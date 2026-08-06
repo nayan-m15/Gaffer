@@ -67,7 +67,7 @@ Ensure you have the following installed on your machine:
 1. **Clone the repository**:
    ```bash
    git clone https://sdp.ms.wits.ac.za/SDP-Interlude/SportCoachingTool.git
-   cd SportCoachingTool
+   cd SportCoachingTool etete
    ```
 
 2. **Install dependencies**:
