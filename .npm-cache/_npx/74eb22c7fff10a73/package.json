@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@nestjs/cli": "^11.0.24"
+  },
+  "_npx": {
+    "packages": [
+      "@nestjs/cli@latest"
+    ]
+  }
+}
