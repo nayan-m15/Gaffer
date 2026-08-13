@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 
+import './environment';
 import * as schema from './schema';
 
 export function createDatabaseClient(databaseUrl = process.env.DATABASE_URL) {
