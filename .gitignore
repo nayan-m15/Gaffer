@@ -20,3 +20,5 @@ playwright-report/
 .npm-cache/
 *.tsbuildinfo
 *.log
+
+.claude/settings.local.json
