@@ -3,22 +3,47 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
+/* ─── Dark-mode variant ─────────────────────────────────────────────────── */
 @custom-variant dark (&:is(.dark *));
+
+/* ─── Typography system ─────────────────────────────────────────────────── *
+ * Lyon is the preferred display typeface.  When the font file is added later
+ * the @font-face rule will activate it automatically.  Until then Georgia
+ * provides a similar high-contrast serif feel as the fallback.              */
+@font-face {
+  font-family: "Lyon";
+  src: local("Lyon");
+  font-display: swap;
+}
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  color: #171717;
-  background: #f8fafc;
+    'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* ─── Tailwind theme tokens ─────────────────────────────────────────────── *
+ * Maps brand and shadcn CSS variables to Tailwind utility classes so that
+ * `bg-brand`, `text-brand-foreground`, `font-display`, etc. work out of the
+ * box alongside the default shadcn palette.                                  */
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Inter Variable', sans-serif;
+  --font-display: "Lyon", Georgia, "Times New Roman", serif;
+
+  /* Brand accent tokens — emerald / teal */
+  --color-brand:            var(--brand);
+  --color-brand-dark:       var(--brand-dark);
+  --color-brand-light:      var(--brand-light);
+  --color-brand-foreground: var(--brand-foreground);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -59,75 +84,109 @@ body {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ─── Light-mode palette ────────────────────────────────────────────────── *
+ * Warm off-white background (#F5F3F0), emerald primary (#059669), and
+ * carefully balanced neutrals with blue-gray undertones.                    */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Brand emerald / teal */
+  --brand:            #059669;
+  --brand-dark:       #047857;
+  --brand-light:      #10B981;
+  --brand-foreground: #FFFFFF;
+
+  /* Surfaces */
+  --background: #F5F3F0;
+  --foreground: #171717;
+  --card:       #FFFFFF;
+  --card-foreground: #171717;
+  --popover:    #FFFFFF;
+  --popover-foreground: #171717;
+
+  /* Primary = brand emerald in light mode */
+  --primary:           #059669;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary / muted / accent */
+  --secondary:           #E8E5E1;
+  --secondary-foreground: #171717;
+  --muted:               #E8E5E1;
+  --muted-foreground:    #737373;
+  --accent:              #E8E5E1;
+  --accent-foreground:   #171717;
+
+  --destructive: #FF5B5F;
+
+  --border: #D9D6D2;
+  --input:  #D9D6D2;
+  --ring:   #059669;
+
+  --chart-1: #059669;
+  --chart-2: #10B981;
+  --chart-3: #D9D6D2;
+  --chart-4: #737373;
+  --chart-5: #171717;
+
+  --radius: 0.5rem;
+
+  --sidebar: #FAFAF9;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8E5E1;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #D9D6D2;
+  --sidebar-ring: #059669;
 }
 
+/* ─── Dark-mode palette ─────────────────────────────────────────────────── *
+ * Near-black background (#0B1218) with dark blue-gray surfaces (#17212B).
+ * Emerald accent (#00D99A) for primary interactions and positive states.     */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --brand:            #00D99A;
+  --brand-dark:       #00CFA0;
+  --brand-light:      #20E6A6;
+  --brand-foreground: #07110F;
+
+  --background: #0B1218;
+  --foreground: #E8ECEF;
+  --card:       #17212B;
+  --card-foreground: #E8ECEF;
+  --popover:    #17212B;
+  --popover-foreground: #E8ECEF;
+
+  --primary:            #00D99A;
+  --primary-foreground: #07110F;
+
+  --secondary:           #1A2530;
+  --secondary-foreground: #E8ECEF;
+  --muted:               #1A2530;
+  --muted-foreground:    #8E9BA8;
+  --accent:              rgba(0, 217, 154, 0.10);
+  --accent-foreground:   #20E6A6;
+
+  --destructive: #FF5B5F;
+
+  --border: #233747;
+  --input:  #233747;
+  --ring:   #00D99A;
+
+  --chart-1: #00D99A;
+  --chart-2: #00AFA0;
+  --chart-3: #1A2530;
+  --chart-4: #8E9BA8;
+  --chart-5: #FFBE2E;
+
+  --sidebar: #111A22;
+  --sidebar-foreground: #E8ECEF;
+  --sidebar-primary: #00D99A;
+  --sidebar-primary-foreground: #07110F;
+  --sidebar-accent: #1A2530;
+  --sidebar-accent-foreground: #E8ECEF;
+  --sidebar-border: #233747;
+  --sidebar-ring: #00D99A;
 }
 
+/* ─── Base-layer resets ─────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -139,3 +198,50 @@ body {
     @apply font-sans;
   }
 }
+
+/* ─── Reduced-motion preference ─────────────────────────────────────────── *
+ * Disables transitions and animations for users who prefer reduced motion.   */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Entrance animations ───────────────────────────────────────────────── *
+ * Subtle fade / slide animations used by the Hero and other landing-page
+ * components.  Each animation respects `prefers-reduced-motion` via the media
+ * query above.                                                               */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out both;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.7s ease-out both;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2.5s ease-in-out infinite;
+}
+
+/* Staggered entrance delays (150ms apart). */
+.animation-delay-150 { animation-delay: 150ms; }
+.animation-delay-200 { animation-delay: 200ms; }
+.animation-delay-300 { animation-delay: 300ms; }
+.animation-delay-450 { animation-delay: 450ms; }
