@@ -1,4 +1,77 @@
-import { Controller } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { AuthGuard, type SessionUser } from '../auth/auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { zodValidate } from '../common/zod-validate';
+import { TeamsService } from '../teams/teams.service';
+import { createAthleteSchema, updateAthleteSchema } from './athletes.schemas';
+import { AthletesService } from './athletes.service';
 
 @Controller('athletes')
-export class AthletesController {}
+@UseGuards(AuthGuard)
+export class AthletesController {
+  constructor(
+    private readonly athletesService: AthletesService,
+    private readonly teamsService: TeamsService,
+  ) {}
+
+  private async getTeamId(userId: string): Promise<string> {
+    const team = await this.teamsService.findTeamForUser(userId);
+
+    if (!team) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    return team.id;
+  }
+
+  @Post()
+  async create(@CurrentUser() user: SessionUser, @Body() body: unknown) {
+    const input = zodValidate(createAthleteSchema, body);
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.create(teamId, input);
+  }
+
+  @Get()
+  async findAll(@CurrentUser() user: SessionUser) {
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.findAll(teamId);
+  }
+
+  @Get(':id')
+  async findOne(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.findOne(teamId, id);
+  }
+
+  @Patch(':id')
+  async update(
+    @CurrentUser() user: SessionUser,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = zodValidate(updateAthleteSchema, body);
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.update(teamId, id, input);
+  }
+
+  @Delete(':id')
+  async archive(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.archive(teamId, id);
+  }
+}
