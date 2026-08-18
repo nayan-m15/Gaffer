@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
+import SignUpPage from '@/pages/SignUpPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
 import LandingPage from '@/pages/LandingPage'
@@ -20,6 +21,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />  
         <Route path="/" element={<DashboardPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
         <Route path="/athletes" element={<AthletesPage />} />
         <Route path="/events" element={<EventsPage />} />
       </Routes>

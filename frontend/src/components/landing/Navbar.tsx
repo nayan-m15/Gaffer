@@ -126,7 +126,7 @@ export function Navbar() {
             Log In
           </a>
 
-          <a href="/login" className={buttonVariants()}>
+          <a href="/signup" className={buttonVariants()}>
             Get Started
           </a>
         </div>

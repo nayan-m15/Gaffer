@@ -13,6 +13,8 @@ type FloatingLabelInputProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   /** Optional content rendered inside the input on the trailing (right) side. */
   rightSlot?: React.ReactNode;
+  /** Horizontal alignment of the floating label. Defaults to `"left"`. */
+  labelAlign?: "left" | "right";
 };
 
 /**
@@ -30,6 +32,7 @@ export function FloatingLabelInput({
   label,
   className,
   rightSlot,
+  labelAlign = "left",
   value,
   onChange,
   onFocus,
@@ -78,9 +81,13 @@ export function FloatingLabelInput({
         htmlFor={inputId}
         className={cn(
           "pointer-events-none absolute z-10 px-1.5 select-none transition-all duration-200 ease-out",
-          isActive
-            ? "left-4 -top-2.5 text-[11px] font-medium leading-none bg-card text-muted-foreground"
-            : "left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground",
+          labelAlign === "right"
+            ? isActive
+              ? "right-4 -top-2.5 text-right text-[11px] font-medium leading-none bg-card text-muted-foreground"
+              : "right-4 top-1/2 -translate-y-1/2 text-right text-sm text-muted-foreground"
+            : isActive
+              ? "left-4 -top-2.5 text-[11px] font-medium leading-none bg-card text-muted-foreground"
+              : "left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground",
         )}
       >
         {label}
