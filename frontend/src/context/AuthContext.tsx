@@ -66,13 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTeam(data.team);
       setStatus("authenticated");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        setUser(null);
-        setTeam(null);
-        setStatus("unauthenticated");
-        return;
+      // Treat "no session" (401) and "couldn't reach the API at all" (e.g.
+      // the backend isn't running — a plain network error, not an ApiError)
+      // the same way: fall back to signed-out rather than leaving `status`
+      // stuck on "loading" forever, which would hang every protected page.
+      if (!(error instanceof ApiError && error.status === 401)) {
+        console.error("Failed to load the current session:", error);
       }
-      throw error;
+      setUser(null);
+      setTeam(null);
+      setStatus("unauthenticated");
     }
   }, []);
 
