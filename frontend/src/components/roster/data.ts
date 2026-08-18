@@ -53,6 +53,8 @@ export interface Athlete {
   recentAppearances: RecentAppearance[];
   /** Initials used for fallback avatars. */
   initials: string;
+  /** Whether the athlete has been archived (soft-delete state). */
+  isArchived: boolean;
 }
 
 /** Sample squad used while the backend API is not yet connected. */
@@ -73,6 +75,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 1,
     redCards: 0,
     initials: "DC",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "2 Saves" },
@@ -94,6 +97,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 3,
     redCards: 0,
     initials: "SS",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Goal" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "Clean Sheet" },
@@ -115,6 +119,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 2,
     redCards: 0,
     initials: "TV",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Metro Rovers", minutes: 23, contribution: "Injured 23'" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
@@ -136,6 +141,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 4,
     redCards: 0,
     initials: "LM",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Assist" },
       { opponent: "Riverside United", minutes: 82, contribution: "1 Assist, 1 Yellow Card" },
@@ -157,6 +163,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 2,
     redCards: 0,
     initials: "ZK",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Goal, 2 Assists" },
       { opponent: "Riverside United", minutes: 82, contribution: "1 Assist, 1 Yellow Card" },
@@ -180,6 +187,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 1,
     redCards: 0,
     initials: "MR",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 78, contribution: "1 Goal" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "1 Goal, 1 Assist" },
@@ -201,6 +209,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 5,
     redCards: 1,
     initials: "CB",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Riverside United", minutes: 90, contribution: "1 Goal" },
       { opponent: "Metro Rovers", minutes: 90, contribution: "Red Card" },
@@ -222,6 +231,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 3,
     redCards: 0,
     initials: "JM",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "1 Assist" },
@@ -243,6 +253,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 2,
     redCards: 0,
     initials: "AC",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
@@ -264,6 +275,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 0,
     redCards: 0,
     initials: "NF",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Eastside Athletic", minutes: 65, contribution: "1 Goal" },
       { opponent: "Metro Rovers", minutes: 74, contribution: "1 Assist" },
@@ -285,9 +297,52 @@ export const MOCK_ATHLETES: Athlete[] = [
     yellowCards: 6,
     redCards: 0,
     initials: "OT",
+    isArchived: false,
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
+    ],
+  },
+  {
+    id: "ath-012",
+    jerseyNumber: 17,
+    name: "Finn Hayes",
+    position: "RW",
+    positionLong: "Right Winger",
+    status: "Available",
+    appearances: 6,
+    goals: 2,
+    assists: 1,
+    age: 19,
+    joinedDate: "Jan 2024",
+    preferredFoot: "Left",
+    yellowCards: 1,
+    redCards: 0,
+    initials: "FH",
+    isArchived: true,
+    recentAppearances: [
+      { opponent: "Apex Wanderers", minutes: 45, contribution: "1 Goal" },
+    ],
+  },
+  {
+    id: "ath-013",
+    jerseyNumber: 21,
+    name: "Eli Brooks",
+    position: "CM",
+    positionLong: "Central Midfielder",
+    status: "Injured",
+    appearances: 4,
+    goals: 0,
+    assists: 1,
+    age: 30,
+    joinedDate: "Aug 2020",
+    preferredFoot: "Right",
+    yellowCards: 2,
+    redCards: 0,
+    initials: "EB",
+    isArchived: true,
+    recentAppearances: [
+      { opponent: "Metro Rovers", minutes: 12, contribution: "Injured 12'" },
     ],
   },
 ];

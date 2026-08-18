@@ -1,12 +1,20 @@
-import { useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Athlete, AthleteStatus } from "@/components/roster/data";
 
-interface AddAthleteDialogProps {
+interface AthleteFormDialogProps {
+  /** Whether the dialog is visible. */
   isOpen: boolean;
+  /** Called when the dialog should close without saving. */
   onClose: () => void;
-  onAdd: (athlete: Athlete) => void;
+  /**
+   * Athlete to edit. When `null` the dialog is in "add" mode and starts
+   * with empty/default values.
+   */
+  athlete: Athlete | null;
+  /** Called with the new or updated athlete object. */
+  onSave: (athlete: Athlete) => void;
 }
 
 const POSITIONS = ["GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"] as const;
@@ -14,12 +22,16 @@ const STATUSES: AthleteStatus[] = ["Available", "Injured", "Suspended"];
 const FEET: Array<"Left" | "Right" | "Both"> = ["Left", "Right", "Both"];
 
 /**
- * AddAthleteDialog — local-state-only modal for adding a mock athlete.
+ * AthleteFormDialog — generic add / edit athlete form.
  *
- * Does not call the backend.  When submitted, it builds a partial athlete
- * object and passes it back to the parent so the roster table updates.
+ * In edit mode the form is pre-filled with the existing athlete.  In add mode
+ * it creates a fresh mock athlete with zeroed stats and `isArchived: false`.
+ * All changes are local-only.
  */
-export function AddAthleteDialog({ isOpen, onClose, onAdd }: AddAthleteDialogProps) {
+export function AthleteFormDialog({ isOpen, onClose, athlete, onSave }: AthleteFormDialogProps) {
+  const isEditing = athlete !== null;
+  const title = isEditing ? "Edit Athlete" : "Add Athlete";
+
   const [name, setName] = useState("");
   const [jerseyNumber, setJerseyNumber] = useState("");
   const [position, setPosition] = useState<typeof POSITIONS[number]>("ST");
@@ -27,33 +39,58 @@ export function AddAthleteDialog({ isOpen, onClose, onAdd }: AddAthleteDialogPro
   const [preferredFoot, setPreferredFoot] = useState<"Left" | "Right" | "Both">("Right");
   const [age, setAge] = useState("");
 
-  const reset = useCallback(() => {
-    setName("");
-    setJerseyNumber("");
-    setPosition("ST");
-    setStatus("Available");
-    setPreferredFoot("Right");
-    setAge("");
-  }, []);
+  useEffect(() => {
+    if (!isOpen) return;
 
-  const handleClose = useCallback(() => {
-    reset();
-    onClose();
-  }, [onClose, reset]);
+    if (athlete) {
+      setName(athlete.name);
+      setJerseyNumber(athlete.jerseyNumber.toString());
+      setPosition(athlete.position as typeof POSITIONS[number]);
+      setStatus(athlete.status);
+      setPreferredFoot(athlete.preferredFoot);
+      setAge(athlete.age.toString());
+    } else {
+      setName("");
+      setJerseyNumber("");
+      setPosition("ST");
+      setStatus("Available");
+      setPreferredFoot("Right");
+      setAge("");
+    }
+  }, [athlete, isOpen]);
 
-  const handleSubmit = useCallback(
-    (event: React.FormEvent) => {
-      event.preventDefault();
-
-      const number = Number(jerseyNumber) || 0;
-      const ageNum = Number(age) || 0;
-      const initials = name
+  const initials = useMemo(() => {
+    return (
+      name
         .split(" ")
         .map((part) => part[0])
         .join("")
         .toUpperCase()
-        .slice(0, 2) || "NA";
+        .slice(0, 2) || "NA"
+    );
+  }, [name]);
 
+  if (!isOpen) return null;
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const number = Number(jerseyNumber) || 0;
+    const ageNum = Number(age) || 0;
+
+    if (athlete) {
+      onSave({
+        ...athlete,
+        name: name.trim() || athlete.name,
+        jerseyNumber: number,
+        position,
+        positionLong: position,
+        status,
+        preferredFoot,
+        age: ageNum,
+        initials,
+      });
+    } else {
       const newAthlete: Athlete = {
         id: `ath-${Date.now()}`,
         name: name.trim() || "New Athlete",
@@ -71,38 +108,34 @@ export function AddAthleteDialog({ isOpen, onClose, onAdd }: AddAthleteDialogPro
         redCards: 0,
         recentAppearances: [],
         initials,
+        isArchived: false,
       };
-
-      onAdd(newAthlete);
-      handleClose();
-    },
-    [age, jerseyNumber, name, onAdd, position, preferredFoot, status, handleClose],
-  );
-
-  if (!isOpen) return null;
+      onSave(newAthlete);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={handleClose}
+        onClick={onClose}
         aria-hidden="true"
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-athlete-title"
+        aria-labelledby="athlete-form-title"
         className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 id="add-athlete-title" className="text-lg font-bold text-foreground">
-            Add Athlete
+          <h2 id="athlete-form-title" className="text-lg font-bold text-foreground">
+            {title}
           </h2>
           <Button
             variant="ghost"
             size="icon-xs"
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             aria-label="Close dialog"
           >
             <X className="size-4" />
@@ -192,10 +225,10 @@ export function AddAthleteDialog({ isOpen, onClose, onAdd }: AddAthleteDialogPro
           </FormField>
 
           <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={handleClose}>
+            <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">Add Athlete</Button>
+            <Button type="submit">{isEditing ? "Save Changes" : "Add Athlete"}</Button>
           </div>
         </form>
       </div>

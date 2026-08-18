@@ -1,29 +1,50 @@
+import { Archive, Pencil, RotateCcw } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
 import type { Athlete, RecentAppearance } from "@/components/roster/data";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface AthleteDetailPanelProps {
   athlete: Athlete;
+  onEdit: (athlete: Athlete) => void;
+  onArchive: (athlete: Athlete) => void;
+  onRestore: (athlete: Athlete) => void;
 }
 
 /**
  * AthleteDetailPanel — right-hand panel showing the selected athlete.
  *
  * Displays profile summary, quick info cards, season performance and recent
- * appearances using mock data only.
+ * appearances using mock data only.  Active athletes can be edited or archived;
+ * archived athletes can be restored.
  */
-export function AthleteDetailPanel({ athlete }: AthleteDetailPanelProps) {
+export function AthleteDetailPanel({
+  athlete,
+  onEdit,
+  onArchive,
+  onRestore,
+}: AthleteDetailPanelProps) {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-6">
       {/* Profile header */}
       <div className="flex flex-col items-center text-center">
         <div className="relative mb-4">
-          <div className="flex size-28 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/50 ring-2 ring-brand/30 ring-offset-2 ring-offset-card">
+          <div
+            className={cn(
+              "flex size-28 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/50 ring-2 ring-offset-2 ring-offset-card",
+              athlete.isArchived ? "ring-muted-foreground/30" : "ring-brand/30",
+            )}
+          >
             <span className="text-3xl font-bold text-foreground">
               {athlete.initials}
             </span>
           </div>
-          <span className="absolute -bottom-1 -right-1 flex h-7 items-center justify-center rounded-full bg-brand px-2 text-xs font-bold text-brand-foreground">
+          <span
+            className={cn(
+              "absolute -bottom-1 -right-1 flex h-7 items-center justify-center rounded-full px-2 text-xs font-bold",
+              athlete.isArchived ? "bg-muted-foreground text-background" : "bg-brand text-brand-foreground",
+            )}
+          >
             #{athlete.jerseyNumber}
           </span>
         </div>
@@ -32,8 +53,52 @@ export function AthleteDetailPanel({ athlete }: AthleteDetailPanelProps) {
         <p className="text-sm font-medium text-cyan-400">
           {athlete.positionLong} ({athlete.position})
         </p>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           <StatusBadge status={athlete.status} />
+          {athlete.isArchived && (
+            <span className="inline-flex items-center rounded-full border border-muted-foreground/30 bg-muted/50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Archived
+            </span>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="mt-4 flex items-center gap-2">
+          {athlete.isArchived ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onRestore(athlete)}
+              className="gap-1.5"
+            >
+              <RotateCcw className="size-4 text-brand" />
+              Restore
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(athlete)}
+                className="gap-1.5"
+              >
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onArchive(athlete)}
+                className="gap-1.5 border-amber-400/30 text-amber-400 hover:bg-amber-400/10 hover:text-amber-400"
+              >
+                <Archive className="size-4" />
+                Archive
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

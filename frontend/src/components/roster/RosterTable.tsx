@@ -1,14 +1,20 @@
+import { Archive, Pencil, RotateCcw } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
 import type { Athlete } from "@/components/roster/data";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface RosterTableProps {
   athletes: Athlete[];
   selectedId: string | null;
+  showArchived: boolean;
   onSelect: (athlete: Athlete) => void;
+  onEdit: (athlete: Athlete) => void;
+  onArchive: (athlete: Athlete) => void;
+  onRestore: (athlete: Athlete) => void;
 }
 
-const COLUMNS = [
+const DATA_COLUMNS = [
   { key: "jerseyNumber", label: "#", className: "w-16 text-center" },
   { key: "name", label: "NAME", className: "min-w-[140px]" },
   { key: "position", label: "POS", className: "w-16" },
@@ -22,15 +28,24 @@ const COLUMNS = [
  * RosterTable — selectable squad table matching the reference design.
  *
  * Highlights the selected row with a brand-coloured border and background,
- * and visually distinguishes non-zero attacking stats in the brand colour.
+ * distinguishes non-zero attacking stats in the brand colour, and provides
+ * per-row edit / archive / restore actions.
  */
-export function RosterTable({ athletes, selectedId, onSelect }: RosterTableProps) {
+export function RosterTable({
+  athletes,
+  selectedId,
+  showArchived,
+  onSelect,
+  onEdit,
+  onArchive,
+  onRestore,
+}: RosterTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full caption-bottom text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {COLUMNS.map((col) => (
+            {DATA_COLUMNS.map((col) => (
               <th
                 key={col.key}
                 scope="col"
@@ -39,6 +54,9 @@ export function RosterTable({ athletes, selectedId, onSelect }: RosterTableProps
                 {col.label}
               </th>
             ))}
+            <th scope="col" className="w-28 px-4 py-3 text-right">
+              ACTIONS
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -54,6 +72,7 @@ export function RosterTable({ athletes, selectedId, onSelect }: RosterTableProps
                   isSelected
                     ? "border-brand bg-brand/10"
                     : "hover:bg-muted/30",
+                  athlete.isArchived && "opacity-70",
                 )}
               >
                 <td className="px-4 py-3 text-center">
@@ -110,6 +129,51 @@ export function RosterTable({ athletes, selectedId, onSelect }: RosterTableProps
                   )}
                 >
                   {athlete.assists}
+                </td>
+
+                <td className="px-4 py-3 text-right">
+                  <div
+                    className="flex items-center justify-end gap-1"
+                    onClick={(event) => event.stopPropagation()}
+                    role="group"
+                    aria-label={`Actions for ${athlete.name}`}
+                  >
+                    {showArchived ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => onRestore(athlete)}
+                        aria-label={`Restore ${athlete.name}`}
+                        title="Restore"
+                      >
+                        <RotateCcw className="size-3.5 text-brand" />
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onEdit(athlete)}
+                          aria-label={`Edit ${athlete.name}`}
+                          title="Edit"
+                        >
+                          <Pencil className="size-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onArchive(athlete)}
+                          aria-label={`Archive ${athlete.name}`}
+                          title="Archive"
+                        >
+                          <Archive className="size-3.5 text-amber-400" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
