@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const p=require\\('./node_modules/better-auth/package.json'\\); console.log\\(p.exports['./api']\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx eslint *)",
+      "Bash(npm run *)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique\")",
+      "Bash(powershell -NoProfile -Command \"Get-Process -Id 10012 | Select-Object Id,ProcessName,Path\")",
+      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter 'ProcessId=10012' | Select-Object CommandLine\")",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 10012 -Force\")",
+      "Bash(powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue\")",
+      "Bash(powershell -NoProfile -Command \"try { Get-NetTCPConnection -LocalPort 3000 -ErrorAction Stop | Format-Table } catch { Write-Output 'port free' }\")",
+      "Bash(curl -s -i -X POST http://localhost:3000/auth/sign-up -H 'Content-Type: application/json' -d '{\"name\":\"Smoke Test Coach\",\"email\":\"s1-02-smoke-__CMDSUB_OUTPUT__@example.com\",\"password\":\"password123\",\"teamName\":\"Smoke FC\"}' -c 'C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-User-OneDrive-Documents-GitHub-SportCoachingTool\\\\6b10a3d8-5de1-42bc-a226-93c88fcde6fa\\\\scratchpad\\\\cookies.txt')",
+      "Bash(curl -s -i -X POST http://localhost:3000/auth/sign-out -b 'C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-User-OneDrive-Documents-GitHub-SportCoachingTool\\\\6b10a3d8-5de1-42bc-a226-93c88fcde6fa\\\\scratchpad\\\\signin_cookies.txt')",
+      "Bash(curl -s -w '\\\\nHTTP:%{http_code}\\\\n' http://localhost:3000/auth/session -b 'C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-User-OneDrive-Documents-GitHub-SportCoachingTool\\\\6b10a3d8-5de1-42bc-a226-93c88fcde6fa\\\\scratchpad\\\\signin_cookies.txt')"
+    ]
+  }
+}
