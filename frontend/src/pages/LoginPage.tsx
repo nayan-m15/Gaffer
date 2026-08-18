@@ -76,9 +76,7 @@ export default function LoginPage() {
         <div className="rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
           {/* ── Brand header ─────────────────────────────────────────── */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
-            <div className="flex size-14 items-center justify-center rounded-full bg-brand/10 text-brand">
-              <SportLogo size={30} />
-            </div>
+            <SportLogo size={56} className="rounded-lg" />
 
             <h1 className="mt-1 font-display text-2xl font-bold tracking-wide text-foreground">
               GAFFER
