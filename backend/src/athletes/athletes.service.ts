@@ -92,4 +92,21 @@ export class AthletesService {
 
     return athlete;
   }
+
+  async restore(teamId: string, athleteId: string) {
+    const [athlete] = await this.databaseService.database
+      .update(athletes)
+      .set({
+        archivedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(athletes.id, athleteId), eq(athletes.teamId, teamId)))
+      .returning();
+
+    if (!athlete) {
+      throw new NotFoundException('Athlete not found.');
+    }
+
+    return athlete;
+  }
 }

@@ -74,4 +74,10 @@ export class AthletesController {
 
     return this.athletesService.archive(teamId, id);
   }
+  @Patch(':id/restore')
+  async restore(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    const teamId = await this.getTeamId(user.id);
+
+    return this.athletesService.restore(teamId, id);
+  }
 }

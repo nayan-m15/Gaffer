@@ -17,6 +17,7 @@ describe('AthletesController', () => {
     findOne: jest.fn(),
     update: jest.fn(),
     archive: jest.fn(),
+    restore: jest.fn(),
   };
 
   const mockTeamsService = {
