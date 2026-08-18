@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
+import dugoutBg from "@/assets/dugout-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
@@ -50,82 +51,95 @@ export default function LoginPage() {
 
   /* ── Render ──────────────────────────────────────────────────────────── */
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-background px-4 py-8">
-      {/* ── Ambient glow behind the card ─────────────────────────────── */}
+    <main className="relative flex min-h-screen items-center overflow-hidden bg-background">
+      {/* ── Dugout background layer ─────────────────────────────────────── */}
+      <img
+        src={dugoutBg}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className="animate-fade-in pointer-events-none absolute inset-0 h-full w-full object-cover object-center select-none lg:object-right"
+      />
+
+      {/* ── Readability overlays ────────────────────────────────────────── */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 flex items-center justify-center"
-      >
-        <div className="h-[420px] w-[420px] rounded-full bg-brand/[0.06] blur-[120px]" />
-      </div>
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-background/15"
+      />
 
       {/* ── Login card ───────────────────────────────────────────────── */}
-      <div className="relative w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
-        {/* ── Brand header ─────────────────────────────────────────── */}
-        <div className="mb-8 flex flex-col items-center gap-2.5">
-          <div className="flex size-14 items-center justify-center rounded-full bg-brand/10 text-brand">
-            <SportLogo size={30} />
+      <div className="relative z-10 mx-auto w-full max-w-sm px-4 py-8 sm:ml-[8%] md:ml-[12%] lg:ml-[15%]">
+        <div className="rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
+          {/* ── Brand header ─────────────────────────────────────────── */}
+          <div className="mb-8 flex flex-col items-center gap-2.5">
+            <div className="flex size-14 items-center justify-center rounded-full bg-brand/10 text-brand">
+              <SportLogo size={30} />
+            </div>
+
+            <h1 className="mt-1 font-display text-2xl font-bold tracking-wide text-foreground">
+              GAFFER
+            </h1>
+
+            <p className="text-[11px] font-semibold tracking-[0.2em] text-brand">
+              LIVE SIDELINE ASSISTANT
+            </p>
           </div>
 
-          <h1 className="mt-1 font-display text-2xl font-bold tracking-wide text-foreground">
-            GAFFER
-          </h1>
+          {/* ── Email / password form ────────────────────────────────── */}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <FloatingLabelInput
+              label="Email address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+            />
 
-          <p className="text-[11px] font-semibold tracking-[0.2em] text-brand">
-            LIVE SIDELINE ASSISTANT
-          </p>
+            <FloatingLabelInput
+              label="Password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              rightSlot={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              }
+            />
+
+            <Button type="submit" size="lg" className="w-full font-semibold tracking-wide">
+              SIGN IN TO DUGOUT
+            </Button>
+          </form>
+
+          {/* ── Divider ──────────────────────────────────────────────── */}
+          <div className="my-6 flex items-center gap-3" role="separator">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+              or
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Google sign-in ───────────────────────────────────────── */}
+          <GoogleSignInButton onClick={handleGoogleSignIn} />
         </div>
-
-        {/* ── Email / password form ────────────────────────────────── */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <FloatingLabelInput
-            label="Email address"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-
-          <FloatingLabelInput
-            label="Password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            rightSlot={
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            }
-          />
-
-          <Button type="submit" size="lg" className="w-full font-semibold tracking-wide">
-            SIGN IN TO DUGOUT
-          </Button>
-        </form>
-
-        {/* ── Divider ──────────────────────────────────────────────── */}
-        <div className="my-6 flex items-center gap-3" role="separator">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-            or
-          </span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        {/* ── Google sign-in ───────────────────────────────────────── */}
-        <GoogleSignInButton onClick={handleGoogleSignIn} />
       </div>
     </main>
   );
