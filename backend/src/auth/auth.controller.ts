@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpException,
+  Logger,
   Post,
   Req,
   Res,
@@ -26,6 +27,8 @@ function forwardSetCookie(res: Response, headers: Headers): void {
   }
 }
 
+const logger = new Logger('AuthController');
+
 /** Better Auth raises `APIError` for auth failures; map it to a matching HTTP response. */
 function toHttpException(error: unknown): HttpException {
   if (error instanceof APIError) {
@@ -34,6 +37,12 @@ function toHttpException(error: unknown): HttpException {
       error.statusCode,
     );
   }
+  // Anything else (network/DB error talking to Neon, an unexpected Better
+  // Auth internal failure, etc.) wasn't a recognized APIError, so there's no
+  // safe client-facing message to extract from it — but discarding it
+  // entirely made every such failure indistinguishable and undebuggable, so
+  // log the real error server-side before falling back to a generic 500.
+  logger.error('Unrecognized error from Better Auth', error);
   return new HttpException('Authentication request failed.', 500);
 }
 
