@@ -1,11 +1,14 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import dugoutBg from "@/assets/dugout-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api";
 
 /**
  * LoginPage — Pitchside authentication page.
@@ -24,6 +27,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from =
+    (location.state as { from?: { pathname: string } } | null)?.from
+      ?.pathname ?? "/dashboard";
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {
@@ -40,9 +52,23 @@ export default function LoginPage() {
   }, []);
 
   /* ── Handlers ────────────────────────────────────────────────────────── */
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // TODO: Connect to authentication service.
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await signIn({ email, password });
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Something went wrong signing you in. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoogleSignIn = () => {
@@ -121,8 +147,19 @@ export default function LoginPage() {
               }
             />
 
-            <Button type="submit" size="lg" className="w-full font-semibold tracking-wide">
-              SIGN IN TO DUGOUT
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={isSubmitting}
+              className="w-full font-semibold tracking-wide"
+            >
+              {isSubmitting ? "SIGNING IN…" : "SIGN IN TO DUGOUT"}
             </Button>
           </form>
 
@@ -138,6 +175,17 @@ export default function LoginPage() {
           {/* ── Google sign-in ───────────────────────────────────────── */}
           <GoogleSignInButton onClick={handleGoogleSignIn} />
         </div>
+
+        {/* ── Footer navigation ───────────────────────────────────────── */}
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            to="/signup"
+            className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            Register
+          </Link>
+        </p>
       </div>
     </main>
   );

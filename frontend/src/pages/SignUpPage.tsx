@@ -1,12 +1,14 @@
 import { useState, useEffect, useId, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import signupBg from "@/assets/signup-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +33,9 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { signUp } = useAuth();
+  const navigate = useNavigate();
 
   const baseId = useId();
   const fullNameErrorId = `${baseId}-fullName-error`;
@@ -100,18 +105,26 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
 
-    // TODO: Connect to the real signup/authentication flow (e.g. better-auth
-    // /api/auth/sign-up/email).  This handler is a clean boundary: the form
-    // state is collected and validated, ready to be sent to the backend.
-    // eslint-disable-next-line no-console
-    console.warn("Signup integration not yet wired:", {
-      role,
-      fullName,
-      email,
-      teamName,
-    });
-
-    setIsSubmitting(false);
+    // Sprint 1 only supports coaches registering and owning their own team —
+    // the role selector above is left in place for the invite flow planned
+    // for a later sprint, but every sign-up here creates the account as the
+    // team's coach.
+    try {
+      await signUp({ name: fullName, email, password, teamName });
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      if (error instanceof ApiError && /email/i.test(error.message)) {
+        setErrors((prev) => ({ ...prev, email: error.message }));
+      } else {
+        const message =
+          error instanceof ApiError
+            ? error.message
+            : "Something went wrong creating your account. Please try again.";
+        setErrors((prev) => ({ ...prev, form: message }));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoogleSignUp = () => {
@@ -360,6 +373,13 @@ export default function SignUpPage() {
               )}
             </div>
 
+            {/* ── Form-level error ─────────────────────────────────────── */}
+            {errors.form && (
+              <p role="alert" className="text-sm text-destructive">
+                {errors.form}
+              </p>
+            )}
+
             {/* ── Submit button ────────────────────────────────────────── */}
             <Button
               type="submit"
@@ -367,7 +387,7 @@ export default function SignUpPage() {
               disabled={isSubmitting}
               className="w-full font-semibold tracking-wide"
             >
-              JOIN THE DUGOUT
+              {isSubmitting ? "JOINING…" : "JOIN THE DUGOUT"}
             </Button>
           </form>
 
