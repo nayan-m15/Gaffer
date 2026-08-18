@@ -7,7 +7,7 @@
 
 export const brand = {
   /** Display name shown in the navbar, hero and meta tags. */
-  name: "Sport Coaching Tool",
+  name: "GAFFER",
 
   /** Primary marketing tagline — do not alter wording without product approval. */
   tagline: "The football coaching platform built for the touchline.",
