@@ -55,7 +55,7 @@ export function Hero() {
           {/* CTA buttons */}
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center animate-fade-in-up animation-delay-300">
             <a
-              href="/login"
+              href="/signup"
               className={cn(
                 buttonVariants({ size: "lg" }),
                 "w-full gap-2 bg-brand text-brand-foreground font-semibold hover:bg-brand-light shadow-lg shadow-brand/20 sm:w-auto",

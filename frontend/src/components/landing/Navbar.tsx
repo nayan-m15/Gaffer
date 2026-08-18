@@ -82,7 +82,7 @@ export function Navbar() {
           href="/"
           className="flex items-center gap-2.5 text-foreground transition-opacity hover:opacity-80"
         >
-          <SportLogo size={30} />
+          <SportLogo size={30} className="rounded" />
           <span className="text-sm font-semibold tracking-tight sm:text-base">
             {brand.name}
           </span>
@@ -126,7 +126,7 @@ export function Navbar() {
             Log In
           </a>
 
-          <a href="/login" className={buttonVariants()}>
+          <a href="/signup" className={buttonVariants()}>
             Get Started
           </a>
         </div>
