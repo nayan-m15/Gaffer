@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { athletes } from '../database/schema';
 import type { CreateAthleteDto, UpdateAthleteDto } from './athletes.schemas';
@@ -25,6 +25,13 @@ export class AthletesService {
       .select()
       .from(athletes)
       .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)));
+  }
+
+  async findArchived(teamId: string) {
+    return this.databaseService.database
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.teamId, teamId), isNotNull(athletes.archivedAt)));
   }
 
   async findOne(teamId: string, athleteId: string) {

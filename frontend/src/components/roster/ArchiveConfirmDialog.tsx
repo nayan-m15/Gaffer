@@ -15,9 +15,8 @@ interface ArchiveConfirmDialogProps {
 /**
  * ArchiveConfirmDialog — confirmation modal shown before archiving an athlete.
  *
- * Archiving is a soft-delete: the athlete is marked `isArchived: true` and
- * hidden from the active roster, but remains in local state so they can be
- * restored later.
+ * Archiving is a soft-delete persisted through DELETE /athletes/:id. The
+ * athlete is hidden from the active roster and can be restored later.
  */
 export function ArchiveConfirmDialog({
   isOpen,

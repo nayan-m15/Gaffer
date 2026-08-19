@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Athlete, AthleteStatus } from "@/components/roster/data";
+import type { AthleteFormValues } from "@/services/athletes";
 
 interface AthleteFormDialogProps {
   /** Whether the dialog is visible. */
@@ -9,109 +9,64 @@ interface AthleteFormDialogProps {
   /** Called when the dialog should close without saving. */
   onClose: () => void;
   /**
-   * Athlete to edit. When `null` the dialog is in "add" mode and starts
+   * Initial form values. When `null` the dialog is in "add" mode and starts
    * with empty/default values.
    */
-  athlete: Athlete | null;
-  /** Called with the new or updated athlete object. */
-  onSave: (athlete: Athlete) => void;
+  initialValues: AthleteFormValues | null;
+  /** Called with the submitted form values. */
+  onSubmit: (values: AthleteFormValues) => void;
 }
 
 const POSITIONS = ["GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"] as const;
-const STATUSES: AthleteStatus[] = ["Available", "Injured", "Suspended"];
-const FEET: Array<"Left" | "Right" | "Both"> = ["Left", "Right", "Both"];
+
+const DEFAULT_VALUES: AthleteFormValues = {
+  firstName: "",
+  lastName: "",
+  dateOfBirth: "",
+  position: "ST",
+  squadNumber: 0,
+};
 
 /**
- * AthleteFormDialog — generic add / edit athlete form.
+ * AthleteFormDialog — add / edit athlete form.
  *
- * In edit mode the form is pre-filled with the existing athlete.  In add mode
- * it creates a fresh mock athlete with zeroed stats and `isArchived: false`.
- * All changes are local-only.
+ * Collects only the fields persisted by the Sprint 1 backend:
+ * firstName, lastName, dateOfBirth, position, squadNumber.
  */
-export function AthleteFormDialog({ isOpen, onClose, athlete, onSave }: AthleteFormDialogProps) {
-  const isEditing = athlete !== null;
+export function AthleteFormDialog({
+  isOpen,
+  onClose,
+  initialValues,
+  onSubmit,
+}: AthleteFormDialogProps) {
+  const isEditing = initialValues !== null;
   const title = isEditing ? "Edit Athlete" : "Add Athlete";
 
-  const [name, setName] = useState("");
-  const [jerseyNumber, setJerseyNumber] = useState("");
-  const [position, setPosition] = useState<typeof POSITIONS[number]>("ST");
-  const [status, setStatus] = useState<AthleteStatus>("Available");
-  const [preferredFoot, setPreferredFoot] = useState<"Left" | "Right" | "Both">("Right");
-  const [age, setAge] = useState("");
+  const [values, setValues] = useState<AthleteFormValues>(DEFAULT_VALUES);
 
   useEffect(() => {
     if (!isOpen) return;
-
-    if (athlete) {
-      setName(athlete.name);
-      setJerseyNumber(athlete.jerseyNumber.toString());
-      setPosition(athlete.position as typeof POSITIONS[number]);
-      setStatus(athlete.status);
-      setPreferredFoot(athlete.preferredFoot);
-      setAge(athlete.age.toString());
-    } else {
-      setName("");
-      setJerseyNumber("");
-      setPosition("ST");
-      setStatus("Available");
-      setPreferredFoot("Right");
-      setAge("");
-    }
-  }, [athlete, isOpen]);
-
-  const initials = useMemo(() => {
-    return (
-      name
-        .split(" ")
-        .map((part) => part[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2) || "NA"
-    );
-  }, [name]);
+    setValues(initialValues ?? DEFAULT_VALUES);
+  }, [initialValues, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleChange = <K extends keyof AthleteFormValues>(
+    field: K,
+    value: AthleteFormValues[K],
+  ) => {
+    setValues((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    const number = Number(jerseyNumber) || 0;
-    const ageNum = Number(age) || 0;
-
-    if (athlete) {
-      onSave({
-        ...athlete,
-        name: name.trim() || athlete.name,
-        jerseyNumber: number,
-        position,
-        positionLong: position,
-        status,
-        preferredFoot,
-        age: ageNum,
-        initials,
-      });
-    } else {
-      const newAthlete: Athlete = {
-        id: `ath-${Date.now()}`,
-        name: name.trim() || "New Athlete",
-        jerseyNumber: number,
-        position,
-        positionLong: position,
-        status,
-        appearances: 0,
-        goals: 0,
-        assists: 0,
-        age: ageNum,
-        joinedDate: new Date().toLocaleDateString("en-GB", { month: "short", year: "numeric" }),
-        preferredFoot,
-        yellowCards: 0,
-        redCards: 0,
-        recentAppearances: [],
-        initials,
-        isArchived: false,
-      };
-      onSave(newAthlete);
-    }
+    onSubmit({
+      ...values,
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      position: values.position.trim(),
+    });
   };
 
   return (
@@ -143,37 +98,24 @@ export function AthleteFormDialog({ isOpen, onClose, athlete, onSave }: AthleteF
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <FormField label="Full name">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Alex Morgan"
-              required
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
-            />
-          </FormField>
-
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="Jersey number">
+            <FormField label="First name">
               <input
-                type="number"
-                min={1}
-                max={99}
-                value={jerseyNumber}
-                onChange={(e) => setJerseyNumber(e.target.value)}
+                type="text"
+                value={values.firstName}
+                onChange={(e) => handleChange("firstName", e.target.value)}
+                placeholder="e.g. Alex"
                 required
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               />
             </FormField>
 
-            <FormField label="Age">
+            <FormField label="Last name">
               <input
-                type="number"
-                min={15}
-                max={60}
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
+                type="text"
+                value={values.lastName}
+                onChange={(e) => handleChange("lastName", e.target.value)}
+                placeholder="e.g. Morgan"
                 required
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               />
@@ -181,10 +123,22 @@ export function AthleteFormDialog({ isOpen, onClose, athlete, onSave }: AthleteF
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <FormField label="Jersey number">
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={values.squadNumber}
+                onChange={(e) => handleChange("squadNumber", Number(e.target.value))}
+                required
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
+              />
+            </FormField>
+
             <FormField label="Position">
               <select
-                value={position}
-                onChange={(e) => setPosition(e.target.value as typeof POSITIONS[number])}
+                value={values.position}
+                onChange={(e) => handleChange("position", e.target.value)}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               >
                 {POSITIONS.map((pos) => (
@@ -194,34 +148,15 @@ export function AthleteFormDialog({ isOpen, onClose, athlete, onSave }: AthleteF
                 ))}
               </select>
             </FormField>
-
-            <FormField label="Preferred foot">
-              <select
-                value={preferredFoot}
-                onChange={(e) => setPreferredFoot(e.target.value as "Left" | "Right" | "Both")}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
-              >
-                {FEET.map((foot) => (
-                  <option key={foot} value={foot}>
-                    {foot}
-                  </option>
-                ))}
-              </select>
-            </FormField>
           </div>
 
-          <FormField label="Status">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as AthleteStatus)}
+          <FormField label="Date of birth">
+            <input
+              type="date"
+              value={values.dateOfBirth}
+              onChange={(e) => handleChange("dateOfBirth", e.target.value)}
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            />
           </FormField>
 
           <div className="mt-2 flex justify-end gap-2">

@@ -1,54 +1,94 @@
 import { useMemo, useState } from "react";
-import { Search, Plus, Users, Archive } from "lucide-react";
+import { Search, Plus, Users, Archive, Loader2, AlertCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveConfirmDialog } from "@/components/roster/ArchiveConfirmDialog";
 import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
-import { MOCK_ATHLETES, type Athlete } from "@/components/roster/data";
+import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterSidebar } from "@/components/roster/RosterSidebar";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  archiveAthlete,
+  createAthlete,
+  getArchivedAthletes,
+  getAthletes,
+  restoreAthlete,
+  toFormValues,
+  toUiAthlete,
+  updateAthlete,
+  type AthleteFormValues,
+  type BackendAthlete,
+  type CreateAthleteInput,
+  type UpdateAthleteInput,
+} from "@/services/athletes";
+
+const QUERY_KEY_ACTIVE = ["athletes", "active"] as const;
+const QUERY_KEY_ARCHIVED = ["athletes", "archived"] as const;
 
 /**
  * AthletesPage — Squad roster command centre (S1-03).
  *
- * This is a UI-only implementation.  All athlete data is mocked locally,
- * selection state is held in React, and the add / edit / archive / restore
- * interactions only update the local roster array.  No backend calls are made.
+ * Active and archived athletes are loaded from the backend through
+ * TanStack Query. Add, edit, archive and restore operations are persisted
+ * via the API and the relevant roster queries are invalidated afterwards.
  */
 export default function AthletesPage() {
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
-  const [selectedId, setSelectedId] = useState<string | null>(MOCK_ATHLETES[4]?.id ?? null);
+  const queryClient = useQueryClient();
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
-  const [formAthlete, setFormAthlete] = useState<Athlete | null>(null);
+  const [editingBackendAthlete, setEditingBackendAthlete] = useState<BackendAthlete | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const [archivingAthlete, setArchivingAthlete] = useState<Athlete | null>(null);
 
+  const activeQuery = useQuery({
+    queryKey: QUERY_KEY_ACTIVE,
+    queryFn: getAthletes,
+  });
+
+  const archivedQuery = useQuery({
+    queryKey: QUERY_KEY_ARCHIVED,
+    queryFn: getArchivedAthletes,
+  });
+
+  const activeAthletes = useMemo(
+    () => (activeQuery.data ?? []).map(toUiAthlete),
+    [activeQuery.data],
+  );
+  const archivedAthletes = useMemo(
+    () => (archivedQuery.data ?? []).map(toUiAthlete),
+    [archivedQuery.data],
+  );
+
+  const currentAthletes = showArchived ? archivedAthletes : activeAthletes;
+  const isLoading = showArchived ? archivedQuery.isLoading : activeQuery.isLoading;
+  const isPending = showArchived ? archivedQuery.isPending : activeQuery.isPending;
+  const error = showArchived ? archivedQuery.error : activeQuery.error;
+
   /**
-   * Filter the roster by archived state and then by the search query.
+   * Filter the roster by the search query.
    * Search matches name, position, status or jersey number.
    */
   const filteredAthletes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    const byArchive = athletes.filter((athlete) =>
-      showArchived ? athlete.isArchived : !athlete.isArchived,
-    );
+    if (!query) return currentAthletes;
 
-    if (!query) return byArchive;
-
-    return byArchive.filter(
+    return currentAthletes.filter(
       (athlete) =>
         athlete.name.toLowerCase().includes(query) ||
         athlete.position.toLowerCase().includes(query) ||
         athlete.status.toLowerCase().includes(query) ||
         athlete.jerseyNumber.toString().includes(query),
     );
-  }, [athletes, searchQuery, showArchived]);
+  }, [currentAthletes, searchQuery]);
 
   /** Selected athlete must belong to the current filtered view. */
   const selectedAthlete = useMemo(() => {
@@ -56,38 +96,87 @@ export default function AthletesPage() {
     return match ?? filteredAthletes[0] ?? null;
   }, [filteredAthletes, selectedId]);
 
-  const activeCount = athletes.filter(
-    (athlete) => !athlete.isArchived && athlete.status === "Available",
-  ).length;
-  const archivedCount = athletes.filter((athlete) => athlete.isArchived).length;
+  const activeCount = activeAthletes.length;
+  const archivedCount = archivedAthletes.length;
+
+  const createMutation = useMutation({
+    mutationFn: createAthlete,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+      closeForm();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateAthleteInput }) =>
+      updateAthlete(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ARCHIVED });
+      closeForm();
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: archiveAthlete,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ARCHIVED });
+
+      if (selectedId === archivingAthlete?.id) {
+        setSelectedId(null);
+      }
+
+      closeArchiveDialog();
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: restoreAthlete,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ARCHIVED });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+    },
+  });
 
   const handleSelect = (athlete: Athlete) => setSelectedId(athlete.id);
 
   const openAddForm = () => {
-    setFormAthlete(null);
+    setEditingBackendAthlete(null);
     setIsFormOpen(true);
   };
 
   const openEditForm = (athlete: Athlete) => {
-    setFormAthlete(athlete);
+    const backend =
+      activeQuery.data?.find((a) => a.id === athlete.id) ??
+      archivedQuery.data?.find((a) => a.id === athlete.id) ??
+      null;
+
+    setEditingBackendAthlete(backend);
     setIsFormOpen(true);
   };
 
   const closeForm = () => {
     setIsFormOpen(false);
-    setFormAthlete(null);
+    setEditingBackendAthlete(null);
+    createMutation.reset();
+    updateMutation.reset();
   };
 
-  const handleSaveAthlete = (athlete: Athlete) => {
-    setAthletes((prev) => {
-      const exists = prev.some((a) => a.id === athlete.id);
-      if (exists) {
-        return prev.map((a) => (a.id === athlete.id ? athlete : a));
-      }
-      return [...prev, athlete];
-    });
-    setSelectedId(athlete.id);
-    closeForm();
+  const handleFormSubmit = (values: AthleteFormValues) => {
+    const input: CreateAthleteInput = {
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      dateOfBirth: values.dateOfBirth || undefined,
+      position: values.position || undefined,
+      squadNumber: values.squadNumber || undefined,
+    };
+
+    if (editingBackendAthlete) {
+      updateMutation.mutate({ id: editingBackendAthlete.id, input });
+    } else {
+      createMutation.mutate(input);
+    }
   };
 
   const openArchiveDialog = (athlete: Athlete) => setArchivingAthlete(athlete);
@@ -96,25 +185,11 @@ export default function AthletesPage() {
 
   const handleArchiveConfirm = () => {
     if (!archivingAthlete) return;
-
-    setAthletes((prev) =>
-      prev.map((athlete) =>
-        athlete.id === archivingAthlete.id ? { ...athlete, isArchived: true } : athlete,
-      ),
-    );
-
-    if (selectedId === archivingAthlete.id) {
-      setSelectedId(null);
-    }
-
-    closeArchiveDialog();
+    archiveMutation.mutate(archivingAthlete.id);
   };
 
   const handleRestore = (athlete: Athlete) => {
-    setAthletes((prev) =>
-      prev.map((a) => (a.id === athlete.id ? { ...a, isArchived: false } : a)),
-    );
-    setSelectedId(athlete.id);
+    restoreMutation.mutate(athlete.id);
   };
 
   const switchTab = (archived: boolean) => {
@@ -203,26 +278,43 @@ export default function AthletesPage() {
                 </div>
               </div>
 
-              <RosterTable
-                athletes={filteredAthletes}
-                selectedId={selectedId}
-                showArchived={showArchived}
-                onSelect={handleSelect}
-                onEdit={openEditForm}
-                onArchive={openArchiveDialog}
-                onRestore={handleRestore}
-              />
-
-              {filteredAthletes.length === 0 && (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    {searchQuery
-                      ? "No athletes match your search."
-                      : showArchived
-                        ? "No archived athletes."
-                        : "No active athletes."}
-                  </p>
+              {isPending || isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading roster…
                 </div>
+              ) : error ? (
+                <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Failed to load athletes</p>
+                    <p>{error instanceof ApiError ? error.message : "Please try again later."}</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <RosterTable
+                    athletes={filteredAthletes}
+                    selectedId={selectedId}
+                    showArchived={showArchived}
+                    onSelect={handleSelect}
+                    onEdit={openEditForm}
+                    onArchive={openArchiveDialog}
+                    onRestore={handleRestore}
+                  />
+
+                  {filteredAthletes.length === 0 && (
+                    <div className="py-12 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {searchQuery
+                          ? "No athletes match your search."
+                          : showArchived
+                            ? "No archived athletes."
+                            : "No active athletes."}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
@@ -253,8 +345,8 @@ export default function AthletesPage() {
       <AthleteFormDialog
         isOpen={isFormOpen}
         onClose={closeForm}
-        athlete={formAthlete}
-        onSave={handleSaveAthlete}
+        initialValues={editingBackendAthlete ? toFormValues(editingBackendAthlete) : null}
+        onSubmit={handleFormSubmit}
       />
 
       <ArchiveConfirmDialog

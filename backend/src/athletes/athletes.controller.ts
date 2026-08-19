@@ -48,7 +48,12 @@ export class AthletesController {
 
     return this.athletesService.findAll(teamId);
   }
+  @Get('archived')
+  async findArchived(@CurrentUser() user: SessionUser) {
+    const teamId = await this.getTeamId(user.id);
 
+    return this.athletesService.findArchived(teamId);
+  }
   @Get(':id')
   async findOne(@CurrentUser() user: SessionUser, @Param('id') id: string) {
     const teamId = await this.getTeamId(user.id);

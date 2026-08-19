@@ -57,7 +57,13 @@ export interface Athlete {
   isArchived: boolean;
 }
 
-/** Sample squad used while the backend API is not yet connected. */
+/**
+ * Sample squad used only for local UI prototyping.
+ *
+ * AthletesPage now loads persisted athletes from the backend, so this mock
+ * array is no longer the main data source. It is kept temporarily in case
+ * another UI component still needs sample roster data.
+ */
 export const MOCK_ATHLETES: Athlete[] = [
   {
     id: "ath-001",
