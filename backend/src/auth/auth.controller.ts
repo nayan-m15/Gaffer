@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpException,
+  HttpStatus,
   Logger,
   Post,
   Req,
@@ -18,6 +19,7 @@ import { signInSchema, signUpSchema } from './auth.schemas';
 import { CurrentUser } from './current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { zodValidate } from '../common/zod-validate';
+import { isDatabaseConnectionError } from '../database/drizzle';
 
 /** Copies any `Set-Cookie` header Better Auth returned onto the Nest response. */
 function forwardSetCookie(res: Response, headers: Headers): void {
@@ -29,21 +31,31 @@ function forwardSetCookie(res: Response, headers: Headers): void {
 
 const logger = new Logger('AuthController');
 
-/** Better Auth raises `APIError` for auth failures; map it to a matching HTTP response. */
+/** Maps Better Auth and database errors to appropriate client-facing HTTP exceptions. */
 function toHttpException(error: unknown): HttpException {
+  if (isDatabaseConnectionError(error)) {
+    logger.error(
+      'Database connection timeout or network error in AuthController',
+      error,
+    );
+    return new HttpException(
+      'Database connection timed out or is unreachable. Please check your network connection and try again.',
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+
   if (error instanceof APIError) {
     return new HttpException(
       error.body?.message ?? error.message,
       error.statusCode,
     );
   }
-  // Anything else (network/DB error talking to Neon, an unexpected Better
-  // Auth internal failure, etc.) wasn't a recognized APIError, so there's no
-  // safe client-facing message to extract from it — but discarding it
-  // entirely made every such failure indistinguishable and undebuggable, so
-  // log the real error server-side before falling back to a generic 500.
+
   logger.error('Unrecognized error from Better Auth', error);
-  return new HttpException('Authentication request failed.', 500);
+  return new HttpException(
+    'Authentication request failed.',
+    HttpStatus.INTERNAL_SERVER_ERROR,
+  );
 }
 
 @Controller('auth')
