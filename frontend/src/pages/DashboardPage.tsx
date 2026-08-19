@@ -9,16 +9,22 @@ import {
   Activity,
   AlertCircle,
   Calendar,
+  CalendarCheck,
   MapPin,
   RefreshCw,
   TrendingUp,
   Trophy,
   BarChart3,
+  Users,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TYPES — contracts the dashboard expects from the backend.
- *  These will be moved to @/types once the backend endpoints are implemented.
+ *
+ *  Sprint 1 fields (activeAthletesCount, totalEventsCount, upcomingEvents)
+ *  are served by GET /dashboard.  Sprint 2+ fields (liveMatch,
+ *  seasonSummary, recentForm, recentStats) are optional and will be
+ *  populated as those backend features are implemented.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 interface LiveMatchData {
@@ -47,13 +53,13 @@ interface RecentResult {
   date: string;
 }
 
-interface UpcomingFixture {
+/** Sprint 1 upcoming event — matches the backend events table schema. */
+interface UpcomingEvent {
   id: string;
-  opponent: string;
-  homeAway: "Home" | "Away";
-  venue: string;
-  date: string;
-  time: string;
+  title: string;
+  type: "match" | "training" | "meeting";
+  scheduledAt: string;
+  location: string;
 }
 
 interface MatchStat {
@@ -62,11 +68,15 @@ interface MatchStat {
 }
 
 interface DashboardData {
-  liveMatch: LiveMatchData | null;
-  seasonSummary: SeasonSummaryData | null;
-  recentForm: RecentResult[];
-  upcomingFixtures: UpcomingFixture[];
-  recentStats: MatchStat[];
+  /* Sprint 1 — served by GET /dashboard */
+  activeAthletesCount: number;
+  totalEventsCount: number;
+  upcomingEvents: UpcomingEvent[];
+  /* Sprint 2+ — optional until those backend features ship */
+  liveMatch?: LiveMatchData | null;
+  seasonSummary?: SeasonSummaryData | null;
+  recentForm?: RecentResult[];
+  recentStats?: MatchStat[];
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -78,17 +88,39 @@ async function fetchDashboardData(): Promise<DashboardData> {
     return await apiFetch<DashboardData>("/dashboard");
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
-      // Endpoint not yet implemented — return empty state gracefully.
+      // Endpoint not yet reachable — render empty state gracefully.
       return {
-        liveMatch: null,
-        seasonSummary: null,
-        recentForm: [],
-        upcomingFixtures: [],
-        recentStats: [],
+        activeAthletesCount: 0,
+        totalEventsCount: 0,
+        upcomingEvents: [],
       };
     }
     throw error;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  DATE / TIME FORMATTING HELPERS
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const DATE_FMT = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
+const TIME_FMT = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+function formatEventDate(iso: string): string {
+  return DATE_FMT.format(new Date(iso));
+}
+
+function formatEventTime(iso: string): string {
+  return TIME_FMT.format(new Date(iso));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -184,7 +216,7 @@ function DashboardHeader({
             {userName
               ? `Welcome back, ${userName}`
               : "Welcome back"}
-            {teamName ? ` · ${teamName}` : ""}
+            {teamName ? ` \u00b7 ${teamName}` : ""}
           </p>
         </div>
         {isLive !== undefined && (
@@ -207,7 +239,39 @@ function DashboardHeader({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  LIVE MATCH CARD
+ *  STAT CARDS — Active Athletes & Total Events  (Sprint 1)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function StatCard({
+  label,
+  value,
+  icon,
+  ariaLabel,
+}: {
+  label: string;
+  value: number;
+  icon: ReactNode;
+  ariaLabel: string;
+}) {
+  return (
+    <Card aria-label={ariaLabel}>
+      <div className="flex items-center gap-4">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <div>
+          <p className="text-3xl font-bold tabular-nums text-foreground">
+            {value}
+          </p>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  LIVE MATCH CARD  (Sprint 2 — deferred)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function LiveMatchCard({
@@ -262,7 +326,7 @@ function LiveMatchCard({
               {match.homeTeam}
             </span>
             <span className="font-mono text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
-              {match.homeScore}&thinsp;–&thinsp;{match.awayScore}
+              {match.homeScore}&thinsp;\u2013&thinsp;{match.awayScore}
             </span>
             <span className="text-lg font-bold text-foreground sm:text-xl">
               {match.awayTeam}
@@ -289,7 +353,7 @@ function LiveMatchCard({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  SEASON SUMMARY
+ *  SEASON SUMMARY  (Sprint 2 — deferred)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function SummaryStat({
@@ -313,7 +377,7 @@ function SummaryStat({
               : "text-foreground",
         )}
       >
-        {value ?? "—"}
+        {value ?? "\u2014"}
       </span>
       <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
@@ -352,7 +416,7 @@ function SeasonSummaryCard({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  RECENT FORM
+ *  RECENT FORM  (Sprint 2 — deferred)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function ResultBadge({ result }: { result: "W" | "D" | "L" }) {
@@ -398,7 +462,7 @@ function RecentFormCard({ results }: { results: RecentResult[] }) {
               vs {results[0].opponent}
             </p>
             <p className="text-xs text-muted-foreground">
-              {results[0].score} · {results[0].date}
+              {results[0].score} \u00b7 {results[0].date}
             </p>
           </div>
         </div>
@@ -413,52 +477,80 @@ function RecentFormCard({ results }: { results: RecentResult[] }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  UPCOMING FIXTURES
+ *  UPCOMING EVENTS  (Sprint 1 — connected to real backend)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function FixtureItem({ fixture }: { fixture: UpcomingFixture }) {
+const EVENT_TYPE_STYLES: Record<
+  UpcomingEvent["type"],
+  { bg: string; text: string; label: string }
+> = {
+  match: { bg: "bg-primary/10", text: "text-primary", label: "Match" },
+  training: { bg: "bg-muted", text: "text-foreground", label: "Training" },
+  meeting: {
+    bg: "bg-muted-foreground/10",
+    text: "text-muted-foreground",
+    label: "Meeting",
+  },
+};
+
+function EventItem({ event }: { event: UpcomingEvent }) {
+  const typeStyle = EVENT_TYPE_STYLES[event.type];
+
   return (
     <li className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0 last:pb-0">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">
-          {fixture.opponent}
+          {event.title}
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+              typeStyle.bg,
+              typeStyle.text,
+            )}
+          >
+            {typeStyle.label}
+          </span>
           <span className="flex items-center gap-1">
             <MapPin className="size-3" aria-hidden="true" />
-            {fixture.homeAway} · {fixture.venue}
+            {event.location}
           </span>
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-xs font-medium text-foreground">{fixture.date}</p>
-        <p className="text-xs text-muted-foreground">{fixture.time}</p>
+        <p className="text-xs font-medium text-foreground">
+          {formatEventDate(event.scheduledAt)}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {formatEventTime(event.scheduledAt)}
+        </p>
       </div>
     </li>
   );
 }
 
-function UpcomingFixturesCard({
-  fixtures,
+function UpcomingEventsCard({
+  events: upcomingEvents,
 }: {
-  fixtures: UpcomingFixture[];
+  events: UpcomingEvent[];
 }) {
   return (
-    <Card aria-label="Upcoming fixtures">
+    <Card aria-label="Upcoming events" className="min-h-[11rem]">
       <SectionTitle
         icon={<Calendar className="size-4 text-muted-foreground" />}
       >
-        Upcoming Fixtures
+        Upcoming Events
       </SectionTitle>
-      {fixtures.length > 0 ? (
+      {upcomingEvents.length > 0 ? (
         <ul className="-my-1">
-          {fixtures.map((f) => (
-            <FixtureItem key={f.id} fixture={f} />
+          {upcomingEvents.map((event) => (
+            <EventItem key={event.id} event={event} />
           ))}
         </ul>
       ) : (
         <EmptyState
-          message="No upcoming fixtures scheduled"
+          message="No upcoming events scheduled"
           icon={<Calendar className="size-6" />}
         />
       )}
@@ -467,7 +559,7 @@ function UpcomingFixturesCard({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  RECENT STATS PER MATCH
+ *  RECENT STATS PER MATCH  (Sprint 2 — deferred)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
@@ -567,6 +659,10 @@ export default function DashboardPage() {
           teamName={team?.name ?? null}
         />
         <div className="space-y-6 p-6 sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-2">
+            <CardSkeleton lines={1} />
+            <CardSkeleton lines={1} />
+          </div>
           <CardSkeleton lines={2} />
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="lg:col-span-3">
@@ -587,17 +683,17 @@ export default function DashboardPage() {
 
   /* ── Loaded state ─────────────────────────────────────────────────────── */
   const {
+    activeAthletesCount,
+    totalEventsCount,
+    upcomingEvents,
     liveMatch,
     seasonSummary,
     recentForm,
-    upcomingFixtures,
     recentStats,
   } = data ?? {
-    liveMatch: null,
-    seasonSummary: null,
-    recentForm: [],
-    upcomingFixtures: [],
-    recentStats: [],
+    activeAthletesCount: 0,
+    totalEventsCount: 0,
+    upcomingEvents: [],
   };
 
   return (
@@ -605,30 +701,46 @@ export default function DashboardPage() {
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
-        isLive={liveMatch !== null}
+        isLive={liveMatch != null}
       />
 
       <div className="space-y-6 p-6 sm:p-8">
-        {/* ── Live Match ─────────────────────────────────────────────────── */}
+        {/* ── Sprint 2: Live Match (deferred — shows empty state) ─────────── */}
         <LiveMatchCard
-          match={liveMatch}
+          match={liveMatch ?? null}
           onOpenLogger={() => navigate("/events")}
         />
 
-        {/* ── Season Summary + Recent Form ───────────────────────────────── */}
+        {/* ── Sprint 1: Stat Cards ────────────────────────────────────────── */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <StatCard
+            label="Active Athletes"
+            value={activeAthletesCount}
+            icon={<Users className="size-6" aria-hidden="true" />}
+            ariaLabel="Active athletes count"
+          />
+          <StatCard
+            label="Total Events"
+            value={totalEventsCount}
+            icon={<CalendarCheck className="size-6" aria-hidden="true" />}
+            ariaLabel="Total events count"
+          />
+        </div>
+
+        {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3">
-            <SeasonSummaryCard summary={seasonSummary} />
+            <UpcomingEventsCard events={upcomingEvents} />
           </div>
           <div className="lg:col-span-2">
-            <RecentFormCard results={recentForm} />
+            <RecentFormCard results={recentForm ?? []} />
           </div>
         </div>
 
-        {/* ── Upcoming Fixtures + Recent Stats ──────────────────────────── */}
+        {/* ── Sprint 2: Season Summary + Recent Stats (deferred) ──────────── */}
         <div className="grid gap-6 lg:grid-cols-2">
-          <UpcomingFixturesCard fixtures={upcomingFixtures} />
-          <RecentStatsCard stats={recentStats} />
+          <SeasonSummaryCard summary={seasonSummary ?? null} />
+          <RecentStatsCard stats={recentStats ?? []} />
         </div>
       </div>
     </>

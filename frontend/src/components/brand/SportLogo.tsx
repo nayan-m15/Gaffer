@@ -1,7 +1,7 @@
 /**
  * SportLogo — Brand logo image for the Sport Coaching Tool.
  *
- * Renders the canonical `Logo.jpeg` asset from the `assets` folder.
+ * Renders the canonical `Logo.png` asset (with transparent background) from the `assets` folder.
  * The component accepts an optional `size` prop (in px) so it can be rendered
  * at navbar, favicon or hero scale, and a `className` prop for additional
  * Tailwind / CSS overrides.
@@ -11,7 +11,7 @@
  *   <SportLogo size={40} />
  */
 
-import logoSrc from "@/assets/Logo.jpeg";
+import logoSrc from "@/assets/Logo.png";
 
 interface SportLogoProps {
   /** Width & height in pixels — defaults to 32 (navbar size). */
