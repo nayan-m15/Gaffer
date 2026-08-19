@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { AppShell } from '@/layouts/AppShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
@@ -22,29 +23,16 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route
-          path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <AppShell />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/athletes"
-          element={
-            <ProtectedRoute>
-              <AthletesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/events"
-          element={
-            <ProtectedRoute>
-              <EventsPage />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/athletes" element={<AthletesPage />} />
+          <Route path="/events" element={<EventsPage />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )

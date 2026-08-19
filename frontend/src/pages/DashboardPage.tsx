@@ -1,7 +1,6 @@
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -533,62 +532,56 @@ export default function DashboardPage() {
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden lg:pl-64">
-          <DashboardHeader
-            userName={user?.name ?? null}
-            teamName={team?.name ?? null}
-          />
-          <div className="flex flex-col items-center justify-center gap-4 p-16">
-            <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
-            <div className="text-center">
-              <p className="font-medium text-foreground">
-                Failed to load dashboard data
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {error instanceof Error
-                  ? error.message
-                  : "An unexpected error occurred"}
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => void refetch()}>
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Try again
-            </Button>
+      <>
+        <DashboardHeader
+          userName={user?.name ?? null}
+          teamName={team?.name ?? null}
+        />
+        <div className="flex flex-col items-center justify-center gap-4 p-16">
+          <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
+          <div className="text-center">
+            <p className="font-medium text-foreground">
+              Failed to load dashboard data
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {error instanceof Error
+                ? error.message
+                : "An unexpected error occurred"}
+            </p>
           </div>
-        </main>
-      </div>
+          <Button variant="outline" onClick={() => void refetch()}>
+            <RefreshCw className="size-4" aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      </>
     );
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden lg:pl-64">
-          <DashboardHeader
-            userName={user?.name ?? null}
-            teamName={team?.name ?? null}
-          />
-          <div className="space-y-6 p-6 sm:p-8">
-            <CardSkeleton lines={2} />
-            <div className="grid gap-6 lg:grid-cols-5">
-              <div className="lg:col-span-3">
-                <CardSkeleton lines={3} />
-              </div>
-              <div className="lg:col-span-2">
-                <CardSkeleton lines={3} />
-              </div>
+      <>
+        <DashboardHeader
+          userName={user?.name ?? null}
+          teamName={team?.name ?? null}
+        />
+        <div className="space-y-6 p-6 sm:p-8">
+          <CardSkeleton lines={2} />
+          <div className="grid gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+              <CardSkeleton lines={3} />
             </div>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <CardSkeleton lines={4} />
-              <CardSkeleton lines={4} />
+            <div className="lg:col-span-2">
+              <CardSkeleton lines={3} />
             </div>
           </div>
-        </main>
-      </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <CardSkeleton lines={4} />
+            <CardSkeleton lines={4} />
+          </div>
+        </div>
+      </>
     );
   }
 
@@ -608,39 +601,36 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <main className="flex-1 overflow-x-hidden lg:pl-64">
-        <DashboardHeader
-          userName={user?.name ?? null}
-          teamName={team?.name ?? null}
-          isLive={liveMatch !== null}
+    <>
+      <DashboardHeader
+        userName={user?.name ?? null}
+        teamName={team?.name ?? null}
+        isLive={liveMatch !== null}
+      />
+
+      <div className="space-y-6 p-6 sm:p-8">
+        {/* ── Live Match ─────────────────────────────────────────────────── */}
+        <LiveMatchCard
+          match={liveMatch}
+          onOpenLogger={() => navigate("/events")}
         />
 
-        <div className="space-y-6 p-6 sm:p-8">
-          {/* ── Live Match ─────────────────────────────────────────────────── */}
-          <LiveMatchCard
-            match={liveMatch}
-            onOpenLogger={() => navigate("/events")}
-          />
-
-          {/* ── Season Summary + Recent Form ───────────────────────────────── */}
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-3">
-              <SeasonSummaryCard summary={seasonSummary} />
-            </div>
-            <div className="lg:col-span-2">
-              <RecentFormCard results={recentForm} />
-            </div>
+        {/* ── Season Summary + Recent Form ───────────────────────────────── */}
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <SeasonSummaryCard summary={seasonSummary} />
           </div>
-
-          {/* ── Upcoming Fixtures + Recent Stats ──────────────────────────── */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <UpcomingFixturesCard fixtures={upcomingFixtures} />
-            <RecentStatsCard stats={recentStats} />
+          <div className="lg:col-span-2">
+            <RecentFormCard results={recentForm} />
           </div>
         </div>
-      </main>
-    </div>
+
+        {/* ── Upcoming Fixtures + Recent Stats ──────────────────────────── */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <UpcomingFixturesCard fixtures={upcomingFixtures} />
+          <RecentStatsCard stats={recentStats} />
+        </div>
+      </div>
+    </>
   );
 }

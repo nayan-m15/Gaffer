@@ -6,7 +6,6 @@ import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
-import { RosterSidebar } from "@/components/roster/RosterSidebar";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
@@ -199,11 +198,8 @@ export default function AthletesPage() {
   };
 
   return (
-    <div className="roster-page dark min-h-screen bg-background">
-      <RosterSidebar />
-
-      <main className="transition-all md:ml-64">
-        <div className="mx-auto max-w-7xl p-4 pt-20 md:p-8 md:pt-8">
+    <>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
           {/* Page header */}
           <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
             <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
@@ -339,8 +335,7 @@ export default function AthletesPage() {
               )}
             </section>
           </div>
-        </div>
-      </main>
+      </div>
 
       <AthleteFormDialog
         isOpen={isFormOpen}
@@ -355,7 +350,7 @@ export default function AthletesPage() {
         onConfirm={handleArchiveConfirm}
         athleteName={archivingAthlete?.name ?? ""}
       />
-    </div>
+    </>
   );
 }
 

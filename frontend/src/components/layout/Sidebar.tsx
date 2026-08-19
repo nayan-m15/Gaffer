@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
@@ -34,11 +34,6 @@ const NAV_ITEMS: NavItem[] = [
     path: "/events",
     icon: <Calendar className="size-5" />,
   },
-  {
-    label: "Stats",
-    path: "/events",
-    icon: <BarChart3 className="size-5" />,
-  },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -53,7 +48,6 @@ export function Sidebar({ className }: SidebarProps) {
   const { user, team, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const handleSignOut = async () => {
@@ -64,13 +58,6 @@ export function Sidebar({ className }: SidebarProps) {
       console.error("Failed to sign out:", error);
     }
   };
-
-  const handleNavigate = (path: string) => {
-    navigate(path);
-    setIsMobileOpen(false);
-  };
-
-  const isActive = (path: string) => location.pathname === path;
 
   /* ── Sidebar content (shared between desktop and mobile) ─────────────── */
   const sidebarContent = (
@@ -90,27 +77,37 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item.path);
-          return (
-            <button
-              key={item.label}
-              onClick={() => handleNavigate(item.path)}
-              className={cn(
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.label}
+            to={item.path}
+            onClick={() => setIsMobileOpen(false)}
+            className={({ isActive }) =>
+              cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                active
+                isActive
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="shrink-0" aria-hidden="true">
-                {item.icon}
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
+              )
+            }
+          >
+            <span className="shrink-0" aria-hidden="true">
+              {item.icon}
+            </span>
+            {item.label}
+          </NavLink>
+        ))}
+
+        {/* Stats — disabled until a later sprint */}
+        <span
+          className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/50"
+          title="Coming in a later sprint"
+        >
+          <span className="shrink-0" aria-hidden="true">
+            <BarChart3 className="size-5" />
+          </span>
+          Stats
+        </span>
       </nav>
 
       {/* Footer */}
