@@ -18,6 +18,8 @@ interface PitchPlayerProps {
   athlete: BackendAthlete | null;
   /** The current drag item, if any. */
   dragItem: DragItem | null;
+  /** When true, transform vertical formation coords to horizontal layout. */
+  horizontal?: boolean;
   /** Called when a drag starts on this player. */
   onDragStart: (item: DragItem) => void;
   /** Called when a drag ends. */
@@ -39,11 +41,20 @@ export function PitchPlayer({
   position,
   athlete,
   dragItem,
+  horizontal = false,
   onDragStart,
   onDragEnd,
   onDrop,
 }: PitchPlayerProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Transform vertical formation coords to horizontal when needed.
+  // Vertical: x = across, y = down (opponent goal at top, own at bottom).
+  // Horizontal: own goal at left, opponent at right.
+  //   left%  = original y
+  //   top%   = 100 - original x
+  const left = horizontal ? position.y : position.x;
+  const top = horizontal ? 100 - position.x : position.y;
 
   const isDragging =
     dragItem !== null &&
@@ -126,7 +137,7 @@ export function PitchPlayer({
     return (
       <div
         className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
-        style={{ left: `${position.x}%`, top: `${position.y}%` }}
+        style={{ left: `${left}%`, top: `${top}%` }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -169,7 +180,7 @@ export function PitchPlayer({
         "absolute -translate-x-1/2 -translate-y-1/2 z-10 transition-transform duration-150",
         isDragOver && isValidDrop && "scale-105",
       )}
-      style={{ left: `${position.x}%`, top: `${position.y}%` }}
+      style={{ left: `${left}%`, top: `${top}%` }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

@@ -7,7 +7,7 @@
  * data is used; empty and loading states are handled explicitly.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -33,6 +33,18 @@ export default function TeamManagementPage() {
   const athleteList = athletes ?? emptyRef.current;
 
   const lineup = useLineupState(athleteList);
+
+  // Detect desktop viewport (lg breakpoint = 1024px) for horizontal pitch
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    setIsDesktop(mq.matches);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   /* ── Lookup helpers ──────────────────────────────────────────────────────── */
 
@@ -200,13 +212,14 @@ export default function TeamManagementPage() {
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
-        <FootballPitch>
+        <FootballPitch horizontal={isDesktop}>
           {lineup.formation?.positions.map((pos) => (
             <PitchPlayer
               key={pos.id}
               position={pos}
               athlete={getAthlete(lineup.assignments[pos.id] ?? null)}
               dragItem={lineup.dragItem}
+              horizontal={isDesktop}
               onDragStart={lineup.startDrag}
               onDragEnd={lineup.endDrag}
               onDrop={lineup.handleDrop}

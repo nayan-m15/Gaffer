@@ -10,7 +10,7 @@
  * - GK position only accepts goalkeepers
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BackendAthlete } from "@/services/athletes";
 import {
   FORMATIONS,
@@ -44,6 +44,18 @@ export function useLineupState(athletes: BackendAthlete[]) {
   const [substituteIds, setSubstituteIds] = useState<string[]>([]);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Track whether we've performed the initial auto-populate of subs
+  const initializedRef = useRef(false);
+
+  // Auto-populate all athletes into the substitutes bench on first load
+  useEffect(() => {
+    if (initializedRef.current) return;
+    if (athletes.length === 0) return;
+
+    initializedRef.current = true;
+    setSubstituteIds(athletes.map((a) => a.id));
+  }, [athletes]);
 
   /* ── Derived data ──────────────────────────────────────────────────────── */
 
@@ -267,9 +279,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
   const resetLineup = useCallback(() => {
     setAssignments(emptyAssignments(formationId));
-    setSubstituteIds([]);
+    // Return all athletes to the substitutes bench
+    setSubstituteIds(athletes.map((a) => a.id));
     setError(null);
-  }, [formationId]);
+  }, [formationId, athletes]);
 
   const autoFill = useCallback(() => {
     const allIds = athletes.map((a) => a.id);
