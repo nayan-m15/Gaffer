@@ -7,10 +7,14 @@ import { EventsModule } from './events/events.module';
 import { TeamsModule } from './teams/teams.module';
 import { AthletesModule } from './athletes/athletes.module';
 
-
-
 @Module({
-  imports: [DatabaseModule, AuthModule, TeamsModule, AthletesModule, EventsModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    TeamsModule,
+    AthletesModule,
+    EventsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
