@@ -1,0 +1,328 @@
+/**
+ * Core state management hook for the Team Management tactical board.
+ *
+ * Manages formation selection, starting XI assignments, substitutes, and
+ * all drag-and-drop operations while enforcing the hard team rules:
+ *
+ * - Maximum 11 players on the pitch
+ * - Exactly 1 goalkeeper in a complete XI
+ * - No player in both starting XI and substitutes simultaneously
+ * - GK position only accepts goalkeepers
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { BackendAthlete } from "@/services/athletes";
+import {
+  FORMATIONS,
+  DEFAULT_FORMATION_ID,
+  remapPlayers,
+  autoFillFormation,
+} from "./formations";
+import type { DragItem, PitchAssignments } from "./types";
+
+/** Check whether a position string represents a goalkeeper. */
+function isGoalkeeper(position: string | null): boolean {
+  return (position ?? "").toUpperCase() === "GK";
+}
+
+/** Build an empty assignments map for a given formation. */
+function emptyAssignments(formationId: string): PitchAssignments {
+  const formation = FORMATIONS[formationId];
+  if (!formation) return {};
+  const assignments: PitchAssignments = {};
+  for (const pos of formation.positions) {
+    assignments[pos.id] = null;
+  }
+  return assignments;
+}
+
+export function useLineupState(athletes: BackendAthlete[]) {
+  const [formationId, setFormationIdState] = useState(DEFAULT_FORMATION_ID);
+  const [assignments, setAssignments] = useState<PitchAssignments>(
+    () => emptyAssignments(DEFAULT_FORMATION_ID),
+  );
+  const [substituteIds, setSubstituteIds] = useState<string[]>([]);
+  const [dragItem, setDragItem] = useState<DragItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Track whether we've performed the initial auto-populate of subs
+  const initializedRef = useRef(false);
+
+  // Auto-populate all athletes into the substitutes bench on first load
+  useEffect(() => {
+    if (initializedRef.current) return;
+    if (athletes.length === 0) return;
+
+    initializedRef.current = true;
+    setSubstituteIds(athletes.map((a) => a.id));
+  }, [athletes]);
+
+  /* ── Derived data ──────────────────────────────────────────────────────── */
+
+  const formation = FORMATIONS[formationId];
+
+  /** Set of athlete IDs currently on the pitch. */
+  const pitchAthleteIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const athleteId of Object.values(assignments)) {
+      if (athleteId) ids.add(athleteId);
+    }
+    return ids;
+  }, [assignments]);
+
+  /** Number of players currently on the pitch. */
+  const pitchCount = pitchAthleteIds.size;
+
+  /** Whether the starting XI is complete (exactly 11). */
+  const isXiComplete = pitchCount === 11;
+
+  /** Whether exactly one goalkeeper is assigned to the GK position. */
+  const hasGoalkeeper = useMemo(() => {
+    if (!formation) return false;
+    const gkPos = formation.positions.find((p) => p.role === "GK");
+    if (!gkPos) return false;
+    const gkAthleteId = assignments[gkPos.id];
+    if (!gkAthleteId) return false;
+    const athlete = athletes.find((a) => a.id === gkAthleteId);
+    return isGoalkeeper(athlete?.position ?? null);
+  }, [formation, assignments, athletes]);
+
+  /* ── Formation change ──────────────────────────────────────────────────── */
+
+  const setFormation = useCallback(
+    (newFormationId: string) => {
+      if (newFormationId === formationId) return;
+      if (!FORMATIONS[newFormationId]) return;
+
+      const { assignments: newAssignments, overflowToSubs } = remapPlayers(
+        formationId,
+        newFormationId,
+        assignments,
+      );
+
+      setFormationIdState(newFormationId);
+      setAssignments(newAssignments);
+
+      // Merge overflow into existing substitutes (avoid duplicates)
+      setSubstituteIds((prev) => {
+        const merged = new Set([...prev, ...overflowToSubs]);
+        return Array.from(merged);
+      });
+
+      setError(null);
+    },
+    [formationId, assignments],
+  );
+
+  /* ── Drag start / end ──────────────────────────────────────────────────── */
+
+  const startDrag = useCallback((item: DragItem) => {
+    setDragItem(item);
+    setError(null);
+  }, []);
+
+  const endDrag = useCallback(() => {
+    setDragItem(null);
+  }, []);
+
+  /* ── Drop operations ───────────────────────────────────────────────────── */
+
+  /**
+   * Move a substitute onto the pitch at a specific position.
+   *
+   * If the target position is already occupied, the two players swap
+   * (the occupant goes to the bench).
+   */
+  const dropSubOnPitch = useCallback(
+    (athleteId: string, targetPositionId: string) => {
+      if (!formation) return;
+
+      // Validate: no duplicates
+      if (pitchAthleteIds.has(athleteId)) {
+        setError("This player is already on the pitch.");
+        return;
+      }
+
+      // Validate: max 11 (only if the player is genuinely new to the pitch)
+      const targetOccupant = assignments[targetPositionId];
+      if (!targetOccupant && pitchCount >= 11) {
+        setError("Starting XI is full. Remove a player first.");
+        return;
+      }
+
+      // Validate: GK position only accepts goalkeepers
+      const targetPos = formation.positions.find((p) => p.id === targetPositionId);
+      if (targetPos?.role === "GK") {
+        const athlete = athletes.find((a) => a.id === athleteId);
+        if (!isGoalkeeper(athlete?.position ?? null)) {
+          setError("Only a goalkeeper can play in the GK position.");
+          return;
+        }
+      }
+
+      setAssignments((prev) => ({
+        ...prev,
+        [targetPositionId]: athleteId,
+      }));
+
+      setSubstituteIds((prev) => {
+        // Remove the new player from subs
+        const filtered = prev.filter((id) => id !== athleteId);
+        // If there was an occupant, they go to subs
+        if (targetOccupant && targetOccupant !== athleteId) {
+          return [...filtered.filter((id) => id !== targetOccupant), targetOccupant];
+        }
+        return filtered;
+      });
+
+      setError(null);
+    },
+    [formation, pitchAthleteIds, assignments, pitchCount, athletes],
+  );
+
+  /**
+   * Move a pitch player to the substitutes bench.
+   */
+  const dropPitchOnSubs = useCallback(
+    (athleteId: string, sourcePositionId: string) => {
+      // Remove from pitch
+      setAssignments((prev) => ({
+        ...prev,
+        [sourcePositionId]: null,
+      }));
+
+      // Add to subs (avoid duplicates)
+      setSubstituteIds((prev) =>
+        prev.includes(athleteId) ? prev : [...prev, athleteId],
+      );
+
+      setError(null);
+    },
+    [],
+  );
+
+  /**
+   * Swap two pitch players between positions.
+   */
+  const swapPitchPlayers = useCallback(
+    (fromPositionId: string, toPositionId: string) => {
+      if (!formation) return;
+      if (fromPositionId === toPositionId) return;
+
+      const fromAthlete = assignments[fromPositionId];
+      const toAthlete = assignments[toPositionId];
+
+      if (!fromAthlete) return;
+
+      // Validate: GK swap rules
+      const fromPos = formation.positions.find((p) => p.id === fromPositionId);
+      const toPos = formation.positions.find((p) => p.id === toPositionId);
+
+      // If moving to GK position, the incoming player must be a goalkeeper
+      if (toPos?.role === "GK" && fromAthlete) {
+        const athlete = athletes.find((a) => a.id === fromAthlete);
+        if (!isGoalkeeper(athlete?.position ?? null)) {
+          setError("Only a goalkeeper can play in the GK position.");
+          return;
+        }
+      }
+
+      // If moving from GK position, the replacement must also be a GK
+      // (or the position stays empty)
+      if (fromPos?.role === "GK" && toAthlete) {
+        const athlete = athletes.find((a) => a.id === toAthlete);
+        if (!isGoalkeeper(athlete?.position ?? null)) {
+          setError("Only a goalkeeper can play in the GK position.");
+          return;
+        }
+      }
+
+      setAssignments((prev) => ({
+        ...prev,
+        [fromPositionId]: toAthlete ?? null,
+        [toPositionId]: fromAthlete,
+      }));
+
+      setError(null);
+    },
+    [formation, assignments, athletes],
+  );
+
+  /**
+   * Handle any drop based on the drag payload and target.
+   */
+  const handleDrop = useCallback(
+    (
+      source: DragItem,
+      target:
+        | { type: "pitch"; positionId: string }
+        | { type: "subs" },
+    ) => {
+      if (target.type === "pitch") {
+        if (source.source === "subs") {
+          dropSubOnPitch(source.athleteId, target.positionId);
+        } else if (source.source === "pitch" && source.positionId) {
+          // Pitch-to-pitch: swap
+          swapPitchPlayers(source.positionId, target.positionId);
+        }
+      } else if (target.type === "subs") {
+        if (source.source === "pitch" && source.positionId) {
+          dropPitchOnSubs(source.athleteId, source.positionId);
+        }
+        // Sub-to-sub is a no-op
+      }
+    },
+    [dropSubOnPitch, swapPitchPlayers, dropPitchOnSubs],
+  );
+
+  /* ── Reset & auto-fill ─────────────────────────────────────────────────── */
+
+  const resetLineup = useCallback(() => {
+    setAssignments(emptyAssignments(formationId));
+    // Return all athletes to the substitutes bench
+    setSubstituteIds(athletes.map((a) => a.id));
+    setError(null);
+  }, [formationId, athletes]);
+
+  const autoFill = useCallback(() => {
+    const allIds = athletes.map((a) => a.id);
+    const getPosition = (id: string) =>
+      athletes.find((a) => a.id === id)?.position ?? null;
+
+    const { assignments: newAssignments, substituteIds: newSubs } =
+      autoFillFormation(formationId, allIds, getPosition);
+
+    setAssignments(newAssignments);
+    setSubstituteIds(newSubs);
+    setError(null);
+  }, [athletes, formationId]);
+
+  /* ── Public API ────────────────────────────────────────────────────────── */
+
+  return {
+    // State
+    formationId,
+    formation,
+    assignments,
+    substituteIds,
+    dragItem,
+    error,
+    pitchCount,
+    isXiComplete,
+    hasGoalkeeper,
+    pitchAthleteIds,
+
+    // Derived athlete counts
+    totalAthletes: athletes.length,
+    hasEnoughForXi: athletes.length >= 11,
+
+    // Actions
+    setFormation,
+    startDrag,
+    endDrag,
+    handleDrop,
+    resetLineup,
+    autoFill,
+    clearError: () => setError(null),
+  };
+}
