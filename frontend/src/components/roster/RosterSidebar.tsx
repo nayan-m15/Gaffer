@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { LayoutDashboard, Users, CalendarDays, BarChart3, X, Menu } from "lucide-react";
-import logo from "@/assets/Logo.jpeg";
+import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -68,11 +68,7 @@ export function RosterSidebar({ className }: RosterSidebarProps) {
       >
         {/* Logo / wordmark */}
         <div className="flex items-center gap-3 px-6 py-6">
-          <img
-            src={logo}
-            alt=""
-            className="size-9 rounded-md object-cover"
-          />
+          <SportLogo size={36} className="shrink-0" />
           <div className="leading-tight">
             <p className="text-sm font-bold tracking-tight text-sidebar-foreground">
               {brand.name.toUpperCase()}
