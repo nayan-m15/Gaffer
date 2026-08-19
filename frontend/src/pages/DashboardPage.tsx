@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { SportLogo } from "@/components/brand/SportLogo";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -165,33 +165,18 @@ function CardSkeleton({ lines = 3 }: { lines?: number }) {
  *  DASHBOARD HEADER
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-interface DashboardHeaderProps {
-  userName: string | null;
-  teamName: string | null;
-  isLive: boolean;
-  onSignOut: () => void;
-}
-
 function DashboardHeader({
   userName,
   teamName,
   isLive,
-  onSignOut,
-}: DashboardHeaderProps) {
+}: {
+  userName: string | null;
+  teamName: string | null;
+  isLive?: boolean;
+}) {
   return (
-    <header>
-      <div className="flex items-center justify-between border-b border-border px-6 py-4 sm:px-8">
-        <div className="flex items-center gap-3">
-          <SportLogo size={32} className="rounded-md" />
-          <span className="font-display text-lg font-bold tracking-wide text-foreground">
-            GAFFER
-          </span>
-        </div>
-        <Button variant="outline" onClick={onSignOut}>
-          Sign out
-        </Button>
-      </div>
-      <div className="flex flex-col gap-1 px-6 pt-6 pb-4 sm:flex-row sm:items-end sm:justify-between sm:px-8">
+    <header className="border-b border-border px-6 py-6 sm:px-8">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold uppercase tracking-widest text-foreground sm:text-3xl">
             Dashboard
@@ -203,20 +188,21 @@ function DashboardHeader({
             {teamName ? ` · ${teamName}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "inline-block size-2 rounded-full",
-              isLive ? "bg-primary" : "bg-muted-foreground/40",
-            )}
-            aria-hidden="true"
-          />
-          <span className="text-xs font-medium text-muted-foreground">
-            Sideline Mode {isLive ? "Active" : "Inactive"}
-          </span>
-        </div>
+        {isLive !== undefined && (
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-block size-2 rounded-full",
+                isLive ? "bg-primary" : "bg-muted-foreground/40",
+              )}
+              aria-hidden="true"
+            />
+            <span className="text-xs font-medium text-muted-foreground">
+              Sideline Mode {isLive ? "Active" : "Inactive"}
+            </span>
+          </div>
+        )}
       </div>
-      <div className="mx-6 border-b border-border sm:mx-8" />
     </header>
   );
 }
@@ -529,13 +515,8 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
-  const { user, team, signOut } = useAuth();
+  const { user, team } = useAuth();
   const navigate = useNavigate();
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/login", { replace: true });
-  };
 
   const {
     data,
@@ -552,60 +533,62 @@ export default function DashboardPage() {
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <main className="min-h-screen bg-background">
-        <DashboardHeader
-          userName={user?.name ?? null}
-          teamName={team?.name ?? null}
-          isLive={false}
-          onSignOut={() => void handleSignOut()}
-        />
-        <div className="flex flex-col items-center justify-center gap-4 p-16">
-          <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
-          <div className="text-center">
-            <p className="font-medium text-foreground">
-              Failed to load dashboard data
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {error instanceof Error
-                ? error.message
-                : "An unexpected error occurred"}
-            </p>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 overflow-x-hidden lg:pl-64">
+          <DashboardHeader
+            userName={user?.name ?? null}
+            teamName={team?.name ?? null}
+          />
+          <div className="flex flex-col items-center justify-center gap-4 p-16">
+            <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
+            <div className="text-center">
+              <p className="font-medium text-foreground">
+                Failed to load dashboard data
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {error instanceof Error
+                  ? error.message
+                  : "An unexpected error occurred"}
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => void refetch()}>
+              <RefreshCw className="size-4" aria-hidden="true" />
+              Try again
+            </Button>
           </div>
-          <Button variant="outline" onClick={() => void refetch()}>
-            <RefreshCw className="size-4" aria-hidden="true" />
-            Try again
-          </Button>
-        </div>
-      </main>
+        </main>
+      </div>
     );
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-background">
-        <DashboardHeader
-          userName={user?.name ?? null}
-          teamName={team?.name ?? null}
-          isLive={false}
-          onSignOut={() => void handleSignOut()}
-        />
-        <div className="space-y-6 p-6 sm:p-8">
-          <CardSkeleton lines={2} />
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-3">
-              <CardSkeleton lines={3} />
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 overflow-x-hidden lg:pl-64">
+          <DashboardHeader
+            userName={user?.name ?? null}
+            teamName={team?.name ?? null}
+          />
+          <div className="space-y-6 p-6 sm:p-8">
+            <CardSkeleton lines={2} />
+            <div className="grid gap-6 lg:grid-cols-5">
+              <div className="lg:col-span-3">
+                <CardSkeleton lines={3} />
+              </div>
+              <div className="lg:col-span-2">
+                <CardSkeleton lines={3} />
+              </div>
             </div>
-            <div className="lg:col-span-2">
-              <CardSkeleton lines={3} />
+            <div className="grid gap-6 lg:grid-cols-2">
+              <CardSkeleton lines={4} />
+              <CardSkeleton lines={4} />
             </div>
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <CardSkeleton lines={4} />
-            <CardSkeleton lines={4} />
-          </div>
-        </div>
-      </main>
+        </main>
+      </div>
     );
   }
 
@@ -625,37 +608,39 @@ export default function DashboardPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
-      <DashboardHeader
-        userName={user?.name ?? null}
-        teamName={team?.name ?? null}
-        isLive={liveMatch !== null}
-        onSignOut={() => void handleSignOut()}
-      />
-
-      <div className="space-y-6 p-6 sm:p-8">
-        {/* ── Live Match ─────────────────────────────────────────────────── */}
-        <LiveMatchCard
-          match={liveMatch}
-          onOpenLogger={() => navigate("/events")}
+    <div className="flex min-h-screen bg-background">
+      <Sidebar />
+      <main className="flex-1 overflow-x-hidden lg:pl-64">
+        <DashboardHeader
+          userName={user?.name ?? null}
+          teamName={team?.name ?? null}
+          isLive={liveMatch !== null}
         />
 
-        {/* ── Season Summary + Recent Form ───────────────────────────────── */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-3">
-            <SeasonSummaryCard summary={seasonSummary} />
-          </div>
-          <div className="lg:col-span-2">
-            <RecentFormCard results={recentForm} />
-          </div>
-        </div>
+        <div className="space-y-6 p-6 sm:p-8">
+          {/* ── Live Match ─────────────────────────────────────────────────── */}
+          <LiveMatchCard
+            match={liveMatch}
+            onOpenLogger={() => navigate("/events")}
+          />
 
-        {/* ── Upcoming Fixtures + Recent Stats ──────────────────────────── */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <UpcomingFixturesCard fixtures={upcomingFixtures} />
-          <RecentStatsCard stats={recentStats} />
+          {/* ── Season Summary + Recent Form ───────────────────────────────── */}
+          <div className="grid gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+              <SeasonSummaryCard summary={seasonSummary} />
+            </div>
+            <div className="lg:col-span-2">
+              <RecentFormCard results={recentForm} />
+            </div>
+          </div>
+
+          {/* ── Upcoming Fixtures + Recent Stats ──────────────────────────── */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <UpcomingFixturesCard fixtures={upcomingFixtures} />
+            <RecentStatsCard stats={recentStats} />
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
