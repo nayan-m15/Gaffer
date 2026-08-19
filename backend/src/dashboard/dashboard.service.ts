@@ -38,9 +38,7 @@ export class DashboardService {
       this.databaseService.database
         .select({ value: count() })
         .from(athletes)
-        .where(
-          and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)),
-        ),
+        .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt))),
 
       this.databaseService.database
         .select({ value: count() })

@@ -7,9 +7,11 @@
     "build": "npm --prefix frontend run build && npm --prefix backend run build",
     "lint": "npm --prefix frontend run lint && npm --prefix backend run lint",
     "test": "npm --prefix backend test",
-    "test:e2e": "npm --prefix backend run test:e2e"
+    "test:e2e": "npm --prefix backend run test:e2e",
+    "test:e2e:ui": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "concurrently": "^10.0.4"
   }
 }
