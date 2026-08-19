@@ -90,11 +90,7 @@ export const verification = pgTable(
 );
 
 export const teamRole = pgEnum('team_role', ['coach', 'assistant']);
-export const eventType = pgEnum('event_type', [
-  'match',
-  'training',
-  'team_meeting',
-]);
+export const eventType = pgEnum('event_type', ['match', 'training', 'meeting']);
 export const eventStatus = pgEnum('event_status', [
   'scheduled',
   'cancelled',
@@ -164,6 +160,7 @@ export const events = pgTable(
     status: eventStatus('status').default('scheduled').notNull(),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
+    notes: text('notes'),
     ...timestamps,
   },
   (table) => [

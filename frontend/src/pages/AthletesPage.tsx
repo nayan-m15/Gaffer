@@ -1,7 +1,7 @@
 export default function AthletesPage() {
   return (
-    <main className="p-8">
-      <h1 className="text-3xl font-semibold text-slate-900">Athletes Roster</h1>
-    </main>
-  )
+    <div className="p-8">
+      <h1 className="text-3xl font-semibold text-foreground">Athletes Roster</h1>
+    </div>
+  );
 }
