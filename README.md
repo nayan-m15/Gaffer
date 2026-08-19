@@ -55,18 +55,21 @@ mid-way, test rows are identifiable by their `s1-07*`-prefixed email/team
 name and safe to delete manually.
 
 **Current coverage:** the auth flow (sign-up, sign-in, session, sign-out),
-team isolation, and athlete/event CRUD (create, list, get, update,
+team isolation, athlete/event CRUD (create, list, get, update,
 archive/restore or cancel, and team-scoping so one team never sees another's
-data) are covered end-to-end via Supertest. The Playwright e2e test covers
-Register → Dashboard → add an athlete on the Roster page → see it appear →
-visit Events. It doesn't drive event *creation* through the UI — the event
-form uses a custom calendar/time-column picker with no plain date/time
-inputs, which would make the browser test slow and flaky for little extra
-signal over `events.e2e-spec.ts`; the Events page is still checked for
-loading correctly (empty state) for a signed-in coach. The dashboard itself
-has no backend endpoint yet (`GET /dashboard` 404s); the e2e test asserts it
-degrades to its empty states instead of erroring, which is the only
-dashboard behavior that exists today.
+data), and the dashboard summary endpoint (active athlete count, total event
+count, next-five upcoming events, correctly team-scoped) are covered
+end-to-end via Supertest. The Playwright e2e test covers Register →
+Dashboard (zeroed-out counts for a new team) → add an athlete on the Roster
+page → see it appear → visit Events → back to Dashboard, reloaded, showing
+the updated athlete count. It doesn't drive event *creation* through the
+UI — the event form uses a custom calendar/time-column picker with no plain
+date/time inputs, which would make the browser test slow and flaky for
+little extra signal over `events.e2e-spec.ts`; the Events page is still
+checked for loading correctly (empty state) for a signed-in coach. The
+dashboard's Sprint 2 fields (live match, season summary, recent form,
+per-match stats) have no backend yet and are asserted to render their empty
+states rather than error.
 
 ## Structure
 
