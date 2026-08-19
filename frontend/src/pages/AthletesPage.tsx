@@ -198,9 +198,8 @@ export default function AthletesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="w-full">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+    <>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
           {/* Page header */}
           <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
             <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
@@ -336,8 +335,7 @@ export default function AthletesPage() {
               )}
             </section>
           </div>
-        </div>
-      </main>
+      </div>
 
       <AthleteFormDialog
         isOpen={isFormOpen}
@@ -352,7 +350,7 @@ export default function AthletesPage() {
         onConfirm={handleArchiveConfirm}
         athleteName={archivingAthlete?.name ?? ""}
       />
-    </div>
+    </>
   );
 }
 
