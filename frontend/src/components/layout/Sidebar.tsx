@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 import {
   Home,
   Users,
@@ -23,17 +24,13 @@ import {
 interface NavItem {
   label: string;
   path: string;
-  icon: ReactNode;
+  icon: LucideIcon;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", path: "/dashboard", icon: <Home className="size-5" /> },
-  { label: "Roster", path: "/athletes", icon: <Users className="size-5" /> },
-  {
-    label: "Events",
-    path: "/events",
-    icon: <Calendar className="size-5" />,
-  },
+  { label: "Dashboard", path: "/dashboard", icon: Home },
+  { label: "Roster", path: "/athletes", icon: Users },
+  { label: "Events", path: "/events", icon: Calendar },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -77,26 +74,27 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.label}
-            to={item.path}
-            onClick={() => setIsMobileOpen(false)}
-            className={({ isActive }) =>
-              cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )
-            }
-          >
-            <span className="shrink-0" aria-hidden="true">
-              {item.icon}
-            </span>
-            {item.label}
-          </NavLink>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.label}
+              to={item.path}
+              onClick={() => setIsMobileOpen(false)}
+              className={({ isActive }) =>
+                cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                )
+              }
+            >
+              <Icon className="size-5 shrink-0" aria-hidden="true" />
+              {item.label}
+            </NavLink>
+          );
+        })}
 
         {/* Stats — disabled until a later sprint */}
         <span
