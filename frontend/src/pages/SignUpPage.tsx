@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
  * SignUpPage — Dugout registration page for new coaches and assistants.
  *
  * Forces dark theme on mount so the signup experience is always consistent.
- * The form collects the user's command role, name, email, password, team name
+ * The form collects the user's command role, name, email, password
  * and terms agreement.  The actual authentication integration is intentionally
  * left as a clean TODO boundary — the UI is fully wired and validated, ready
  * to be connected to the backend auth flow.
@@ -27,7 +27,6 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [teamName, setTeamName] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -42,7 +41,6 @@ export default function SignUpPage() {
   const emailErrorId = `${baseId}-email-error`;
   const passwordErrorId = `${baseId}-password-error`;
   const confirmPasswordErrorId = `${baseId}-confirmPassword-error`;
-  const teamNameErrorId = `${baseId}-teamName-error`;
   const termsErrorId = `${baseId}-terms-error`;
 
   /* ── Force dark theme for the signup page ────────────────────────────── */
@@ -85,10 +83,6 @@ export default function SignUpPage() {
       nextErrors.confirmPassword = "Passwords do not match.";
     }
 
-    if (!teamName.trim()) {
-      nextErrors.teamName = "Team / squad name is required.";
-    }
-
     if (!termsAccepted) {
       nextErrors.terms = "You must agree to the terms to continue.";
     }
@@ -108,9 +102,9 @@ export default function SignUpPage() {
     // Sprint 1 only supports coaches registering and owning their own team —
     // the role selector above is left in place for the invite flow planned
     // for a later sprint, but every sign-up here creates the account as the
-    // team's coach.
+    // coach. A coach will be able to add teams on their dashboard once logged in.
     try {
-      await signUp({ name: fullName, email, password, teamName });
+      await signUp({ name: fullName, email, password });
       navigate("/dashboard", { replace: true });
     } catch (error) {
       if (error instanceof ApiError && /email/i.test(error.message)) {
@@ -316,26 +310,6 @@ export default function SignUpPage() {
               {errors.confirmPassword && (
                 <p id={confirmPasswordErrorId} className="text-xs text-destructive">
                   {errors.confirmPassword}
-                </p>
-              )}
-            </div>
-
-            {/* ── Team / squad name ────────────────────────────────────── */}
-            <div className="space-y-1.5">
-              <FloatingLabelInput
-                id={`${baseId}-teamName`}
-                label="Team / Squad name"
-                type="text"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                autoComplete="organization"
-                required
-                aria-invalid={!!errors.teamName}
-                aria-describedby={errors.teamName ? teamNameErrorId : undefined}
-              />
-              {errors.teamName && (
-                <p id={teamNameErrorId} className="text-xs text-destructive">
-                  {errors.teamName}
                 </p>
               )}
             </div>

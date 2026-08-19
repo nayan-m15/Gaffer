@@ -71,30 +71,18 @@ export class AuthController {
 
     // Only the Better Auth call is wrapped: an error here really is an auth
     // failure (bad input, duplicate email) and gets Better Auth's own
-    // message via toHttpException. Team creation is a separate concern —
-    // letting its errors propagate as-is (instead of relabeling them
-    // "Authentication request failed.") keeps the real cause visible, e.g.
-    // TeamsService's own ConflictException, or Nest's default 500 (logged
-    // server-side with the actual stack trace) for anything unexpected.
-    let user: { id: string; name: string; email: string };
+    // message via toHttpException. 
     try {
-      const { headers, response } = await auth.api.signUpEmail({
-        body: { name: dto.name, email: dto.email, password: dto.password },
-        returnHeaders: true,
-      });
-      forwardSetCookie(res, headers);
-      user = response.user;
-    } catch (error) {
-      throw toHttpException(error);
-    }
-
-    const team = await this.teamsService.createTeamForUser(
-      user.id,
-      dto.teamName,
-    );
-
-    return { user, team };
+    const { headers, response } = await auth.api.signUpEmail({
+      body: { name: dto.name, email: dto.email, password: dto.password },
+      returnHeaders: true,
+    });
+    forwardSetCookie(res, headers);
+    return { user: response.user };
+  } catch (error) {
+    throw toHttpException(error);
   }
+}
 
   @Post('sign-in')
   async signIn(
