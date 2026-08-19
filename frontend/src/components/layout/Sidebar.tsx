@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Roster", path: "/athletes", icon: Users },
   { label: "Events", path: "/events", icon: Calendar },
+  { label: "Team", path: "/team", icon: Shield },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
