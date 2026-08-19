@@ -71,11 +71,11 @@ export function PlayerCard({
             "flex items-center justify-center rounded-full",
             "size-[clamp(32px,5vw,42px)]",
             "text-[10px] font-bold uppercase",
-            "border-2 transition-colors duration-150",
+            "border-2 shadow-sm transition-colors duration-150",
             position.toUpperCase() === "GK"
-              ? "bg-amber-500/20 text-amber-600 border-amber-500/40 dark:text-amber-400 dark:border-amber-400/40"
-              : "bg-primary/15 text-primary border-primary/30 dark:text-primary",
-            isDropTarget && !isInvalid && "ring-2 ring-primary bg-primary/25 scale-110",
+              ? "bg-amber-400 text-amber-950 border-amber-500"
+              : "bg-white text-slate-900 border-slate-900/25",
+            isDropTarget && !isInvalid && "ring-2 ring-primary scale-110",
             isInvalid && "ring-2 ring-destructive bg-destructive/15",
           )}
         >
@@ -83,12 +83,12 @@ export function PlayerCard({
         </div>
 
         {/* Name */}
-        <span className="text-[clamp(8px,1.3vw,11px)] font-medium text-foreground text-center leading-tight truncate w-full">
+        <span className="text-[clamp(8px,1.3vw,11px)] font-medium text-foreground text-center leading-tight truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">
           {name}
         </span>
 
         {/* Position + number row */}
-        <span className="text-[clamp(7px,1.1vw,9px)] font-medium text-muted-foreground leading-none">
+        <span className="text-[clamp(7px,1.1vw,9px)] font-medium text-foreground/80 leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">
           {position}
           {squadNumber ? ` · #${squadNumber}` : ""}
         </span>

@@ -156,13 +156,13 @@ export function PitchPlayer({
               "size-[clamp(32px,5vw,42px)]",
               "text-[9px] font-semibold uppercase",
               "transition-colors duration-150",
-              "border-muted-foreground/30 text-muted-foreground/50",
-              isDragOver && dragItem && "border-primary bg-primary/15 text-primary scale-110",
+              "border-white/50 text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]",
+              isDragOver && dragItem && "border-white bg-white/25 text-white scale-110",
             )}
           >
             {position.label}
           </div>
-          <span className="text-[clamp(7px,1.1vw,9px)] text-muted-foreground/60">
+          <span className="text-[clamp(7px,1.1vw,9px)] text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">
             {position.label}
           </span>
         </div>
