@@ -1,10 +1,19 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, CalendarDays, LayoutDashboard, LogOut, Users } from "lucide-react";
+import {
+  BarChart3,
+  CalendarDays,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Sun,
+  Users,
+} from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -21,6 +30,7 @@ const NAV_ITEMS = [
  */
 export function AppShell() {
   const { user, team, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,13 +116,27 @@ export function AppShell() {
                 {team?.name ?? "Your team"}
               </p>
             </div>
+          </div>
+
+          <div className="mt-3 space-y-1.5">
             <Button
+              type="button"
               variant="ghost"
-              size="icon-sm"
+              className="w-full justify-start gap-2 px-3 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full justify-start gap-2 px-3 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
               onClick={() => void handleSignOut()}
-              aria-label="Sign out"
             >
               <LogOut className="size-4" />
+              Sign out
             </Button>
           </div>
         </div>

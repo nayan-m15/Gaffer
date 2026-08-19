@@ -1,7 +1,6 @@
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -533,9 +532,8 @@ export default function DashboardPage() {
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden lg:pl-64">
+      <div className="min-h-screen bg-background">
+        <main className="w-full overflow-x-hidden">
           <DashboardHeader
             userName={user?.name ?? null}
             teamName={team?.name ?? null}
@@ -565,9 +563,8 @@ export default function DashboardPage() {
   /* ── Loading state ────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden lg:pl-64">
+      <div className="min-h-screen bg-background">
+        <main className="w-full overflow-x-hidden">
           <DashboardHeader
             userName={user?.name ?? null}
             teamName={team?.name ?? null}
@@ -608,9 +605,8 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <main className="flex-1 overflow-x-hidden lg:pl-64">
+    <div className="min-h-screen bg-background">
+      <main className="w-full overflow-x-hidden">
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
