@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { RequireTeam } from '@/components/RequireTeam'
 import { AppShell } from '@/layouts/AppShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
@@ -13,8 +14,12 @@ import LandingPage from '@/pages/LandingPage'
  * App — Root application component.
  *
  * `/` is the public marketing landing page; `/login` and `/signup` are also
- * public. The dashboard, athletes and events pages require a signed-in coach
- * and live behind `ProtectedRoute`, which redirects to `/login` otherwise.
+ * public. The dashboard, athletes, events and team pages require a signed-in
+ * coach and live behind `ProtectedRoute`, which redirects to `/login`
+ * otherwise. Athletes and Events additionally require the coach to already
+ * have a team — `RequireTeam` sends them back to `/dashboard` if not.
+ * `/team` stays reachable without a team, since it's how a team-less coach
+ * gets one.
  */
 function App() {
   return (
@@ -31,9 +36,30 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/athletes" element={<AthletesPage />} />
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/team" element={<TeamManagementPage />} />
+          <Route
+            path="/athletes"
+            element={
+              <RequireTeam>
+                <AthletesPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/events"
+            element={
+              <RequireTeam>
+                <EventsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/team"
+            element={
+              <RequireTeam>
+                <TeamManagementPage />
+              </RequireTeam>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>
