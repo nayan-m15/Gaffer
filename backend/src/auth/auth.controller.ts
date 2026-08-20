@@ -15,11 +15,19 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
-import { signInSchema, signUpSchema } from './auth.schemas';
+import {
+  resendVerificationEmailSchema,
+  signInSchema,
+  signUpSchema,
+} from './auth.schemas';
 import { CurrentUser } from './current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { zodValidate } from '../common/zod-validate';
 import { isDatabaseConnectionError } from '../database/drizzle';
+
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+/** Where Better Auth redirects the browser after a verification link is clicked. */
+const VERIFIED_REDIRECT_URL = `${FRONTEND_URL}/login?verified=1`;
 
 /** Copies any `Set-Cookie` header Better Auth returned onto the Nest response. */
 function forwardSetCookie(res: Response, headers: Headers): void {
@@ -71,18 +79,59 @@ export class AuthController {
 
     // Only the Better Auth call is wrapped: an error here really is an auth
     // failure (bad input, duplicate email) and gets Better Auth's own
-    // message via toHttpException. 
+    // message via toHttpException.
     try {
-    const { headers, response } = await auth.api.signUpEmail({
-      body: { name: dto.name, email: dto.email, password: dto.password },
-      returnHeaders: true,
-    });
-    forwardSetCookie(res, headers);
-    return { user: response.user };
-  } catch (error) {
-    throw toHttpException(error);
+      const { headers, response } = await auth.api.signUpEmail({
+        body: {
+          name: dto.name,
+          email: dto.email,
+          password: dto.password,
+          callbackURL: VERIFIED_REDIRECT_URL,
+        },
+        returnHeaders: true,
+      });
+      forwardSetCookie(res, headers);
+      // `requireEmailVerification` makes Better Auth withhold the session
+      // (no Set-Cookie, response.user.emailVerified stays false) until the
+      // address is confirmed. The frontend uses this flag to show a "check
+      // your email" screen instead of assuming sign-up authenticated them.
+      return {
+        user: response.user,
+        emailVerificationRequired: !response.user.emailVerified,
+      };
+    } catch (error) {
+      throw toHttpException(error);
+    }
   }
-}
+
+  @Post('send-verification-email')
+  async sendVerificationEmail(@Body() body: unknown) {
+    const dto = zodValidate(resendVerificationEmailSchema, body);
+
+    try {
+      await auth.api.sendVerificationEmail({
+        body: { email: dto.email, callbackURL: VERIFIED_REDIRECT_URL },
+      });
+    } catch (error) {
+      // Better Auth's own errors here (rate limiting, etc.) still map through
+      // normally, but an already-verified or unknown email should not be
+      // distinguishable from a successful send — that would let a caller
+      // probe which addresses have accounts.
+      if (!(error instanceof APIError)) {
+        throw toHttpException(error);
+      }
+    }
+
+    return { status: true };
+  }
+
+  // Better Auth's verification link (`GET /auth/verify-email?token=...`)
+  // points here. It marks the address verified, then 302s the browser to the
+  // callbackURL we set on sign-up/resend.
+  @Get('verify-email')
+  async verifyEmail(@Req() req: Request, @Res() res: Response) {
+    await toNodeHandler(auth)(req, res);
+  }
 
   @Post('sign-in')
   async signIn(
