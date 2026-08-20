@@ -33,7 +33,7 @@ export default function SignUpPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const baseId = useId();
@@ -121,8 +121,17 @@ export default function SignUpPage() {
     }
   };
 
-  const handleGoogleSignUp = () => {
-    // TODO: Connect to Google OAuth flow.
+  const handleGoogleSignUp = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      console.error("Google sign-in failed:", err);
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't start Google sign-in. Please try again.";
+      setErrors((prev) => ({ ...prev, form: message }));
+    }
   };
 
   /* ── Render helpers ──────────────────────────────────────────────────── */

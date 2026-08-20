@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import dugoutBg from "@/assets/dugout-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
@@ -30,12 +30,22 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const from =
     (location.state as { from?: { pathname: string } } | null)?.from
       ?.pathname ?? "/dashboard";
+  
+  
+  useEffect(() => {
+    if (searchParams.get("error") === "google") {
+      setError(
+        "That Google account's email is already registered. Sign in with your password instead, or contact support to link it.",
+      );
+    }
+  }, [searchParams]);
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {
@@ -71,8 +81,18 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSignIn = () => {
-    // TODO: Connect to Google OAuth flow.
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      console.error("Google sign-in failed:", err);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't start Google sign-in. Please try again.",
+      );
+    }
   };
 
   /* ── Render ──────────────────────────────────────────────────────────── */
