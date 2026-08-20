@@ -119,10 +119,31 @@ export default function HowItWorksPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <div ref={pageRef} className="min-h-screen bg-background text-foreground">
+    <div ref={pageRef} className="relative min-h-screen bg-[#0B1218] text-white">
+      {/* ── Fixed stadium background ──────────────────────────────────────
+       * The image and its overlays are anchored to the viewport with
+       * `position: fixed`.  Every section scrolls *over* this single layer,
+       * so the stadium is never duplicated.  Sections use semi-transparent
+       * dark backgrounds to keep text readable while letting the photo
+       * peek through at the edges and during scroll transitions.
+       */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
+        <img
+          src="/hero-stadium-bg.png"
+          alt=""
+          className="size-full object-cover object-center"
+        />
+        {/* Dark gradient — heavier at top/bottom for legibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/25 to-black/55" />
+        {/* Radial vignette — focuses attention centre */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.5)_100%)]" />
+        {/* Subtle brand-tinted wash */}
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
+      </div>
+
       <Navbar />
 
-      <main>
+      <main className="relative z-10">
         <HeroSection />
         <GettingStartedSection />
         <DashboardSection />
@@ -144,24 +165,8 @@ function HeroSection() {
   return (
     <section
       aria-labelledby="hiw-heading"
-      className="relative isolate overflow-hidden bg-[#0B1218]"
+      className="relative isolate overflow-hidden"
     >
-      {/* Stadium background image + overlays for text readability */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        {/* Full-width centered stadium photograph */}
-        <img
-          src="/hero-stadium-bg.png"
-          alt=""
-          className="absolute inset-0 size-full object-cover object-center"
-        />
-        {/* Dark gradient overlay — heavier at top for heading legibility */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black/60" />
-        {/* Radial vignette — keeps the edges dark, focuses attention centre */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.55)_100%)]" />
-        {/* Subtle brand-tinted wash to unify with the app palette */}
-        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
-      </div>
-
       <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-32 lg:pt-28">
         <div className="mx-auto max-w-3xl text-center">
           <span className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-1.5 text-xs font-medium tracking-wide text-white/80 backdrop-blur-sm animate-fade-in">
@@ -218,17 +223,17 @@ function GettingStartedSection() {
   return (
     <section
       aria-labelledby="gs-heading"
-      className="animate-on-scroll border-t border-border py-16 sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2
             id="gs-heading"
-            className="font-display text-2xl font-bold text-foreground sm:text-3xl lg:text-4xl"
+            className="font-display text-2xl font-bold text-white sm:text-3xl lg:text-4xl"
           >
             Five Steps to Kick Off
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-white/60 sm:text-base">
             Get your team up and running in minutes. Follow this simple
             progression to start coaching smarter.
           </p>
@@ -238,15 +243,15 @@ function GettingStartedSection() {
           {STEPS.map((step, i) => (
             <div
               key={step.num}
-              className="hover-lift relative rounded-xl border border-border bg-card p-6 shadow-sm"
+              className="hover-lift relative rounded-xl border border-white/10 bg-white/5 p-6 shadow-sm"
             >
               <span className="font-display text-3xl font-bold text-brand/30">
                 {step.num}
               </span>
-              <h3 className="mt-3 text-base font-semibold text-foreground">
+              <h3 className="mt-3 text-base font-semibold text-white">
                 {step.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-2 text-sm leading-relaxed text-white/60">
                 {step.desc}
               </p>
 
@@ -367,17 +372,17 @@ function WorkflowSection() {
   return (
     <section
       aria-labelledby="workflow-heading"
-      className="animate-on-scroll border-t border-border py-16 sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2
             id="workflow-heading"
-            className="font-display text-2xl font-bold text-foreground sm:text-3xl lg:text-4xl"
+            className="font-display text-2xl font-bold text-white sm:text-3xl lg:text-4xl"
           >
             One Connected Workflow
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-white/60 sm:text-base">
             Every part of {brand.name} works together. Your team, athletes,
             events and lineup are connected — so you can focus on coaching.
           </p>
@@ -394,10 +399,10 @@ function WorkflowSection() {
           ].map((step, i, arr) => (
             <div key={step.label} className="flex items-center">
               <div className="hover-lift flex flex-col items-center gap-2">
-                <div className="flex size-14 items-center justify-center rounded-full border border-border bg-card shadow-sm">
+                <div className="flex size-14 items-center justify-center rounded-full border border-white/10 bg-white/5 shadow-sm">
                   <step.icon className="size-6 text-brand" />
                 </div>
-                <span className="text-xs font-semibold text-muted-foreground">
+                <span className="text-xs font-semibold text-white/60">
                   {step.label}
                 </span>
               </div>
@@ -421,13 +426,13 @@ function WorkflowSection() {
 
 function CtaSection() {
   return (
-    <section className="animate-on-scroll border-t border-border py-16 sm:py-24">
+    <section className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm sm:p-12">
-          <h2 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-8 text-center shadow-sm sm:p-12">
+          <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
             Ready to Take Command?
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-white/60 sm:text-base">
             Join {brand.name} and start organising, managing and coaching your
             team — all from one place.
           </p>
@@ -446,13 +451,13 @@ function CtaSection() {
               href="/"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "w-full sm:w-auto",
+                "w-full gap-2 border-white/20 bg-black/30 text-white backdrop-blur-sm hover:bg-white/15 hover:text-white sm:w-auto",
               )}
             >
               Back to Home
             </a>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mt-4 text-xs text-white/40">
             Free to get started. No credit card required.
           </p>
         </div>
@@ -487,7 +492,7 @@ function FeatureSection({
   return (
     <section
       aria-labelledby={id}
-      className="animate-on-scroll border-t border-border py-16 sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
@@ -506,18 +511,18 @@ function FeatureSection({
             </div>
             <h2
               id={id}
-              className="font-display text-2xl font-bold text-foreground sm:text-3xl"
+              className="font-display text-2xl font-bold text-white sm:text-3xl"
             >
               {title}
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            <p className="mt-4 text-sm leading-relaxed text-white/60 sm:text-base">
               {description}
             </p>
             <ul className="mt-6 space-y-3">
               {bullets.map((item) => (
                 <li
                   key={item}
-                  className="flex items-start gap-3 text-sm text-muted-foreground"
+                  className="flex items-start gap-3 text-sm text-white/60"
                 >
                   <CheckCircle2
                     className="mt-0.5 size-4 shrink-0 text-brand"
@@ -727,7 +732,7 @@ const FORMATION_PLAYERS = [
 function FormationMockup() {
   return (
     <div className="hover-lift w-full max-w-[260px] sm:max-w-[300px]">
-      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border shadow-lg">
+      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-white/10 shadow-lg">
         {/* Grass stripes */}
         <div
           className="absolute inset-0"
@@ -781,7 +786,7 @@ function FormationMockup() {
         </svg>
       </div>
 
-      <p className="mt-3 text-center text-xs text-muted-foreground">
+      <p className="mt-3 text-center text-xs text-white/50">
         4-3-3 formation &middot; 11 players on the pitch
       </p>
     </div>
@@ -808,7 +813,7 @@ function MockupFrame({
   return (
     <div
       className={cn(
-        "w-full max-w-md rounded-xl border border-border bg-[#0F1820] p-4 shadow-lg sm:p-5",
+        "w-full max-w-md rounded-xl border border-white/10 bg-[#0F1820] p-4 shadow-lg sm:p-5",
         className,
       )}
     >
