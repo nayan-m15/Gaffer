@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import {
   RotateCcw,
@@ -129,52 +130,47 @@ export default function TeamManagementPage() {
   /* ── Main content ────────────────────────────────────────────────────────── */
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8">
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground md:text-2xl">
-            Team Management
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Configure your starting XI and formation
-          </p>
-        </div>
+    <>
+      <PageHeader
+        title="Team Management"
+        subtitle="Configure your starting XI, tactical formation, and matchday squad."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <FormationSelector
+              value={lineup.formationId}
+              onChange={lineup.setFormation}
+            />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <FormationSelector
-            value={lineup.formationId}
-            onChange={lineup.setFormation}
-          />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={lineup.autoFill}
+              className="gap-1.5"
+            >
+              <Wand2 className="size-3.5" />
+              Auto-fill
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={lineup.autoFill}
-            className="gap-1.5"
-          >
-            <Wand2 className="size-3.5" />
-            Auto-fill
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={lineup.resetLineup}
+              className="gap-1.5"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={lineup.resetLineup}
-            className="gap-1.5"
-          >
-            <RotateCcw className="size-3.5" />
-            Reset
-          </Button>
+            <Button variant="default" size="sm" className="gap-1.5" disabled>
+              <Save className="size-3.5" />
+              Save Lineup
+            </Button>
+          </div>
+        }
+      />
 
-          <Button variant="default" size="sm" className="gap-1.5" disabled>
-            <Save className="size-3.5" />
-            Save Lineup
-          </Button>
-        </div>
-      </header>
-
-      {/* ── Status bar ────────────────────────────────────────────────────── */}
+      <div className="space-y-6 p-6 sm:p-8">
+        {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <StatusBar
           label="On Pitch"
@@ -236,7 +232,8 @@ export default function TeamManagementPage() {
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}
       />
-    </div>
+      </div>
+    </>
   );
 }
 
