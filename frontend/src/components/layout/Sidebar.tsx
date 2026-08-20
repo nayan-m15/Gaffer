@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
+import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ export function Sidebar({ className }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -127,8 +129,15 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border px-4 py-4">
-        {/* Coach profile */}
-        <div className="mb-3 flex items-center gap-3 px-2">
+        {/* Coach profile — clickable to open the profile editor */}
+        <button
+          onClick={() => {
+            setIsMobileOpen(false);
+            setIsProfileOpen(true);
+          }}
+          className="mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="View and edit profile"
+        >
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
             {user?.name?.charAt(0).toUpperCase() ?? "C"}
           </div>
@@ -140,7 +149,7 @@ export function Sidebar({ className }: SidebarProps) {
               {team?.name ?? "Your Team"}
             </p>
           </div>
-        </div>
+        </button>
 
         {/* Theme toggle */}
         <button
@@ -222,6 +231,12 @@ export function Sidebar({ className }: SidebarProps) {
           </aside>
         </div>
       )}
+
+      {/* Profile editor modal */}
+      <ProfileEditorDialog
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
     </>
   );
 }

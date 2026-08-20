@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
 import { TeamsModule } from './teams/teams.module';
 import { AthletesModule } from './athletes/athletes.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AthletesModule } from './athletes/athletes.module';
     AthletesModule,
     EventsModule,
     DashboardModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],
