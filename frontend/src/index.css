@@ -289,3 +289,16 @@ body {
 .dark .hover-lift:hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
+
+/* ─── Scroll indicator bounce ───────────────────────────────────────────── *
+ * A slow, gentle bounce used by the scroll-down chevron indicator on the     *
+ * How It Works hero.  Travels 8px down and back over 2 seconds.              */
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(8px); }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 2s ease-in-out infinite;
+}

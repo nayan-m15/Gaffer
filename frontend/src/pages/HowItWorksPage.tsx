@@ -134,9 +134,9 @@ export default function HowItWorksPage() {
           className="size-full object-cover object-center"
         />
         {/* Dark gradient — heavier at top/bottom for legibility */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/25 to-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/15 to-black/45" />
         {/* Radial vignette — focuses attention centre */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.5)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.4)_100%)]" />
         {/* Subtle brand-tinted wash */}
         <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
       </div>
@@ -165,9 +165,9 @@ function HeroSection() {
   return (
     <section
       aria-labelledby="hiw-heading"
-      className="relative isolate overflow-hidden"
+      className="relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden"
     >
-      <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-32 lg:pt-28">
+      <div className="relative mx-auto w-full max-w-7xl px-4 pb-24 pt-12 sm:px-6 sm:pb-32 sm:pt-20 lg:px-8 lg:pb-40 lg:pt-28">
         <div className="mx-auto max-w-3xl text-center">
           <span className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-1.5 text-xs font-medium tracking-wide text-white/80 backdrop-blur-sm animate-fade-in">
             <span className="size-1.5 rounded-full bg-brand animate-pulse-subtle" />
@@ -211,6 +211,24 @@ function HeroSection() {
           </div>
         </div>
       </div>
+
+      {/* Scroll-down indicator — bouncing chevron near bottom of viewport */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce-slow" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-white/50"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
     </section>
   );
 }
@@ -223,7 +241,7 @@ function GettingStartedSection() {
   return (
     <section
       aria-labelledby="gs-heading"
-      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
@@ -243,7 +261,7 @@ function GettingStartedSection() {
           {STEPS.map((step, i) => (
             <div
               key={step.num}
-              className="hover-lift relative rounded-xl border border-white/10 bg-white/5 p-6 shadow-sm"
+              className="hover-lift relative rounded-xl border border-white/10 bg-white/[0.03] p-6 shadow-sm"
             >
               <span className="font-display text-3xl font-bold text-brand/30">
                 {step.num}
@@ -372,7 +390,7 @@ function WorkflowSection() {
   return (
     <section
       aria-labelledby="workflow-heading"
-      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
@@ -399,7 +417,7 @@ function WorkflowSection() {
           ].map((step, i, arr) => (
             <div key={step.label} className="flex items-center">
               <div className="hover-lift flex flex-col items-center gap-2">
-                <div className="flex size-14 items-center justify-center rounded-full border border-white/10 bg-white/5 shadow-sm">
+                <div className="flex size-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] shadow-sm">
                   <step.icon className="size-6 text-brand" />
                 </div>
                 <span className="text-xs font-semibold text-white/60">
@@ -426,9 +444,9 @@ function WorkflowSection() {
 
 function CtaSection() {
   return (
-    <section className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24">
+    <section className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-8 text-center shadow-sm sm:p-12">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center shadow-sm backdrop-blur-sm sm:p-12">
           <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
             Ready to Take Command?
           </h2>
@@ -492,7 +510,7 @@ function FeatureSection({
   return (
     <section
       aria-labelledby={id}
-      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/80 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t border-white/10 bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
