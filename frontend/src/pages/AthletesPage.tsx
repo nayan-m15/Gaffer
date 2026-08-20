@@ -8,6 +8,7 @@ import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -199,24 +200,23 @@ export default function AthletesPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Page header */}
-          <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
-            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-              ROSTER COMMAND
-            </h1>
+      <PageHeader
+        title="Roster Command"
+        subtitle="Manage active squad players, squad status, and athlete archives."
+        actions={
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="relative flex size-2.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
+            </span>
+            Sideline Active Mode
+          </div>
+        }
+      />
 
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span className="relative flex size-2.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-75" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
-              </span>
-              Sideline Active Mode
-            </div>
-          </header>
-
-          {/* Main layout */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+      <div className="space-y-6 p-6 sm:p-8">
+        {/* Main layout */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
             {/* Squad management card */}
             <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6 lg:col-span-2">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -213,21 +214,16 @@ function DashboardHeader({
   onAddTeam: () => void;
 }) {
   return (
-    <header className="border-b border-border px-6 py-6 sm:px-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold uppercase tracking-widest text-foreground sm:text-3xl">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {userName
-              ? `Welcome back, ${userName}`
-              : "Welcome back"}
-            {teamName ? ` \u00b7 ${teamName}` : ""}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-4">
+    <PageHeader
+      title="Dashboard"
+      subtitle={
+        <>
+          {userName ? `Welcome back, ${userName}` : "Welcome back"}
+          {teamName ? ` \u00b7 ${teamName}` : ""}
+        </>
+      }
+      actions={
+        <>
           {!hasTeam && (
             <Button variant="outline" size="sm" onClick={onAddTeam}>
               <Plus className="size-4" aria-hidden="true" />
@@ -249,9 +245,9 @@ function DashboardHeader({
               </span>
             </div>
           )}
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }
 
