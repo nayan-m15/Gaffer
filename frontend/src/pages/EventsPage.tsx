@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, MapPin, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { EventDetailDialog, StatusBadge } from "@/features/events/EventDetailDialog";
 import { EventFormDialog } from "@/features/events/EventFormDialog";
 import {
@@ -35,27 +36,23 @@ export default function EventsPage() {
       : null;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Schedule
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold uppercase tracking-wide text-foreground">
-            Events
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Upcoming matches, training sessions, and meetings.
-          </p>
-        </div>
-        <Button
-          size="lg"
-          className="font-semibold tracking-wide"
-          onClick={() => setPanel({ kind: "create" })}
-        >
-          + New Event
-        </Button>
-      </header>
+    <>
+      <PageHeader
+        title="Events"
+        subtitle="Upcoming matches, training sessions, and meetings."
+        actions={
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setPanel({ kind: "create" })}
+          >
+            <Plus className="size-4" />
+            New Event
+          </Button>
+        }
+      />
+
+      <div className="space-y-6 p-6 sm:p-8">
 
       {isLoading && (
         <p className="text-sm text-muted-foreground">Loading events…</p>
@@ -112,6 +109,8 @@ export default function EventsPage() {
         </ul>
       )}
 
+      </div>
+
       <EventFormDialog
         open={panel.kind === "create" || panel.kind === "edit"}
         event={panel.kind === "edit" ? (selectedEvent ?? undefined) : undefined}
@@ -133,7 +132,7 @@ export default function EventsPage() {
         }}
         onEdit={(event) => setPanel({ kind: "edit", eventId: event.id })}
       />
-    </div>
+    </>
   );
 }
 
