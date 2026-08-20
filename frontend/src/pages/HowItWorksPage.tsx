@@ -146,29 +146,37 @@ function HeroSection() {
       aria-labelledby="hiw-heading"
       className="relative isolate overflow-hidden bg-[#0B1218]"
     >
-      {/* Atmospheric background — matches landing Hero */}
+      {/* Stadium background image + overlays for text readability */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0B1218] via-[#0A1419] to-[#0B1218]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/[0.08] via-emerald-800/[0.06] to-emerald-900/[0.04]" />
-        <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/10 blur-[150px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,#0B1218_100%)]" />
+        {/* Full-width centered stadium photograph */}
+        <img
+          src="/hero-stadium-bg.png"
+          alt=""
+          className="absolute inset-0 size-full object-cover object-center"
+        />
+        {/* Dark gradient overlay — heavier at top for heading legibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black/60" />
+        {/* Radial vignette — keeps the edges dark, focuses attention centre */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.55)_100%)]" />
+        {/* Subtle brand-tinted wash to unify with the app palette */}
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-32 lg:pt-28">
         <div className="mx-auto max-w-3xl text-center">
-          <span className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium tracking-wide text-white/70 backdrop-blur-sm animate-fade-in">
+          <span className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-1.5 text-xs font-medium tracking-wide text-white/80 backdrop-blur-sm animate-fade-in">
             <span className="size-1.5 rounded-full bg-brand animate-pulse-subtle" />
             Getting Started Guide
           </span>
 
           <h1
             id="hiw-heading"
-            className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[3.5rem] xl:text-6xl animate-fade-in-up"
+            className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-white drop-shadow-lg sm:text-5xl lg:text-[3.5rem] xl:text-6xl animate-fade-in-up"
           >
             How It Works
           </h1>
 
-          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg animate-fade-in-up animation-delay-150">
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 drop-shadow-md sm:text-lg animate-fade-in-up animation-delay-150">
             Everything you need to organise, manage and coach your team, all
             in one place. From squad setup to matchday lineups, {brand.name}{" "}
             guides you through every step.
@@ -189,7 +197,7 @@ function HeroSection() {
               href="/login"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "w-full gap-2 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto",
+                "w-full gap-2 border-white/20 bg-black/30 text-white backdrop-blur-sm hover:bg-white/15 hover:text-white sm:w-auto",
               )}
             >
               <LogIn className="size-4" />
