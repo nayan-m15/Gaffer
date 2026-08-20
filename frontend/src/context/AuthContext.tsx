@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 
 export interface SessionUser {
   id: string;
@@ -39,6 +40,7 @@ interface AuthContextValue {
   team: SessionTeam | null;
   signUp: (input: SignUpInput) => Promise<void>;
   signIn: (input: SignInInput) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -105,6 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    await authClient.signIn.social({
+      provider: "google",
+      callbackURL: `${window.location.origin}/dashboard`,
+      errorCallbackURL: `${window.location.origin}/login?error=google`,
+    });
+  }, []);
+
   const signOut = useCallback(async () => {
     await apiFetch("/auth/sign-out", { method: "POST" });
     setUser(null);
@@ -112,10 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
-  const value = useMemo(
-    () => ({ status, user, team, signUp, signIn, signOut, refreshSession: refresh }),
-    [status, user, team, signUp, signIn, signOut, refresh],
-  );
+    const value = useMemo(
+      () => ({
+        status,
+        user,
+        team,
+        signUp,
+        signIn,
+        signInWithGoogle,
+        signOut,
+        refreshSession: refresh,
+      }),
+      [status, user, team, signUp, signIn, signInWithGoogle, signOut, refresh],
+    );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
