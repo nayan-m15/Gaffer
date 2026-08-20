@@ -26,13 +26,14 @@ interface NavItem {
   label: string;
   path: string;
   icon: LucideIcon;
+  requiresTeam?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
-  { label: "Roster", path: "/athletes", icon: Users },
-  { label: "Events", path: "/events", icon: Calendar },
-  { label: "Team", path: "/team", icon: Shield },
+  { label: "Roster", path: "/athletes", icon: Users, requiresTeam: true },
+  { label: "Events", path: "/events", icon: Calendar, requiresTeam: true },
+  { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +79,20 @@ export function Sidebar({ className }: SidebarProps) {
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
+
+          if (item.requiresTeam && !team) {
+            return (
+              <span
+                key={item.label}
+                className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/50"
+                title="Add a team first"
+              >
+                <Icon className="size-5 shrink-0" aria-hidden="true" />
+                {item.label}
+              </span>
+            );
+          }
+
           return (
             <NavLink
               key={item.label}

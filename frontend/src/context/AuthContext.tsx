@@ -26,7 +26,6 @@ export interface SignUpInput {
   name: string;
   email: string;
   password: string;
-  teamName: string;
 }
 
 export interface SignInInput {
@@ -41,6 +40,7 @@ interface AuthContextValue {
   signUp: (input: SignUpInput) => Promise<void>;
   signIn: (input: SignInInput) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -113,8 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, team, signUp, signIn, signOut }),
-    [status, user, team, signUp, signIn, signOut],
+    () => ({ status, user, team, signUp, signIn, signOut, refreshSession: refresh }),
+    [status, user, team, signUp, signIn, signOut, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

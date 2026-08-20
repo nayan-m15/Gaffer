@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AddTeamModal } from "@/components/AddTeamModal";
+import { useState } from "react";
 import {
   Activity,
   AlertCircle,
   Calendar,
   CalendarCheck,
   MapPin,
+  Plus,
   RefreshCw,
   TrendingUp,
   Trophy,
@@ -200,10 +203,14 @@ function DashboardHeader({
   userName,
   teamName,
   isLive,
+  hasTeam,
+  onAddTeam,
 }: {
   userName: string | null;
   teamName: string | null;
   isLive?: boolean;
+  hasTeam: boolean;
+  onAddTeam: () => void;
 }) {
   return (
     <header className="border-b border-border px-6 py-6 sm:px-8">
@@ -219,20 +226,30 @@ function DashboardHeader({
             {teamName ? ` \u00b7 ${teamName}` : ""}
           </p>
         </div>
-        {isLive !== undefined && (
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "inline-block size-2 rounded-full",
-                isLive ? "bg-primary" : "bg-muted-foreground/40",
-              )}
-              aria-hidden="true"
-            />
-            <span className="text-xs font-medium text-muted-foreground">
-              Sideline Mode {isLive ? "Active" : "Inactive"}
-            </span>
-          </div>
-        )}
+
+        <div className="flex items-center gap-4">
+          {!hasTeam && (
+            <Button variant="outline" size="sm" onClick={onAddTeam}>
+              <Plus className="size-4" aria-hidden="true" />
+              Add Team
+            </Button>
+          )}
+
+          {isLive !== undefined && (
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "inline-block size-2 rounded-full",
+                  isLive ? "bg-primary" : "bg-muted-foreground/40",
+                )}
+                aria-hidden="true"
+              />
+              <span className="text-xs font-medium text-muted-foreground">
+                Sideline Mode {isLive ? "Active" : "Inactive"}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -608,6 +625,7 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
 export default function DashboardPage() {
   const { user, team } = useAuth();
   const navigate = useNavigate();
+  const [addTeamOpen, setAddTeamOpen] = useState(false);
 
   const {
     data,
@@ -628,6 +646,8 @@ export default function DashboardPage() {
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
+          hasTeam={!!team}
+          onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="flex flex-col items-center justify-center gap-4 p-16">
           <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
@@ -657,6 +677,8 @@ export default function DashboardPage() {
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
+          hasTeam={!!team}
+          onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="space-y-6 p-6 sm:p-8">
           <div className="grid gap-6 sm:grid-cols-2">
@@ -702,6 +724,8 @@ export default function DashboardPage() {
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
         isLive={liveMatch != null}
+        hasTeam={!!team}
+        onAddTeam={() => setAddTeamOpen(true)}
       />
 
       <div className="space-y-6 p-6 sm:p-8">
@@ -743,6 +767,7 @@ export default function DashboardPage() {
           <RecentStatsCard stats={recentStats ?? []} />
         </div>
       </div>
+      <AddTeamModal open={addTeamOpen} onOpenChange={setAddTeamOpen} />
     </>
   );
 }
