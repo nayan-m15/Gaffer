@@ -11,8 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { APIError } from 'better-auth/api';
-import { fromNodeHeaders } from 'better-auth/node';
-import type { Response } from 'express';
+import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
+import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
 import { signInSchema, signUpSchema } from './auth.schemas';
@@ -128,5 +128,20 @@ export class AuthController {
   async session(@CurrentUser() user: AuthenticatedRequest['user']) {
     const team = await this.teamsService.findTeamForUser(user.id);
     return { user, team };
+  }
+
+  // Kicks off the OAuth flow. The frontend calls this via the Better Auth
+  // client, which POSTs here and gets back a Google authorization URL.
+  @Post('sign-in/social')
+  async signInSocial(@Req() req: Request, @Res() res: Response) {
+    await toNodeHandler(auth)(req, res);
+  }
+
+  // Google redirects the browser here after consent. Better Auth exchanges
+  // the code, creates the session, sets the cookie, and redirects the user
+  // back into the app.
+  @Get('callback/google')
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    await toNodeHandler(auth)(req, res);
   }
 }
