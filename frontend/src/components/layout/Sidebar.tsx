@@ -138,8 +138,16 @@ export function Sidebar({ className }: SidebarProps) {
           className="mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="View and edit profile"
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
-            {user?.name?.charAt(0).toUpperCase() ?? "C"}
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/20 text-sm font-bold text-primary">
+            {user?.image ? (
+              <img
+                src={user.image}
+                alt=""
+                className="size-full rounded-full object-cover"
+              />
+            ) : (
+              (user?.name?.charAt(0).toUpperCase() ?? "C")
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-sidebar-foreground">

@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Cake,
   Check,
   Loader2,
   Mail,
   Pencil,
+  Phone,
   Shield,
   UserCircle,
   Users,
@@ -19,6 +21,7 @@ import {
   getProfile,
   updateProfile,
   type BackendProfile,
+  type Sex,
 } from "@/services/profile";
 
 const PROFILE_QUERY_KEY = ["profile"] as const;
@@ -46,6 +49,9 @@ export function ProfileEditorDialog({
 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editPhoneNumber, setEditPhoneNumber] = useState("");
+  const [editSex, setEditSex] = useState<Sex | "">("");
+  const [editDateOfBirth, setEditDateOfBirth] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -78,6 +84,9 @@ export function ProfileEditorDialog({
 
   const handleEdit = () => {
     setEditName(profileQuery.data?.name ?? user?.name ?? "");
+    setEditPhoneNumber(profileQuery.data?.phoneNumber ?? "");
+    setEditSex(profileQuery.data?.sex ?? "");
+    setEditDateOfBirth(profileQuery.data?.dateOfBirth ?? "");
     setValidationError(null);
     updateMutation.reset();
     setIsEditing(true);
@@ -102,10 +111,27 @@ export function ProfileEditorDialog({
       return;
     }
 
+    const trimmedPhone = editPhoneNumber.trim() || null;
+    const sexValue: Sex | null = editSex || null;
+    const dobValue = editDateOfBirth || null;
+
+    if (dobValue) {
+      const dob = new Date(dobValue + "T00:00:00");
+      if (dob > new Date()) {
+        setValidationError("Date of birth cannot be in the future.");
+        return;
+      }
+    }
+
     setValidationError(null);
 
     try {
-      await updateMutation.mutateAsync({ name: trimmed });
+      await updateMutation.mutateAsync({
+        name: trimmed,
+        phoneNumber: trimmedPhone,
+        sex: sexValue,
+        dateOfBirth: dobValue,
+      });
       await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
       await refreshSession();
       setIsEditing(false);
@@ -197,10 +223,16 @@ export function ProfileEditorDialog({
             teamRole={team?.role ?? null}
             isEditing={isEditing}
             editName={editName}
+            editPhoneNumber={editPhoneNumber}
+            editSex={editSex}
+            editDateOfBirth={editDateOfBirth}
             validationError={validationError}
             mutationError={updateMutation.error ?? null}
             isSaving={updateMutation.isPending}
             onEditNameChange={setEditName}
+            onEditPhoneNumberChange={setEditPhoneNumber}
+            onEditSexChange={setEditSex}
+            onEditDateOfBirthChange={setEditDateOfBirth}
             onEdit={handleEdit}
             onCancel={handleCancelEdit}
             onSave={handleSave}
@@ -220,10 +252,16 @@ interface ProfileBodyProps {
   teamRole: string | null;
   isEditing: boolean;
   editName: string;
+  editPhoneNumber: string;
+  editSex: Sex | "";
+  editDateOfBirth: string;
   validationError: string | null;
   mutationError: Error | null;
   isSaving: boolean;
   onEditNameChange: (value: string) => void;
+  onEditPhoneNumberChange: (value: string) => void;
+  onEditSexChange: (value: Sex | "") => void;
+  onEditDateOfBirthChange: (value: string) => void;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
@@ -236,10 +274,16 @@ function ProfileBody({
   teamRole,
   isEditing,
   editName,
+  editPhoneNumber,
+  editSex,
+  editDateOfBirth,
   validationError,
   mutationError,
   isSaving,
   onEditNameChange,
+  onEditPhoneNumberChange,
+  onEditSexChange,
+  onEditDateOfBirthChange,
   onEdit,
   onCancel,
   onSave,
@@ -253,9 +297,17 @@ function ProfileBody({
     <>
       {/* Avatar + identity */}
       <div className="mb-5 flex flex-col items-center gap-3 text-center">
-        <div className="flex size-20 shrink-0 items-center justify-center rounded-full bg-primary/20 text-2xl font-bold text-primary">
-          {initials || <UserCircle className="size-10" />}
-        </div>
+        {profile.image ? (
+          <img
+            src={profile.image}
+            alt=""
+            className="size-20 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex size-20 shrink-0 items-center justify-center rounded-full bg-primary/20 text-2xl font-bold text-primary">
+            {initials || <UserCircle className="size-10" />}
+          </div>
+        )}
         <div>
           <p className="text-lg font-bold text-foreground">{profile.name}</p>
           <p className="text-sm text-muted-foreground">{profile.email}</p>
@@ -280,12 +332,18 @@ function ProfileBody({
       {isEditing ? (
         <EditForm
           editName={editName}
-          onNameChange={onEditNameChange}
+          editPhoneNumber={editPhoneNumber}
+          editSex={editSex}
+          editDateOfBirth={editDateOfBirth}
           validationError={validationError}
           mutationError={mutationError}
           isSaving={isSaving}
           onSave={onSave}
           onCancel={onCancel}
+          onNameChange={onEditNameChange}
+          onPhoneNumberChange={onEditPhoneNumberChange}
+          onSexChange={onEditSexChange}
+          onDateOfBirthChange={onEditDateOfBirthChange}
         />
       ) : (
         <>
@@ -312,6 +370,27 @@ function ProfileBody({
                 icon={<Users className="size-4" />}
                 label="Team"
                 value={teamName}
+              />
+            )}
+            {profile.phoneNumber && (
+              <DetailRow
+                icon={<Phone className="size-4" />}
+                label="Phone"
+                value={profile.phoneNumber}
+              />
+            )}
+            {profile.sex && (
+              <DetailRow
+                icon={<UserCircle className="size-4" />}
+                label="Sex"
+                value={formatSex(profile.sex)}
+              />
+            )}
+            {profile.dateOfBirth && (
+              <DetailRow
+                icon={<Cake className="size-4" />}
+                label="Age"
+                value={`${calculateAge(profile.dateOfBirth)} years`}
               />
             )}
             <DetailRow
@@ -358,59 +437,132 @@ function DetailRow({ icon, label, value }: DetailRowProps) {
 
 interface EditFormProps {
   editName: string;
-  onNameChange: (value: string) => void;
+  editPhoneNumber: string;
+  editSex: Sex | "";
+  editDateOfBirth: string;
   validationError: string | null;
   mutationError: Error | null;
   isSaving: boolean;
   onSave: () => void;
   onCancel: () => void;
+  onNameChange: (value: string) => void;
+  onPhoneNumberChange: (value: string) => void;
+  onSexChange: (value: Sex | "") => void;
+  onDateOfBirthChange: (value: string) => void;
 }
 
 function EditForm({
   editName,
-  onNameChange,
+  editPhoneNumber,
+  editSex,
+  editDateOfBirth,
   validationError,
   mutationError,
   isSaving,
   onSave,
   onCancel,
+  onNameChange,
+  onPhoneNumberChange,
+  onSexChange,
+  onDateOfBirthChange,
 }: EditFormProps) {
   const errorMessage = validationError ?? getMutationMessage(mutationError);
+  const today = new Date().toISOString().slice(0, 10);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     void onSave();
   };
 
+  const inputClass = cn(
+    "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
+    errorMessage && "border-destructive",
+    isSaving && "opacity-60",
+  );
+  const labelClass =
+    "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+
   return (
-    <form onSubmit={handleSubmit}>
-      <label className="mb-1.5 block">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Name */}
+      <div>
+        <label className={labelClass} htmlFor="edit-name">
           Name
-        </span>
-      </label>
-      <input
-        type="text"
-        value={editName}
-        onChange={(event) => onNameChange(event.target.value)}
-        disabled={isSaving}
-        autoFocus
-        maxLength={100}
-        className={cn(
-          "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
-          errorMessage && "border-destructive",
-          isSaving && "opacity-60",
-        )}
-      />
+        </label>
+        <input
+          id="edit-name"
+          type="text"
+          value={editName}
+          onChange={(event) => onNameChange(event.target.value)}
+          disabled={isSaving}
+          autoFocus
+          maxLength={100}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Phone number */}
+      <div>
+        <label className={labelClass} htmlFor="edit-phone">
+          Phone Number
+        </label>
+        <input
+          id="edit-phone"
+          type="tel"
+          value={editPhoneNumber}
+          onChange={(event) => onPhoneNumberChange(event.target.value)}
+          disabled={isSaving}
+          placeholder="e.g. 07123 456789"
+          maxLength={30}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Sex */}
+      <div>
+        <label className={labelClass} htmlFor="edit-sex">
+          Sex
+        </label>
+        <select
+          id="edit-sex"
+          value={editSex}
+          onChange={(event) =>
+            onSexChange(event.target.value as Sex | "")
+          }
+          disabled={isSaving}
+          className={inputClass}
+        >
+          <option value="">—</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="prefer_not_to_say">Prefer not to say</option>
+        </select>
+      </div>
+
+      {/* Date of birth */}
+      <div>
+        <label className={labelClass} htmlFor="edit-dob">
+          Date of Birth
+        </label>
+        <input
+          id="edit-dob"
+          type="date"
+          value={editDateOfBirth}
+          onChange={(event) => onDateOfBirthChange(event.target.value)}
+          disabled={isSaving}
+          max={today}
+          className={inputClass}
+        />
+      </div>
 
       {errorMessage && (
-        <p className="mt-2 flex items-center gap-1.5 text-sm text-destructive">
+        <p className="flex items-center gap-1.5 text-sm text-destructive">
           <AlertCircle className="size-3.5" />
           {errorMessage}
         </p>
       )}
 
-      <div className="mt-5 flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -437,4 +589,31 @@ function getMutationMessage(error: Error | null): string | null {
   if (!error) return null;
   if (error instanceof ApiError) return error.message;
   return "Failed to update profile. Please try again.";
+}
+
+/** Derives a whole-number age from a YYYY-MM-DD date string. */
+function calculateAge(dateOfBirth: string): number {
+  const birth = new Date(dateOfBirth + "T00:00:00");
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const monthDiff = now.getMonth() - birth.getMonth();
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && now.getDate() < birth.getDate())
+  ) {
+    age--;
+  }
+  return age;
+}
+
+/** Maps the raw enum value to a human-readable label. */
+function formatSex(sex: Sex): string {
+  switch (sex) {
+    case "male":
+      return "Male";
+    case "female":
+      return "Female";
+    case "prefer_not_to_say":
+      return "Prefer not to say";
+  }
 }

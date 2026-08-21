@@ -11,6 +11,9 @@ describe('ProfileService', () => {
     email: 'coach@example.com',
     emailVerified: true,
     image: null,
+    phoneNumber: null,
+    sex: null,
+    dateOfBirth: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -81,7 +84,12 @@ describe('ProfileService', () => {
 
   describe('updateProfile', () => {
     it('should update the user with the provided user ID', async () => {
-      await service.updateProfile('user-1', { name: 'New Name' });
+      await service.updateProfile('user-1', {
+        name: 'New Name',
+        phoneNumber: null,
+        sex: null,
+        dateOfBirth: null,
+      });
 
       expect(mockDatabase.update).toHaveBeenCalled();
       expect(mockUpdateChain.set).toHaveBeenCalledWith(
@@ -90,9 +98,47 @@ describe('ProfileService', () => {
       expect(mockUpdateChain.where).toHaveBeenCalled();
     });
 
+    it('should update phone number, sex, and date of birth', async () => {
+      await service.updateProfile('user-1', {
+        name: 'Coach Smith',
+        phoneNumber: '07123 456789',
+        sex: 'male',
+        dateOfBirth: '1990-05-15',
+      });
+
+      expect(mockUpdateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Coach Smith',
+          phoneNumber: '07123 456789',
+          sex: 'male',
+          dateOfBirth: '1990-05-15',
+        }),
+      );
+    });
+
+    it('should allow clearing optional fields with null', async () => {
+      await service.updateProfile('user-1', {
+        name: 'Coach Smith',
+        phoneNumber: null,
+        sex: null,
+        dateOfBirth: null,
+      });
+
+      expect(mockUpdateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phoneNumber: null,
+          sex: null,
+          dateOfBirth: null,
+        }),
+      );
+    });
+
     it('should return the updated user record', async () => {
       const result = await service.updateProfile('user-1', {
         name: 'Updated Coach',
+        phoneNumber: null,
+        sex: null,
+        dateOfBirth: null,
       });
       expect(result).toEqual(mockUser);
     });
@@ -101,7 +147,12 @@ describe('ProfileService', () => {
       mockUpdateChain.returning.mockResolvedValueOnce([]);
 
       await expect(
-        service.updateProfile('missing', { name: 'New Name' }),
+        service.updateProfile('missing', {
+          name: 'New Name',
+          phoneNumber: null,
+          sex: null,
+          dateOfBirth: null,
+        }),
       ).rejects.toThrow('User not found.');
     });
   });
