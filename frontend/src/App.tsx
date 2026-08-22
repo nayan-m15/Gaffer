@@ -7,6 +7,7 @@ import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
+import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
 import LandingPage from '@/pages/LandingPage'
 
@@ -49,6 +50,14 @@ function App() {
             element={
               <RequireTeam>
                 <EventsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/statistics"
+            element={
+              <RequireTeam>
+                <StatisticsPage />
               </RequireTeam>
             }
           />
