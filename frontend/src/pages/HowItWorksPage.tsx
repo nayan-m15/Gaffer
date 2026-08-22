@@ -241,7 +241,7 @@ function GettingStartedSection() {
   return (
     <section
       aria-labelledby="gs-heading"
-      className="animate-on-scroll border-t dark:border-white/10 bg-card dark:bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t dark:border-white/10 bg-background/40 dark:bg-background/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
@@ -251,7 +251,7 @@ function GettingStartedSection() {
           >
             Five Steps to Kick Off
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground dark:text-white/60 sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-foreground dark:text-white/60 sm:text-base">
             Get your team up and running in minutes. Follow this simple
             progression to start coaching smarter.
           </p>
@@ -269,7 +269,7 @@ function GettingStartedSection() {
               <h3 className="mt-3 text-base font-semibold text-foreground dark:text-white">
                 {step.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground dark:text-white/60">
+              <p className="mt-2 text-sm leading-relaxed text-foreground dark:text-white/60">
                 {step.desc}
               </p>
 
@@ -390,7 +390,7 @@ function WorkflowSection() {
   return (
     <section
       aria-labelledby="workflow-heading"
-      className="animate-on-scroll border-t dark:border-white/10 bg-card dark:bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t dark:border-white/10 bg-background/40 dark:bg-background/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
@@ -400,7 +400,7 @@ function WorkflowSection() {
           >
             One Connected Workflow
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground dark:text-white/60 sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-foreground dark:text-white/60 sm:text-base">
             Every part of {brand.name} works together. Your team, athletes,
             events and lineup are connected — so you can focus on coaching.
           </p>
@@ -420,7 +420,7 @@ function WorkflowSection() {
                 <div className="flex size-14 items-center justify-center rounded-full border dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03] shadow-sm">
                   <step.icon className="size-6 text-brand" />
                 </div>
-                <span className="text-xs font-semibold text-muted-foreground dark:text-white/60">
+                <span className="text-xs font-semibold text-foreground dark:text-white/60">
                   {step.label}
                 </span>
               </div>
@@ -444,13 +444,13 @@ function WorkflowSection() {
 
 function CtaSection() {
   return (
-    <section className="animate-on-scroll border-t dark:border-white/10 bg-card dark:bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24">
+    <section className="animate-on-scroll border-t dark:border-white/10 bg-background/40 dark:bg-background/55 py-16 backdrop-blur-sm sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl rounded-2xl border dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.03] p-8 text-center shadow-sm backdrop-blur-sm sm:p-12">
           <h2 className="font-display text-2xl font-bold text-foreground dark:text-white sm:text-3xl">
             Ready to Take Command?
           </h2>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground dark:text-white/60 sm:text-base">
+          <p className="mt-4 text-sm leading-relaxed text-foreground dark:text-white/60 sm:text-base">
             Join {brand.name} and start organising, managing and coaching your
             team — all from one place.
           </p>
@@ -475,7 +475,7 @@ function CtaSection() {
               Back to Home
             </a>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground dark:text-white/40">
+          <p className="mt-4 text-xs text-foreground dark:text-white/40">
             Free to get started. No credit card required.
           </p>
         </div>
@@ -510,7 +510,7 @@ function FeatureSection({
   return (
     <section
       aria-labelledby={id}
-      className="animate-on-scroll border-t dark:border-white/10 bg-card dark:bg-[#0B1218]/55 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll border-t dark:border-white/10 bg-background/40 dark:bg-background/55 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
@@ -533,14 +533,14 @@ function FeatureSection({
             >
               {title}
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground dark:text-white/60 sm:text-base">
+            <p className="mt-4 text-sm leading-relaxed text-foreground dark:text-white/60 sm:text-base">
               {description}
             </p>
             <ul className="mt-6 space-y-3">
               {bullets.map((item) => (
                 <li
                   key={item}
-                  className="flex items-start gap-3 text-sm text-muted-foreground dark:text-white/60"
+                  className="flex items-start gap-3 text-sm text-foreground dark:text-white/60"
                 >
                   <CheckCircle2
                     className="mt-0.5 size-4 shrink-0 text-brand"
@@ -804,7 +804,7 @@ function FormationMockup() {
         </svg>
       </div>
 
-      <p className="mt-3 text-center text-xs text-muted-foreground dark:text-white/50">
+      <p className="mt-3 text-center text-xs text-foreground dark:text-white/50">
         4-3-3 formation &middot; 11 players on the pitch
       </p>
     </div>
