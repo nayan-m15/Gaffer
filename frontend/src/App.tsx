@@ -10,12 +10,14 @@ import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
 import LandingPage from '@/pages/LandingPage'
+import HowItWorksPage from '@/pages/HowItWorksPage'
 
 /**
  * App — Root application component.
  *
  * `/` is the public marketing landing page; `/login`, `/signup` and
- * `/verify-email` are also public. The dashboard, athletes, events and team pages require a signed-in
+ * `/verify-email` are also public. `/how-it-works` is a public informational
+ * page. The dashboard, athletes, events and team pages require a signed-in
  * coach and live behind `ProtectedRoute`, which redirects to `/login`
  * otherwise. Athletes and Events additionally require the coach to already
  * have a team — `RequireTeam` sends them back to `/dashboard` if not.
@@ -27,6 +29,7 @@ function App() {
     <BrowserRouter useTransitions={false}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/how-it-works" element={<HowItWorksPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
