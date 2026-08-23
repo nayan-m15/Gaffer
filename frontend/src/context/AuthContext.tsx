@@ -14,6 +14,7 @@ export interface SessionUser {
   name: string;
   email: string;
   image: string | null;
+  emailVerified: boolean;
 }
 
 export interface SessionTeam {
@@ -35,15 +36,25 @@ export interface SignInInput {
   password: string;
 }
 
+export interface SignUpResult {
+  /**
+   * True when the account was created but no session was issued because the
+   * address still needs to be verified (email/password sign-up). False for
+   * Google sign-up, which is auto-verified and signs in immediately.
+   */
+  emailVerificationRequired: boolean;
+}
+
 interface AuthContextValue {
   status: AuthStatus;
   user: SessionUser | null;
   team: SessionTeam | null;
-  signUp: (input: SignUpInput) => Promise<void>;
+  signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  resendVerificationEmail: (email: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -87,12 +98,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const signUp = useCallback(
-    async (input: SignUpInput) => {
-      await apiFetch("/auth/sign-up", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
-      await refresh();
+    async (input: SignUpInput): Promise<SignUpResult> => {
+      const data = await apiFetch<{ emailVerificationRequired: boolean }>(
+        "/auth/sign-up",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+
+      // No session is issued until the address is verified, so there's
+      // nothing to hydrate yet — skip the session fetch in that case.
+      if (!data.emailVerificationRequired) {
+        await refresh();
+      }
+
+      return { emailVerificationRequired: data.emailVerificationRequired };
     },
     [refresh],
   );
@@ -123,6 +144,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
+  // Fire-and-forget from the caller's point of view: the backend always
+  // returns success here regardless of whether the address has an account,
+  // so there's nothing meaningful to branch on beyond network/validation
+  // errors, which `apiFetch` still throws as an `ApiError`.
+  const resendVerificationEmail = useCallback(async (email: string) => {
+    await apiFetch("/auth/send-verification-email", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }, []);
+
     const value = useMemo(
       () => ({
         status,
@@ -133,8 +165,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         signOut,
         refreshSession: refresh,
+        resendVerificationEmail,
       }),
-      [status, user, team, signUp, signIn, signInWithGoogle, signOut, refresh],
+      [
+        status,
+        user,
+        team,
+        signUp,
+        signIn,
+        signInWithGoogle,
+        signOut,
+        refresh,
+        resendVerificationEmail,
+      ],
     );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

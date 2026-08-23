@@ -28,9 +28,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">(
+    "idle",
+  );
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, resendVerificationEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -44,6 +49,9 @@ export default function LoginPage() {
       setError(
         "That Google account's email is already registered. Sign in with your password instead, or contact support to link it.",
       );
+    }
+    if (searchParams.get("verified") === "1") {
+      setNotice("Email verified — you can sign in now.");
     }
   }, [searchParams]);
 
@@ -65,19 +73,40 @@ export default function LoginPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
+    setNeedsVerification(false);
     setIsSubmitting(true);
 
     try {
       await signIn({ email, password });
       navigate(from, { replace: true });
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong signing you in. Please try again.",
-      );
+      if (err instanceof ApiError && err.status === 403) {
+        setNeedsVerification(true);
+        setError(
+          "Your email isn't verified yet. Check your inbox for the verification link, or resend it below.",
+        );
+      } else {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Something went wrong signing you in. Please try again.",
+        );
+      }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendStatus("sending");
+    try {
+      await resendVerificationEmail(email);
+      setResendStatus("sent");
+    } catch (err) {
+      console.error("Failed to resend the verification email:", err);
+      setResendStatus("idle");
+      setError("Couldn't resend the verification email. Please try again.");
     }
   };
 
@@ -167,10 +196,31 @@ export default function LoginPage() {
               }
             />
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
+            {notice && !error && (
+              <p role="status" className="text-sm text-brand">
+                {notice}
               </p>
+            )}
+
+            {error && (
+              <div role="alert" className="space-y-2">
+                <p className="text-sm text-destructive">{error}</p>
+                {needsVerification && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={resendStatus === "sending" || resendStatus === "sent"}
+                    onClick={handleResendVerification}
+                  >
+                    {resendStatus === "sent"
+                      ? "Verification email sent"
+                      : resendStatus === "sending"
+                        ? "Sending…"
+                        : "Resend verification email"}
+                  </Button>
+                )}
+              </div>
             )}
 
             <Button
