@@ -253,3 +253,52 @@ body {
 .animation-delay-200 { animation-delay: 200ms; }
 .animation-delay-300 { animation-delay: 300ms; }
 .animation-delay-450 { animation-delay: 450ms; }
+
+/* ─── Scroll-triggered reveal ───────────────────────────────────────────── *
+ * Elements start invisible and translated down; the `.is-visible` class      *
+ * (applied by an Intersection Observer) triggers the entrance.               */
+
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.animate-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Hover card lift ───────────────────────────────────────────────────── *
+ * Subtle upward translate + shadow boost on hover for interactive cards.     */
+
+.hover-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark .hover-lift:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ─── Scroll indicator bounce ───────────────────────────────────────────── *
+ * A slow, gentle bounce used by the scroll-down chevron indicator on the     *
+ * How It Works hero.  Travels 8px down and back over 2 seconds.              */
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(8px); }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 2s ease-in-out infinite;
+}
