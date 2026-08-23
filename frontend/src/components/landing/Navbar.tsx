@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
  * landing-page sections are built in later phases.
  */
 const NAV_LINKS = [
-  { label: "Product", href: "#product" },
-  { label: "Features", href: "#features" },
+  { label: "Product", href: "/#product" },
+  { label: "Features", href: "/features" },
   { label: "How It Works", href: "/how-it-works" },
 ] as const;
 
@@ -202,7 +202,7 @@ export function Navbar() {
               Log In
             </a>
             <a
-              href="/login"
+              href="/signup"
               className={cn(buttonVariants(), "w-full")}
               onClick={() => setMobileOpen(false)}
             >
