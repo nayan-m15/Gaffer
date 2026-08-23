@@ -104,8 +104,16 @@ export default function SignUpPage() {
     // for a later sprint, but every sign-up here creates the account as the
     // coach. A coach will be able to add teams on their dashboard once logged in.
     try {
-      await signUp({ name: fullName, email, password });
-      navigate("/dashboard", { replace: true });
+      const { emailVerificationRequired } = await signUp({
+        name: fullName,
+        email,
+        password,
+      });
+      if (emailVerificationRequired) {
+        navigate("/verify-email", { replace: true, state: { email } });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (error) {
       if (error instanceof ApiError && /email/i.test(error.message)) {
         setErrors((prev) => ({ ...prev, email: error.message }));
