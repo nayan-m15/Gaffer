@@ -114,7 +114,7 @@ export default function FeaturesPage() {
        */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
         <img
-          src="/hero-stadium-bg.png"
+          src="/features-stadium-bg.png"
           alt=""
           className="size-full object-cover object-center"
         />

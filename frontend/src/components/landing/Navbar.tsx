@@ -75,7 +75,7 @@ export function Navbar() {
     >
       <nav
         aria-label="Main navigation"
-        className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
+        className="relative mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
       >
         {/* ── Logo + wordmark ──────────────────────────────────────────── */}
         <a
@@ -88,8 +88,8 @@ export function Navbar() {
           </span>
         </a>
 
-        {/* ── Desktop links ────────────────────────────────────────────── */}
-        <ul className="hidden items-center gap-1 md:flex">
+        {/* ── Desktop links (centered) ─────────────────────────────────── */}
+        <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.href}>
               <a
