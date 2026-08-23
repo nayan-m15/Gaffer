@@ -22,6 +22,13 @@
       "when": 1787350207434,
       "tag": "0002_opposite_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787486152769,
+      "tag": "0003_colorful_the_hood",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import SignUpPage from '@/pages/SignUpPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
+import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
 import LandingPage from '@/pages/LandingPage'
 import HowItWorksPage from '@/pages/HowItWorksPage'
@@ -54,6 +55,14 @@ function App() {
             element={
               <RequireTeam>
                 <EventsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/statistics"
+            element={
+              <RequireTeam>
+                <StatisticsPage />
               </RequireTeam>
             }
           />

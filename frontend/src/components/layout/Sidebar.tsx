@@ -34,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Roster", path: "/athletes", icon: Users, requiresTeam: true },
   { label: "Events", path: "/events", icon: Calendar, requiresTeam: true },
+  { label: "Stats", path: "/statistics", icon: BarChart3, requiresTeam: true },
   { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
 
@@ -115,16 +116,6 @@ export function Sidebar({ className }: SidebarProps) {
           );
         })}
 
-        {/* Stats — disabled until a later sprint */}
-        <span
-          className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/50"
-          title="Coming in a later sprint"
-        >
-          <span className="shrink-0" aria-hidden="true">
-            <BarChart3 className="size-5" />
-          </span>
-          Stats
-        </span>
       </nav>
 
       {/* Footer */}

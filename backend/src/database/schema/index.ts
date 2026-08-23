@@ -173,3 +173,100 @@ export const events = pgTable(
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
   ],
 );
+
+export const competitionType = pgEnum('competition_type', [
+  'league',
+  'cup',
+  'friendly',
+]);
+ 
+// A league or cup the team is competing in this season.
+export const competitions = pgTable(
+  'competitions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: competitionType('type').notNull(),
+    season: text('season'), // e.g. "2025/26" — optional
+    ...timestamps,
+  },
+  (table) => [index('competitions_team_id_index').on(table.teamId)],
+);
+ 
+// One row per event of type 'match'. Populated by the (future) live match
+// logger; this feature only reads from it.
+export const matches = pgTable(
+  'matches',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .unique()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    competitionId: uuid('competition_id').references(() => competitions.id, {
+      onDelete: 'set null',
+    }),
+    opponentName: text('opponent_name').notNull(),
+    isHome: boolean('is_home').default(true).notNull(),
+    teamScore: integer('team_score').default(0).notNull(),
+    opponentScore: integer('opponent_score').default(0).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('matches_competition_id_index').on(table.competitionId)],
+);
+ 
+// One row per athlete per match. Populated by the (future) live match
+// logger; this feature only reads from it.
+export const athleteMatchStats = pgTable(
+  'athlete_match_stats',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athletes.id, { onDelete: 'cascade' }),
+    started: boolean('started').default(true).notNull(),
+    minutesPlayed: integer('minutes_played'), // nullable — not required for v1
+    goals: integer('goals').default(0).notNull(),
+    assists: integer('assists').default(0).notNull(),
+    yellowCards: integer('yellow_cards').default(0).notNull(),
+    redCards: integer('red_cards').default(0).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('athlete_match_stats_athlete_id_index').on(table.athleteId),
+    uniqueIndex('athlete_match_stats_match_athlete_unique').on(
+      table.matchId,
+      table.athleteId,
+    ),
+  ],
+);
+ 
+// Manually entered/updated by the coach — the app has no way to calculate
+// standings since it doesn't track other teams' results.
+export const standings = pgTable(
+  'standings',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    teamName: text('team_name').notNull(),
+    position: integer('position').notNull(),
+    played: integer('played').default(0).notNull(),
+    won: integer('won').default(0).notNull(),
+    drawn: integer('drawn').default(0).notNull(),
+    lost: integer('lost').default(0).notNull(),
+    goalsFor: integer('goals_for').default(0).notNull(),
+    goalsAgainst: integer('goals_against').default(0).notNull(),
+    points: integer('points').default(0).notNull(),
+    isOwnTeam: boolean('is_own_team').default(false).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('standings_competition_id_index').on(table.competitionId)],
+);
