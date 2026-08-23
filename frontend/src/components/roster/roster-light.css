@@ -1,0 +1,68 @@
+/**
+ * Roster light-mode overrides.
+ *
+ * The Athlete Roster is dark-first: the root element in `AthletesPage.tsx`
+ * carries the `.dark` class, so the existing global `.dark` palette from
+ * `src/index.css` is used automatically.
+ *
+ * This file provides the optional light-mode palette, scoped to
+ * `.roster-page.light`.  Adding the `.light` class to the `.roster-page` root
+ * element (and removing `.dark`) will switch the roster to light mode without
+ * affecting the rest of the application.
+ *
+ * Variable names match the global theme exactly so existing Tailwind utilities
+ * and shadcn/ui components continue to work unchanged.
+ */
+
+.roster-page.light {
+  /* Brand accent — emerald / teal */
+  --brand:            #059669;
+  --brand-dark:       #047857;
+  --brand-light:      #10B981;
+  --brand-foreground: #FFFFFF;
+
+  /* Surfaces */
+  --background: #F5F3F0;
+  --foreground: #171717;
+  --card:       #FFFFFF;
+  --card-foreground: #171717;
+  --popover:    #FFFFFF;
+  --popover-foreground: #171717;
+
+  /* Primary interactions */
+  --primary:           #059669;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary / muted / accent */
+  --secondary:           #E8E5E1;
+  --secondary-foreground: #171717;
+  --muted:               #E8E5E1;
+  --muted-foreground:    #737373;
+  --accent:              #E8E5E1;
+  --accent-foreground:   #171717;
+
+  /* Semantic */
+  --destructive: #FF5B5F;
+
+  /* Borders and inputs */
+  --border: #D9D6D2;
+  --input:  #D9D6D2;
+  --ring:   #059669;
+
+  /* Charts */
+  --chart-1: #059669;
+  --chart-2: #10B981;
+  --chart-3: #D9D6D2;
+  --chart-4: #737373;
+  --chart-5: #171717;
+
+  /* Sidebar */
+  --sidebar: #FAFAF9;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8E5E1;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #D9D6D2;
+  --sidebar-ring: #059669;
+}

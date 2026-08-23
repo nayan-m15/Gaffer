@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
  * landing-page sections are built in later phases.
  */
 const NAV_LINKS = [
-  { label: "Product", href: "#product" },
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
+  { label: "Product", href: "/#product" },
+  { label: "Features", href: "/features" },
+  { label: "How It Works", href: "/how-it-works" },
 ] as const;
 
 /**
@@ -75,21 +75,21 @@ export function Navbar() {
     >
       <nav
         aria-label="Main navigation"
-        className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
+        className="relative mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
       >
         {/* ── Logo + wordmark ──────────────────────────────────────────── */}
         <a
           href="/"
           className="flex items-center gap-2.5 text-foreground transition-opacity hover:opacity-80"
         >
-          <SportLogo size={30} />
+          <SportLogo size={30} className="rounded" />
           <span className="text-sm font-semibold tracking-tight sm:text-base">
             {brand.name}
           </span>
         </a>
 
-        {/* ── Desktop links ────────────────────────────────────────────── */}
-        <ul className="hidden items-center gap-1 md:flex">
+        {/* ── Desktop links (centered) ─────────────────────────────────── */}
+        <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.href}>
               <a
@@ -126,7 +126,7 @@ export function Navbar() {
             Log In
           </a>
 
-          <a href="/login" className={buttonVariants()}>
+          <a href="/signup" className={buttonVariants()}>
             Get Started
           </a>
         </div>
@@ -202,7 +202,7 @@ export function Navbar() {
               Log In
             </a>
             <a
-              href="/login"
+              href="/signup"
               className={cn(buttonVariants(), "w-full")}
               onClick={() => setMobileOpen(false)}
             >

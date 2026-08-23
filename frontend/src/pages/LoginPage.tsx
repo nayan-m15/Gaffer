@@ -1,11 +1,14 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import dugoutBg from "@/assets/dugout-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api";
 
 /**
  * LoginPage — Pitchside authentication page.
@@ -24,6 +27,33 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">(
+    "idle",
+  );
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const { signIn, signInWithGoogle, resendVerificationEmail } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const from =
+    (location.state as { from?: { pathname: string } } | null)?.from
+      ?.pathname ?? "/dashboard";
+  
+  
+  useEffect(() => {
+    if (searchParams.get("error") === "google") {
+      setError(
+        "That Google account's email is already registered. Sign in with your password instead, or contact support to link it.",
+      );
+    }
+    if (searchParams.get("verified") === "1") {
+      setNotice("Email verified — you can sign in now.");
+    }
+  }, [searchParams]);
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {
@@ -40,13 +70,58 @@ export default function LoginPage() {
   }, []);
 
   /* ── Handlers ────────────────────────────────────────────────────────── */
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // TODO: Connect to authentication service.
+    setError(null);
+    setNotice(null);
+    setNeedsVerification(false);
+    setIsSubmitting(true);
+
+    try {
+      await signIn({ email, password });
+      navigate(from, { replace: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setNeedsVerification(true);
+        setError(
+          "Your email isn't verified yet. Check your inbox for the verification link, or resend it below.",
+        );
+      } else {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "Something went wrong signing you in. Please try again.",
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleGoogleSignIn = () => {
-    // TODO: Connect to Google OAuth flow.
+  const handleResendVerification = async () => {
+    setResendStatus("sending");
+    try {
+      await resendVerificationEmail(email);
+      setResendStatus("sent");
+    } catch (err) {
+      console.error("Failed to resend the verification email:", err);
+      setResendStatus("idle");
+      setError("Couldn't resend the verification email. Please try again.");
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      console.error("Google sign-in failed:", err);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't start Google sign-in. Please try again.",
+      );
+    }
   };
 
   /* ── Render ──────────────────────────────────────────────────────────── */
@@ -76,9 +151,7 @@ export default function LoginPage() {
         <div className="rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
           {/* ── Brand header ─────────────────────────────────────────── */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
-            <div className="flex size-14 items-center justify-center rounded-full bg-brand/10 text-brand">
-              <SportLogo size={30} />
-            </div>
+            <SportLogo size={56} className="rounded-lg" />
 
             <h1 className="mt-1 font-display text-2xl font-bold tracking-wide text-foreground">
               GAFFER
@@ -123,8 +196,40 @@ export default function LoginPage() {
               }
             />
 
-            <Button type="submit" size="lg" className="w-full font-semibold tracking-wide">
-              SIGN IN TO DUGOUT
+            {notice && !error && (
+              <p role="status" className="text-sm text-brand">
+                {notice}
+              </p>
+            )}
+
+            {error && (
+              <div role="alert" className="space-y-2">
+                <p className="text-sm text-destructive">{error}</p>
+                {needsVerification && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={resendStatus === "sending" || resendStatus === "sent"}
+                    onClick={handleResendVerification}
+                  >
+                    {resendStatus === "sent"
+                      ? "Verification email sent"
+                      : resendStatus === "sending"
+                        ? "Sending…"
+                        : "Resend verification email"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={isSubmitting}
+              className="w-full font-semibold tracking-wide"
+            >
+              {isSubmitting ? "SIGNING IN…" : "SIGN IN TO DUGOUT"}
             </Button>
           </form>
 
@@ -140,6 +245,17 @@ export default function LoginPage() {
           {/* ── Google sign-in ───────────────────────────────────────── */}
           <GoogleSignInButton onClick={handleGoogleSignIn} />
         </div>
+
+        {/* ── Footer navigation ───────────────────────────────────────── */}
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            to="/signup"
+            className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            Register
+          </Link>
+        </p>
       </div>
     </main>
   );
