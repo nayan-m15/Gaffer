@@ -34,7 +34,8 @@ export class StatisticsController {
   @Get()
   async getOverview(
     @CurrentUser() user: AuthenticatedRequest['user'],
-    @Query('competitionId') competitionId?: string,
+    @Query('competitionId', new ParseUUIDPipe({ optional: true }))
+    competitionId?: string,
   ) {
     return this.statisticsService.getOverview(user.id, competitionId);
   }
