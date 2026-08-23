@@ -12,3 +12,10 @@ export const signInSchema = z.object({
   password: z.string().min(1, 'Password is required.'),
 });
 export type SignInDto = z.infer<typeof signInSchema>;
+
+export const resendVerificationEmailSchema = z.object({
+  email: z.string().trim().email('Enter a valid email address.'),
+});
+export type ResendVerificationEmailDto = z.infer<
+  typeof resendVerificationEmailSchema
+>;

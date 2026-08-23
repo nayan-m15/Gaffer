@@ -22,12 +22,17 @@ const timestamps = {
 
 // These tables use Better Auth's default PostgreSQL model names so they can be
 // connected to the Better Auth Drizzle adapter during the authentication slice.
+export const sexEnum = pgEnum('sex', ['male', 'female', 'prefer_not_to_say']);
+
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').default(false).notNull(),
   image: text('image'),
+  phoneNumber: text('phone_number'),
+  sex: sexEnum('sex'),
+  dateOfBirth: date('date_of_birth', { mode: 'string' }),
   ...timestamps,
 });
 
