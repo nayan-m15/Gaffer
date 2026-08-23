@@ -1,7 +1,26 @@
 # Sport Coaching Tool
 
-Development foundation for a sport coaching platform with a React/Vite frontend
-and NestJS backend.
+A full-stack platform that helps sport coaches manage their team from one
+place: coach accounts with email verification and Google sign-in, an athlete
+roster, a season/fixture calendar, a live dashboard summary, and team
+statistics — all scoped per team so coaches only ever see their own data.
+
+Built with a React/Vite frontend and a NestJS backend.
+
+📖 **Project documentation:** [nayan-m15.github.io/SDP-Project-Documentation](https://nayan-m15.github.io/SDP-Project-Documentation)
+
+## Features
+
+- **Auth & onboarding** — email/password and Google sign-up, email
+  verification before sign-in, coach onboarding and team creation
+- **Roster management** — add, edit, archive/restore athletes, scoped to the
+  coach's team
+- **Events** — create and browse team events on a calendar/time-column picker
+- **Dashboard** — live summary cards (active athletes, upcoming events,
+  season/match info)
+- **Statistics** — team and competition statistics pages
+- **Profile management** — editable coach profile details
+- **Public marketing pages** — landing, features, and "how it works" pages
 
 ## Stack
 
@@ -46,30 +65,6 @@ Three layers of automated tests exist, run from the repo root unless noted:
 | `npm run test:e2e` | Backend integration tests (`backend/test/**/*.e2e-spec.ts`) — boot the real NestJS app and hit its HTTP endpoints with [Supertest](https://github.com/ladjs/supertest). | A reachable `DATABASE_URL` (see below). |
 | `npm run test:e2e:ui` | Full-stack browser e2e (`e2e/**/*.spec.ts`) via [Playwright](https://playwright.dev) — drives a real Chromium browser against the real Vite dev server and Nest API. | A reachable `DATABASE_URL`; auto-starts both dev servers if they aren't already running (`npm run dev`). |
 
-**There is no separate test database yet.** Integration and e2e tests run
-against whatever Postgres `DATABASE_URL` in `.env` points at (the shared dev
-database in this repo's current setup) — every test creates its data with a
-random, uniquely-prefixed email/team name and deletes it again in
-`afterAll`/`finally`, so a clean run leaves no residue. If a run crashes
-mid-way, test rows are identifiable by their `s1-07*`-prefixed email/team
-name and safe to delete manually.
-
-**Current coverage:** the auth flow (sign-up, sign-in, session, sign-out),
-team isolation, athlete/event CRUD (create, list, get, update,
-archive/restore or cancel, and team-scoping so one team never sees another's
-data), and the dashboard summary endpoint (active athlete count, total event
-count, next-five upcoming events, correctly team-scoped) are covered
-end-to-end via Supertest. The Playwright e2e test covers Register →
-Dashboard (zeroed-out counts for a new team) → add an athlete on the Roster
-page → see it appear → visit Events → back to Dashboard, reloaded, showing
-the updated athlete count. It doesn't drive event *creation* through the
-UI — the event form uses a custom calendar/time-column picker with no plain
-date/time inputs, which would make the browser test slow and flaky for
-little extra signal over `events.e2e-spec.ts`; the Events page is still
-checked for loading correctly (empty state) for a signed-in coach. The
-dashboard's Sprint 2 fields (live match, season summary, recent form,
-per-match stats) have no backend yet and are asserted to render their empty
-states rather than error.
 
 ## Structure
 
@@ -78,8 +73,28 @@ SportCoachingTool/
 ├── frontend/
 ├── backend/
 ├── docs/
+├── e2e/
 ├── .env.example
 ├── .gitignore
 ├── package.json
 └── README.md
 ```
+
+## AI Declaration
+
+This project was built with the assistance of AI coding tools throughout
+development, used for code generation, refactoring, UI implementation, and
+test authoring, with all output reviewed and committed by the team. Per the
+commit history, the following tools were used:
+
+- **Codex** (GPT-5.5 and GPT-5.6 "Terra"/"Luna") — feature implementation,
+  bug fixes, and the initial project scaffolding (`CODEX_HANDOFF.md`)
+- **Claude Code** (Claude Sonnet 5) — feature implementation, backend
+  integration tests, and bug fixes
+- **Qoder** (Agent/Auto) — UI refactors and styling
+- **ChatGPT** (GPT-5.5) — supporting implementation work
+- **Antigravity AI** (Gemini 3.6 Flash) — supporting implementation work
+
+Commits that include AI assistance are marked with an `Assisted by:` or
+`Co-authored-by:` trailer naming the tool used; see the git log for the
+full, per-commit breakdown.
