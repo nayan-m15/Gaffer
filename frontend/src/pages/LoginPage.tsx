@@ -44,16 +44,19 @@ export default function LoginPage() {
       ?.pathname ?? "/dashboard";
   
   
+  const errorParam = searchParams.get("error");
+  const verifiedParam = searchParams.get("verified");
+
   useEffect(() => {
-    if (searchParams.get("error") === "google") {
+    if (errorParam === "google") {
       setError(
         "That Google account's email is already registered. Sign in with your password instead, or contact support to link it.",
       );
     }
-    if (searchParams.get("verified") === "1") {
+    if (verifiedParam === "1") {
       setNotice("Email verified — you can sign in now.");
     }
-  }, [searchParams]);
+  }, [errorParam, verifiedParam]);
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {
