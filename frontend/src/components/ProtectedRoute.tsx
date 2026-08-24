@@ -20,7 +20,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (status === "unauthenticated") {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   return <>{children}</>;

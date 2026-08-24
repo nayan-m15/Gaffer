@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { Footer } from "@/components/layout/Footer";
 
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
@@ -25,8 +26,11 @@ export function AppShell() {
     <div className="flex min-h-screen bg-background text-foreground">
       <Sidebar />
 
-      <main className="min-w-0 flex-1 overflow-y-auto lg:pl-64">
-        <Outlet />
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
+        <div className="flex-1">
+          <Outlet />
+        </div>
+        <Footer />
       </main>
     </div>
   );

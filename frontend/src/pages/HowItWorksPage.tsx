@@ -37,6 +37,7 @@ import {
   Users,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
+import { Footer } from "@/components/landing/Footer";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -119,7 +120,7 @@ export default function HowItWorksPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <div ref={pageRef} className="relative min-h-screen bg-[#0B1218] text-white">
+    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#0B1218] text-white">
       {/* ── Fixed stadium background ──────────────────────────────────────
        * The image and its overlays are anchored to the viewport with
        * `position: fixed`.  Every section scrolls *over* this single layer,
@@ -143,7 +144,7 @@ export default function HowItWorksPage() {
 
       <Navbar />
 
-      <main className="relative z-10">
+      <main className="relative z-10 flex-1">
         <HeroSection />
         <GettingStartedSection />
         <DashboardSection />
@@ -153,6 +154,10 @@ export default function HowItWorksPage() {
         <WorkflowSection />
         <CtaSection />
       </main>
+
+      <div className="relative z-10">
+        <Footer />
+      </div>
     </div>
   );
 }

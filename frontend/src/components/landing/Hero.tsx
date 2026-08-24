@@ -23,13 +23,13 @@ export function Hero() {
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative isolate overflow-hidden bg-[#0B1218]"
+      className="relative isolate flex flex-1 flex-col justify-center overflow-hidden bg-[#0B1218]"
     >
       {/* ── Atmospheric background layer ──────────────────────────────── */}
       <HeroBackground />
 
       {/* ── Content grid ──────────────────────────────────────────────── */}
-      <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8 lg:pb-32 lg:pt-28">
+      <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
         <div className="mx-auto max-w-3xl text-center">
           {/* Eyebrow */}
           <span

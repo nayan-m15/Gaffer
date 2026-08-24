@@ -298,7 +298,7 @@ export default function StatisticsPage() {
           }
           onAddStanding={openAddStanding}
           onEditStanding={openEditStanding}
-          onDeleteStanding={(c, s) =>
+          onDeleteStanding={(_, s) =>
             setDeleteTarget({
               kind: "standing",
               id: s.id,

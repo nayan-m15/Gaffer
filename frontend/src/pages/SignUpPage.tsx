@@ -2,7 +2,7 @@ import { useState, useEffect, useId, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
-import signupBg from "@/assets/signup-bg.png";
+import signupBg from "@/assets/SignUp-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
