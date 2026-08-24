@@ -47,6 +47,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
+import { Footer } from "@/components/landing/Footer";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -106,7 +107,7 @@ export default function FeaturesPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <div ref={pageRef} className="relative min-h-screen bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground">
+    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground">
       {/* ── Fixed stadium background ──────────────────────────────────────
        * The image and its overlays are anchored to the viewport with
        * `position: fixed`. Every section scrolls *over* this single layer,
@@ -128,7 +129,7 @@ export default function FeaturesPage() {
 
       <Navbar />
 
-      <main className="relative z-10">
+      <main className="relative z-10 flex-1">
         <HeroSection />
         <JumpBarSection />
         <CorePillarsSection />
@@ -141,6 +142,10 @@ export default function FeaturesPage() {
         <AnalyticsFeatureSection />
         <CtaSection />
       </main>
+
+      <div className="relative z-10">
+        <Footer />
+      </div>
     </div>
   );
 }
