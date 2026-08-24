@@ -39,9 +39,13 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const rawFrom = (location.state as { from?: string | { pathname?: string } } | null)?.from;
   const from =
-    (location.state as { from?: { pathname: string } } | null)?.from
-      ?.pathname ?? "/dashboard";
+    typeof rawFrom === "string"
+      ? rawFrom
+      : typeof rawFrom === "object" && rawFrom?.pathname
+        ? rawFrom.pathname
+        : "/dashboard";
   
   
   const errorParam = searchParams.get("error");
