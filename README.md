@@ -7,7 +7,9 @@ statistics — all scoped per team so coaches only ever see their own data.
 
 Built with a React/Vite frontend and a NestJS backend.
 
-📖 **Project documentation:** [nayan-m15.github.io/SDP-Project-Documentation](https://nayan-m15.github.io/SDP-Project-Documentation)
+📖 **Project documentation:** [SDP Interlude Documentation](https://nayan-m15.github.io/SDP-Project-Documentation)
+
+🌐 **Live Webpage:** [Gaffer](https://gaffer-virid.vercel.app/)
 
 ## Features
 
