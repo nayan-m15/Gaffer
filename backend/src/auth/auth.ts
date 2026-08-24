@@ -45,6 +45,12 @@ export const auth = betterAuth({
       await sendVerificationEmail({ to: user.email, name: user.name, url });
     },
   },
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
