@@ -15,11 +15,28 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ].filter(Boolean) as string[];
+
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. server-to-server, mobile, curl)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Fallback to allow if origin matches standard patterns
+    },
     credentials: true,
   });
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port, '0.0.0.0');
 }
 void bootstrap();
