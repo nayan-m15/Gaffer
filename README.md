@@ -96,6 +96,11 @@ commit history, the following tools were used:
 - **Qoder** (Agent/Auto) — UI refactors and styling
 - **ChatGPT** (GPT-5.5) — supporting implementation work
 - **Antigravity AI** (Gemini 3.6 Flash) — supporting implementation work
+- **Granola AI** — recording and transcription of selected project meetings,
+  and assistance in generating structured meeting notes, with all generated
+  notes reviewed by the team for accuracy before inclusion in the project
+  documentation.
+
 
 Commits that include AI assistance are marked with an `Assisted by:` or
 `Co-authored-by:` trailer naming the tool used; see the git log for the
