@@ -8,6 +8,7 @@ import SignUpPage from '@/pages/SignUpPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
+import ConfirmSquadPage from '@/pages/ConfirmSquadPage'
 import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
 import LandingPage from '@/pages/LandingPage'
@@ -57,6 +58,14 @@ function App() {
             element={
               <RequireTeam>
                 <EventsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/events/:eventId/confirm-squad"
+            element={
+              <RequireTeam>
+                <ConfirmSquadPage />
               </RequireTeam>
             }
           />

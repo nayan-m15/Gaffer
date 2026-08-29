@@ -179,7 +179,7 @@ export const competitionType = pgEnum('competition_type', [
   'cup',
   'friendly',
 ]);
- 
+
 // A league or cup the team is competing in this season.
 export const competitions = pgTable(
   'competitions',
@@ -195,7 +195,7 @@ export const competitions = pgTable(
   },
   (table) => [index('competitions_team_id_index').on(table.teamId)],
 );
- 
+
 // One row per event of type 'match'. Populated by the (future) live match
 // logger; this feature only reads from it.
 export const matches = pgTable(
@@ -217,7 +217,7 @@ export const matches = pgTable(
   },
   (table) => [index('matches_competition_id_index').on(table.competitionId)],
 );
- 
+
 // One row per athlete per match. Populated by the (future) live match
 // logger; this feature only reads from it.
 export const athleteMatchStats = pgTable(
@@ -246,7 +246,7 @@ export const athleteMatchStats = pgTable(
     ),
   ],
 );
- 
+
 // Manually entered/updated by the coach — the app has no way to calculate
 // standings since it doesn't track other teams' results.
 export const standings = pgTable(
@@ -269,4 +269,40 @@ export const standings = pgTable(
     ...timestamps,
   },
   (table) => [index('standings_competition_id_index').on(table.competitionId)],
+);
+
+export const matchEventTeam = pgEnum('match_event_team', ['own', 'opponent']);
+export const matchEventType = pgEnum('match_event_type', [
+  'goal',
+  'assist',
+  'key_pass',
+  'yellow_card',
+  'red_card',
+  'substitution',
+  'penalty',
+  'injury',
+]);
+
+export const matchEvents = pgTable(
+  'match_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    team: matchEventTeam('team').notNull(),
+    opponentLabel: text('opponent_label'),
+    eventType: matchEventType('event_type').notNull(),
+    minute: integer('minute').notNull(),
+    detail: text('detail'),
+    loggedByUserId: text('logged_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    manuallyAdjusted: boolean('manually_adjusted').default(false).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('match_events_match_id_index').on(table.matchId)],
 );

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +36,7 @@ export function EventDetailDialog({
   onOpenChange,
   onEdit,
 }: EventDetailDialogProps) {
+  const navigate = useNavigate();
   const cancelEvent = useCancelEvent();
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +123,13 @@ export function EventDetailDialog({
               disabled={cancelEvent.isPending}
             >
               {cancelEvent.isPending ? "Cancelling…" : "Cancel Event"}
+            </Button>
+          )}
+          {event && event.type === "match" && event.status !== "cancelled" && (
+            <Button
+              onClick={() => navigate(`/events/${event.id}/confirm-squad`)}
+            >
+              Confirm squad
             </Button>
           )}
           {event && (
