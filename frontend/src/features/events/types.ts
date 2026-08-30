@@ -11,6 +11,7 @@ export interface TeamEvent {
   scheduledAt: string;
   location: string;
   notes: string | null;
+  matchId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

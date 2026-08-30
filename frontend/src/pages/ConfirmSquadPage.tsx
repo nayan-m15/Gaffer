@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CheckCircle2,
   Loader2,
   ShieldAlert,
   Users,
@@ -100,11 +99,12 @@ export default function ConfirmSquadPage() {
     }
     setSubmitError(null);
     try {
-      await startMatch.mutateAsync({
+      const match = await startMatch.mutateAsync({
         opponentName: opponentName.trim(),
         isHome,
         startingAthleteIds: [...startingIds],
       });
+      navigate(`/matches/${match.id}/live`, { replace: true });
     } catch (err) {
       setSubmitError(
         err instanceof ApiError
@@ -171,35 +171,6 @@ export default function ConfirmSquadPage() {
           </Button>
         </div>
       </div>
-    );
-  }
-
-  if (startMatch.isSuccess) {
-    return (
-      <>
-        <PageHeader
-          title="Squad confirmed"
-          subtitle={event.title}
-        />
-        <div className="space-y-6 p-6 sm:p-8">
-          <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
-            <CheckCircle2 className="size-8 text-primary" />
-            <h2 className="mt-4 text-lg font-semibold text-foreground">
-              Matchday squad saved
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Starting XI and bench have been recorded for {event.title} vs{" "}
-              {startMatch.data.opponentName}.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button onClick={() => navigate("/events")}>Back to Events</Button>
-              <Button variant="outline" onClick={() => navigate("/dashboard")}>
-                Go to Dashboard
-              </Button>
-            </div>
-          </div>
-        </div>
-      </>
     );
   }
 

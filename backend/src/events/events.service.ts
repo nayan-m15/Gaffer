@@ -52,11 +52,20 @@ export class EventsService {
   async list(userId: string) {
     const team = await this.requireTeam(userId);
 
-    return this.databaseService.database
-      .select()
+    const rows = await this.databaseService.database
+      .select({
+        event: events,
+        matchId: matches.id,
+      })
       .from(events)
+      .leftJoin(matches, eq(matches.eventId, events.id))
       .where(eq(events.teamId, team.id))
       .orderBy(asc(events.scheduledAt));
+
+    return rows.map((row) => ({
+      ...row.event,
+      matchId: row.matchId,
+    }));
   }
 
   async findOne(userId: string, eventId: string) {

@@ -1,0 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
+
+.live-match {
+  --lm-bg: #070d12;
+  --lm-panel: #101920;
+  --lm-panel-2: #141e27;
+  --lm-line: #1c2b36;
+  --lm-green: #00d99a;
+  --lm-green-dim: rgba(0, 217, 154, 0.14);
+  --lm-amber: #ffbe2e;
+  --lm-red: #ff5b5f;
+  --lm-yellow: #f5c518;
+  --lm-muted: #8e9ba8;
+  --lm-white: #e8ecef;
+  font-family: "Inter Variable", Inter, system-ui, sans-serif;
+  background: var(--lm-bg);
+  color: var(--lm-white);
+}
+
+.live-match .font-oswald {
+  font-family: Oswald, Impact, sans-serif;
+}
+
+.live-match .font-display {
+  font-family: var(--font-display);
+}
+
+@keyframes live-timeline-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.live-timeline-enter {
+  animation: live-timeline-in 0.28s ease-out;
+}
