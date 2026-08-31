@@ -50,5 +50,9 @@ export async function apiFetch<T>(
     throw new ApiError(message, response.status);
   }
 
+  if (body === undefined && response.status !== 204) {
+    throw new ApiError("Invalid response from server", response.status);
+  }
+
   return body as T;
 }
