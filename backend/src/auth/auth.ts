@@ -51,6 +51,12 @@ export const auth = betterAuth({
       secure: process.env.NODE_ENV === 'production',
     },
   },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ['google'],
+    },
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
