@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 /** Thrown when the backend responds with a non-2xx status. */
 export class ApiError extends Error {
@@ -22,7 +22,13 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const url = API_URL
+    ? `${API_URL}${path}`
+    : path.startsWith("/auth")
+      ? path
+      : `/api${path}`;
+
+  const response = await fetch(url, {
     ...options,
     credentials: "include",
     headers: {
