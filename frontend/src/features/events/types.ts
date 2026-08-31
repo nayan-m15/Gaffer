@@ -11,6 +11,7 @@ export interface TeamEvent {
   scheduledAt: string;
   location: string;
   notes: string | null;
+  matchId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,4 +31,23 @@ export interface UpdateEventInput {
   scheduledAt?: string;
   location?: string;
   notes?: string | null;
+}
+
+export interface StartMatchInput {
+  opponentName: string;
+  isHome: boolean;
+  startingAthleteIds: string[];
+}
+
+/** A match row returned by POST /events/:eventId/start-match. */
+export interface MatchRecord {
+  id: string;
+  eventId: string;
+  competitionId: string | null;
+  opponentName: string;
+  isHome: boolean;
+  teamScore: number;
+  opponentScore: number;
+  createdAt: string;
+  updatedAt: string;
 }

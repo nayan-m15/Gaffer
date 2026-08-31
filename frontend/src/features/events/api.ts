@@ -1,8 +1,18 @@
 import { apiFetch } from "@/lib/api";
-import type { CreateEventInput, TeamEvent, UpdateEventInput } from "./types";
+import type {
+  CreateEventInput,
+  MatchRecord,
+  StartMatchInput,
+  TeamEvent,
+  UpdateEventInput,
+} from "./types";
 
 export function fetchEvents() {
   return apiFetch<TeamEvent[]>("/events");
+}
+
+export function fetchEvent(id: string) {
+  return apiFetch<TeamEvent>(`/events/${id}`);
 }
 
 export function createEvent(input: CreateEventInput) {
@@ -22,5 +32,12 @@ export function updateEvent(id: string, input: UpdateEventInput) {
 export function cancelEvent(id: string) {
   return apiFetch<TeamEvent>(`/events/${id}`, {
     method: "DELETE",
+  });
+}
+
+export function startMatch(eventId: string, input: StartMatchInput) {
+  return apiFetch<MatchRecord>(`/events/${eventId}/start-match`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }

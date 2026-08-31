@@ -12,7 +12,11 @@ import {
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
-import { createEventSchema, updateEventSchema } from './events.schemas';
+import {
+  createEventSchema,
+  startMatchSchema,
+  updateEventSchema,
+} from './events.schemas';
 import { EventsService } from './events.service';
 
 @Controller('events')
@@ -32,6 +36,16 @@ export class EventsController {
   @Get()
   async list(@CurrentUser() user: AuthenticatedRequest['user']) {
     return this.eventsService.list(user.id);
+  }
+
+  @Post(':eventId/start-match')
+  async startMatch(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(startMatchSchema, body);
+    return this.eventsService.startMatch(user.id, eventId, dto);
   }
 
   @Get(':id')

@@ -29,3 +29,15 @@ export const updateEventSchema = createEventSchema
     },
   );
 export type UpdateEventDto = z.infer<typeof updateEventSchema>;
+
+export const startMatchSchema = z.object({
+  opponentName: z.string().trim().min(1, 'Opponent name is required.'),
+  isHome: z.boolean(),
+  startingAthleteIds: z
+    .array(z.uuid())
+    .length(11, 'A starting XI must contain exactly 11 athletes.')
+    .refine((ids) => new Set(ids).size === 11, {
+      message: 'Starting athletes must be unique.',
+    }),
+});
+export type StartMatchDto = z.infer<typeof startMatchSchema>;

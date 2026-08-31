@@ -1,13 +1,23 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { events } from '../database/schema';
+import {
+  athleteMatchStats,
+  athletes,
+  events,
+  matches,
+} from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
-import type { CreateEventDto, UpdateEventDto } from './events.schemas';
+import type {
+  CreateEventDto,
+  StartMatchDto,
+  UpdateEventDto,
+} from './events.schemas';
 
 /**
  * CRUD for a coach's team events. Every query is scoped to the team returned
@@ -42,11 +52,20 @@ export class EventsService {
   async list(userId: string) {
     const team = await this.requireTeam(userId);
 
-    return this.databaseService.database
-      .select()
+    const rows = await this.databaseService.database
+      .select({
+        event: events,
+        matchId: matches.id,
+      })
       .from(events)
+      .leftJoin(matches, eq(matches.eventId, events.id))
       .where(eq(events.teamId, team.id))
       .orderBy(asc(events.scheduledAt));
+
+    return rows.map((row) => ({
+      ...row.event,
+      matchId: row.matchId,
+    }));
   }
 
   async findOne(userId: string, eventId: string) {
@@ -93,6 +112,92 @@ export class EventsService {
     return event;
   }
 
+  async startMatch(userId: string, eventId: string, dto: StartMatchDto) {
+    const team = await this.requireTeam(userId);
+    const event = await this.requireEvent(team.id, eventId);
+
+    if (event.type !== 'match') {
+      throw new NotFoundException('Event not found.');
+    }
+
+    if (this.isBeforeMatchDay(event.scheduledAt)) {
+      throw new ForbiddenException(
+        'Matches cannot be started before match day.',
+      );
+    }
+
+    const teamAthletes = await this.databaseService.database
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
+
+    const teamAthleteIds = new Set(teamAthletes.map((athlete) => athlete.id));
+    for (const athleteId of dto.startingAthleteIds) {
+      if (!teamAthleteIds.has(athleteId)) {
+        throw new BadRequestException(
+          'One or more starting athletes are not on this team.',
+        );
+      }
+    }
+
+    const startingIds = new Set(dto.startingAthleteIds);
+
+    const [existingMatch] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+
+    let match = existingMatch;
+    if (match) {
+      const [updated] = await this.databaseService.database
+        .update(matches)
+        .set({
+          opponentName: dto.opponentName,
+          isHome: dto.isHome,
+          updatedAt: new Date(),
+        })
+        .where(eq(matches.id, match.id))
+        .returning();
+      match = updated;
+    } else {
+      const [created] = await this.databaseService.database
+        .insert(matches)
+        .values({
+          eventId: event.id,
+          opponentName: dto.opponentName,
+          isHome: dto.isHome,
+        })
+        .returning();
+      match = created;
+    }
+
+    if (!match) {
+      throw new NotFoundException('Event not found.');
+    }
+
+    if (teamAthletes.length > 0) {
+      await this.databaseService.database
+        .insert(athleteMatchStats)
+        .values(
+          teamAthletes.map((athlete) => ({
+            matchId: match.id,
+            athleteId: athlete.id,
+            started: startingIds.has(athlete.id),
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [athleteMatchStats.matchId, athleteMatchStats.athleteId],
+          set: {
+            started: sql`excluded.started`,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
+    return match;
+  }
+
   private async requireTeam(userId: string) {
     const team = await this.teamsService.findTeamForUser(userId);
     if (!team) {
@@ -113,5 +218,18 @@ export class EventsService {
     }
 
     return event;
+  }
+
+  private isBeforeMatchDay(scheduledAt: Date) {
+    const today = this.calendarDate(new Date());
+    const matchDay = this.calendarDate(scheduledAt);
+    return today < matchDay;
+  }
+
+  private calendarDate(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

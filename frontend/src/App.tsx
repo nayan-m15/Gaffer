@@ -8,6 +8,10 @@ import SignUpPage from '@/pages/SignUpPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
+import ConfirmSquadPage from '@/pages/ConfirmSquadPage'
+import LiveLoggerPage from '@/pages/LiveLoggerPage'
+import LiveMatchPage from '@/pages/LiveMatchPage'
+import MatchReportPage from '@/pages/MatchReportPage'
 import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
 import LandingPage from '@/pages/LandingPage'
@@ -37,6 +41,26 @@ function App() {
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
+          path="/matches/:matchId/live"
+          element={
+            <ProtectedRoute>
+              <RequireTeam>
+                <LiveMatchPage />
+              </RequireTeam>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/matches/:matchId/report"
+          element={
+            <ProtectedRoute>
+              <RequireTeam>
+                <MatchReportPage />
+              </RequireTeam>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           element={
             <ProtectedRoute>
               <AppShell />
@@ -57,6 +81,22 @@ function App() {
             element={
               <RequireTeam>
                 <EventsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/events/:eventId/confirm-squad"
+            element={
+              <RequireTeam>
+                <ConfirmSquadPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/live-logger"
+            element={
+              <RequireTeam>
+                <LiveLoggerPage />
               </RequireTeam>
             }
           />

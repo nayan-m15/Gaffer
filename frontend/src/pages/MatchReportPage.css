@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
+
+.match-report {
+  --mr-bg: #070d12;
+  --mr-panel: #101920;
+  --mr-line: #1c2b36;
+  --mr-green: #00d99a;
+  --mr-amber: #ffbe2e;
+  --mr-red: #ff5b5f;
+  --mr-muted: #8e9ba8;
+  --mr-white: #e8ecef;
+  font-family: "Inter Variable", Inter, system-ui, sans-serif;
+  background: var(--mr-bg);
+  color: var(--mr-white);
+}
+
+.match-report .font-oswald {
+  font-family: Oswald, Impact, sans-serif;
+}
+
+.match-report .font-display {
+  font-family: var(--font-display);
+}
