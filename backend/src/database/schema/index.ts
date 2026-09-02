@@ -3,6 +3,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -150,6 +151,32 @@ export const athletes = pgTable(
       table.lastName,
       table.firstName,
     ),
+  ],
+);
+
+// A coach's saved starting XI / substitutes for the tactical board. A team
+// may save multiple named lineups (e.g. "vs City", "High press") and switch
+// between them; names are unique per team.
+export const lineups = pgTable(
+  'lineups',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    formationId: text('formation_id').notNull(),
+    // Maps formation position IDs to athlete IDs (or null for an empty slot).
+    assignments: jsonb('assignments')
+      .notNull()
+      .$type<Record<string, string | null>>(),
+    // Athlete IDs currently on the substitutes bench.
+    substituteIds: jsonb('substitute_ids').notNull().$type<string[]>(),
+    ...timestamps,
+  },
+  (table) => [
+    index('lineups_team_id_index').on(table.teamId),
+    uniqueIndex('lineups_team_name_unique').on(table.teamId, table.name),
   ],
 );
 
