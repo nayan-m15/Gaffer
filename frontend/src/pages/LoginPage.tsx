@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">(
     "idle",
   );
@@ -119,10 +120,12 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
     } catch (err) {
       console.error("Google sign-in failed:", err);
+      setIsGoogleLoading(false);
       setError(
         err instanceof ApiError
           ? err.message
@@ -250,7 +253,11 @@ export default function LoginPage() {
           </div>
 
           {/* ── Google sign-in ───────────────────────────────────────── */}
-          <GoogleSignInButton onClick={handleGoogleSignIn} />
+          <GoogleSignInButton
+            onClick={handleGoogleSignIn}
+            isLoading={isGoogleLoading}
+            disabled={isSubmitting}
+          />
         </div>
 
         {/* ── Footer navigation ───────────────────────────────────────── */}
