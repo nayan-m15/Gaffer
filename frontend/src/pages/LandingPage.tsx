@@ -1,22 +1,25 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Footer } from "@/components/landing/Footer";
+import { HowItWorksSection } from "@/pages/HowItWorksPage";
+import { FeaturesSection } from "@/pages/FeaturesPage";
 
 /**
- * LandingPage — Top-level page component for the marketing landing page.
+ * LandingPage — Combined scrollable Home page.
  *
- * Phase 1 currently renders only:
- *   1. Navbar (sticky, responsive, with theme toggle)
- *   2. Hero section (headline, CTAs, dashboard mockup)
- *   3. Footer (brand, site links, copyright)
+ * Merges the three public marketing pages into a single scrollable experience:
+ *   1. Landing / Hero section (dark cinematic pitch background)
+ *   2. How It Works section (stadium background, 8 content sections)
+ *   3. Features section (stadium background, 11 content sections)
  *
- * Future phases will append additional sections between the Hero and
- * Footer (features, how-it-works, statistics, calendar, final CTA, etc.).
+ * Each section has its own background treatment and scroll-reveal observer.
+ * The Navbar is rendered once at the top and the Footer once at the bottom —
+ * individual sections do not duplicate these global elements.
  *
- * `main` is a flex column so the Hero (itself `flex-1`) fills exactly the
- * space between the navbar and the footer while there's only one section.
- * Once more sections land below it, drop `flex-1` from Hero so it sizes to
- * its own content instead of stretching to fill the page.
+ * Anchor navigation:
+ *   - `/#how-it-works` scrolls to the How It Works section
+ *   - `/#features` scrolls to the Features section
+ *   - `scroll-smooth` on <html> (via index.css) provides smooth scrolling
  */
 export default function LandingPage() {
   return (
@@ -24,9 +27,13 @@ export default function LandingPage() {
       <Navbar />
 
       <main className="flex flex-1 flex-col">
-        <Hero />
+        <section id="home">
+          <Hero />
+        </section>
 
-        {/* ── Phase 2+ sections will be inserted here ───────────────────── */}
+        <HowItWorksSection />
+
+        <FeaturesSection />
       </main>
 
       <Footer />

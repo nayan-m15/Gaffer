@@ -12,7 +12,7 @@
  *   7. Coaching Workflow summary
  *   8. Final CTA
  *
- * Accessible as a public route (/how-it-works). Uses the existing Navbar
+ * Accessible as a section of the Home page (`/#how-it-works`). Uses the existing Navbar
  * and supports both light and dark modes via CSS variables from index.css.
  * Sections 2-8 respond to the visitor's theme; the Hero stays dark for a
  * cinematic landing feel.
@@ -116,6 +116,48 @@ function useScrollReveal<T extends HTMLElement>() {
  *  PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * HowItWorksSection — How It Works content as an embeddable section.
+ *
+ * Used by LandingPage to render the How It Works content inline within the
+ * combined Home page. The stadium background uses `absolute` positioning
+ * (instead of `fixed`) so it scrolls with the section rather than remaining
+ * anchored to the viewport.
+ */
+export function HowItWorksSection() {
+  const sectionRef = useScrollReveal<HTMLElement>();
+
+  return (
+    <section
+      ref={sectionRef}
+      id="how-it-works"
+      className="scroll-mt-16 relative bg-[#0B1218] text-white"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+        <img
+          src="/hero-stadium-bg.png"
+          alt=""
+          className="size-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/15 to-black/45" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.4)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
+      </div>
+
+      <div className="relative z-10">
+        <HeroSection />
+        <GettingStartedSection />
+        <DashboardSection />
+        <RosterSection />
+        <EventsSection />
+        <LineupSection />
+        <WorkflowSection />
+        <CtaSection />
+      </div>
+    </section>
+  );
+}
+
 export default function HowItWorksPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
@@ -170,7 +212,7 @@ function HeroSection() {
   return (
     <section
       aria-labelledby="hiw-heading"
-      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center overflow-hidden"
+      className="relative isolate flex min-h-[70svh] flex-col items-center justify-center overflow-hidden"
     >
       <div className="relative mx-auto w-full max-w-7xl px-4 pb-24 pt-12 sm:px-6 sm:pb-32 sm:pt-20 lg:px-8 lg:pb-40 lg:pt-28">
         <div className="mx-auto max-w-3xl text-center">

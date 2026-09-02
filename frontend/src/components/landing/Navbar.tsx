@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
  * landing-page sections are built in later phases.
  */
 const NAV_LINKS = [
-  { label: "Product", href: "/#product" },
-  { label: "Features", href: "/features" },
-  { label: "How It Works", href: "/how-it-works" },
+  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Features", href: "/#features" },
+  
 ] as const;
 
 /**

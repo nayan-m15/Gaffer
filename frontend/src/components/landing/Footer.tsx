@@ -9,8 +9,8 @@ import { brand } from "@/data/brand";
  */
 const FOOTER_LINKS = [
   { label: "Home", href: "/" },
-  { label: "Features", href: "/features" },
-  { label: "How It Works", href: "/how-it-works" },
+  { label: "Features", href: "/#features" },
+  { label: "How It Works", href: "/#how-it-works" },
   { label: "Log In", href: "/login" },
   { label: "Get Started", href: "/signup" },
 ] as const;

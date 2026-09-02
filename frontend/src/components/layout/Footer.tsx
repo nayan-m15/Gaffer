@@ -9,8 +9,8 @@ interface FooterLink {
 
 const FOOTER_LINKS: FooterLink[] = [
   { label: "Dashboard", path: "/dashboard" },
-  { label: "Features", path: "/features" },
-  { label: "How It Works", path: "/how-it-works" },
+  { label: "Features", path: "/#features" },
+  { label: "How It Works", path: "/#how-it-works" },
 ];
 
 /**
