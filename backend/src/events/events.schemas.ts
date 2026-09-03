@@ -5,14 +5,26 @@ export const eventTypeSchema = z.enum(eventType.enumValues);
 export const eventStatusSchema = z.enum(eventStatus.enumValues);
 
 export const createEventSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required.'),
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Title is required.')
+    .max(150, 'Title must be 150 characters or fewer.'),
   type: eventTypeSchema,
   scheduledAt: z.iso.datetime({
     offset: true,
     error: 'Enter a valid date and time.',
   }),
-  location: z.string().trim().min(1, 'Location is required.'),
-  notes: z.string().trim().optional(),
+  location: z
+    .string()
+    .trim()
+    .min(1, 'Location is required.')
+    .max(200, 'Location must be 200 characters or fewer.'),
+  notes: z
+    .string()
+    .trim()
+    .max(2000, 'Notes must be 2000 characters or fewer.')
+    .optional(),
 });
 export type CreateEventDto = z.infer<typeof createEventSchema>;
 
@@ -20,7 +32,12 @@ export const updateEventSchema = createEventSchema
   .partial()
   .extend({
     status: eventStatusSchema.optional(),
-    notes: z.string().trim().nullable().optional(),
+    notes: z
+      .string()
+      .trim()
+      .max(2000, 'Notes must be 2000 characters or fewer.')
+      .nullable()
+      .optional(),
   })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),
@@ -31,7 +48,11 @@ export const updateEventSchema = createEventSchema
 export type UpdateEventDto = z.infer<typeof updateEventSchema>;
 
 export const startMatchSchema = z.object({
-  opponentName: z.string().trim().min(1, 'Opponent name is required.'),
+  opponentName: z
+    .string()
+    .trim()
+    .min(1, 'Opponent name is required.')
+    .max(100, 'Opponent name must be 100 characters or fewer.'),
   isHome: z.boolean(),
   startingAthleteIds: z
     .array(z.uuid())

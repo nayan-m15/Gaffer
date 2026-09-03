@@ -102,6 +102,7 @@ export function CompetitionFormDialog({
               onChange={(e) => handleChange("name", e.target.value)}
               placeholder="e.g. Premier League"
               required
+              maxLength={100}
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
             />
           </FormField>
@@ -129,6 +130,7 @@ export function CompetitionFormDialog({
                 value={values.season}
                 onChange={(e) => handleChange("season", e.target.value)}
                 placeholder="e.g. 2025/26"
+                maxLength={20}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               />
             </FormField>

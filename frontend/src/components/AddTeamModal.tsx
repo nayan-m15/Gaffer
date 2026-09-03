@@ -97,6 +97,7 @@ export function AddTeamModal({ open, onOpenChange }: AddTeamModalProps) {
               autoComplete="off"
               autoFocus
               required
+              maxLength={100}
               aria-invalid={!!error}
               aria-describedby={error ? nameErrorId : undefined}
             />

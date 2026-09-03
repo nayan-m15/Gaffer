@@ -189,6 +189,7 @@ export function EventFormDialog({
               placeholder="e.g. Saturday training"
               className={inputClassName}
               required
+              maxLength={150}
             />
           </Field>
 
@@ -252,6 +253,7 @@ export function EventFormDialog({
               placeholder="e.g. Main field"
               className={inputClassName}
               required
+              maxLength={200}
             />
           </Field>
 
@@ -262,6 +264,7 @@ export function EventFormDialog({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional session notes"
               rows={4}
+              maxLength={2000}
               className="min-h-24 bg-background"
             />
           </Field>
