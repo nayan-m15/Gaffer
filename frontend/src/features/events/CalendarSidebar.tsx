@@ -10,15 +10,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { AgendaView } from "./AgendaView";
 import { EVENT_TYPE_OPTIONS } from "./event-utils";
 import { getEventTypeStyle } from "./event-style";
-import { MiniCalendar } from "./MiniCalendar";
 import type { EventType, TeamEvent } from "./types";
 
 interface CalendarSidebarProps {
   month: Date;
   selectedDate: Date;
   now: Date;
+  events: TeamEvent[];
   /** Local day keys (YYYY-MM-DD) that contain at least one visible event. */
   eventDays: ReadonlySet<string>;
   /** Event types hidden through the calendar visibility toggles. */
@@ -29,40 +30,38 @@ interface CalendarSidebarProps {
   onToggleType: (type: EventType) => void;
   onNavigateMonth: (direction: 1 | -1) => void;
   onSelectDate: (date: Date) => void;
-  onCreateEvent: (type: EventType) => void;
+  onCreateEvent: (type?: EventType) => void;
   onOpenEvent: (event: TeamEvent) => void;
   className?: string;
 }
 
 /**
- * Floating calendar sidebar: mini calendar, calendar visibility toggles, and
+ * Floating calendar sidebar: agenda view, calendar visibility toggles, and
  * the undated/feed sections. Rendered inline on wide screens and inside the
  * drawer on smaller ones.
  */
 export function CalendarSidebar({
   month,
-  selectedDate,
   now,
-  eventDays,
+  events,
   hiddenTypes,
   teamName,
   undatedEvents,
   onToggleType,
   onNavigateMonth,
-  onSelectDate,
   onCreateEvent,
   onOpenEvent,
   className,
 }: CalendarSidebarProps) {
   return (
     <div className={cn("flex flex-col gap-5", className)}>
-      <MiniCalendar
+      <AgendaView
         month={month}
-        selectedDate={selectedDate}
+        events={events}
         now={now}
-        eventDays={eventDays}
+        onOpenEvent={onOpenEvent}
+        onCreateEvent={() => onCreateEvent()}
         onNavigateMonth={onNavigateMonth}
-        onSelectDate={onSelectDate}
       />
 
       <CalendarsSection

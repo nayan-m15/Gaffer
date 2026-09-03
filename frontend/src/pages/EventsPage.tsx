@@ -141,6 +141,7 @@ export default function EventsPage() {
       month={cursor}
       selectedDate={selectedDate}
       now={now}
+      events={visibleEvents}
       eventDays={eventDays}
       hiddenTypes={hiddenTypes}
       teamName={team?.name}

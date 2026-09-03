@@ -19,7 +19,6 @@ interface CalendarToolbarProps {
 const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
   { value: "month", label: "Month" },
   { value: "week", label: "Week" },
-  { value: "agenda", label: "Agenda" },
 ];
 
 /**
