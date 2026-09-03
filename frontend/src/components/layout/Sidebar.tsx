@@ -58,7 +58,7 @@ export function Sidebar({ className }: SidebarProps) {
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true });
     } catch (error) {
       console.error("Failed to sign out:", error);
     }
