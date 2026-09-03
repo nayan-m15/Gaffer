@@ -1,5 +1,5 @@
 import { useState, useEffect, useId, type FormEvent } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import signupBg from "@/assets/SignUp-bg.png";
@@ -175,6 +175,14 @@ export default function SignUpPage() {
 
       {/* ── Signup card ─────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-md px-4 py-8 sm:ml-[8%] md:ml-[12%] lg:ml-[15%]">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ArrowLeft className="size-4" />
+          Back to home
+        </Link>
+
         <div className="rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
           {/* ── Brand header ───────────────────────────────────────────── */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
