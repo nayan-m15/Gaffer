@@ -23,13 +23,13 @@ export function Hero() {
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative isolate flex flex-1 flex-col justify-center overflow-hidden bg-[#0B1218]"
+      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col justify-center items-center overflow-hidden bg-[#0B1218] pb-12"
     >
       {/* ── Atmospheric background layer ──────────────────────────────── */}
       <HeroBackground />
 
       {/* ── Content grid ──────────────────────────────────────────────── */}
-      <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
+      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           {/* Eyebrow */}
           <span
@@ -83,6 +83,28 @@ export function Hero() {
           </p>
         </div>
       </div>
+
+      {/* Scroll indicator prompt */}
+      <a
+        href="#philosophy"
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white/40 text-[10px] sm:text-xs font-mono tracking-widest uppercase transition-colors hover:text-white/80 animate-bounce-slow"
+        aria-label="Scroll to explore"
+      >
+        <span>Scroll to enter</span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </a>
     </section>
   );
 }

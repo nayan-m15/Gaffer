@@ -8,9 +8,12 @@ import { brand } from "@/data/brand";
  * Service / Privacy Policy page yet, so those aren't linked here.
  */
 const FOOTER_LINKS = [
-  { label: "Home", href: "/" },
-  { label: "Features", href: "/features" },
-  { label: "How It Works", href: "/how-it-works" },
+  { label: "Home", href: "/#home" },
+  { label: "Philosophy", href: "/#philosophy" },
+  { label: "Roster", href: "/#roster" },
+  { label: "Tactics", href: "/#tactics" },
+  { label: "Matchday", href: "/#matchday" },
+  { label: "Analytics", href: "/#analytics" },
   { label: "Log In", href: "/login" },
   { label: "Get Started", href: "/signup" },
 ] as const;

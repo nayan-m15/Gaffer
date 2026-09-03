@@ -13,9 +13,11 @@ import { cn } from "@/lib/utils";
  * landing-page sections are built in later phases.
  */
 const NAV_LINKS = [
-  { label: "Product", href: "/#product" },
-  { label: "Features", href: "/features" },
-  { label: "How It Works", href: "/how-it-works" },
+  { label: "Philosophy", href: "/#philosophy" },
+  { label: "Roster", href: "/#roster" },
+  { label: "Tactics", href: "/#tactics" },
+  { label: "Matchday", href: "/#matchday" },
+  { label: "Analytics", href: "/#analytics" },
 ] as const;
 
 /**
@@ -88,22 +90,8 @@ export function Navbar() {
           </span>
         </a>
 
-        {/* ── Desktop links (centered) ─────────────────────────────────── */}
-        <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <a
-                href={link.href}
-                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-
         {/* ── Desktop actions ──────────────────────────────────────────── */}
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-3 md:flex">
           {/* Theme toggle */}
           <Button
             variant="ghost"

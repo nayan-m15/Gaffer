@@ -20,7 +20,7 @@
  *  10. Analytics, League Standings & Exports (Derived stats, tables, PDF/CSV)
  *  11. Final CTA
  *
- * Accessible via `/features`. Follows the same aesthetic language as
+ * Accessible as a section of the Home page (`/#features`). Follows the same aesthetic language as
  * `HowItWorksPage`, utilizing the stadium background, scroll reveal transitions,
  * brand emerald palette, and terminal-style interactive mockups.
  */
@@ -103,6 +103,51 @@ const FEATURE_NAV_ITEMS = [
  *  PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * FeaturesSection — Features content as an embeddable section.
+ *
+ * Used by LandingPage to render the Features content inline within the
+ * combined Home page. The stadium background uses `absolute` positioning
+ * (instead of `fixed`) so it scrolls with the section rather than remaining
+ * anchored to the viewport.
+ */
+export function FeaturesSection() {
+  const sectionRef = useScrollReveal<HTMLElement>();
+
+  return (
+    <section
+      ref={sectionRef}
+      id="features"
+      className="scroll-mt-16 relative bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+        <img
+          src="/features-stadium-bg.png"
+          alt=""
+          className="size-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/15 to-black/45" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.4)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-emerald-900/5" />
+      </div>
+
+      <div className="relative z-10">
+        <HeroSection />
+        <JumpBarSection />
+        <CorePillarsSection />
+        <RosterFeatureSection />
+        <EventsFeatureSection />
+        <LineupFeatureSection />
+        <DashboardFeatureSection />
+        <LiveTrackingFeatureSection />
+        <OfflineFeatureSection />
+        <AnalyticsFeatureSection />
+        <CtaSection />
+      </div>
+    </section>
+  );
+}
+
 export default function FeaturesPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
@@ -158,7 +203,7 @@ function HeroSection() {
   return (
     <section
       aria-labelledby="features-heading"
-      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center overflow-hidden"
+      className="relative isolate flex min-h-[70svh] flex-col items-center justify-center overflow-hidden"
     >
       <div className="relative mx-auto w-full max-w-7xl px-4 pb-24 pt-12 sm:px-6 sm:pb-32 sm:pt-20 lg:px-8 lg:pb-40 lg:pt-28">
         <div className="mx-auto max-w-3xl text-center">
@@ -190,7 +235,7 @@ function HeroSection() {
               <ArrowRight className="size-4" />
             </a>
             <a
-              href="/how-it-works"
+              href="/#how-it-works"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
                 "w-full gap-2 border-white/20 bg-black/30 text-white backdrop-blur-sm hover:bg-white/15 hover:text-white sm:w-auto",
