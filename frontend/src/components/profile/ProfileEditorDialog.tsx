@@ -64,6 +64,7 @@ export function ProfileEditorDialog({
   const updateMutation = useMutation({
     mutationFn: updateProfile,
   });
+  const { reset: resetMutation } = updateMutation;
 
   // Reset to view mode whenever the dialog closes.
   useEffect(() => {
@@ -71,9 +72,9 @@ export function ProfileEditorDialog({
       setIsEditing(false);
       setValidationError(null);
       setShowSuccess(false);
-      updateMutation.reset();
+      resetMutation();
     }
-  }, [isOpen, updateMutation]);
+  }, [isOpen, resetMutation]);
 
   // Auto-dismiss the success banner after a few seconds.
   useEffect(() => {
