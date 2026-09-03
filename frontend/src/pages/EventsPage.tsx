@@ -144,10 +144,8 @@ export default function EventsPage() {
       now={now}
       events={visibleEvents}
       eventDays={eventDays}
-      hiddenTypes={hiddenTypes}
       teamName={team?.name}
       undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
-      onToggleType={handleToggleType}
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
         handleSelectDate(date);
@@ -249,6 +247,8 @@ export default function EventsPage() {
             now={now}
             eventsByDay={eventsByDay}
             visibleEvents={visibleEvents}
+            hiddenTypes={hiddenTypes}
+            onToggleType={handleToggleType}
             onViewChange={setView}
             onSelectDate={handleSelectDate}
             onNavigate={navigate}
@@ -266,6 +266,8 @@ export default function EventsPage() {
           <CalendarToolbar
             view={view}
             label={label}
+            hiddenTypes={hiddenTypes}
+            onToggleType={handleToggleType}
             onViewChange={setView}
             onPrevious={() => navigate(-1)}
             onNext={() => navigate(1)}

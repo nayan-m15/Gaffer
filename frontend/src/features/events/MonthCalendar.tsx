@@ -154,7 +154,7 @@ function DayCell({
       aria-label={`${dayLabel}${events.length > 0 ? `, ${events.length} event${events.length === 1 ? "" : "s"}` : ""}`}
       onClick={() => onCreateEvent(day)}
       className={cn(
-        "flex min-h-[92px] cursor-pointer flex-col gap-1 border-r border-border p-1.5 transition-colors last:border-r-0 sm:min-h-[124px] sm:p-2",
+        "flex min-h-[105px] cursor-pointer flex-col gap-1 border-r border-border p-1.5 transition-colors last:border-r-0 sm:min-h-[148px] lg:min-h-[160px] sm:p-2",
         "hover:bg-muted/30 focus-within:bg-muted/20",
         outside && "bg-muted/25",
         isSelected && !outside && "bg-accent/40",

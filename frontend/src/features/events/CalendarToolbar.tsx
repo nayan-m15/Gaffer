@@ -1,12 +1,17 @@
 import { ChevronLeft, ChevronRight, PanelRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { EVENT_TYPE_OPTIONS } from "./event-utils";
+import { getEventTypeStyle } from "./event-style";
 import type { CalendarView } from "./calendar-utils";
+import type { EventType } from "./types";
 
 interface CalendarToolbarProps {
   view: CalendarView;
   /** Dynamic period label, e.g. "September 2026" or "1 – 7 September 2026". */
   label: string;
+  hiddenTypes: ReadonlySet<EventType>;
+  onToggleType: (type: EventType) => void;
   onViewChange: (view: CalendarView) => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -22,12 +27,15 @@ const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
 ];
 
 /**
- * Calendar toolbar: period navigation, dynamic period label, view switcher,
+ * Calendar toolbar: period navigation, dynamic period label,
+ * event type filters (Training, Match, Meeting), view switcher,
  * and the primary "New Event" action.
  */
 export function CalendarToolbar({
   view,
   label,
+  hiddenTypes,
+  onToggleType,
   onViewChange,
   onPrevious,
   onNext,
@@ -74,8 +82,47 @@ export function CalendarToolbar({
         {label}
       </p>
 
-      {/* View switcher + actions */}
-      <div className="ml-auto flex items-center gap-2">
+      {/* Filters + View switcher + actions */}
+      <div className="ml-auto flex flex-wrap items-center gap-2 sm:gap-3">
+        {/* Event Type Filters (Training, Match, Meeting) directly on the left of Month/Week */}
+        <div
+          role="group"
+          aria-label="Calendar event filters"
+          className="flex items-center gap-1.5"
+        >
+          {EVENT_TYPE_OPTIONS.map((option) => {
+            const isVisible = !hiddenTypes.has(option.value);
+            const style = getEventTypeStyle(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="checkbox"
+                aria-checked={isVisible}
+                aria-label={`Toggle ${option.label} events`}
+                onClick={() => onToggleType(option.value)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 select-none",
+                  isVisible
+                    ? "border-border bg-card text-foreground hover:bg-accent/50"
+                    : "border-border/40 bg-muted/40 text-muted-foreground opacity-50 line-through hover:opacity-75",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full transition-opacity",
+                    style.swatch,
+                    !isVisible && "opacity-40",
+                  )}
+                  aria-hidden="true"
+                />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <Button
           variant="outline"
           size="icon-sm"

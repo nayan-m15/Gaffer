@@ -3,18 +3,20 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Filter,
   MapPin,
+  PanelRight,
   Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AgendaView } from "./AgendaView";
 import {
   formatEventTime,
   formatMonthYear,
   formatWeekRangeLabel,
   getDayEvents,
+  getMonthEvents,
   getMonthGrid,
   getWeekDays,
   getWeekdayLabels,
@@ -23,9 +25,9 @@ import {
   toDayKey,
   type CalendarView,
 } from "./calendar-utils";
-import { displayEventStatus, eventTypeLabel } from "./event-utils";
+import { displayEventStatus, eventTypeLabel, EVENT_TYPE_OPTIONS } from "./event-utils";
 import { getEventTypeStyle } from "./event-style";
-import type { TeamEvent } from "./types";
+import type { EventType, TeamEvent } from "./types";
 
 interface MobileCalendarViewProps {
   view: CalendarView;
@@ -34,21 +36,23 @@ interface MobileCalendarViewProps {
   now: Date;
   eventsByDay: Map<string, TeamEvent[]>;
   visibleEvents: TeamEvent[];
+  hiddenTypes: ReadonlySet<EventType>;
+  onToggleType: (type: EventType) => void;
   onViewChange: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
   onToday: () => void;
   onCreateEvent: (date?: Date) => void;
   onOpenEvent: (event: TeamEvent) => void;
-  onToggleSidebar: () => void;
+  onToggleSidebar?: () => void;
 }
 
 const weekdayLabels = getWeekdayLabels();
 
 /**
- * Mobile-first smartphone calendar view inspired by Samsung One UI and Apple iOS Calendar.
- * Features a compact header, month/week grid with colored event dots, a sleek selected-day
- * schedule list below the grid, and a bottom-right floating action button (FAB).
+ * Mobile-first smartphone calendar view inspired by Samsung Calendar & Apple iOS Calendar.
+ * Features a clean header with direct event-type filters, full-width month grid with multi-line readable text
+ * in event blocks, and the full month's agenda list below.
  */
 export function MobileCalendarView({
   view,
@@ -57,6 +61,8 @@ export function MobileCalendarView({
   now,
   eventsByDay,
   visibleEvents,
+  hiddenTypes,
+  onToggleType,
   onViewChange,
   onSelectDate,
   onNavigate,
@@ -73,24 +79,21 @@ export function MobileCalendarView({
     [eventsByDay, selectedDate],
   );
 
+  const monthEventsCount = useMemo(
+    () => getMonthEvents(visibleEvents, cursor).length,
+    [visibleEvents, cursor],
+  );
+
   const headerLabel =
     view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   return (
-    <div className="flex flex-col gap-4 pb-20 sm:hidden">
-      {/* ── 1. Smartphone Top Bar ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-xs">
+    <div className="flex flex-col gap-3.5 pb-24 sm:hidden">
+      {/* ── 1. Smartphone Top Navigation & Filter Bar ────────────────────── */}
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
         {/* Navigation & Period Title */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={onToday}
-              className="rounded-full px-2.5 text-xs font-medium"
-            >
-              Today
-            </Button>
             <Button
               variant="ghost"
               size="icon-xs"
@@ -99,6 +102,9 @@ export function MobileCalendarView({
             >
               <ChevronLeft className="size-4" />
             </Button>
+            <h2 className="text-base font-bold tracking-tight text-foreground uppercase">
+              {headerLabel}
+            </h2>
             <Button
               variant="ghost"
               size="icon-xs"
@@ -109,22 +115,70 @@ export function MobileCalendarView({
             </Button>
           </div>
 
-          <h2 className="min-w-0 truncate text-base font-bold tracking-tight text-foreground">
-            {headerLabel}
-          </h2>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={onToday}
+              className="rounded-full px-2.5 text-xs font-semibold"
+            >
+              Today
+            </Button>
 
-          <Button
-            variant="outline"
-            size="icon-xs"
-            onClick={onToggleSidebar}
-            aria-label="Open calendars filter drawer"
-            className="rounded-full"
-          >
-            <Filter className="size-3.5" />
-          </Button>
+            {/* Sidebar drawer button for Other Calendars, Undated, and Calendar Feed */}
+            {onToggleSidebar && (
+              <Button
+                variant="outline"
+                size="icon-xs"
+                onClick={onToggleSidebar}
+                aria-label="Open calendar options and feeds"
+                className="rounded-full"
+              >
+                <PanelRight className="size-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* View Switcher Chips (Samsung One UI / iOS segmented control style) */}
+        {/* Event Type Filter Chips (Training, Match, Meeting) directly accessible on mobile */}
+        <div
+          role="group"
+          aria-label="Filter events by type"
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
+        >
+          {EVENT_TYPE_OPTIONS.map((option) => {
+            const isVisible = !hiddenTypes.has(option.value);
+            const style = getEventTypeStyle(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="checkbox"
+                aria-checked={isVisible}
+                aria-label={`Toggle ${option.label} events`}
+                onClick={() => onToggleType(option.value)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs select-none",
+                  isVisible
+                    ? "border-border bg-background text-foreground"
+                    : "border-border/40 bg-muted/40 text-muted-foreground opacity-50 line-through",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full transition-opacity",
+                    style.swatch,
+                    !isVisible && "opacity-40",
+                  )}
+                  aria-hidden="true"
+                />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* View Switcher Tabs (Month / Week / Agenda) */}
         <div className="grid grid-cols-3 rounded-xl bg-muted/60 p-1 text-center">
           {(["month", "week", "agenda"] as const).map((v) => {
             const active = view === v;
@@ -137,7 +191,7 @@ export function MobileCalendarView({
                 className={cn(
                   "rounded-lg py-1 text-xs font-semibold capitalize transition-all",
                   active
-                    ? "bg-background text-foreground shadow-xs"
+                    ? "bg-background text-foreground shadow-xs font-bold"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -157,6 +211,7 @@ export function MobileCalendarView({
           now={now}
           eventsByDay={eventsByDay}
           onSelectDate={onSelectDate}
+          onOpenEvent={onOpenEvent}
         />
       )}
 
@@ -170,7 +225,7 @@ export function MobileCalendarView({
         />
       )}
 
-      {/* ── 3. Agenda / Selected Day Details (Samsung / Apple Style) ───── */}
+      {/* ── 3. Bottom Agenda Section: Full Month Schedule (like desktop) ─── */}
       {view === "agenda" ? (
         <MobileAgendaList
           events={visibleEvents}
@@ -178,6 +233,26 @@ export function MobileCalendarView({
           onOpenEvent={onOpenEvent}
           onCreateEvent={() => onCreateEvent()}
         />
+      ) : view === "month" ? (
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {formatMonthYear(cursor)} Schedule
+            </h3>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              {monthEventsCount} {monthEventsCount === 1 ? "event" : "events"}
+            </span>
+          </div>
+
+          <AgendaView
+            month={cursor}
+            events={visibleEvents}
+            now={now}
+            onOpenEvent={onOpenEvent}
+            onCreateEvent={() => onCreateEvent(selectedDate)}
+            className="rounded-2xl border border-border bg-card p-3.5 shadow-xs"
+          />
+        </div>
       ) : (
         <MobileDayDetailSection
           selectedDate={selectedDate}
@@ -188,13 +263,13 @@ export function MobileCalendarView({
         />
       )}
 
-      {/* ── 4. Samsung/Apple Floating Action Button (FAB) ──────────────── */}
+      {/* ── 4. Floating Action Button (FAB) ────────────────────────────── */}
       <button
         type="button"
         onClick={() => onCreateEvent(selectedDate)}
         aria-label="Add new event"
         className={cn(
-          "fixed bottom-6 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "fixed bottom-6 right-5 z-40 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
       >
         <Plus className="size-6" />
@@ -204,7 +279,7 @@ export function MobileCalendarView({
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Mobile Month Calendar Grid (with iOS/Samsung colored event dots)
+ * Mobile Month Calendar Grid (Samsung Calendar style)
  * ══════════════════════════════════════════════════════════════════════════ */
 
 function MobileMonthGrid({
@@ -214,6 +289,7 @@ function MobileMonthGrid({
   now,
   eventsByDay,
   onSelectDate,
+  onOpenEvent,
 }: {
   grid: Date[];
   cursor: Date;
@@ -221,81 +297,96 @@ function MobileMonthGrid({
   now: Date;
   eventsByDay: Map<string, TeamEvent[]>;
   onSelectDate: (date: Date) => void;
+  onOpenEvent: (event: TeamEvent) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card p-2 shadow-xs">
-      {/* Weekday Row Header */}
-      <div className="grid grid-cols-7 mb-1 text-center">
-        {weekdayLabels.map((label) => (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+      {/* Weekday Row Header (M T W T F S S) */}
+      <div className="grid grid-cols-7 border-b border-border/60 bg-muted/20 text-center py-1.5">
+        {weekdayLabels.map((label, idx) => (
           <span
             key={label}
-            className="py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+            className={cn(
+              "text-[11px] font-bold uppercase tracking-wider",
+              idx === 6 ? "text-destructive" : "text-muted-foreground",
+            )}
           >
             {label.slice(0, 1)}
           </span>
         ))}
       </div>
 
-      {/* Days Grid */}
-      <div className="grid grid-cols-7 gap-y-1">
-        {grid.map((day) => {
+      {/* Days Grid - Samsung full screen grid style */}
+      <div className="grid grid-cols-7">
+        {grid.map((day, dayIndex) => {
           const isToday = isSameCalendarDay(day, now);
           const isSelected = isSameCalendarDay(day, selectedDate);
           const outside = isOutsideMonth(day, cursor);
           const dayEvents = getDayEvents(eventsByDay, day);
+          const isSunday = (dayIndex + 1) % 7 === 0;
 
           return (
-            <button
+            <div
               key={day.toISOString()}
-              type="button"
               onClick={() => onSelectDate(day)}
               className={cn(
-                "group relative flex flex-col items-center justify-start rounded-xl py-1.5 transition-all",
-                outside && "opacity-35",
-                isSelected && !isToday && "bg-accent/60 font-bold ring-1 ring-primary/40",
-                isToday && !isSelected && "font-bold",
+                "group relative flex min-h-[82px] flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
+                outside && "bg-muted/15 opacity-40",
+                isSelected && !outside && "bg-accent/40",
+                "hover:bg-muted/30",
               )}
             >
-              {/* Date Circle/Pill */}
-              <span
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums transition-colors",
-                  isToday
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : isSelected
-                      ? "bg-primary/20 text-primary font-bold"
-                      : outside
-                        ? "text-muted-foreground"
-                        : "text-foreground",
-                )}
-              >
-                {format(day, "d")}
-              </span>
+              {/* Date Number / Today Badge */}
+              <div className="flex justify-center pb-0.5">
+                <span
+                  className={cn(
+                    "flex size-6 items-center justify-center rounded-md text-xs font-bold tabular-nums transition-colors",
+                    isToday
+                      ? "bg-primary text-primary-foreground shadow-xs ring-1 ring-primary font-bold"
+                      : isSelected
+                        ? "bg-primary/20 text-primary font-bold ring-1 ring-primary/40"
+                        : outside
+                          ? "text-muted-foreground font-normal"
+                          : isSunday
+                            ? "text-destructive font-semibold"
+                            : "text-foreground font-semibold",
+                  )}
+                >
+                  {format(day, "d")}
+                </span>
+              </div>
 
-              {/* Mobile Event Pills / Titles */}
-              <div className="mt-1 flex w-full flex-col gap-0.5 px-0.5 overflow-hidden">
+              {/* Samsung-style Event blocks with multi-line readable text */}
+              <div className="flex w-full flex-col gap-0.5 overflow-hidden">
                 {dayEvents.slice(0, 2).map((evt) => {
                   const style = getEventTypeStyle(evt.type);
+                  const isCancelled = evt.status === "cancelled";
                   return (
-                    <span
+                    <button
                       key={evt.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenEvent(evt);
+                      }}
                       title={evt.title}
                       className={cn(
-                        "block w-full truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-tight text-left",
+                        "block w-full rounded px-1 py-0.5 text-[9px] font-medium leading-[1.15] text-left break-words whitespace-normal line-clamp-2 transition-transform active:scale-95 shadow-2xs",
                         style.pill,
+                        isCancelled && "line-through opacity-60",
                       )}
                     >
                       {evt.title}
-                    </span>
+                    </button>
                   );
                 })}
                 {dayEvents.length > 2 && (
-                  <span className="text-[9px] font-bold text-muted-foreground text-center leading-none">
+                  <span className="text-[8.5px] font-bold text-muted-foreground text-center leading-none pt-0.5">
                     +{dayEvents.length - 2} more
                   </span>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -373,7 +464,7 @@ function MobileWeekStrip({
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Mobile Selected Day Schedule Card List (Samsung / Apple Style)
+ * Mobile Selected Day Schedule Card List (used in Week view)
  * ══════════════════════════════════════════════════════════════════════════ */
 
 function MobileDayDetailSection({
@@ -459,14 +550,14 @@ function MobileEventCard({
         !cancelled && completed && "opacity-80",
       )}
     >
-      {/* Left Color Indicator Stripe (Apple/Samsung style) */}
+      {/* Left Color Indicator Stripe */}
       <span className={cn("w-1.5 shrink-0 rounded-full", style.swatch)} aria-hidden="true" />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <span
             className={cn(
-              "truncate text-sm font-bold text-foreground",
+              "text-sm font-bold text-foreground break-words line-clamp-2",
               cancelled && "line-through",
             )}
           >
