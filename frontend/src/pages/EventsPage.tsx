@@ -1,119 +1,304 @@
-import { useState } from "react";
-import { CalendarDays, MapPin, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { isSameMonth, startOfWeek } from "date-fns";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { EventDetailDialog, StatusBadge } from "@/features/events/EventDetailDialog";
+import { AgendaView } from "@/features/events/AgendaView";
+import { CalendarSidebar } from "@/features/events/CalendarSidebar";
+import { CalendarToolbar } from "@/features/events/CalendarToolbar";
+import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { EventFormDialog } from "@/features/events/EventFormDialog";
+import { MonthCalendar } from "@/features/events/MonthCalendar";
+import { WeekView } from "@/features/events/WeekView";
 import {
-  displayEventStatus,
-  eventTypeLabel,
-  formatEventDateTime,
-} from "@/features/events/event-utils";
+  WEEK_STARTS_ON,
+  filterEventTypes,
+  formatMonthYear,
+  formatWeekRangeLabel,
+  getWeekDays,
+  groupEventsByDay,
+  moveCursor,
+} from "@/features/events/calendar-utils";
 import { useEvents, useNow } from "@/features/events/hooks";
-import type { TeamEvent } from "@/features/events/types";
-import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import type { EventType, TeamEvent } from "@/features/events/types";
 
 type Panel =
   | { kind: "closed" }
-  | { kind: "create" }
+  | { kind: "create"; date?: Date; type?: EventType }
   | { kind: "view"; eventId: string }
   | { kind: "edit"; eventId: string };
 
+type CalendarView = "month" | "week" | "agenda";
+
 /**
- * Events list for the signed-in coach's team.
- *
- * Fetches GET /events (soonest first), opens a create/edit dialog, and a
- * detail dialog with a soft-cancel action.
+ * Events page — a Google-Calendar-style schedule for the signed-in coach's
+ * team. Month view is the primary surface; week and agenda are alternates.
+ * The sidebar (mini calendar, calendar filters) floats beside the calendar
+ * on wide screens and opens as a drawer on smaller ones.
  */
 export default function EventsPage() {
+  const { team } = useAuth();
   const { data: events, isLoading, isError, error, refetch } = useEvents();
   const now = useNow();
+
+  const [view, setView] = useState<CalendarView>("month");
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [hiddenTypes, setHiddenTypes] = useState<Set<EventType>>(() => new Set());
   const [panel, setPanel] = useState<Panel>({ kind: "closed" });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  /* ── Derived data ─────────────────────────────────────────────────────── */
+  const visibleEvents = useMemo(
+    () => filterEventTypes(events ?? [], hiddenTypes),
+    [events, hiddenTypes],
+  );
+  const eventsByDay = useMemo(() => groupEventsByDay(visibleEvents), [visibleEvents]);
+  const eventDays = useMemo(() => new Set(eventsByDay.keys()), [eventsByDay]);
+  const weekDays = useMemo(() => getWeekDays(cursor), [cursor]);
+  const label =
+    view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   const selectedEvent =
     panel.kind === "view" || panel.kind === "edit"
       ? (events?.find((event) => event.id === panel.eventId) ?? null)
       : null;
 
+  /* ── Navigation ───────────────────────────────────────────────────────── */
+  const navigate = useCallback(
+    (direction: 1 | -1) => {
+      setCursor((current) => moveCursor(view, current, direction));
+    },
+    [view],
+  );
+
+  const goToToday = useCallback(() => {
+    const today = new Date();
+    setCursor(today);
+    setSelectedDate(today);
+  }, []);
+
+  /** Selects a date and jumps the main calendar to its month/week. */
+  const handleSelectDate = useCallback(
+    (date: Date) => {
+      setSelectedDate(date);
+      if (view === "week") {
+        const currentWeek = startOfWeek(cursor, { weekStartsOn: WEEK_STARTS_ON });
+        const targetWeek = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+        if (currentWeek.getTime() !== targetWeek.getTime()) {
+          setCursor(date);
+        }
+      } else if (!isSameMonth(date, cursor)) {
+        setCursor(date);
+      }
+    },
+    [cursor, view],
+  );
+
+  /** Clicking the empty area of a day opens the create dialog for that date. */
+  const handleCreateForDate = useCallback(
+    (date: Date) => {
+      setSelectedDate(date);
+      setPanel({ kind: "create", date });
+    },
+    [],
+  );
+
+  const handleOpenEvent = useCallback((event: TeamEvent) => {
+    setPanel({ kind: "view", eventId: event.id });
+  }, []);
+
+  const handleToggleType = useCallback((type: EventType) => {
+    setHiddenTypes((current) => {
+      const next = new Set(current);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  }, []);
+
+  /* ── Mobile drawer: close on Escape ───────────────────────────────────── */
+  useEffect(() => {
+    if (!sidebarOpen) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
+
+  const renderSidebar = (closeDrawer: boolean, className?: string) => (
+    <CalendarSidebar
+      className={className}
+      month={cursor}
+      selectedDate={selectedDate}
+      now={now}
+      eventDays={eventDays}
+      hiddenTypes={hiddenTypes}
+      teamName={team?.name}
+      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
+      onToggleType={handleToggleType}
+      onNavigateMonth={(direction) => navigate(direction)}
+      onSelectDate={(date) => {
+        handleSelectDate(date);
+        if (closeDrawer) {
+          setSidebarOpen(false);
+        }
+      }}
+      onCreateEvent={(type) => {
+        setPanel({ kind: "create", type });
+        if (closeDrawer) {
+          setSidebarOpen(false);
+        }
+      }}
+      onOpenEvent={(event) => {
+        handleOpenEvent(event);
+        if (closeDrawer) {
+          setSidebarOpen(false);
+        }
+      }}
+    />
+  );
+
+  /* ── Main views ────────────────────────────────────────────────────────── */
+  const viewContent = (
+    <>
+      {view === "month" && (
+        <MonthCalendar
+          month={cursor}
+          eventsByDay={eventsByDay}
+          selectedDate={selectedDate}
+          now={now}
+          onSelectDate={handleSelectDate}
+          onCreateEvent={handleCreateForDate}
+          onOpenEvent={handleOpenEvent}
+        />
+      )}
+      {view === "week" && (
+        <WeekView
+          weekOf={cursor}
+          eventsByDay={eventsByDay}
+          selectedDate={selectedDate}
+          now={now}
+          onCreateEvent={handleCreateForDate}
+          onOpenEvent={handleOpenEvent}
+        />
+      )}
+      {view === "agenda" && (
+        <AgendaView
+          month={cursor}
+          events={visibleEvents}
+          now={now}
+          onOpenEvent={handleOpenEvent}
+          onCreateEvent={() => setPanel({ kind: "create" })}
+        />
+      )}
+    </>
+  );
+
   return (
     <>
       <PageHeader
         title="Events"
-        subtitle="Upcoming matches, training sessions, and meetings."
-        actions={
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setPanel({ kind: "create" })}
-          >
-            <Plus className="size-4" />
-            New Event
-          </Button>
-        }
+        subtitle="Matches, training sessions, and meetings on one calendar."
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="flex flex-col gap-4 p-4 pb-10 sm:gap-5 sm:p-6 lg:p-8">
+        <CalendarToolbar
+          view={view}
+          label={label}
+          onViewChange={setView}
+          onPrevious={() => navigate(-1)}
+          onNext={() => navigate(1)}
+          onToday={goToToday}
+          onNewEvent={() => setPanel({ kind: "create" })}
+          onToggleSidebar={() => setSidebarOpen(true)}
+        />
 
-      {isLoading && (
-        <p className="text-sm text-muted-foreground">Loading events…</p>
-      )}
-
-      {isError && (
-        <div className="rounded-xl border border-border bg-card p-6">
-          <p className="text-sm text-destructive">
-            {error instanceof Error
-              ? error.message
-              : "Could not load events."}
+        {/* Loading / error states */}
+        {isLoading && !events && (
+          <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+            Loading events…
+          </div>
+        )}
+        {isError && !events && (
+          <div className="rounded-xl border border-border bg-card p-6">
+            <p className="text-sm text-destructive">
+              {error instanceof Error ? error.message : "Could not load events."}
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => void refetch()}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
+        {isError && events && (
+          <p role="status" className="text-sm text-destructive">
+            Couldn't refresh events — showing your last saved schedule.
           </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => void refetch()}
-          >
-            Try again
-          </Button>
-        </div>
-      )}
+        )}
 
-      {!isLoading && !isError && events && events.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
-          <CalendarDays className="mx-auto size-8 text-muted-foreground" />
-          <p className="mt-3 text-sm font-medium text-foreground">
-            No events yet
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create a training, match, or meeting to start the calendar.
-          </p>
-          <Button
-            className="mt-6 font-semibold tracking-wide"
-            onClick={() => setPanel({ kind: "create" })}
-          >
-            + New Event
-          </Button>
-        </div>
-      )}
+        {/* Calendar + floating sidebar */}
+        {events && (
+          <div className="flex items-start gap-6">
+            <div className="min-w-0 flex-1">{viewContent}</div>
 
-      {!isLoading && !isError && events && events.length > 0 && (
-        <ul className="flex flex-col gap-3">
-          {events.map((event) => (
-            <li key={event.id}>
-              <EventRow
-                event={event}
-                now={now}
-                onSelect={() =>
-                  setPanel({ kind: "view", eventId: event.id })
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-
+            <aside className="hidden w-80 shrink-0 xl:block">
+              {renderSidebar(
+                false,
+                "sticky top-6 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-border bg-card p-4 shadow-sm",
+              )}
+            </aside>
+          </div>
+        )}
       </div>
+
+      {/* Sidebar drawer for tablet/mobile */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Calendars panel"
+            className="absolute inset-y-0 right-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto border-l border-border bg-card p-4 shadow-xl"
+          >
+            <div className="mb-2 flex justify-end">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close calendars panel"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            {renderSidebar(true)}
+          </aside>
+        </div>
+      )}
 
       <EventFormDialog
         open={panel.kind === "create" || panel.kind === "edit"}
         event={panel.kind === "edit" ? (selectedEvent ?? undefined) : undefined}
+        initialDate={panel.kind === "create" ? panel.date : undefined}
+        initialType={panel.kind === "create" ? panel.type : undefined}
+        allowPastDate={panel.kind === "create" && panel.date !== undefined}
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });
@@ -133,59 +318,5 @@ export default function EventsPage() {
         onEdit={(event) => setPanel({ kind: "edit", eventId: event.id })}
       />
     </>
-  );
-}
-
-function EventRow({
-  event,
-  now,
-  onSelect,
-}: {
-  event: TeamEvent;
-  now: Date;
-  onSelect: () => void;
-}) {
-  const cancelled = event.status === "cancelled";
-  const shownStatus = displayEventStatus(event, now);
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "w-full rounded-xl border border-border bg-card p-4 text-left transition-colors",
-        "hover:border-primary/40 hover:bg-card/80",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        cancelled && "opacity-55",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2
-            className={cn(
-              "truncate text-base font-semibold text-foreground",
-              cancelled && "line-through",
-            )}
-          >
-            {event.title}
-          </h2>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {eventTypeLabel(event.type)}
-          </p>
-        </div>
-        <StatusBadge status={shownStatus} />
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
-        <span className="inline-flex items-center gap-1.5">
-          <CalendarDays className="size-3.5 shrink-0" />
-          {formatEventDateTime(event.scheduledAt)}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <MapPin className="size-3.5 shrink-0" />
-          {event.location}
-        </span>
-      </div>
-    </button>
   );
 }
