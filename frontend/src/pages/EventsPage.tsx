@@ -8,6 +8,7 @@ import { CalendarSidebar } from "@/features/events/CalendarSidebar";
 import { CalendarToolbar } from "@/features/events/CalendarToolbar";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { EventFormDialog } from "@/features/events/EventFormDialog";
+import { MobileCalendarView } from "@/features/events/MobileCalendarView";
 import { MonthCalendar } from "@/features/events/MonthCalendar";
 import { WeekView } from "@/features/events/WeekView";
 import {
@@ -213,17 +214,6 @@ export default function EventsPage() {
       />
 
       <div className="flex flex-col gap-4 p-4 pb-10 sm:gap-5 sm:p-6 lg:p-8">
-        <CalendarToolbar
-          view={view}
-          label={label}
-          onViewChange={setView}
-          onPrevious={() => navigate(-1)}
-          onNext={() => navigate(1)}
-          onToday={goToToday}
-          onNewEvent={() => setPanel({ kind: "create" })}
-          onToggleSidebar={() => setSidebarOpen(true)}
-        />
-
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
@@ -250,19 +240,54 @@ export default function EventsPage() {
           </p>
         )}
 
-        {/* Calendar + floating sidebar */}
+        {/* Mobile View: Samsung & Apple phone inspired calendar */}
         {events && (
-          <div className="flex items-stretch gap-6">
-            <div className="min-w-0 flex-1">{viewContent}</div>
-
-            <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
-              {renderSidebar(
-                false,
-                "h-full rounded-xl border border-border bg-card p-4 shadow-sm",
-              )}
-            </aside>
-          </div>
+          <MobileCalendarView
+            view={view}
+            cursor={cursor}
+            selectedDate={selectedDate}
+            now={now}
+            eventsByDay={eventsByDay}
+            visibleEvents={visibleEvents}
+            onViewChange={setView}
+            onSelectDate={handleSelectDate}
+            onNavigate={navigate}
+            onToday={goToToday}
+            onCreateEvent={(date) =>
+              setPanel({ kind: "create", date: date ?? selectedDate })
+            }
+            onOpenEvent={handleOpenEvent}
+            onToggleSidebar={() => setSidebarOpen(true)}
+          />
         )}
+
+        {/* Desktop & Tablet View: Google-Calendar style layout */}
+        <div className="hidden sm:flex sm:flex-col sm:gap-5">
+          <CalendarToolbar
+            view={view}
+            label={label}
+            onViewChange={setView}
+            onPrevious={() => navigate(-1)}
+            onNext={() => navigate(1)}
+            onToday={goToToday}
+            onNewEvent={() => setPanel({ kind: "create" })}
+            onToggleSidebar={() => setSidebarOpen(true)}
+          />
+
+          {/* Calendar + floating sidebar */}
+          {events && (
+            <div className="flex items-stretch gap-6">
+              <div className="min-w-0 flex-1">{viewContent}</div>
+
+              <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
+                {renderSidebar(
+                  false,
+                  "h-full rounded-xl border border-border bg-card p-4 shadow-sm",
+                )}
+              </aside>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sidebar drawer for tablet/mobile */}
