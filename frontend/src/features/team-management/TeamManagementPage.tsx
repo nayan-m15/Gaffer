@@ -41,6 +41,8 @@ import { DeleteLineupDialog } from "./DeleteLineupDialog";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
+import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
+import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 
 export default function TeamManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,6 +58,10 @@ export default function TeamManagementPage() {
   const athleteList = athletes ?? emptyRef.current;
 
   const lineup = useLineupState(athleteList);
+
+  // Shared game-plan editor state: its save controls render in the header
+  // (below), the tab strip + bodies render in <TeamTacticsPanel>.
+  const gamePlanEditor = useGamePlanEditor();
 
   const { data: lineupsData, isLoading: isLineupsLoading } = useLineups();
   const lineupsList = useMemo(() => lineupsData ?? [], [lineupsData]);
@@ -254,7 +260,9 @@ export default function TeamManagementPage() {
       <PageHeader
         title="Team Management"
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
-        actions={activeSection === "squad" ? (
+        actions={activeSection === "tactics" ? (
+          <GamePlanControls editor={gamePlanEditor} />
+        ) : (
           <div className="flex flex-wrap items-center gap-2">
             <LineupSelector
               lineups={lineupsList}
@@ -333,7 +341,7 @@ export default function TeamManagementPage() {
                     : "Save Lineup"}
             </Button>
           </div>
-        ) : undefined}
+        )}
       >
         <nav className="flex gap-1" aria-label="Team sections">
           <button
@@ -367,7 +375,7 @@ export default function TeamManagementPage() {
 
       <div className="space-y-6 p-6 sm:p-8">
         {activeSection === "tactics" ? (
-          <TeamTacticsPanel />
+          <TeamTacticsPanel editor={gamePlanEditor} />
         ) : (
           <>
         {/* ── Status bar ────────────────────────────────────────────────────── */}
