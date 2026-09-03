@@ -50,6 +50,13 @@
       "when": 1788359983877,
       "tag": "0006_lineups_multiple_named",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788443825502,
+      "tag": "0007_add_game_plans",
+      "breakpoints": true
     }
   ]
 }

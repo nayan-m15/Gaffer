@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
@@ -39,13 +40,28 @@ import { SaveLineupDialog } from "./SaveLineupDialog";
 import { DeleteLineupDialog } from "./DeleteLineupDialog";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
+import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
+import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
+import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 
 export default function TeamManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeSection =
+    searchParams.get("section") === "tactics" ? "tactics" : "squad";
+
+  const setActiveSection = (section: "squad" | "tactics") => {
+    setSearchParams(section === "tactics" ? { section } : {});
+  };
+
   const { data: athletes, isLoading, isError, refetch } = useAthletes();
   const emptyRef = useRef<BackendAthlete[]>([]);
   const athleteList = athletes ?? emptyRef.current;
 
   const lineup = useLineupState(athleteList);
+
+  // Shared game-plan editor state: its save controls render in the header
+  // (below), the tab strip + bodies render in <TeamTacticsPanel>.
+  const gamePlanEditor = useGamePlanEditor();
 
   const { data: lineupsData, isLoading: isLineupsLoading } = useLineups();
   const lineupsList = useMemo(() => lineupsData ?? [], [lineupsData]);
@@ -244,7 +260,9 @@ export default function TeamManagementPage() {
       <PageHeader
         title="Team Management"
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
-        actions={
+        actions={activeSection === "tactics" ? (
+          <GamePlanControls editor={gamePlanEditor} />
+        ) : (
           <div className="flex flex-wrap items-center gap-2">
             <LineupSelector
               lineups={lineupsList}
@@ -323,10 +341,43 @@ export default function TeamManagementPage() {
                     : "Save Lineup"}
             </Button>
           </div>
-        }
-      />
+        )}
+      >
+        <nav className="flex gap-1" aria-label="Team sections">
+          <button
+            type="button"
+            onClick={() => setActiveSection("squad")}
+            aria-current={activeSection === "squad" ? "page" : undefined}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              activeSection === "squad"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Squad
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection("tactics")}
+            aria-current={activeSection === "tactics" ? "page" : undefined}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              activeSection === "tactics"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Tactics
+          </button>
+        </nav>
+      </PageHeader>
 
       <div className="space-y-6 p-6 sm:p-8">
+        {activeSection === "tactics" ? (
+          <TeamTacticsPanel editor={gamePlanEditor} />
+        ) : (
+          <>
         {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <StatusBar
@@ -409,6 +460,8 @@ export default function TeamManagementPage() {
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}
       />
+          </>
+        )}
       </div>
 
       <SaveLineupDialog

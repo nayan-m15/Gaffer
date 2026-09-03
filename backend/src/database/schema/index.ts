@@ -180,6 +180,72 @@ export const lineups = pgTable(
   ],
 );
 
+// FIFA-style "custom tactics" for a team. Each defensive/offensive style is a
+// single enum value; the sliders are integers on a 1–10 scale.
+export const defensiveStyle = pgEnum('defensive_style', [
+  'drop_back',
+  'balanced',
+  'pressure_on_heavy_touch',
+  'press_after_possession_loss',
+  'constant_pressure',
+]);
+
+export const offensiveStyle = pgEnum('offensive_style', [
+  'possession',
+  'balanced',
+  'fast_build_up',
+  'long_ball',
+]);
+
+// A named tactical profile ("game plan") for a team, modeled on FIFA 20's
+// Custom Tactics. A team keeps several (e.g. "Balanced", "Cup final low
+// block") and swaps between them per fixture; names are unique per team. Each
+// row is a complete snapshot of formation + defensive/offensive settings +
+// set-piece takers.
+export const gamePlans = pgTable(
+  'game_plans',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    formationId: text('formation_id').notNull().default('4-3-3'),
+    // Defence
+    defensiveStyle: defensiveStyle('defensive_style')
+      .notNull()
+      .default('balanced'),
+    defensiveWidth: integer('defensive_width').notNull().default(5),
+    defensiveDepth: integer('defensive_depth').notNull().default(5),
+    // Offence
+    offensiveStyle: offensiveStyle('offensive_style')
+      .notNull()
+      .default('balanced'),
+    offensiveWidth: integer('offensive_width').notNull().default(5),
+    playersInBox: integer('players_in_box').notNull().default(4),
+    cornersCommitment: integer('corners_commitment').notNull().default(3),
+    freeKicksCommitment: integer('free_kicks_commitment').notNull().default(3),
+    // Roles — one athlete each; cleared to null if the athlete is removed.
+    captainId: uuid('captain_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    freeKickTakerId: uuid('free_kick_taker_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    penaltyTakerId: uuid('penalty_taker_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    cornerTakerId: uuid('corner_taker_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    index('game_plans_team_id_index').on(table.teamId),
+    uniqueIndex('game_plans_team_name_unique').on(table.teamId, table.name),
+  ],
+);
+
 export const events = pgTable(
   'events',
   {
