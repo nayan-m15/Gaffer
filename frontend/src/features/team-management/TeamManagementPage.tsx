@@ -15,16 +15,28 @@ import {
   RotateCcw,
   Wand2,
   Save,
+  Copy,
+  Trash2,
   Users,
   ShieldAlert,
   Loader2,
+  Check,
 } from "lucide-react";
 
-import { useAthletes } from "./api";
+import {
+  useAthletes,
+  useLineups,
+  useCreateLineup,
+  useUpdateLineup,
+  useDeleteLineup,
+} from "./api";
 import { useLineupState } from "./useLineupState";
 import { FootballPitch } from "./FootballPitch";
 import { PitchPlayer } from "./PitchPlayer";
 import { FormationSelector } from "./FormationSelector";
+import { LineupSelector } from "./LineupSelector";
+import { SaveLineupDialog } from "./SaveLineupDialog";
+import { DeleteLineupDialog } from "./DeleteLineupDialog";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
 
@@ -34,6 +46,104 @@ export default function TeamManagementPage() {
   const athleteList = athletes ?? emptyRef.current;
 
   const lineup = useLineupState(athleteList);
+
+  const { data: lineupsData, isLoading: isLineupsLoading } = useLineups();
+  const lineupsList = useMemo(() => lineupsData ?? [], [lineupsData]);
+
+  const createLineupMutation = useCreateLineup();
+  const updateLineupMutation = useUpdateLineup();
+  const deleteLineupMutation = useDeleteLineup();
+
+  const [selectedLineupId, setSelectedLineupId] = useState<string | null>(null);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const selectedLineup = useMemo(
+    () => lineupsList.find((l) => l.id === selectedLineupId) ?? null,
+    [lineupsList, selectedLineupId],
+  );
+
+  const { loadLineup } = lineup;
+
+  // Once the squad and the saved lineups have both loaded, select and load
+  // the most recently updated lineup (if any); otherwise the board stays
+  // blank with everyone on the bench.
+  const hasHydratedRef = useRef(false);
+  useEffect(() => {
+    if (hasHydratedRef.current) return;
+    if (athleteList.length === 0) return;
+    if (isLineupsLoading) return;
+
+    hasHydratedRef.current = true;
+    const initial = lineupsList[0] ?? null;
+    setSelectedLineupId(initial?.id ?? null);
+    loadLineup(initial);
+  }, [athleteList, isLineupsLoading, lineupsList, loadLineup]);
+
+  const handleSelectLineup = (id: string | null) => {
+    if (id === null) {
+      setSelectedLineupId(null);
+      loadLineup(null);
+      return;
+    }
+    const target = lineupsList.find((l) => l.id === id);
+    if (!target) return;
+    setSelectedLineupId(target.id);
+    loadLineup(target);
+  };
+
+  const currentContent = {
+    formationId: lineup.formationId,
+    assignments: lineup.assignments,
+    substituteIds: lineup.substituteIds,
+  };
+
+  /** Save button: overwrite the selected lineup, or prompt for a name if none is selected. */
+  const handleSave = () => {
+    setSaveError(null);
+    if (!selectedLineup) {
+      setIsSaveDialogOpen(true);
+      return;
+    }
+    updateLineupMutation.mutate(
+      { id: selectedLineup.id, input: currentContent },
+      {
+        onSuccess: () => {
+          setJustSaved(true);
+          window.setTimeout(() => setJustSaved(false), 2500);
+        },
+        onError: (err) => {
+          setSaveError(
+            err instanceof Error ? err.message : "Failed to save lineup.",
+          );
+        },
+      },
+    );
+  };
+
+  /** "Save as new" always creates a fresh named lineup, even when one is selected. */
+  const handleSaveAsNew = async (name: string) => {
+    const created = await createLineupMutation.mutateAsync({
+      name,
+      ...currentContent,
+    });
+    setSelectedLineupId(created.id);
+    setJustSaved(true);
+    window.setTimeout(() => setJustSaved(false), 2500);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!selectedLineup) return;
+    deleteLineupMutation.mutate(selectedLineup.id, {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false);
+        setSelectedLineupId(null);
+        loadLineup(null);
+      },
+    });
+  };
 
   // Detect desktop viewport (lg breakpoint = 1024px) for horizontal pitch
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -136,6 +246,13 @@ export default function TeamManagementPage() {
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <LineupSelector
+              lineups={lineupsList}
+              selectedLineupId={selectedLineupId}
+              onSelect={handleSelectLineup}
+              disabled={isLineupsLoading}
+            />
+
             <FormationSelector
               value={lineup.formationId}
               onChange={lineup.setFormation}
@@ -161,9 +278,49 @@ export default function TeamManagementPage() {
               Reset
             </Button>
 
-            <Button variant="default" size="sm" className="gap-1.5" disabled>
-              <Save className="size-3.5" />
-              Save Lineup
+            {selectedLineup && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDeleteDialogOpen(true)}
+                className="gap-1.5 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSaveDialogOpen(true)}
+              className="gap-1.5"
+            >
+              <Copy className="size-3.5" />
+              Save As New
+            </Button>
+
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleSave}
+              disabled={updateLineupMutation.isPending}
+            >
+              {updateLineupMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : justSaved ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              {updateLineupMutation.isPending
+                ? "Saving..."
+                : justSaved
+                  ? "Saved"
+                  : selectedLineup
+                    ? "Save"
+                    : "Save Lineup"}
             </Button>
           </div>
         }
@@ -204,6 +361,26 @@ export default function TeamManagementPage() {
             {lineup.error} (dismiss)
           </span>
         )}
+
+        {saveError && (
+          <span
+            className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
+            onClick={() => setSaveError(null)}
+            role="alert"
+          >
+            {saveError} (dismiss)
+          </span>
+        )}
+
+        {deleteLineupMutation.isError && (
+          <span
+            className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
+            onClick={() => deleteLineupMutation.reset()}
+            role="alert"
+          >
+            Failed to delete lineup. Please try again. (dismiss)
+          </span>
+        )}
       </div>
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
@@ -233,6 +410,20 @@ export default function TeamManagementPage() {
         onDrop={lineup.handleDrop}
       />
       </div>
+
+      <SaveLineupDialog
+        open={isSaveDialogOpen}
+        onOpenChange={setIsSaveDialogOpen}
+        onSave={handleSaveAsNew}
+      />
+
+      <DeleteLineupDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        lineupName={selectedLineup?.name ?? ""}
+        isDeleting={deleteLineupMutation.isPending}
+      />
     </>
   );
 }

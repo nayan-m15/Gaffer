@@ -10,7 +10,7 @@
  * - GK position only accepts goalkeepers
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { BackendAthlete } from "@/services/athletes";
 import {
   FORMATIONS,
@@ -18,7 +18,7 @@ import {
   remapPlayers,
   autoFillFormation,
 } from "./formations";
-import type { DragItem, PitchAssignments } from "./types";
+import type { DragItem, PitchAssignments, SavedLineup } from "./types";
 
 /** Check whether a position string represents a goalkeeper. */
 function isGoalkeeper(position: string | null): boolean {
@@ -45,17 +45,63 @@ export function useLineupState(athletes: BackendAthlete[]) {
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Track whether we've performed the initial auto-populate of subs
-  const initializedRef = useRef(false);
+  /**
+   * Replace the entire board with a saved lineup, or with a blank board
+   * (all athletes on the bench, default formation) when passed `null`.
+   *
+   * Used both to select a different saved lineup and to start a new one.
+   * Reconciles the saved assignments/subs against the current roster: a
+   * player removed from the squad since the save is dropped, and any player
+   * added since the save lands on the bench.
+   */
+  const loadLineup = useCallback(
+    (saved: SavedLineup | null) => {
+      const restoredFormation = saved ? FORMATIONS[saved.formationId] : undefined;
 
-  // Auto-populate all athletes into the substitutes bench on first load
-  useEffect(() => {
-    if (initializedRef.current) return;
-    if (athletes.length === 0) return;
+      if (!saved || !restoredFormation) {
+        setFormationIdState(DEFAULT_FORMATION_ID);
+        setAssignments(emptyAssignments(DEFAULT_FORMATION_ID));
+        setSubstituteIds(athletes.map((a) => a.id));
+        setError(null);
+        return;
+      }
 
-    initializedRef.current = true;
-    setSubstituteIds(athletes.map((a) => a.id));
-  }, [athletes]);
+      const knownIds = new Set(athletes.map((a) => a.id));
+      const placed = new Set<string>();
+
+      const restoredAssignments: PitchAssignments = {};
+      for (const pos of restoredFormation.positions) {
+        const athleteId = saved.assignments[pos.id] ?? null;
+        if (athleteId && knownIds.has(athleteId) && !placed.has(athleteId)) {
+          restoredAssignments[pos.id] = athleteId;
+          placed.add(athleteId);
+        } else {
+          restoredAssignments[pos.id] = null;
+        }
+      }
+
+      const restoredSubs: string[] = [];
+      for (const athleteId of saved.substituteIds) {
+        if (knownIds.has(athleteId) && !placed.has(athleteId)) {
+          restoredSubs.push(athleteId);
+          placed.add(athleteId);
+        }
+      }
+      // Newly added athletes (not in the saved lineup at all) join the bench.
+      for (const athlete of athletes) {
+        if (!placed.has(athlete.id)) {
+          restoredSubs.push(athlete.id);
+          placed.add(athlete.id);
+        }
+      }
+
+      setFormationIdState(saved.formationId);
+      setAssignments(restoredAssignments);
+      setSubstituteIds(restoredSubs);
+      setError(null);
+    },
+    [athletes],
+  );
 
   /* ── Derived data ──────────────────────────────────────────────────────── */
 
@@ -323,6 +369,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
     handleDrop,
     resetLineup,
     autoFill,
+    loadLineup,
     clearError: () => setError(null),
   };
 }

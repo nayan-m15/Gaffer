@@ -61,6 +61,14 @@ export interface LineupState {
   substituteIds: string[];
 }
 
+/**
+ * A previously saved lineup, as loaded from the backend.
+ *
+ * Used to hydrate `useLineupState` on first load so a coach's saved XI
+ * survives a page reload.
+ */
+export type SavedLineup = LineupState;
+
 /* ─── Drag-and-drop ────────────────────────────────────────────────────── */
 
 /** Describes the item being dragged during a DnD interaction. */
