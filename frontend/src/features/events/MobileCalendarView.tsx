@@ -272,20 +272,27 @@ function MobileMonthGrid({
                 {format(day, "d")}
               </span>
 
-              {/* Samsung / iOS Colored Event Dots */}
-              <div className="mt-1 flex h-1.5 items-center justify-center gap-0.5">
-                {dayEvents.slice(0, 3).map((evt) => {
+              {/* Mobile Event Pills / Titles */}
+              <div className="mt-1 flex w-full flex-col gap-0.5 px-0.5 overflow-hidden">
+                {dayEvents.slice(0, 2).map((evt) => {
                   const style = getEventTypeStyle(evt.type);
                   return (
                     <span
                       key={evt.id}
-                      className={cn("size-1.5 rounded-full", style.swatch)}
-                      aria-hidden="true"
-                    />
+                      title={evt.title}
+                      className={cn(
+                        "block w-full truncate rounded px-1 py-0.5 text-[9px] font-semibold leading-tight text-left",
+                        style.pill,
+                      )}
+                    >
+                      {evt.title}
+                    </span>
                   );
                 })}
-                {dayEvents.length > 3 && (
-                  <span className="size-1 rounded-full bg-muted-foreground/60" />
+                {dayEvents.length > 2 && (
+                  <span className="text-[9px] font-bold text-muted-foreground text-center leading-none">
+                    +{dayEvents.length - 2} more
+                  </span>
                 )}
               </div>
             </button>

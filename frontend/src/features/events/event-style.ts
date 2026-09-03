@@ -22,19 +22,19 @@ export const EVENT_TYPE_STYLES: Record<EventType, EventTypeStyle> = {
   training: {
     icon: Dumbbell,
     swatch: "bg-event-training",
-    pill: "bg-event-training/10 text-event-training hover:bg-event-training/20",
+    pill: "bg-event-training/15 text-foreground hover:bg-event-training/25 border-l-2 border-event-training",
     text: "text-event-training",
   },
   match: {
     icon: Trophy,
     swatch: "bg-event-match",
-    pill: "bg-event-match/10 text-event-match hover:bg-event-match/20",
+    pill: "bg-event-match/15 text-foreground hover:bg-event-match/25 border-l-2 border-event-match",
     text: "text-event-match",
   },
   meeting: {
     icon: Users,
     swatch: "bg-event-meeting",
-    pill: "bg-event-meeting/10 text-event-meeting hover:bg-event-meeting/20",
+    pill: "bg-event-meeting/15 text-foreground hover:bg-event-meeting/25 border-l-2 border-event-meeting",
     text: "text-event-meeting",
   },
 };
