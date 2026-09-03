@@ -8,19 +8,48 @@ export const createMatchLogEventSchema = z.object({
   team: matchEventTeamSchema,
   eventType: matchEventTypeSchema,
   athleteId: z.uuid().optional(),
-  opponentLabel: z.string().trim().min(1).optional(),
-  minute: z.number().int().min(0, 'Minute cannot be negative.'),
-  detail: z.string().trim().optional(),
+  opponentLabel: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50, 'Opponent label must be 50 characters or fewer.')
+    .optional(),
+  minute: z
+    .number()
+    .int('Minute must be a whole number.')
+    .min(0, 'Minute cannot be negative.')
+    .max(150, 'Minute must be 150 or fewer.'),
+  detail: z
+    .string()
+    .trim()
+    .max(500, 'Detail must be 500 characters or fewer.')
+    .optional(),
 });
 export type CreateMatchLogEventDto = z.infer<typeof createMatchLogEventSchema>;
 
 export const updateMatchLogEventSchema = z
   .object({
     athleteId: z.uuid().nullable().optional(),
-    opponentLabel: z.string().trim().min(1).nullable().optional(),
-    minute: z.number().int().min(0, 'Minute cannot be negative.').optional(),
+    opponentLabel: z
+      .string()
+      .trim()
+      .min(1)
+      .max(50, 'Opponent label must be 50 characters or fewer.')
+      .nullable()
+      .optional(),
+    minute: z
+      .number()
+      .int('Minute must be a whole number.')
+      .min(0, 'Minute cannot be negative.')
+      .max(150, 'Minute must be 150 or fewer.')
+      .optional(),
     eventType: matchEventTypeSchema.optional(),
-    detail: z.string().trim().nullable().optional(),
+    detail: z
+      .string()
+      .trim()
+      .max(500, 'Detail must be 500 characters or fewer.')
+      .nullable()
+      .optional(),
   })
   .refine(
     (value) =>

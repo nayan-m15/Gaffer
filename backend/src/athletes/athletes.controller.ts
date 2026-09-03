@@ -5,6 +5,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -55,7 +56,10 @@ export class AthletesController {
     return this.athletesService.findArchived(teamId);
   }
   @Get(':id')
-  async findOne(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+  async findOne(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const teamId = await this.getTeamId(user.id);
 
     return this.athletesService.findOne(teamId, id);
@@ -64,7 +68,7 @@ export class AthletesController {
   @Patch(':id')
   async update(
     @CurrentUser() user: SessionUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
   ) {
     const input = zodValidate(updateAthleteSchema, body);
@@ -74,13 +78,19 @@ export class AthletesController {
   }
 
   @Delete(':id')
-  async archive(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+  async archive(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const teamId = await this.getTeamId(user.id);
 
     return this.athletesService.archive(teamId, id);
   }
   @Patch(':id/restore')
-  async restore(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+  async restore(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const teamId = await this.getTeamId(user.id);
 
     return this.athletesService.restore(teamId, id);

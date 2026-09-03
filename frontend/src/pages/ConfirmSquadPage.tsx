@@ -231,6 +231,7 @@ export default function ConfirmSquadPage() {
               onChange={(event) => setOpponentName(event.target.value)}
               placeholder="Opponent name"
               autoComplete="off"
+              maxLength={100}
             />
           </div>
           <div className="space-y-2">

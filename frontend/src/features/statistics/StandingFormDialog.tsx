@@ -40,10 +40,12 @@ export function StandingFormDialog({
   const title = isEditing ? "Edit Standing" : "Add Standing";
 
   const [values, setValues] = useState<StandingFormValues>(DEFAULT_VALUES);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setValues(initialValues ?? DEFAULT_VALUES);
+    setError(null);
   }, [initialValues, isOpen]);
 
   if (!isOpen) return null;
@@ -52,11 +54,30 @@ export function StandingFormDialog({
     field: K,
     value: StandingFormValues[K],
   ) => {
-    setValues((prev) => ({ ...prev, [field]: value }));
+    setError(null);
+    setValues((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "won" || field === "drawn" || field === "lost") {
+        const w = field === "won" ? (value as number) : prev.won;
+        const d = field === "drawn" ? (value as number) : prev.drawn;
+        const l = field === "lost" ? (value as number) : prev.lost;
+        next.played = Math.max(0, w + d + l);
+        next.points = Math.max(0, w * 3 + d);
+      }
+      return next;
+    });
   };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (values.played !== values.won + values.drawn + values.lost) {
+      setError("Played matches must equal Won + Drawn + Lost.");
+      return;
+    }
+    if (values.points !== values.won * 3 + values.drawn) {
+      setError("Points must equal (Won × 3) + Drawn.");
+      return;
+    }
     onSubmit({
       ...values,
       teamName: values.teamName.trim(),
@@ -102,6 +123,7 @@ export function StandingFormDialog({
               onChange={(e) => handleChange("teamName", e.target.value)}
               placeholder="e.g. Riverside United"
               required
+              maxLength={100}
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
             />
           </FormField>
@@ -111,6 +133,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={1}
+                max={100}
                 value={values.position}
                 onChange={(e) => handleChange("position", Number(e.target.value))}
                 required
@@ -121,6 +144,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={100}
                 value={values.played}
                 onChange={(e) => handleChange("played", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -130,6 +154,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={300}
                 value={values.points}
                 onChange={(e) => handleChange("points", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -142,6 +167,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={100}
                 value={values.won}
                 onChange={(e) => handleChange("won", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -151,6 +177,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={100}
                 value={values.drawn}
                 onChange={(e) => handleChange("drawn", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -160,6 +187,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={100}
                 value={values.lost}
                 onChange={(e) => handleChange("lost", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -172,6 +200,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={500}
                 value={values.goalsFor}
                 onChange={(e) => handleChange("goalsFor", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -181,6 +210,7 @@ export function StandingFormDialog({
               <input
                 type="number"
                 min={0}
+                max={500}
                 value={values.goalsAgainst}
                 onChange={(e) => handleChange("goalsAgainst", Number(e.target.value))}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
@@ -199,6 +229,12 @@ export function StandingFormDialog({
               This is my team
             </span>
           </label>
+
+          {error && (
+            <p role="alert" className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
 
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
