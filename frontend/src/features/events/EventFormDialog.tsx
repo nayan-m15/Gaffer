@@ -53,6 +53,12 @@ const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) =>
 interface EventFormDialogProps {
   open: boolean;
   event?: TeamEvent;
+  /** Date prefilled when creating from a calendar day click. */
+  initialDate?: Date;
+  /** Event type prefilled when creating from a calendar menu action. */
+  initialType?: EventType;
+  /** Allow scheduling in the past (logging history from the calendar). */
+  allowPastDate?: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -64,6 +70,9 @@ interface EventFormDialogProps {
 export function EventFormDialog({
   open,
   event,
+  initialDate,
+  initialType,
+  allowPastDate = false,
   onOpenChange,
 }: EventFormDialogProps) {
   const isEditing = Boolean(event);
@@ -94,14 +103,14 @@ export function EventFormDialog({
       setNotes(event.notes ?? "");
     } else {
       setTitle("");
-      setType("training");
-      setDate(undefined);
+      setType(initialType ?? "training");
+      setDate(initialDate ? startOfLocalDay(initialDate) : undefined);
       setTime("");
       setLocation("");
       setNotes("");
     }
     setError(null);
-  }, [open, event]);
+  }, [open, event, initialDate, initialType]);
 
   const isPending = createEvent.isPending || updateEvent.isPending;
 
@@ -125,7 +134,7 @@ export function EventFormDialog({
       return;
     }
 
-    if (!event && new Date(scheduledAt).getTime() <= Date.now()) {
+    if (!event && !allowPastDate && new Date(scheduledAt).getTime() <= Date.now()) {
       setError("Choose a date and time in the future.");
       return;
     }
@@ -221,11 +230,12 @@ export function EventFormDialog({
             <Field label="Date">
               <DatePicker
                 value={date}
-                disablePast={!isEditing}
+                disablePast={!isEditing && !allowPastDate}
                 onChange={(next) => {
                   setDate(next);
                   if (
                     !isEditing &&
+                    !allowPastDate &&
                     next &&
                     time &&
                     isScheduleInThePast(next, time)
@@ -239,7 +249,7 @@ export function EventFormDialog({
               <TimePicker
                 value={time}
                 date={date}
-                disablePast={!isEditing}
+                disablePast={!isEditing && !allowPastDate}
                 onChange={setTime}
               />
             </Field>
