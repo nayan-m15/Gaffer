@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
 import { AppShell } from '@/layouts/AppShell'
@@ -109,6 +109,14 @@ function App() {
             element={
               <RequireTeam>
                 <TeamManagementPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/tactics"
+            element={
+              <RequireTeam>
+                <Navigate to="/team?section=tactics" replace />
               </RequireTeam>
             }
           />
