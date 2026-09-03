@@ -62,7 +62,7 @@ export async function sendVerificationEmail({
     to: [{ email: to, name }],
     subject: 'Verify your email address',
     htmlContent: `
-      <p>Hi Coach,</p>
+      <p>Hi ${escapeHtml(name || 'Coach')},</p>
       <p>Confirm your email address to finish setting up your Gaffer account.</p>
       <p><a href="${url}">Verify email address</a></p>
       <p>If you didn't create this account, you can safely ignore this email.</p>

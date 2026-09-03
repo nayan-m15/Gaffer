@@ -589,6 +589,7 @@ function EditEventOverlay({
           <input
             type="number"
             min={0}
+            max={150}
             step={1}
             value={minute}
             onChange={(change) => setMinute(change.target.value)}
@@ -637,6 +638,7 @@ function EditEventOverlay({
             value={opponentLabel}
             onChange={(change) => setOpponentLabel(change.target.value)}
             placeholder="e.g. Opponent #9"
+            maxLength={50}
             className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
           />
         </label>
@@ -648,6 +650,7 @@ function EditEventOverlay({
             value={detail}
             onChange={(change) => setDetail(change.target.value)}
             placeholder="Incoming player or note"
+            maxLength={500}
             className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
           />
         </label>

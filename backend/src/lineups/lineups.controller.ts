@@ -5,6 +5,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -42,7 +43,10 @@ export class LineupsController {
   }
 
   @Get(':id')
-  async findOne(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+  async findOne(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const teamId = await this.getTeamId(user.id);
 
     return this.lineupsService.findOne(teamId, id);
@@ -59,7 +63,7 @@ export class LineupsController {
   @Patch(':id')
   async update(
     @CurrentUser() user: SessionUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
   ) {
     const input = zodValidate(updateLineupSchema, body);
@@ -69,7 +73,10 @@ export class LineupsController {
   }
 
   @Delete(':id')
-  async remove(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+  async remove(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     const teamId = await this.getTeamId(user.id);
 
     return this.lineupsService.remove(teamId, id);
