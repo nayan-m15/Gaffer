@@ -32,6 +32,7 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -130,10 +131,12 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
     } catch (err) {
       console.error("Google sign-in failed:", err);
+      setIsGoogleLoading(false);
       const message =
         err instanceof ApiError
           ? err.message
@@ -392,7 +395,11 @@ export default function SignUpPage() {
           </div>
 
           {/* ── Google signup ──────────────────────────────────────────── */}
-          <GoogleSignInButton onClick={handleGoogleSignUp}>
+          <GoogleSignInButton
+            onClick={handleGoogleSignUp}
+            isLoading={isGoogleLoading}
+            disabled={isSubmitting}
+          >
             Sign up with Google
           </GoogleSignInButton>
         </div>
