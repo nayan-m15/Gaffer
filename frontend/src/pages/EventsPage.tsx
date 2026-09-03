@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AgendaView } from "@/features/events/AgendaView";
 import { CalendarSidebar } from "@/features/events/CalendarSidebar";
 import { CalendarToolbar } from "@/features/events/CalendarToolbar";
+import { DayEventsDialog } from "@/features/events/DayEventsDialog";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { EventFormDialog } from "@/features/events/EventFormDialog";
 import { MobileCalendarView } from "@/features/events/MobileCalendarView";
@@ -16,6 +17,7 @@ import {
   filterEventTypes,
   formatMonthYear,
   formatWeekRangeLabel,
+  getDayEvents,
   getWeekDays,
   groupEventsByDay,
   moveCursor,
@@ -28,7 +30,8 @@ type Panel =
   | { kind: "closed" }
   | { kind: "create"; date?: Date; type?: EventType }
   | { kind: "view"; eventId: string }
-  | { kind: "edit"; eventId: string };
+  | { kind: "edit"; eventId: string }
+  | { kind: "day"; date: Date };
 
 type CalendarView = "month" | "week" | "agenda";
 
@@ -80,8 +83,12 @@ export default function EventsPage() {
     setSelectedDate(today);
   }, []);
 
-  /** Selects a date and jumps the main calendar to its month/week. */
-  const handleSelectDate = useCallback(
+  /**
+   * Clicking a date on the calendar:
+   * - If the day has events, opens DayEventsDialog popup (Samsung style).
+   * - If the day has no events, directly opens EventFormDialog to add an event.
+   */
+  const handleDayClick = useCallback(
     (date: Date) => {
       setSelectedDate(date);
       if (view === "week") {
@@ -93,17 +100,15 @@ export default function EventsPage() {
       } else if (!isSameMonth(date, cursor)) {
         setCursor(date);
       }
-    },
-    [cursor, view],
-  );
 
-  /** Clicking the empty area of a day opens the create dialog for that date. */
-  const handleCreateForDate = useCallback(
-    (date: Date) => {
-      setSelectedDate(date);
-      setPanel({ kind: "create", date });
+      const dayEvents = getDayEvents(eventsByDay, date);
+      if (dayEvents.length === 0) {
+        setPanel({ kind: "create", date });
+      } else {
+        setPanel({ kind: "day", date });
+      }
     },
-    [],
+    [cursor, eventsByDay, view],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
@@ -148,7 +153,7 @@ export default function EventsPage() {
       undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
-        handleSelectDate(date);
+        handleDayClick(date);
         if (closeDrawer) {
           setSidebarOpen(false);
         }
@@ -177,8 +182,8 @@ export default function EventsPage() {
           eventsByDay={eventsByDay}
           selectedDate={selectedDate}
           now={now}
-          onSelectDate={handleSelectDate}
-          onCreateEvent={handleCreateForDate}
+          onSelectDate={handleDayClick}
+          onCreateEvent={handleDayClick}
           onOpenEvent={handleOpenEvent}
         />
       )}
@@ -188,7 +193,7 @@ export default function EventsPage() {
           eventsByDay={eventsByDay}
           selectedDate={selectedDate}
           now={now}
-          onCreateEvent={handleCreateForDate}
+          onCreateEvent={handleDayClick}
           onOpenEvent={handleOpenEvent}
         />
       )}
@@ -211,7 +216,7 @@ export default function EventsPage() {
         subtitle="Matches, training sessions, and meetings on one calendar."
       />
 
-      <div className="flex flex-col gap-4 p-4 pb-10 sm:gap-5 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
@@ -250,7 +255,7 @@ export default function EventsPage() {
             hiddenTypes={hiddenTypes}
             onToggleType={handleToggleType}
             onViewChange={setView}
-            onSelectDate={handleSelectDate}
+            onSelectDate={handleDayClick}
             onNavigate={navigate}
             onToday={goToToday}
             onCreateEvent={(date) =>
@@ -320,6 +325,21 @@ export default function EventsPage() {
           </aside>
         </div>
       )}
+
+      {/* Day Events Popup Modal (Samsung Calendar style) */}
+      <DayEventsDialog
+        open={panel.kind === "day"}
+        date={panel.kind === "day" ? panel.date : null}
+        events={panel.kind === "day" ? getDayEvents(eventsByDay, panel.date) : []}
+        now={now}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPanel({ kind: "closed" });
+          }
+        }}
+        onSelectEvent={handleOpenEvent}
+        onAddEvent={(date) => setPanel({ kind: "create", date })}
+      />
 
       <EventFormDialog
         open={panel.kind === "create" || panel.kind === "edit"}

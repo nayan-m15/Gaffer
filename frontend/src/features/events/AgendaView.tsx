@@ -96,7 +96,7 @@ export function AgendaView({
           </Button>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card pr-0.5 shadow-xs">
+        <div className="max-h-[175px] overflow-y-auto rounded-xl border border-border bg-card pr-0.5 shadow-xs">
           {groups.map(([dayKey, dayEvents], index) => (
             <AgendaDayGroup
               key={dayKey}

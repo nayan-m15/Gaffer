@@ -10,13 +10,11 @@ import {
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AgendaView } from "./AgendaView";
 import {
   formatEventTime,
   formatMonthYear,
   formatWeekRangeLabel,
   getDayEvents,
-  getMonthEvents,
   getMonthGrid,
   getWeekDays,
   getWeekdayLabels,
@@ -52,7 +50,7 @@ const weekdayLabels = getWeekdayLabels();
 /**
  * Mobile-first smartphone calendar view inspired by Samsung Calendar & Apple iOS Calendar.
  * Features a clean header with direct event-type filters, full-width month grid with multi-line readable text
- * in event blocks, and the full month's agenda list below.
+ * in event blocks.
  */
 export function MobileCalendarView({
   view,
@@ -79,16 +77,11 @@ export function MobileCalendarView({
     [eventsByDay, selectedDate],
   );
 
-  const monthEventsCount = useMemo(
-    () => getMonthEvents(visibleEvents, cursor).length,
-    [visibleEvents, cursor],
-  );
-
   const headerLabel =
     view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   return (
-    <div className="flex flex-col gap-3.5 pb-24 sm:hidden">
+    <div className="flex flex-col gap-3 pb-3 sm:hidden">
       {/* ── 1. Smartphone Top Navigation & Filter Bar ────────────────────── */}
       <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
         {/* Navigation & Period Title */}
@@ -225,35 +218,16 @@ export function MobileCalendarView({
         />
       )}
 
-      {/* ── 3. Bottom Agenda Section: Full Month Schedule (like desktop) ─── */}
-      {view === "agenda" ? (
+      {/* ── 3. Agenda / Week Details ──────────────────────────────────── */}
+      {view === "agenda" && (
         <MobileAgendaList
           events={visibleEvents}
           now={now}
           onOpenEvent={onOpenEvent}
           onCreateEvent={() => onCreateEvent()}
         />
-      ) : view === "month" ? (
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              {formatMonthYear(cursor)} Schedule
-            </h3>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-              {monthEventsCount} {monthEventsCount === 1 ? "event" : "events"}
-            </span>
-          </div>
-
-          <AgendaView
-            month={cursor}
-            events={visibleEvents}
-            now={now}
-            onOpenEvent={onOpenEvent}
-            onCreateEvent={() => onCreateEvent(selectedDate)}
-            className="rounded-2xl border border-border bg-card p-3.5 shadow-xs"
-          />
-        </div>
-      ) : (
+      )}
+      {view === "week" && (
         <MobileDayDetailSection
           selectedDate={selectedDate}
           events={selectedDayEvents}
@@ -330,7 +304,7 @@ function MobileMonthGrid({
               key={day.toISOString()}
               onClick={() => onSelectDate(day)}
               className={cn(
-                "group relative flex min-h-[82px] flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
+                "group relative flex min-h-[64px] flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
                 outside && "bg-muted/15 opacity-40",
                 isSelected && !outside && "bg-accent/40",
                 "hover:bg-muted/30",
