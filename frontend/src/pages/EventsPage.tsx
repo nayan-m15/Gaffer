@@ -252,13 +252,13 @@ export default function EventsPage() {
 
         {/* Calendar + floating sidebar */}
         {events && (
-          <div className="flex items-start gap-6">
+          <div className="flex items-stretch gap-6">
             <div className="min-w-0 flex-1">{viewContent}</div>
 
-            <aside className="hidden w-80 shrink-0 xl:block">
+            <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
               {renderSidebar(
                 false,
-                "sticky top-6 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-border bg-card p-4 shadow-sm",
+                "h-full rounded-xl border border-border bg-card p-4 shadow-sm",
               )}
             </aside>
           </div>

@@ -54,7 +54,7 @@ export function CalendarSidebar({
   className,
 }: CalendarSidebarProps) {
   return (
-    <div className={cn("flex flex-col gap-5", className)}>
+    <div className={cn("flex h-full flex-col gap-5", className)}>
       <AgendaView
         month={month}
         events={events}
@@ -62,6 +62,7 @@ export function CalendarSidebar({
         onOpenEvent={onOpenEvent}
         onCreateEvent={() => onCreateEvent()}
         onNavigateMonth={onNavigateMonth}
+        className="min-h-0 flex-1"
       />
 
       <CalendarsSection
