@@ -41,27 +41,30 @@ export function WeekView({
   const weekDays = useMemo(() => getWeekDays(weekOf), [weekOf]);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <div className="grid min-w-[640px] grid-cols-7">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+      <div className="w-full min-w-[700px]">
         {/* Day headers */}
         <div role="row" className="grid grid-cols-7 border-b border-border bg-muted/30">
           {weekDays.map((day, index) => {
             const isToday = isSameCalendarDay(day, now);
+            const isSelected = isSameCalendarDay(day, selectedDate);
             return (
               <div
                 key={day.toISOString()}
                 role="columnheader"
-                className="flex flex-col items-center gap-0.5 border-r border-border px-1 py-2 last:border-r-0"
+                className="flex flex-col items-center gap-1 border-r border-border px-1.5 py-2.5 sm:py-3 last:border-r-0"
               >
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {weekdayLabels[index]}
                 </span>
                 <span
                   className={cn(
-                    "flex size-7 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+                    "flex size-7 items-center justify-center rounded-full text-xs sm:size-8 sm:text-sm font-semibold tabular-nums transition-colors",
                     isToday
                       ? "bg-primary text-primary-foreground"
-                      : "text-foreground",
+                      : isSelected
+                        ? "bg-primary/15 text-primary font-bold ring-1 ring-primary/40"
+                        : "text-foreground",
                   )}
                 >
                   {format(day, "d")}
@@ -118,10 +121,10 @@ function WeekDayColumn({
       }).format(day)}
       onClick={() => onCreateEvent(day)}
       className={cn(
-        "flex min-h-[320px] cursor-pointer flex-col gap-2 border-r border-border p-2 transition-colors last:border-r-0",
+        "flex min-h-[360px] sm:min-h-[480px] cursor-pointer flex-col gap-2 border-r border-border p-1.5 sm:p-2.5 transition-colors last:border-r-0",
         "hover:bg-muted/25 focus-within:bg-muted/15",
-        isToday && "bg-accent/25",
-        isSelected && "bg-accent/40",
+        isToday && "bg-accent/20",
+        isSelected && !isToday && "bg-accent/35",
       )}
     >
       {events.map((event) => (
@@ -153,8 +156,8 @@ function WeekEventCard({
         onOpenEvent(event);
       }}
       className={cn(
-        "flex flex-col gap-1 rounded-lg border border-border bg-background p-2 text-left transition-colors",
-        "hover:border-primary/40 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2 sm:p-2.5 text-left transition-all shadow-xs",
+        "hover:border-primary/40 hover:bg-card hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         cancelled && "opacity-60",
         !cancelled && completed && "opacity-75",
       )}
@@ -170,7 +173,7 @@ function WeekEventCard({
       </span>
       <span
         className={cn(
-          "text-sm font-medium leading-tight text-foreground",
+          "text-xs sm:text-sm font-medium leading-tight text-foreground line-clamp-2",
           cancelled && "line-through",
         )}
       >
@@ -178,7 +181,7 @@ function WeekEventCard({
       </span>
       <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
         <Icon className="size-3 shrink-0" aria-hidden="true" />
-        {eventTypeLabel(event.type)}
+        <span className="truncate">{eventTypeLabel(event.type)}</span>
       </span>
       {event.location && (
         <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
