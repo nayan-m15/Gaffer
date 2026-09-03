@@ -49,10 +49,10 @@ export function AgendaView({
   }, [events, month]);
 
   return (
-    <div className={cn("flex flex-col gap-3 min-h-0", className)}>
+    <div className={cn("flex flex-col gap-2.5 h-full min-h-0 flex-1", className)}>
       {/* Optional Month Header Navigation */}
       {onNavigateMonth && (
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex shrink-0 items-center justify-between gap-1">
           <p className="truncate text-sm font-semibold text-foreground" aria-live="polite">
             {formatMonthYear(month)} Agenda
           </p>
@@ -96,7 +96,7 @@ export function AgendaView({
           </Button>
         </div>
       ) : (
-        <div className="max-h-[175px] overflow-y-auto rounded-xl border border-border bg-card pr-0.5 shadow-xs">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card pr-0.5 shadow-xs">
           {groups.map(([dayKey, dayEvents], index) => (
             <AgendaDayGroup
               key={dayKey}

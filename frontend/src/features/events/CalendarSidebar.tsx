@@ -45,18 +45,20 @@ export function CalendarSidebar({
   className,
 }: CalendarSidebarProps) {
   return (
-    <div className={cn("flex flex-col gap-3.5 justify-start", className)}>
-      <AgendaView
-        month={month}
-        events={events}
-        now={now}
-        onOpenEvent={onOpenEvent}
-        onCreateEvent={() => onCreateEvent()}
-        onNavigateMonth={onNavigateMonth}
-        className="shrink-0 max-h-[230px]"
-      />
+    <div className={cn("flex h-full min-h-0 flex-col justify-between gap-3", className)}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AgendaView
+          month={month}
+          events={events}
+          now={now}
+          onOpenEvent={onOpenEvent}
+          onCreateEvent={() => onCreateEvent()}
+          onNavigateMonth={onNavigateMonth}
+          className="h-full min-h-0 flex-1"
+        />
+      </div>
 
-      <div className="flex flex-col gap-3 pt-1 border-t border-border/60 shrink-0">
+      <div className="mt-auto flex shrink-0 flex-col gap-2 pt-2 border-t border-border/60">
         <OtherCalendarsSection />
 
         <UndatedSection

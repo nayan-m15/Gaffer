@@ -309,9 +309,9 @@ export default function EventsPage() {
             role="dialog"
             aria-modal="true"
             aria-label="Calendars panel"
-            className="absolute inset-y-0 right-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto border-l border-border bg-card p-4 shadow-xl"
+            className="absolute inset-y-0 right-0 flex w-80 max-w-[88vw] flex-col overflow-hidden border-l border-border bg-card p-4 shadow-xl"
           >
-            <div className="mb-2 flex justify-end">
+            <div className="mb-2 flex justify-end shrink-0">
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -321,7 +321,7 @@ export default function EventsPage() {
                 <X className="size-4" />
               </Button>
             </div>
-            {renderSidebar(true)}
+            <div className="min-h-0 flex-1">{renderSidebar(true, "h-full")}</div>
           </aside>
         </div>
       )}
