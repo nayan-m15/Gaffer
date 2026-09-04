@@ -9,8 +9,11 @@ interface FooterLink {
 
 const FOOTER_LINKS: FooterLink[] = [
   { label: "Dashboard", path: "/dashboard" },
-  { label: "Features", path: "/#features" },
-  { label: "How It Works", path: "/#how-it-works" },
+  { label: "Roster", path: "/athletes" },
+  { label: "Events", path: "/events" },
+  { label: "Live Logger", path: "/live-logger" },
+  { label: "Stats", path: "/statistics" },
+  { label: "Team", path: "/team" },
 ];
 
 /**

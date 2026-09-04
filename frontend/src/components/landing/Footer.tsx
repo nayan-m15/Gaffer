@@ -2,65 +2,75 @@ import { SportLogo } from "@/components/brand/SportLogo";
 import { brand } from "@/data/brand";
 
 /**
- * Public-site footer links.
+ * Landing-page footer navigation.
  *
- * Only routes that actually exist in the app — there's no Terms of
- * Service / Privacy Policy page yet, so those aren't linked here.
+ * Anchors to the three core chapters of the landing-page story.  The `href`
+ * values are root-relative so the links also resolve when the footer is
+ * rendered from another public route.
  */
 const FOOTER_LINKS = [
-  { label: "Home", href: "/#home" },
   { label: "Philosophy", href: "/#philosophy" },
-  { label: "Roster", href: "/#roster" },
-  { label: "Tactics", href: "/#tactics" },
-  { label: "Matchday", href: "/#matchday" },
+  { label: "Tactical Pitch", href: "/#tactics" },
   { label: "Analytics", href: "/#analytics" },
-  { label: "Log In", href: "/login" },
-  { label: "Get Started", href: "/signup" },
 ] as const;
 
 /**
- * Footer — Shared marketing-site footer.
+ * Footer — custom marketing footer for the landing page.
  *
- * Used at the bottom of the public pages (Landing, Features, How It Works).
- * Always rendered with the same dark cinematic treatment as the Features /
- * How It Works stadium backdrop (bg-[#0B1218], white/opacity text) so it
- * looks identical everywhere it's used, regardless of the site theme toggle.
+ * A brand block (logo, wordmark, tagline, copyright) on the left with a
+ * chapter navigation column on the right.  Every colour goes through the
+ * semantic theme tokens (`background`, `foreground`, `muted-foreground`,
+ * `border`, `brand`) so the footer follows the navbar's light / dark toggle
+ * driven by the `.dark` class on `<html>`.
+ *
+ * Rendered with `relative z-10` — the same layer as `<main>` — so it paints
+ * above the fixed stadium backdrop behind the page.
  */
 export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-white/10 bg-[#0B1218]">
-      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Brand + copyright */}
-          <div className="flex items-center gap-2">
+    <footer className="animate-on-scroll relative z-10 border-t border-border bg-background">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between lg:gap-16">
+          {/* ── Brand block ─────────────────────────────────────────────── */}
+          <div className="max-w-sm">
             <a
-              href="/"
-              className="flex items-center gap-1.5 text-white transition-opacity hover:opacity-80"
+              href="/#home"
+              className="inline-flex items-center gap-2.5 text-foreground transition-opacity hover:opacity-80"
             >
-              <SportLogo size={18} className="rounded" />
-              <span className="text-xs font-semibold tracking-tight">
+              <SportLogo size={32} className="rounded" />
+              <span className="font-display text-lg font-bold tracking-tight">
                 {brand.name}
               </span>
             </a>
-            <span aria-hidden="true" className="text-white/20">
-              &middot;
-            </span>
-            <span className="text-xs text-white/35">
-              &copy; {year} All rights reserved.
-            </span>
+
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {brand.tagline}
+            </p>
+
+            <p className="mt-6 text-xs text-muted-foreground">
+              &copy; {year} {brand.name}. All rights reserved.
+            </p>
           </div>
 
-          {/* Links */}
-          <nav aria-label="Footer navigation">
-            <ul className="flex flex-wrap gap-x-5 gap-y-1.5">
+          {/* ── Chapter navigation ──────────────────────────────────────── */}
+          <nav aria-label="Footer navigation" className="shrink-0">
+            <p className="font-mono text-xs font-semibold uppercase tracking-wider text-brand">
+              Explore
+            </p>
+
+            <ul className="mt-4 space-y-3">
               {FOOTER_LINKS.map((link) => (
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className="text-xs text-white/60 transition-colors hover:text-white"
+                    className="group inline-flex items-center gap-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
                   >
+                    <span
+                      aria-hidden="true"
+                      className="h-px w-3 rounded-full bg-border transition-all duration-200 group-hover:w-5 group-hover:bg-brand"
+                    />
                     {link.label}
                   </a>
                 </li>

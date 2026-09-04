@@ -87,8 +87,8 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
       aria-label="Story chapters"
       className="fixed right-3 sm:right-6 lg:right-8 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col items-end select-none pointer-events-auto"
     >
-      <div className="flex flex-col items-end gap-3.5 py-4 px-3.5 sm:px-4 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
-        <span className="text-[9px] font-mono uppercase tracking-widest text-white/30 pr-1 pb-0.5 border-b border-white/10 w-full text-right">
+      <div className="flex flex-col items-end gap-3.5 py-4 px-3.5 sm:px-4 rounded-2xl bg-background/80 backdrop-blur-xl border border-border shadow-2xl">
+        <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground pr-1 pb-0.5 border-b border-border w-full text-right">
           Sections
         </span>
 
@@ -104,8 +104,8 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
               className={cn(
                 "group flex items-center gap-3 py-1 text-xs lg:text-[13px] font-mono font-medium tracking-wide uppercase transition-all duration-200",
                 isActive
-                  ? "text-emerald-400 font-bold scale-[1.04] origin-right"
-                  : "text-white/50 hover:text-white",
+                  ? "text-brand font-bold scale-[1.04] origin-right"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {/* Always visible label */}
@@ -113,8 +113,8 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
                 className={cn(
                   "transition-all duration-200 whitespace-nowrap",
                   isActive
-                    ? "text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.6)]"
-                    : "group-hover:text-white",
+                    ? "text-brand drop-shadow-[0_0_10px_rgba(5,150,105,0.4)] dark:drop-shadow-[0_0_10px_rgba(16,185,129,0.6)]"
+                    : "group-hover:text-foreground",
                 )}
               >
                 {item.label}
@@ -125,8 +125,8 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
                 className={cn(
                   "h-[2px] rounded-full transition-all duration-300",
                   isActive
-                    ? "w-8 bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]"
-                    : "w-3 bg-white/30 group-hover:w-5 group-hover:bg-white/70",
+                    ? "w-8 bg-brand shadow-[0_0_10px_rgba(5,150,105,0.6)] dark:shadow-[0_0_10px_rgba(16,185,129,0.9)]"
+                    : "w-3 bg-border group-hover:w-5 group-hover:bg-muted-foreground",
                 )}
               />
             </a>
