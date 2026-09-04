@@ -23,7 +23,7 @@ export function Hero() {
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col justify-center items-center overflow-hidden bg-[#0B1218] pb-12"
+      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col justify-center items-center overflow-hidden bg-background pb-12"
     >
       {/* ── Atmospheric background layer ──────────────────────────────── */}
       <HeroBackground />
@@ -33,7 +33,7 @@ export function Hero() {
         <div className="mx-auto max-w-3xl text-center">
           {/* Eyebrow */}
           <span
-            className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium tracking-wide text-white/70 backdrop-blur-sm animate-fade-in"
+            className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-xs font-medium tracking-wide text-muted-foreground animate-fade-in"
           >
             <span className="size-1.5 rounded-full bg-brand animate-pulse-subtle" />
             For Amateur Football Coaches
@@ -42,13 +42,13 @@ export function Hero() {
           {/* Headline — exact wording from the product spec */}
           <h1
             id="hero-heading"
-            className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[3.5rem] xl:text-6xl animate-fade-in-up"
+            className="font-display text-4xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-[3.5rem] xl:text-6xl animate-fade-in-up"
           >
             {brand.tagline}
           </h1>
 
           {/* Supporting description */}
-          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg animate-fade-in-up animation-delay-150">
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg animate-fade-in-up animation-delay-150">
             {brand.description}
           </p>
 
@@ -69,7 +69,7 @@ export function Hero() {
               href="/login"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "w-full gap-2 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto",
+                "w-full gap-2 sm:w-auto",
               )}
             >
               <LogIn className="size-4" />
@@ -78,7 +78,7 @@ export function Hero() {
           </div>
 
           {/* Trust signal */}
-          <p className="mt-5 text-xs text-white/30 animate-fade-in-up animation-delay-450">
+          <p className="mt-5 text-xs text-muted-foreground animate-fade-in-up animation-delay-450">
             Free to get started — no credit card required.
           </p>
         </div>
@@ -87,7 +87,7 @@ export function Hero() {
       {/* Scroll indicator prompt */}
       <a
         href="#philosophy"
-        className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white/40 text-[10px] sm:text-xs font-mono tracking-widest uppercase transition-colors hover:text-white/80 animate-bounce-slow"
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-muted-foreground text-[10px] sm:text-xs font-mono tracking-widest uppercase transition-colors hover:text-foreground animate-bounce-slow"
         aria-label="Scroll to explore"
       >
         <span>Scroll to enter</span>
@@ -123,72 +123,72 @@ export function Hero() {
 function HeroBackground() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-      {/* Base gradient — dark with a cool blue-teal undertone */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0B1218] via-[#0A1419] to-[#0B1218]" />
+      {/* Base gradient — theme-aware background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-background" />
 
       {/* Subtle grass / pitch-green tint — gives the feel of a real pitch */}
-      <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/[0.08] via-emerald-800/[0.06] to-emerald-900/[0.04]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/[0.06] via-emerald-800/[0.04] to-emerald-900/[0.02] dark:from-emerald-900/[0.08] dark:via-emerald-800/[0.06] dark:to-emerald-900/[0.04]" />
 
       {/* Floodlight glow — top centre (brighter for atmosphere) */}
-      <div className="absolute left-1/2 top-0 h-[600px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/15 blur-[150px]" />
+      <div className="absolute left-1/2 top-0 h-[600px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/10 blur-[150px] dark:bg-brand/15" />
 
       {/* Secondary warm floodlight — lower sides for depth */}
       <div className="absolute -left-20 top-1/3 h-[300px] w-[400px] rounded-full bg-brand/5 blur-[120px]" />
       <div className="absolute -right-20 top-1/3 h-[300px] w-[400px] rounded-full bg-brand/5 blur-[120px]" />
 
       {/* Softer vignette — lets pitch markings show through */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,#0B1218_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,var(--background)_100%)]" />
 
       {/* ── Full pitch markings SVG ─────────────────────────────────────── */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-[0.07]"
+        className="absolute inset-0 h-full w-full opacity-[0.04] dark:opacity-[0.07]"
         viewBox="0 0 1200 800"
         preserveAspectRatio="xMidYMid slice"
       >
         {/* Outer boundary — touchlines and goal lines */}
         <rect
           x="100" y="60" width="1000" height="680"
-          stroke="white" strokeWidth="2" fill="none"
+          stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground"
         />
 
         {/* Halfway line */}
-        <line x1="600" y1="60" x2="600" y2="740" stroke="white" strokeWidth="2" />
+        <line x1="600" y1="60" x2="600" y2="740" stroke="currentColor" strokeWidth="2" className="text-foreground" />
 
         {/* Centre circle */}
-        <circle cx="600" cy="400" r="95" stroke="white" strokeWidth="2" fill="none" />
+        <circle cx="600" cy="400" r="95" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Centre spot */}
-        <circle cx="600" cy="400" r="5" fill="white" />
+        <circle cx="600" cy="400" r="5" fill="currentColor" className="text-foreground" />
 
         {/* Left penalty area */}
-        <rect x="100" y="220" width="170" height="360" stroke="white" strokeWidth="2" fill="none" />
+        <rect x="100" y="220" width="170" height="360" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Left goal area (six-yard box) */}
-        <rect x="100" y="310" width="60" height="180" stroke="white" strokeWidth="2" fill="none" />
+        <rect x="100" y="310" width="60" height="180" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Left penalty spot */}
-        <circle cx="210" cy="400" r="4" fill="white" />
+        <circle cx="210" cy="400" r="4" fill="currentColor" className="text-foreground" />
 
         {/* Left penalty arc */}
-        <path d="M 270 310 A 95 95 0 0 1 270 490" stroke="white" strokeWidth="2" fill="none" />
+        <path d="M 270 310 A 95 95 0 0 1 270 490" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Right penalty area */}
-        <rect x="930" y="220" width="170" height="360" stroke="white" strokeWidth="2" fill="none" />
+        <rect x="930" y="220" width="170" height="360" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Right goal area (six-yard box) */}
-        <rect x="1040" y="310" width="60" height="180" stroke="white" strokeWidth="2" fill="none" />
+        <rect x="1040" y="310" width="60" height="180" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Right penalty spot */}
-        <circle cx="990" cy="400" r="4" fill="white" />
+        <circle cx="990" cy="400" r="4" fill="currentColor" className="text-foreground" />
 
         {/* Right penalty arc */}
-        <path d="M 930 310 A 95 95 0 0 0 930 490" stroke="white" strokeWidth="2" fill="none" />
+        <path d="M 930 310 A 95 95 0 0 0 930 490" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
 
         {/* Corner arcs */}
-        <path d="M 100 75 A 15 15 0 0 1 115 60" stroke="white" strokeWidth="2" fill="none" />
-        <path d="M 1085 60 A 15 15 0 0 1 1100 75" stroke="white" strokeWidth="2" fill="none" />
-        <path d="M 115 740 A 15 15 0 0 1 100 725" stroke="white" strokeWidth="2" fill="none" />
-        <path d="M 1100 725 A 15 15 0 0 1 1085 740" stroke="white" strokeWidth="2" fill="none" />
+        <path d="M 100 75 A 15 15 0 0 1 115 60" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
+        <path d="M 1085 60 A 15 15 0 0 1 1100 75" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
+        <path d="M 115 740 A 15 15 0 0 1 100 725" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
+        <path d="M 1100 725 A 15 15 0 0 1 1085 740" stroke="currentColor" strokeWidth="2" fill="none" className="text-foreground" />
       </svg>
     </div>
   );
