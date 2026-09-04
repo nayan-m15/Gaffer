@@ -31,6 +31,14 @@ const nameSchema = z
 
 const gamePlanContentSchema = z.object({
   formationId: z.string().trim().min(1, 'Formation is required.'),
+  // Squad selection — position ID -> athlete ID (or null for an empty slot).
+  assignments: z.record(z.string(), z.string().uuid().nullable()),
+  substituteIds: z
+    .array(z.string().uuid())
+    .max(15, 'Maximum 15 substitutes allowed.')
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: 'Substitutes must be unique athletes.',
+    }),
   defensiveStyle: z.enum(DEFENSIVE_STYLES),
   defensiveWidth: scaleTen,
   defensiveDepth: scaleTen,
@@ -45,14 +53,39 @@ const gamePlanContentSchema = z.object({
   cornerTakerId: z.string().uuid().nullable(),
 });
 
-export const createGamePlanSchema = gamePlanContentSchema.partial().extend({
-  name: nameSchema,
-});
+/**
+ * A player may never be on the pitch and on the bench at once. Applied to both
+ * create and update, where either half of the squad may be absent from the
+ * payload — in that case there is nothing to cross-check.
+ */
+function squadIsConsistent(value: {
+  assignments?: Record<string, string | null>;
+  substituteIds?: string[];
+}): boolean {
+  if (!value.assignments || !value.substituteIds) return true;
+
+  const startingIds = new Set(
+    Object.values(value.assignments).filter(
+      (id): id is string => typeof id === 'string',
+    ),
+  );
+
+  return !value.substituteIds.some((subId) => startingIds.has(subId));
+}
+
+const SQUAD_CONFLICT_MESSAGE =
+  'An athlete cannot be in both the starting lineup and substitutes.';
+
+export const createGamePlanSchema = gamePlanContentSchema
+  .partial()
+  .extend({ name: nameSchema })
+  .refine(squadIsConsistent, { message: SQUAD_CONFLICT_MESSAGE });
 
 export type CreateGamePlanDto = z.infer<typeof createGamePlanSchema>;
 
 export const updateGamePlanSchema = gamePlanContentSchema
   .partial()
-  .extend({ name: nameSchema.optional() });
+  .extend({ name: nameSchema.optional() })
+  .refine(squadIsConsistent, { message: SQUAD_CONFLICT_MESSAGE });
 
 export type UpdateGamePlanDto = z.infer<typeof updateGamePlanSchema>;

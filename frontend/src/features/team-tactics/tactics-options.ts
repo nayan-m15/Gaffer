@@ -9,7 +9,7 @@
 
 import type {
   DefensiveStyle,
-  GamePlanContent,
+  GamePlanTactics,
   OffensiveStyle,
 } from "@/services/gamePlans";
 
@@ -118,11 +118,12 @@ export const TACTICS_TABS = [
 export type TacticsTab = (typeof TACTICS_TABS)[number];
 
 /**
- * Values a brand-new game plan starts from — matches the backend column
- * defaults so a freshly created plan and a locally-initialised one agree.
+ * Tactical values a brand-new game plan starts from — matches the backend
+ * column defaults so a freshly created plan and a locally-initialised one
+ * agree. The squad half (formation, starting XI, bench) starts from a blank
+ * board instead, via `useLineupState`.
  */
-export const DEFAULT_GAME_PLAN_CONTENT: GamePlanContent = {
-  formationId: "4-3-3",
+export const DEFAULT_GAME_PLAN_TACTICS: GamePlanTactics = {
   defensiveStyle: "balanced",
   defensiveWidth: 5,
   defensiveDepth: 5,
