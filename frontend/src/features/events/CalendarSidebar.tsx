@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CalendarOff, Check, ChevronDown, EllipsisVertical, Plus, Rss } from "lucide-react";
+import { ChevronDown, Plus, Rss } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Popover,
@@ -11,8 +11,6 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { AgendaView } from "./AgendaView";
-import { EVENT_TYPE_OPTIONS } from "./event-utils";
-import { getEventTypeStyle } from "./event-style";
 import type { EventType, TeamEvent } from "./types";
 
 interface CalendarSidebarProps {
@@ -21,13 +19,10 @@ interface CalendarSidebarProps {
   now: Date;
   events: TeamEvent[];
   /** Local day keys (YYYY-MM-DD) that contain at least one visible event. */
-  eventDays: ReadonlySet<string>;
-  /** Event types hidden through the calendar visibility toggles. */
-  hiddenTypes: ReadonlySet<EventType>;
+  eventDays?: ReadonlySet<string>;
   teamName?: string | null;
   /** Events without a scheduled date — the current data model has none. */
   undatedEvents: TeamEvent[];
-  onToggleType: (type: EventType) => void;
   onNavigateMonth: (direction: 1 | -1) => void;
   onSelectDate: (date: Date) => void;
   onCreateEvent: (type?: EventType) => void;
@@ -36,50 +31,43 @@ interface CalendarSidebarProps {
 }
 
 /**
- * Floating calendar sidebar: agenda view, calendar visibility toggles, and
- * the undated/feed sections. Rendered inline on wide screens and inside the
- * drawer on smaller ones.
+ * Floating calendar sidebar: agenda view, and the undated/feed sections.
+ * Rendered inline on wide screens and inside the drawer on smaller ones.
  */
 export function CalendarSidebar({
   month,
   now,
   events,
-  hiddenTypes,
-  teamName,
   undatedEvents,
-  onToggleType,
   onNavigateMonth,
   onCreateEvent,
   onOpenEvent,
   className,
 }: CalendarSidebarProps) {
   return (
-    <div className={cn("flex h-full flex-col gap-5", className)}>
-      <AgendaView
-        month={month}
-        events={events}
-        now={now}
-        onOpenEvent={onOpenEvent}
-        onCreateEvent={() => onCreateEvent()}
-        onNavigateMonth={onNavigateMonth}
-        className="min-h-0 flex-1"
-      />
+    <div className={cn("flex h-full min-h-0 flex-col justify-between gap-3", className)}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AgendaView
+          month={month}
+          events={events}
+          now={now}
+          onOpenEvent={onOpenEvent}
+          onCreateEvent={() => onCreateEvent()}
+          onNavigateMonth={onNavigateMonth}
+          className="h-full min-h-0 flex-1"
+        />
+      </div>
 
-      <CalendarsSection
-        teamName={teamName}
-        hiddenTypes={hiddenTypes}
-        onToggleType={onToggleType}
-        onCreateEvent={onCreateEvent}
-      />
+      <div className="mt-auto flex shrink-0 flex-col gap-2 pt-2 border-t border-border/60">
+        <OtherCalendarsSection />
 
-      <OtherCalendarsSection />
+        <UndatedSection
+          undatedEvents={undatedEvents}
+          onOpenEvent={onOpenEvent}
+        />
 
-      <UndatedSection
-        undatedEvents={undatedEvents}
-        onOpenEvent={onOpenEvent}
-      />
-
-      <CalendarFeedAction />
+        <CalendarFeedAction />
+      </div>
     </div>
   );
 }
@@ -126,133 +114,7 @@ function CollapsibleSection({
   );
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
- * Calendars — visibility toggles per event type
- * ══════════════════════════════════════════════════════════════════════════ */
 
-function CalendarsSection({
-  teamName,
-  hiddenTypes,
-  onToggleType,
-  onCreateEvent,
-}: {
-  teamName?: string | null;
-  hiddenTypes: ReadonlySet<EventType>;
-  onToggleType: (type: EventType) => void;
-  onCreateEvent: (type: EventType) => void;
-}) {
-  return (
-    <CollapsibleSection
-      title="Calendars"
-      actions={
-        <p className="truncate px-1 text-[11px] text-muted-foreground">
-          {teamName ?? "Team schedule"}
-        </p>
-      }
-    >
-      {EVENT_TYPE_OPTIONS.map((option) => {
-        const style = getEventTypeStyle(option.value);
-        const visible = !hiddenTypes.has(option.value);
-
-        return (
-          <div
-            key={option.value}
-            className="group/calendar-row flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/50"
-          >
-            <span
-              className={cn("size-2.5 shrink-0 rounded-full", style.swatch)}
-              aria-hidden="true"
-            />
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-              {option.label}
-              {!visible && <span className="sr-only"> (hidden)</span>}
-            </span>
-
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={visible}
-              aria-label={`Show ${option.label.toLowerCase()} events`}
-              onClick={() => onToggleType(option.value)}
-              className={cn(
-                "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                visible
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background hover:border-primary/50",
-              )}
-            >
-              {visible && <Check className="size-3" aria-hidden="true" />}
-            </button>
-
-            <CalendarRowMenu
-              type={option.value}
-              label={option.label}
-              visible={visible}
-              onToggleType={onToggleType}
-              onCreateEvent={onCreateEvent}
-            />
-          </div>
-        );
-      })}
-    </CollapsibleSection>
-  );
-}
-
-function CalendarRowMenu({
-  type,
-  label,
-  visible,
-  onToggleType,
-  onCreateEvent,
-}: {
-  type: EventType;
-  label: string;
-  visible: boolean;
-  onToggleType: (type: EventType) => void;
-  onCreateEvent: (type: EventType) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        type="button"
-        aria-label={`${label} calendar options`}
-        className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
-          "hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        )}
-      >
-        <EllipsisVertical className="size-4" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-48 p-1">
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            onCreateEvent(type);
-          }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          New {label.toLowerCase()} event
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            onToggleType(type);
-          }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          <CalendarOff className="size-3.5" aria-hidden="true" />
-          {visible ? "Hide from calendar" : "Show on calendar"}
-        </button>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
  * Other calendars — external subscriptions (not yet supported)
