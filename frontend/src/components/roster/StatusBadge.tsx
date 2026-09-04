@@ -9,19 +9,19 @@ interface StatusBadgeProps {
 /**
  * StatusBadge — compact availability pill for roster rows.
  *
- * Colours mirror the reference design:
- *   - Available  → emerald
+ * Colours per product spec, tuned for light and dark mode:
+ *   - Available  → blue
  *   - Injured    → red
- *   - Suspended  → amber
+ *   - Suspended  → yellow
  */
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const styles = {
     Available:
-      "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+      "border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400",
     Injured:
-      "bg-red-500/10 text-red-400 border-red-500/20",
+      "border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400",
     Suspended:
-      "bg-amber-500/10 text-amber-400 border-amber-500/20",
+      "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
   } as const satisfies Record<AthleteStatus, string>;
 
   return (

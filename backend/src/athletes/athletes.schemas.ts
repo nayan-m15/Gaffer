@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { athleteStatus } from '../database/schema';
+
+export const athleteStatusSchema = z.enum(athleteStatus.enumValues, {
+  error: 'Status must be one of: available, injured, suspended.',
+});
 
 export const createAthleteSchema = z.object({
   firstName: z
@@ -31,6 +36,7 @@ export const createAthleteSchema = z.object({
     .min(1, 'Squad number must be between 1 and 99.')
     .max(99, 'Squad number must be between 1 and 99.')
     .optional(),
+  status: athleteStatusSchema.optional(),
 });
 
 export type CreateAthleteDto = z.infer<typeof createAthleteSchema>;

@@ -170,6 +170,7 @@ export default function AthletesPage() {
       dateOfBirth: values.dateOfBirth || undefined,
       position: values.position || undefined,
       squadNumber: values.squadNumber || undefined,
+      status: values.status,
     };
 
     if (editingBackendAthlete) {

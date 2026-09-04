@@ -102,6 +102,11 @@ export const eventStatus = pgEnum('event_status', [
   'cancelled',
   'completed',
 ]);
+export const athleteStatus = pgEnum('athlete_status', [
+  'available',
+  'injured',
+  'suspended',
+]);
 
 export const teams = pgTable('teams', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -141,6 +146,7 @@ export const athletes = pgTable(
     dateOfBirth: date('date_of_birth', { mode: 'string' }),
     position: text('position'),
     squadNumber: integer('squad_number'),
+    status: athleteStatus('status').default('available').notNull(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     ...timestamps,
   },
