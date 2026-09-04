@@ -135,21 +135,36 @@ export function useLineupState(athletes: BackendAthlete[]) {
   }, [formation, assignments, athletes]);
 
   const misplacedAthleteIds = useMemo(() => {
-  if (!formation) return [];
-  const ids: string[] = [];
-  for (const pos of formation.positions) {
-    const athleteId = assignments[pos.id];
-    if (!athleteId) continue;
-    const athlete = athletes.find((a) => a.id === athleteId);
-    const role = getPositionRole(athlete?.position ?? null);
-    if (role && role !== pos.role) {
-      ids.push(athleteId);
-    }
-  }
-  return ids;
-}, [formation, assignments, athletes]);
+    if (!formation) return [];
 
-const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
+    const ids: string[] = [];
+
+    for (const pos of formation.positions) {
+      const athleteId = assignments[pos.id];
+
+      if (!athleteId) continue;
+
+      const athlete = athletes.find((a) => a.id === athleteId);
+
+      const athletePosition = (athlete?.position ?? "")
+        .trim()
+        .toUpperCase();
+
+      const slotPosition = pos.label
+        .trim()
+        .toUpperCase();
+
+      // Player is considered "misplaced" when they are not playing
+      // their exact recorded position.
+      if (athletePosition && athletePosition !== slotPosition) {
+        ids.push(athleteId);
+      }
+    }
+
+    return ids;
+  }, [formation, assignments, athletes]);
+
+  const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
 
   /* ── Formation change ──────────────────────────────────────────────────── */
 

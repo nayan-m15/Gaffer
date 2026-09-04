@@ -343,31 +343,90 @@ export function autoFillFormation(
   getPosition: (athleteId: string) => string | null,
 ): { assignments: PitchAssignments; substituteIds: string[] } {
   const formation = FORMATIONS[formationId];
-  if (!formation) return { assignments: {}, substituteIds: [...athleteIds] };
 
-  // Classify athletes by their position role
-  const byRole: Record<PositionRole, string[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  for (const id of athleteIds) {
-    const role = getPositionRole(getPosition(id));
-    if (role) byRole[role].push(id);
+  if (!formation) {
+    return {
+      assignments: {},
+      substituteIds: [...athleteIds],
+    };
   }
 
   const assignments: PitchAssignments = {};
   const assigned = new Set<string>();
 
-  // Assign by role priority: GK → DEF → MID → FWD
+  // Start with every formation position empty.
   for (const pos of formation.positions) {
-    const candidate = byRole[pos.role].find((id) => !assigned.has(id));
+    assignments[pos.id] = null;
+  }
+
+  /**
+   * PASS 1:
+   * Fill formation slots using EXACT player positions only.
+   *
+   * Examples:
+   * LB  -> LB
+   * CB  -> CB
+   * CM  -> CM
+   * CAM -> CAM
+   * RW  -> RW
+   *
+   * A CB will NOT be placed at RB/LB here even though they are all defenders.
+   */
+  for (const pos of formation.positions) {
+    const slotPosition = pos.label.trim().toUpperCase();
+
+    const candidate = athleteIds.find((id) => {
+      if (assigned.has(id)) return false;
+
+      const athletePosition = (getPosition(id) ?? "")
+        .trim()
+        .toUpperCase();
+
+      return athletePosition === slotPosition;
+    });
+
     if (candidate) {
       assignments[pos.id] = candidate;
       assigned.add(candidate);
-    } else {
-      assignments[pos.id] = null;
     }
   }
 
-  // Everyone not assigned goes to substitutes
+  /**
+   * PASS 2:
+   * Look at the remaining substitutes again.
+   *
+   * If formation slots are still empty, allow remaining players to fill
+   * a slot belonging to their GENERAL role:
+   *
+   * DEF -> any remaining DEF slot
+   * MID -> any remaining MID slot
+   * FWD -> any remaining FWD slot
+   *
+   * GK still only matches GK.
+   */
+  for (const pos of formation.positions) {
+    // Exact-position pass already filled this slot.
+    if (assignments[pos.id] !== null) continue;
+
+    const candidate = athleteIds.find((id) => {
+      if (assigned.has(id)) return false;
+
+      const athleteRole = getPositionRole(getPosition(id));
+
+      return athleteRole === pos.role;
+    });
+
+    if (candidate) {
+      assignments[pos.id] = candidate;
+      assigned.add(candidate);
+    }
+  }
+
+  // Anyone who could not be placed remains on the substitutes bench.
   const substituteIds = athleteIds.filter((id) => !assigned.has(id));
 
-  return { assignments, substituteIds };
+  return {
+    assignments,
+    substituteIds,
+  };
 }
