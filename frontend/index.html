@@ -8,9 +8,22 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gaffer - The football coaching platform built for the touchline</title>
+    <script>
+      /* Apply theme class before first paint to prevent FOUC. */
+      try {
+        var t = localStorage.getItem("sport-coaching-theme");
+        if (t === "dark" || (!t && matchMedia("(prefers-color-scheme:dark)").matches)) {
+          document.documentElement.className = "dark";
+        }
+      } catch(e) {}
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><!-- Pre-React loader: prevents white flash before JS bundle loads -->
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--background);z-index:9999;overflow:hidden">
+        <span style="font-family:'Inter Variable',Inter,system-ui,sans-serif;font-weight:700;font-size:1.6rem;letter-spacing:-0.025em;color:var(--foreground);line-height:1">GAFFER</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
