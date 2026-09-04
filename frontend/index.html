@@ -9,21 +9,98 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gaffer - The football coaching platform built for the touchline</title>
     <script>
-      /* Apply theme class before first paint to prevent FOUC. */
+      /* ── Theme detection + background colour before first paint ──────────
+       * Sets the "dark" class AND hardcoded background colours on <html>
+       * and <body> so the very first frame the browser paints already has
+       * the correct theme — no white flash, no dark-mode flash.
+       * Uses hardcoded hex values because CSS custom properties from
+       * index.css have not loaded at this point.                            */
       try {
         var t = localStorage.getItem("sport-coaching-theme");
-        if (t === "dark" || (!t && matchMedia("(prefers-color-scheme:dark)").matches)) {
+        var d = t === "dark" || (!t && matchMedia("(prefers-color-scheme:dark)").matches);
+        if (d) {
           document.documentElement.className = "dark";
+          document.documentElement.style.background = "#0B1218";
+        } else {
+          document.documentElement.style.background = "#F5F3F0";
         }
-      } catch(e) {}
+      } catch(e) {
+        document.documentElement.style.background = "#F5F3F0";
+      }
     </script>
+    <style>
+      /* Ensure body has the correct background from the very first frame.
+         The <head> script sets the colour on <html>; this rule inherits it
+         on <body> and removes the default margin so there is zero white
+         border around the preloader.                                        */
+      body { margin: 0; background: inherit; }
+    </style>
   </head>
   <body>
-    <div id="root"><!-- Pre-React loader: prevents white flash before JS bundle loads -->
-      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--background);z-index:9999;overflow:hidden">
-        <span style="font-family:'Inter Variable',Inter,system-ui,sans-serif;font-weight:700;font-size:1.6rem;letter-spacing:-0.025em;color:var(--foreground);line-height:1">GAFFER</span>
-      </div>
+    <!-- Pre-React loader: shown immediately using hardcoded colours that
+         match the app's light/dark theme.  Sits ABOVE #root so React can
+         mount invisibly underneath.                                          -->
+    <div id="preloader" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99999;overflow:hidden;background:#F5F3F0">
+      <span style="font-family:'Inter Variable',Inter,system-ui,-apple-system,sans-serif;font-weight:700;font-size:1.6rem;letter-spacing:-0.025em;color:#171717;line-height:1">GAFFER</span>
     </div>
+
+    <!-- React root — hidden until the React LoadingScreen is mounted.
+         createRoot() replaces innerHTML but does NOT touch element
+         attributes, so display:none survives the mount.                      -->
+    <div id="root" style="display:none"></div>
+
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- React ↔ pre-loader handoff.
+         Polls for React's .loading-overlay inside #root, then un-hides
+         #root and removes #preloader on the next animation frame so the
+         user sees one seamless loading experience.
+         A 15 s fallback ensures the page isn't stuck if JS fails.           -->
+    <script>
+      (function () {
+        var pre = document.getElementById("preloader");
+        var root = document.getElementById("root");
+        if (!pre || !root) return;
+
+        /* Match the preloader colours to the detected theme. */
+        var isDark = document.documentElement.classList.contains("dark");
+        var bg = isDark ? "#0B1218" : "#F5F3F0";
+        var fg = isDark ? "#E8ECEF" : "#171717";
+        pre.style.background = bg;
+        var textEl = pre.querySelector("span");
+        if (textEl) textEl.style.color = fg;
+
+        var done = false;
+
+        /* Poll each frame until React's loading overlay is in the DOM. */
+        function check() {
+          if (done) return;
+          if (root.querySelector(".loading-overlay")) {
+            done = true;
+            /* Double-rAF: first frame ensures the browser has
+               committed React's paint; second frame swaps layers. */
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                root.style.display = "";
+                pre.remove();
+              });
+            });
+            return;
+          }
+          requestAnimationFrame(check);
+        }
+        requestAnimationFrame(check);
+
+        /* Last-resort fallback: if React never mounts (e.g. JS bundle
+           failed to load), reveal the root after 15 s.                  */
+        setTimeout(function () {
+          if (!done) {
+            done = true;
+            root.style.display = "";
+            pre.remove();
+          }
+        }, 15000);
+      })();
+    </script>
   </body>
 </html>
