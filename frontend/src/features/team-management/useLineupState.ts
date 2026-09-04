@@ -15,9 +15,7 @@ import type { BackendAthlete } from "@/services/athletes";
 import {
   FORMATIONS,
   DEFAULT_FORMATION_ID,
-  remapPlayers,
   autoFillFormation,
-  getPositionRole,
 } from "./formations";
 import type { DragItem, PitchAssignments, SavedLineup } from "./types";
 
@@ -173,24 +171,34 @@ export function useLineupState(athletes: BackendAthlete[]) {
       if (newFormationId === formationId) return;
       if (!FORMATIONS[newFormationId]) return;
 
-      const { assignments: newAssignments, overflowToSubs } = remapPlayers(
-        formationId,
+      const allIds = athletes.map((a) => a.id);
+
+      const getPosition = (id: string) =>
+        athletes.find((a) => a.id === id)?.position ?? null;
+
+      /*
+       * Re-run the same exact-position auto-fill whenever the
+       * formation changes.
+       *
+       * Pass 1: exact position matches
+       * Pass 2: general role matches for remaining empty positions
+       * Everyone else remains on the substitutes bench.
+       */
+      const {
+        assignments: newAssignments,
+        substituteIds: newSubs,
+      } = autoFillFormation(
         newFormationId,
-        assignments,
+        allIds,
+        getPosition,
       );
 
       setFormationIdState(newFormationId);
       setAssignments(newAssignments);
-
-      // Merge overflow into existing substitutes (avoid duplicates)
-      setSubstituteIds((prev) => {
-        const merged = new Set([...prev, ...overflowToSubs]);
-        return Array.from(merged);
-      });
-
+      setSubstituteIds(newSubs);
       setError(null);
     },
-    [formationId, assignments],
+    [formationId, athletes],
   );
 
   /* ── Drag start / end ──────────────────────────────────────────────────── */
