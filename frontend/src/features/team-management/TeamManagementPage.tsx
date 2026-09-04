@@ -395,7 +395,15 @@ export default function TeamManagementPage() {
           ok={lineup.hasGoalkeeper}
           okText="Set"
           failText="Not set"
-        />
+            />
+
+        {lineup.hasMisplacedPlayers && (
+          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+            {lineup.misplacedAthleteIds.length === 1
+              ? "1 player not in their optimal position"
+              : `${lineup.misplacedAthleteIds.length} players not in their optimal positions`}
+          </span>
+        )}
 
         {!lineup.hasEnoughForXi && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">

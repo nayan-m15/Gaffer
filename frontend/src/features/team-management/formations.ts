@@ -309,15 +309,8 @@ export function remapPlayers(
  *
  * Athletes whose position doesn't match or who are left over go to subs.
  */
-export function autoFillFormation(
-  formationId: string,
-  athleteIds: string[],
-  getPosition: (athleteId: string) => string | null,
-): { assignments: PitchAssignments; substituteIds: string[] } {
-  const formation = FORMATIONS[formationId];
-  if (!formation) return { assignments: {}, substituteIds: [...athleteIds] };
 
-  const roleMap: Record<string, PositionRole> = {
+const POSITION_ROLE_MAP: Record<string, PositionRole> = {
     GK: "GK",
     CB: "DEF",
     LB: "DEF",
@@ -339,18 +332,24 @@ export function autoFillFormation(
     CF: "FWD",
   };
 
+export function getPositionRole(position: string | null | undefined): PositionRole | null {
+  if (!position) return null;
+  return POSITION_ROLE_MAP[position.toUpperCase()] ?? null;
+}
+
+export function autoFillFormation(
+  formationId: string,
+  athleteIds: string[],
+  getPosition: (athleteId: string) => string | null,
+): { assignments: PitchAssignments; substituteIds: string[] } {
+  const formation = FORMATIONS[formationId];
+  if (!formation) return { assignments: {}, substituteIds: [...athleteIds] };
+
   // Classify athletes by their position role
   const byRole: Record<PositionRole, string[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  const unclassified: string[] = [];
-
   for (const id of athleteIds) {
-    const pos = (getPosition(id) ?? "").toUpperCase();
-    const role = roleMap[pos];
-    if (role) {
-      byRole[role].push(id);
-    } else {
-      unclassified.push(id);
-    }
+    const role = getPositionRole(getPosition(id));
+    if (role) byRole[role].push(id);
   }
 
   const assignments: PitchAssignments = {};
@@ -358,24 +357,12 @@ export function autoFillFormation(
 
   // Assign by role priority: GK → DEF → MID → FWD
   for (const pos of formation.positions) {
-    const pool = byRole[pos.role];
-    const candidate = pool.find((id) => !assigned.has(id));
+    const candidate = byRole[pos.role].find((id) => !assigned.has(id));
     if (candidate) {
       assignments[pos.id] = candidate;
       assigned.add(candidate);
     } else {
       assignments[pos.id] = null;
-    }
-  }
-
-  // Fill remaining empty slots with unclassified players
-  for (const pos of formation.positions) {
-    if (assignments[pos.id] === null && unclassified.length > 0) {
-      const candidate = unclassified.shift()!;
-      if (!assigned.has(candidate)) {
-        assignments[pos.id] = candidate;
-        assigned.add(candidate);
-      }
     }
   }
 

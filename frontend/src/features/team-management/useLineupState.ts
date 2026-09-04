@@ -17,6 +17,7 @@ import {
   DEFAULT_FORMATION_ID,
   remapPlayers,
   autoFillFormation,
+  getPositionRole,
 } from "./formations";
 import type { DragItem, PitchAssignments, SavedLineup } from "./types";
 
@@ -132,6 +133,23 @@ export function useLineupState(athletes: BackendAthlete[]) {
     const athlete = athletes.find((a) => a.id === gkAthleteId);
     return isGoalkeeper(athlete?.position ?? null);
   }, [formation, assignments, athletes]);
+
+  const misplacedAthleteIds = useMemo(() => {
+  if (!formation) return [];
+  const ids: string[] = [];
+  for (const pos of formation.positions) {
+    const athleteId = assignments[pos.id];
+    if (!athleteId) continue;
+    const athlete = athletes.find((a) => a.id === athleteId);
+    const role = getPositionRole(athlete?.position ?? null);
+    if (role && role !== pos.role) {
+      ids.push(athleteId);
+    }
+  }
+  return ids;
+}, [formation, assignments, athletes]);
+
+const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
 
   /* ── Formation change ──────────────────────────────────────────────────── */
 
@@ -356,6 +374,8 @@ export function useLineupState(athletes: BackendAthlete[]) {
     pitchCount,
     isXiComplete,
     hasGoalkeeper,
+    misplacedAthleteIds,     
+    hasMisplacedPlayers,
     pitchAthleteIds,
 
     // Derived athlete counts
