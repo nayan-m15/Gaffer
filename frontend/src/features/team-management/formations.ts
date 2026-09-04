@@ -309,15 +309,8 @@ export function remapPlayers(
  *
  * Athletes whose position doesn't match or who are left over go to subs.
  */
-export function autoFillFormation(
-  formationId: string,
-  athleteIds: string[],
-  getPosition: (athleteId: string) => string | null,
-): { assignments: PitchAssignments; substituteIds: string[] } {
-  const formation = FORMATIONS[formationId];
-  if (!formation) return { assignments: {}, substituteIds: [...athleteIds] };
 
-  const roleMap: Record<string, PositionRole> = {
+const POSITION_ROLE_MAP: Record<string, PositionRole> = {
     GK: "GK",
     CB: "DEF",
     LB: "DEF",
@@ -339,48 +332,101 @@ export function autoFillFormation(
     CF: "FWD",
   };
 
-  // Classify athletes by their position role
-  const byRole: Record<PositionRole, string[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  const unclassified: string[] = [];
+export function getPositionRole(position: string | null | undefined): PositionRole | null {
+  if (!position) return null;
+  return POSITION_ROLE_MAP[position.toUpperCase()] ?? null;
+}
 
-  for (const id of athleteIds) {
-    const pos = (getPosition(id) ?? "").toUpperCase();
-    const role = roleMap[pos];
-    if (role) {
-      byRole[role].push(id);
-    } else {
-      unclassified.push(id);
-    }
+export function autoFillFormation(
+  formationId: string,
+  athleteIds: string[],
+  getPosition: (athleteId: string) => string | null,
+): { assignments: PitchAssignments; substituteIds: string[] } {
+  const formation = FORMATIONS[formationId];
+
+  if (!formation) {
+    return {
+      assignments: {},
+      substituteIds: [...athleteIds],
+    };
   }
 
   const assignments: PitchAssignments = {};
   const assigned = new Set<string>();
 
-  // Assign by role priority: GK → DEF → MID → FWD
+  // Start with every formation position empty.
   for (const pos of formation.positions) {
-    const pool = byRole[pos.role];
-    const candidate = pool.find((id) => !assigned.has(id));
+    assignments[pos.id] = null;
+  }
+
+  /**
+   * PASS 1:
+   * Fill formation slots using EXACT player positions only.
+   *
+   * Examples:
+   * LB  -> LB
+   * CB  -> CB
+   * CM  -> CM
+   * CAM -> CAM
+   * RW  -> RW
+   *
+   * A CB will NOT be placed at RB/LB here even though they are all defenders.
+   */
+  for (const pos of formation.positions) {
+    const slotPosition = pos.label.trim().toUpperCase();
+
+    const candidate = athleteIds.find((id) => {
+      if (assigned.has(id)) return false;
+
+      const athletePosition = (getPosition(id) ?? "")
+        .trim()
+        .toUpperCase();
+
+      return athletePosition === slotPosition;
+    });
+
     if (candidate) {
       assignments[pos.id] = candidate;
       assigned.add(candidate);
-    } else {
-      assignments[pos.id] = null;
     }
   }
 
-  // Fill remaining empty slots with unclassified players
+  /**
+   * PASS 2:
+   * Look at the remaining substitutes again.
+   *
+   * If formation slots are still empty, allow remaining players to fill
+   * a slot belonging to their GENERAL role:
+   *
+   * DEF -> any remaining DEF slot
+   * MID -> any remaining MID slot
+   * FWD -> any remaining FWD slot
+   *
+   * GK still only matches GK.
+   */
   for (const pos of formation.positions) {
-    if (assignments[pos.id] === null && unclassified.length > 0) {
-      const candidate = unclassified.shift()!;
-      if (!assigned.has(candidate)) {
-        assignments[pos.id] = candidate;
-        assigned.add(candidate);
-      }
+    // Exact-position pass already filled this slot.
+    if (assignments[pos.id] !== null) continue;
+
+    const candidate = athleteIds.find((id) => {
+      if (assigned.has(id)) return false;
+
+      const athleteRole = getPositionRole(getPosition(id));
+
+      return athleteRole === pos.role;
+    });
+
+    if (candidate) {
+      assignments[pos.id] = candidate;
+      assigned.add(candidate);
     }
   }
 
-  // Everyone not assigned goes to substitutes
+  // Anyone who could not be placed remains on the substitutes bench.
   const substituteIds = athleteIds.filter((id) => !assigned.has(id));
 
-  return { assignments, substituteIds };
+  return {
+    assignments,
+    substituteIds,
+  };
 }
