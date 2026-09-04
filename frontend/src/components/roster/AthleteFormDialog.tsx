@@ -19,19 +19,26 @@ interface AthleteFormDialogProps {
 
 const POSITIONS = ["GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"] as const;
 
+const STATUS_OPTIONS = [
+  { value: "available", label: "Available" },
+  { value: "injured", label: "Injured" },
+  { value: "suspended", label: "Suspended" },
+] as const;
+
 const DEFAULT_VALUES: AthleteFormValues = {
   firstName: "",
   lastName: "",
   dateOfBirth: "",
   position: "ST",
   squadNumber: 0,
+  status: "available",
 };
 
 /**
  * AthleteFormDialog — add / edit athlete form.
  *
- * Collects only the fields persisted by the Sprint 1 backend:
- * firstName, lastName, dateOfBirth, position, squadNumber.
+ * Collects the fields persisted by the backend: firstName, lastName,
+ * dateOfBirth, position, squadNumber and availability status.
  */
 export function AthleteFormDialog({
   isOpen,
@@ -152,15 +159,31 @@ export function AthleteFormDialog({
             </FormField>
           </div>
 
-          <FormField label="Date of birth">
-            <input
-              type="date"
-              value={values.dateOfBirth}
-              onChange={(e) => handleChange("dateOfBirth", e.target.value)}
-              max={new Date().toISOString().slice(0, 10)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
-            />
-          </FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Date of birth">
+              <input
+                type="date"
+                value={values.dateOfBirth}
+                onChange={(e) => handleChange("dateOfBirth", e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
+              />
+            </FormField>
+
+            <FormField label="Status">
+              <select
+                value={values.status}
+                onChange={(e) => handleChange("status", e.target.value as AthleteFormValues["status"])}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
 
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>

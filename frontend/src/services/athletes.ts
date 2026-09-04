@@ -1,11 +1,28 @@
 import { apiFetch } from "@/lib/api";
-import type { Athlete } from "@/components/roster/data";
+import type { Athlete, AthleteStatus } from "@/components/roster/data";
+
+/** Athlete availability status values persisted by the backend (Drizzle enum). */
+export type AthleteStatusValue = "available" | "injured" | "suspended";
+
+/** All accepted status values, in UI display order. */
+export const ATHLETE_STATUS_VALUES: readonly AthleteStatusValue[] = [
+  "available",
+  "injured",
+  "suspended",
+] as const;
+
+/** Maps backend status values to the labels shown in the roster UI. */
+const STATUS_LABELS: Record<AthleteStatusValue, AthleteStatus> = {
+  available: "Available",
+  injured: "Injured",
+  suspended: "Suspended",
+};
 
 /**
  * Raw athlete record returned by the backend.
  *
- * The Sprint 1 schema stores only identity / squad information; statistics and
- * availability are derived or mocked on the frontend.
+ * Statistics are derived or mocked on the frontend; identity, squad and
+ * availability status (available / injured / suspended) are persisted.
  */
 export interface BackendAthlete {
   id: string;
@@ -15,6 +32,7 @@ export interface BackendAthlete {
   dateOfBirth: string | null;
   position: string | null;
   squadNumber: number | null;
+  status: AthleteStatusValue;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -27,6 +45,7 @@ export interface CreateAthleteInput {
   dateOfBirth?: string;
   position?: string;
   squadNumber?: number;
+  status?: AthleteStatusValue;
 }
 
 /** Fields accepted by PATCH /athletes/:id. */
@@ -39,6 +58,7 @@ export interface AthleteFormValues {
   dateOfBirth: string;
   position: string;
   squadNumber: number;
+  status: AthleteStatusValue;
 }
 
 const ATHLETES_PATH = "/athletes";
@@ -122,7 +142,7 @@ export function toUiAthlete(backend: BackendAthlete): Athlete {
     name: `${firstName} ${lastName}`,
     position,
     positionLong: position,
-    status: "Available",
+    status: STATUS_LABELS[backend.status],
     appearances: 0,
     goals: 0,
     assists: 0,
@@ -147,5 +167,6 @@ export function toFormValues(backend: BackendAthlete): AthleteFormValues {
     dateOfBirth: backend.dateOfBirth ?? "",
     position: backend.position ?? "",
     squadNumber: backend.squadNumber ?? 0,
+    status: backend.status,
   };
 }
