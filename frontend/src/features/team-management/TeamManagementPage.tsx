@@ -277,13 +277,14 @@ export default function TeamManagementPage() {
             />
 
             <Button
-              variant="outline"
+              variant={lineup.autoFillEnabled ? "default" : "outline"}
               size="sm"
-              onClick={lineup.autoFill}
+              onClick={lineup.toggleAutoFill}
               className="gap-1.5"
+              aria-pressed={lineup.autoFillEnabled}
             >
               <Wand2 className="size-3.5" />
-              Auto-fill
+              Auto-fill {lineup.autoFillEnabled ? "On" : "Off"}
             </Button>
 
             <Button
