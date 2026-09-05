@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SQL } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes, playerClaimInvites } from '../database/schema';
+import { athletes, playerClaimInvites, teams } from '../database/schema';
 import { AthletesService } from './athletes.service';
 
 describe('AthletesService', () => {
@@ -19,6 +19,7 @@ describe('AthletesService', () => {
   function selectChain(result: unknown) {
     const chain: Record<string, unknown> = {
       from: jest.fn(() => chain),
+      innerJoin: jest.fn(() => chain),
       leftJoin: jest.fn(() => chain),
       where: jest.fn(() => chain),
       groupBy: jest.fn(() => chain),
@@ -149,6 +150,41 @@ describe('AthletesService', () => {
       await expect(service.findOne('team-id', 'missing-id')).rejects.toThrow(
         'Athlete not found.',
       );
+    });
+  });
+
+  describe('findClaimedByUser', () => {
+    it('returns claimed athletes joined to their team name', async () => {
+      const summaries = [
+        {
+          id: 'athlete-1',
+          teamId: 'team-1',
+          teamName: 'Riverside FC',
+          firstName: 'Alex',
+          lastName: 'Morgan',
+          position: 'ST',
+          squadNumber: 9,
+        },
+      ];
+      const chain = selectChain(summaries);
+      const select = jest.fn().mockReturnValue(chain);
+      mockDatabaseService.database = { select };
+
+      const result = await service.findClaimedByUser('user-id');
+
+      expect(result).toBe(summaries);
+      expect(chain.from).toHaveBeenCalledWith(athletes);
+      expect(chain.innerJoin).toHaveBeenCalledWith(teams, expect.any(SQL));
+      expect(chain.where).toHaveBeenCalled();
+    });
+
+    it('returns an empty array, never null, when nothing is claimed', async () => {
+      const chain = selectChain([]);
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+      };
+
+      await expect(service.findClaimedByUser('user-id')).resolves.toEqual([]);
     });
   });
 

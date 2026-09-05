@@ -8,5 +8,6 @@ import { AthletesService } from './athletes.service';
   imports: [TeamsModule, ClaimsModule],
   controllers: [AthletesController],
   providers: [AthletesService],
+  exports: [AthletesService],
 })
 export class AthletesModule {}

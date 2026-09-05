@@ -22,6 +22,7 @@ import {
 } from './auth.schemas';
 import { CurrentUser } from './current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
+import { AthletesService } from '../athletes/athletes.service';
 import { zodValidate } from '../common/zod-validate';
 import { isDatabaseConnectionError } from '../database/drizzle';
 
@@ -68,7 +69,10 @@ function toHttpException(error: unknown): HttpException {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly teamsService: TeamsService) {}
+  constructor(
+    private readonly teamsService: TeamsService,
+    private readonly athletesService: AthletesService,
+  ) {}
 
   @Post('sign-up')
   async signUp(
@@ -175,8 +179,13 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Get('session')
   async session(@CurrentUser() user: AuthenticatedRequest['user']) {
-    const team = await this.teamsService.findTeamForUser(user.id);
-    return { user, team };
+    // `claimedAthletes` is additive: consumers that only read `user` and
+    // `team` keep working unchanged and can ignore the new field.
+    const [team, claimedAthletes] = await Promise.all([
+      this.teamsService.findTeamForUser(user.id),
+      this.athletesService.findClaimedByUser(user.id),
+    ]);
+    return { user, team, claimedAthletes };
   }
 
   // Kicks off the OAuth flow. The frontend calls this via the Better Auth
