@@ -1,272 +1,341 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { isSameMonth, startOfWeek } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Calendar,
-  Loader2,
-  MapPin,
-  RefreshCw,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AgendaView } from "@/features/events/AgendaView";
+import { CalendarSidebar } from "@/features/events/CalendarSidebar";
+import { CalendarToolbar } from "@/features/events/CalendarToolbar";
+import { DayEventsDialog } from "@/features/events/DayEventsDialog";
+import { EventDetailDialog } from "@/features/events/EventDetailDialog";
+import { MobileCalendarView } from "@/features/events/MobileCalendarView";
+import { MonthCalendar } from "@/features/events/MonthCalendar";
+import { WeekView } from "@/features/events/WeekView";
+import {
+  WEEK_STARTS_ON,
+  filterEventTypes,
+  formatMonthYear,
+  formatWeekRangeLabel,
+  getDayEvents,
+  getWeekDays,
+  groupEventsByDay,
+  moveCursor,
+} from "@/features/events/calendar-utils";
+import { useNow } from "@/features/events/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { fetchPlayerEvents } from "@/services/player";
-import type { PlayerEvent } from "@/services/player";
-import {
-  displayEventStatus,
-  eventTypeLabel,
-  formatEventDateTime,
-} from "@/features/events/event-utils";
-import { RsvpWidget } from "./RsvpWidget";
-import type { RsvpStatus } from "@/services/rsvps";
+import type { EventType, TeamEvent } from "@/features/events/types";
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  EVENT TYPE STYLING
- * ═══════════════════════════════════════════════════════════════════════════ */
+type Panel =
+  | { kind: "closed" }
+  | { kind: "view"; eventId: string }
+  | { kind: "day"; date: Date };
 
-const EVENT_TYPE_STYLES: Record<
-  PlayerEvent["type"],
-  { bg: string; text: string }
-> = {
-  match: { bg: "bg-primary/10", text: "text-primary" },
-  training: { bg: "bg-muted", text: "text-foreground" },
-  meeting: { bg: "bg-muted-foreground/10", text: "text-muted-foreground" },
-};
+type CalendarView = "month" | "week" | "agenda";
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  RSVP STATUS PILL (for display in event card header)
- * ═══════════════════════════════════════════════════════════════════════════ */
+export const playerEventsQueryKey = ["player", "events"] as const;
 
-const RSVP_LABELS: Record<RsvpStatus, { label: string; className: string }> = {
-  going: {
-    label: "Going",
-    className: "bg-emerald-500/20 text-emerald-400",
-  },
-  maybe: {
-    label: "Maybe",
-    className: "bg-amber-500/20 text-amber-400",
-  },
-  not_going: {
-    label: "Can't go",
-    className: "bg-red-500/20 text-red-400",
-  },
-};
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  MAIN PAGE COMPONENT
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-const playerEventsQueryKey = ["player", "events"] as const;
-
+/**
+ * Player events page — the same Google-Calendar-style surface as the
+ * coach's EventsPage, in read-only form. No create/edit/cancel affordances
+ * anywhere; clicking an event opens EventDetailDialog in its `readOnly`
+ * branch, which shows the player's own RsvpWidget instead of the coach-only
+ * RSVP breakdown / edit / cancel actions.
+ */
 export default function PlayerEventsPage() {
   const { claimedAthletes } = useAuth();
-  const now = new Date();
+  const athleteId = claimedAthletes[0]?.id;
+  const teamName = claimedAthletes[0]?.teamName;
+  const now = useNow();
 
-  const eventsQuery = useQuery({
+  const {
+    data: events,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: playerEventsQueryKey,
-    queryFn: () => fetchPlayerEvents(claimedAthletes[0]?.id),
-    enabled: claimedAthletes.length > 0,
+    queryFn: () => fetchPlayerEvents(athleteId),
+    enabled: Boolean(athleteId),
   });
 
-  const events = eventsQuery.data ?? [];
+  const [view, setView] = useState<CalendarView>("month");
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [hiddenTypes, setHiddenTypes] = useState<Set<EventType>>(() => new Set());
+  const [panel, setPanel] = useState<Panel>({ kind: "closed" });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Split into upcoming vs past
-  const upcoming = events.filter(
-    (e) => e.status === "scheduled" && new Date(e.scheduledAt) > now,
+  const visibleEvents = useMemo(
+    () => filterEventTypes(events ?? [], hiddenTypes),
+    [events, hiddenTypes],
   );
-  const past = events.filter(
-    (e) => e.status !== "scheduled" || new Date(e.scheduledAt) <= now,
+  const eventsByDay = useMemo(() => groupEventsByDay(visibleEvents), [visibleEvents]);
+  const eventDays = useMemo(() => new Set(eventsByDay.keys()), [eventsByDay]);
+  const weekDays = useMemo(() => getWeekDays(cursor), [cursor]);
+  const label =
+    view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
+
+  const selectedEvent =
+    panel.kind === "view"
+      ? (events?.find((event) => event.id === panel.eventId) ?? null)
+      : null;
+
+  const navigate = useCallback(
+    (direction: 1 | -1) => {
+      setCursor((current) => moveCursor(view, current, direction));
+    },
+    [view],
+  );
+
+  const goToToday = useCallback(() => {
+    const today = new Date();
+    setCursor(today);
+    setSelectedDate(today);
+  }, []);
+
+  /**
+   * Unlike the coach's handleDayClick, an empty day never opens a create
+   * dialog here — there's no player-facing create flow. Days that already
+   * have events still open DayEventsDialog, same as the coach view.
+   */
+  const handleDayClick = useCallback(
+    (date: Date) => {
+      setSelectedDate(date);
+      if (view === "week") {
+        const currentWeek = startOfWeek(cursor, { weekStartsOn: WEEK_STARTS_ON });
+        const targetWeek = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+        if (currentWeek.getTime() !== targetWeek.getTime()) {
+          setCursor(date);
+        }
+      } else if (!isSameMonth(date, cursor)) {
+        setCursor(date);
+      }
+
+      const dayEvents = getDayEvents(eventsByDay, date);
+      if (dayEvents.length > 0) {
+        setPanel({ kind: "day", date });
+      }
+    },
+    [cursor, eventsByDay, view],
+  );
+
+  const handleOpenEvent = useCallback((event: TeamEvent) => {
+    setPanel({ kind: "view", eventId: event.id });
+  }, []);
+
+  const handleToggleType = useCallback((type: EventType) => {
+    setHiddenTypes((current) => {
+      const next = new Set(current);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
+
+  const renderSidebar = (closeDrawer: boolean, className?: string) => (
+    <CalendarSidebar
+      className={className}
+      month={cursor}
+      selectedDate={selectedDate}
+      now={now}
+      events={visibleEvents}
+      eventDays={eventDays}
+      teamName={teamName}
+      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
+      readOnly
+      onNavigateMonth={(direction) => navigate(direction)}
+      onSelectDate={(date) => {
+        handleDayClick(date);
+        if (closeDrawer) setSidebarOpen(false);
+      }}
+      onCreateEvent={() => {}}
+      onOpenEvent={(event) => {
+        handleOpenEvent(event);
+        if (closeDrawer) setSidebarOpen(false);
+      }}
+    />
+  );
+
+  const viewContent = (
+    <>
+      {view === "month" && (
+        <MonthCalendar
+          month={cursor}
+          eventsByDay={eventsByDay}
+          selectedDate={selectedDate}
+          now={now}
+          onSelectDate={handleDayClick}
+          onCreateEvent={handleDayClick}
+          onOpenEvent={handleOpenEvent}
+        />
+      )}
+      {view === "week" && (
+        <WeekView
+          weekOf={cursor}
+          eventsByDay={eventsByDay}
+          selectedDate={selectedDate}
+          now={now}
+          onCreateEvent={handleDayClick}
+          onOpenEvent={handleOpenEvent}
+        />
+      )}
+      {view === "agenda" && (
+        <AgendaView
+          month={cursor}
+          events={visibleEvents}
+          now={now}
+          onOpenEvent={handleOpenEvent}
+          onCreateEvent={() => {}}
+          readOnly
+        />
+      )}
+    </>
   );
 
   return (
     <>
       <PageHeader
         title="Events"
-        subtitle="Team events and your RSVP responses."
+        subtitle="Your team's schedule and your RSVP responses."
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
-        {/* Loading */}
-        {eventsQuery.isLoading && (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+      <div className="flex flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
+        {isLoading && !events && (
+          <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
             Loading events…
           </div>
         )}
-
-        {/* Error */}
-        {eventsQuery.isError && (
+        {isError && !events && (
           <div className="rounded-xl border border-border bg-card p-6">
             <p className="text-sm text-destructive">
-              {eventsQuery.error instanceof ApiError
-                ? eventsQuery.error.message
-                : "Could not load events."}
+              {error instanceof ApiError ? error.message : "Could not load events."}
             </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => void eventsQuery.refetch()}
-            >
-              <RefreshCw className="size-4" />
+            <Button variant="outline" className="mt-4" onClick={() => void refetch()}>
               Try again
             </Button>
           </div>
         )}
-
-        {eventsQuery.data && (
-          <>
-            {/* Upcoming events */}
-            <section>
-              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Upcoming
-              </h2>
-              {upcoming.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-card px-6 py-12 text-center">
-                  <Calendar className="mx-auto size-8 text-muted-foreground" />
-                  <p className="mt-3 text-sm font-medium text-foreground">
-                    No upcoming events
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Your coach hasn't scheduled any events yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {upcoming.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      now={now}
-                      queryKey={playerEventsQueryKey}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Past events */}
-            {past.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Past Events
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {past.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      now={now}
-                      queryKey={playerEventsQueryKey}
-                      isPast
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-          </>
+        {isError && events && (
+          <p role="status" className="text-sm text-destructive">
+            Couldn't refresh events — showing your last saved schedule.
+          </p>
         )}
+
+        {events && (
+          <MobileCalendarView
+            view={view}
+            cursor={cursor}
+            selectedDate={selectedDate}
+            now={now}
+            eventsByDay={eventsByDay}
+            visibleEvents={visibleEvents}
+            hiddenTypes={hiddenTypes}
+            readOnly
+            onToggleType={handleToggleType}
+            onViewChange={setView}
+            onSelectDate={handleDayClick}
+            onNavigate={navigate}
+            onToday={goToToday}
+            onCreateEvent={() => {}}
+            onOpenEvent={handleOpenEvent}
+            onToggleSidebar={() => setSidebarOpen(true)}
+          />
+        )}
+
+        <div className="hidden sm:flex sm:flex-col sm:gap-5">
+          <CalendarToolbar
+            view={view}
+            label={label}
+            hiddenTypes={hiddenTypes}
+            readOnly
+            onToggleType={handleToggleType}
+            onViewChange={setView}
+            onPrevious={() => navigate(-1)}
+            onNext={() => navigate(1)}
+            onToday={goToToday}
+            onNewEvent={() => {}}
+            onToggleSidebar={() => setSidebarOpen(true)}
+          />
+
+          {events && (
+            <div className="flex items-stretch gap-6">
+              <div className="min-w-0 flex-1">{viewContent}</div>
+              <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
+                {renderSidebar(
+                  false,
+                  "h-full rounded-xl border border-border bg-card p-4 shadow-sm",
+                )}
+              </aside>
+            </div>
+          )}
+        </div>
       </div>
+
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Calendars panel"
+            className="absolute inset-y-0 right-0 flex w-80 max-w-[88vw] flex-col overflow-hidden border-l border-border bg-card p-4 shadow-xl"
+          >
+            <div className="mb-2 flex justify-end shrink-0">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close calendars panel"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1">{renderSidebar(true, "h-full")}</div>
+          </aside>
+        </div>
+      )}
+
+      <DayEventsDialog
+        open={panel.kind === "day"}
+        date={panel.kind === "day" ? panel.date : null}
+        events={panel.kind === "day" ? getDayEvents(eventsByDay, panel.date) : []}
+        now={now}
+        readOnly
+        onOpenChange={(open) => {
+          if (!open) setPanel({ kind: "closed" });
+        }}
+        onSelectEvent={handleOpenEvent}
+        onAddEvent={() => {}}
+      />
+
+      <EventDetailDialog
+        open={panel.kind === "view"}
+        event={selectedEvent}
+        now={now}
+        readOnly
+        rsvpQueryKey={playerEventsQueryKey}
+        onOpenChange={(open) => {
+          if (!open) setPanel({ kind: "closed" });
+        }}
+        onEdit={() => {}}
+      />
     </>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  EVENT CARD
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function EventCard({
-  event,
-  now,
-  queryKey,
-  isPast = false,
-}: {
-  event: PlayerEvent;
-  now: Date;
-  queryKey: readonly string[];
-  isPast?: boolean;
-}) {
-  const typeStyle = EVENT_TYPE_STYLES[event.type];
-  const rsvpInfo = event.rsvpStatus ? RSVP_LABELS[event.rsvpStatus] : null;
-
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-border bg-card p-4 shadow-sm transition-opacity",
-        isPast && "opacity-70",
-      )}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-bold text-foreground">{event.title}</h3>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              typeStyle.bg,
-              typeStyle.text,
-            )}
-          >
-            {eventTypeLabel(event.type)}
-          </span>
-          <StatusPill status={displayEventStatus(event, now)} />
-        </div>
-      </div>
-
-      {/* Details */}
-      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-        <p>{formatEventDateTime(event.scheduledAt)}</p>
-        <p className="flex items-center gap-1">
-          <MapPin className="size-3" aria-hidden="true" />
-          {event.location}
-        </p>
-        {event.notes && <p className="italic">"{event.notes}"</p>}
-      </div>
-
-      {/* Current RSVP pill */}
-      {rsvpInfo && (
-        <div className="mt-2">
-          <span
-            className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              rsvpInfo.className,
-            )}
-          >
-            {rsvpInfo.label}
-          </span>
-        </div>
-      )}
-
-      {/* RSVP widget (only for upcoming scheduled events) */}
-      {!isPast && event.status === "scheduled" && (
-        <RsvpWidget
-          eventId={event.id}
-          currentStatus={event.rsvpStatus}
-          currentNote={event.rsvpNote}
-          queryKey={queryKey}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ── Small status pill ────────────────────────────────────────────────────── */
-
-function StatusPill({
-  status,
-}: {
-  status: "scheduled" | "completed" | "cancelled";
-}) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-        status === "scheduled" && "bg-primary/10 text-primary",
-        status === "completed" && "bg-muted text-muted-foreground",
-        status === "cancelled" &&
-          "bg-destructive/10 text-destructive line-through",
-      )}
-    >
-      {status}
-    </span>
   );
 }

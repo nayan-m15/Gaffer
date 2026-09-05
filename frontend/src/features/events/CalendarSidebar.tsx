@@ -23,6 +23,7 @@ interface CalendarSidebarProps {
   teamName?: string | null;
   /** Events without a scheduled date — the current data model has none. */
   undatedEvents: TeamEvent[];
+  readOnly?: boolean;
   onNavigateMonth: (direction: 1 | -1) => void;
   onSelectDate: (date: Date) => void;
   onCreateEvent: (type?: EventType) => void;
@@ -39,6 +40,7 @@ export function CalendarSidebar({
   now,
   events,
   undatedEvents,
+  readOnly = false,   
   onNavigateMonth,
   onCreateEvent,
   onOpenEvent,
@@ -54,6 +56,7 @@ export function CalendarSidebar({
           onOpenEvent={onOpenEvent}
           onCreateEvent={() => onCreateEvent()}
           onNavigateMonth={onNavigateMonth}
+          readOnly={readOnly}
           className="h-full min-h-0 flex-1"
         />
       </div>

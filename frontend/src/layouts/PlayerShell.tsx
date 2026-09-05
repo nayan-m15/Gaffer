@@ -30,7 +30,7 @@ export function PlayerShell() {
         <div className="flex-1">
           <Outlet />
         </div>
-        <Footer />
+        <Footer variant="player" />
       </main>
     </div>
   );
