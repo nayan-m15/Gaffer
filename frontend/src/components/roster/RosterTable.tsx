@@ -8,10 +8,12 @@ interface RosterTableProps {
   athletes: Athlete[];
   selectedId: string | null;
   showArchived: boolean;
-  onSelect: (athlete: Athlete) => void;
-  onEdit: (athlete: Athlete) => void;
-  onArchive: (athlete: Athlete) => void;
-  onRestore: (athlete: Athlete) => void;
+  /** When true, hides the ACTIONS column and all edit/archive/restore affordances. */
+  readOnly?: boolean;
+  onSelect?: (athlete: Athlete) => void;
+  onEdit?: (athlete: Athlete) => void;
+  onArchive?: (athlete: Athlete) => void;
+  onRestore?: (athlete: Athlete) => void;
 }
 
 const DATA_COLUMNS = [
@@ -36,6 +38,7 @@ export function RosterTable({
   athletes,
   selectedId,
   showArchived,
+  readOnly = false,
   onSelect,
   onEdit,
   onArchive,
@@ -55,9 +58,11 @@ export function RosterTable({
                 {col.label}
               </th>
             ))}
-            <th scope="col" className="w-28 px-4 py-3 text-right">
-              ACTIONS
-            </th>
+            {!readOnly && (
+              <th scope="col" className="w-28 px-4 py-3 text-right">
+                ACTIONS
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -67,9 +72,10 @@ export function RosterTable({
             return (
               <tr
                 key={athlete.id}
-                onClick={() => onSelect(athlete)}
+                onClick={() => onSelect?.(athlete)}
                 className={cn(
-                  "cursor-pointer border-b border-border transition-colors last:border-b-0",
+                  "border-b border-border transition-colors last:border-b-0",
+                  !readOnly && "cursor-pointer",
                   isSelected
                     ? "border-brand bg-brand/10"
                     : "hover:bg-muted/30",
@@ -136,6 +142,7 @@ export function RosterTable({
                   {athlete.assists}
                 </td>
 
+                {!readOnly && (
                 <td className="px-4 py-3 text-right">
                   <div
                     className="flex items-center justify-end gap-1"
@@ -148,7 +155,7 @@ export function RosterTable({
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        onClick={() => onRestore(athlete)}
+                        onClick={() => onRestore?.(athlete)}
                         aria-label={`Restore ${athlete.name}`}
                         title="Restore"
                       >
@@ -160,7 +167,7 @@ export function RosterTable({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          onClick={() => onEdit(athlete)}
+                          onClick={() => onEdit?.(athlete)}
                           aria-label={`Edit ${athlete.name}`}
                           title="Edit"
                         >
@@ -170,7 +177,7 @@ export function RosterTable({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          onClick={() => onArchive(athlete)}
+                          onClick={() => onArchive?.(athlete)}
                           aria-label={`Archive ${athlete.name}`}
                           title="Archive"
                         >
@@ -180,6 +187,7 @@ export function RosterTable({
                     )}
                   </div>
                 </td>
+                )}
               </tr>
             );
           })}

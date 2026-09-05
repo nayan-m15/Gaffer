@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
+import { RequirePlayer } from '@/components/RequirePlayer'
 import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
+import { PlayerShell } from '@/layouts/PlayerShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
@@ -18,6 +20,10 @@ import LiveMatchPage from '@/pages/LiveMatchPage'
 import MatchReportPage from '@/pages/MatchReportPage'
 import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
+import PlayerDashboardPage from '@/features/player/PlayerDashboardPage'
+import PlayerTeamPage from '@/features/player/PlayerTeamPage'
+import PlayerEventsPage from '@/features/player/PlayerEventsPage'
+import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
 
 /**
@@ -152,6 +158,22 @@ function App() {
               </RequireTeam>
             }
           />
+        </Route>
+
+        {/* ── Player routes ──────────────────────────────────────────── */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <RequirePlayer>
+                <PlayerShell />
+              </RequirePlayer>
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
+          <Route path="/player/team" element={<PlayerTeamPage />} />
+          <Route path="/player/events" element={<PlayerEventsPage />} />
+          <Route path="/player/standings" element={<PlayerStandingsPage />} />
         </Route>
       </Routes>
       </BrowserRouter>

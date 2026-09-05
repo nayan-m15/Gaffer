@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +20,7 @@ import {
 } from "./event-utils";
 import { useCancelEvent } from "./hooks";
 import type { EventStatus, TeamEvent } from "./types";
+import { fetchEventRsvps, type AthleteRsvp, type RsvpStatus } from "@/services/rsvps";
 
 interface EventDetailDialogProps {
   event: TeamEvent | null;
@@ -39,6 +41,33 @@ export function EventDetailDialog({
   const navigate = useNavigate();
   const cancelEvent = useCancelEvent();
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch RSVP breakdown for the coach
+  const rsvpsQuery = useQuery({
+    queryKey: ["events", event?.id, "rsvps"],
+    queryFn: () => fetchEventRsvps(event!.id),
+    enabled: open && Boolean(event?.id),
+  });
+
+  const rsvpGroups = useMemo(() => {
+    const athletes = rsvpsQuery.data ?? [];
+    const groups: Record<
+      "confirmed" | "maybe" | "declined" | "no_response",
+      AthleteRsvp[]
+    > = {
+      confirmed: [],
+      maybe: [],
+      declined: [],
+      no_response: [],
+    };
+    for (const a of athletes) {
+      if (a.rsvpStatus === "going") groups.confirmed.push(a);
+      else if (a.rsvpStatus === "maybe") groups.maybe.push(a);
+      else if (a.rsvpStatus === "not_going") groups.declined.push(a);
+      else groups.no_response.push(a);
+    }
+    return groups;
+  }, [rsvpsQuery.data]);
 
   const handleCancel = async () => {
     if (!event) {
@@ -109,6 +138,43 @@ export function EventDetailDialog({
           </div>
         )}
 
+        {/* ── RSVP Breakdown (coach view) ──────────────────────────────── */}
+        {event && rsvpsQuery.data && rsvpsQuery.data.length > 0 && (
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              RSVP Responses ({rsvpsQuery.data.length})
+            </h3>
+            <div className="space-y-3">
+              <RsvpGroup
+                label="Confirmed"
+                athletes={rsvpGroups.confirmed}
+                dotClass="bg-emerald-400"
+              />
+              <RsvpGroup
+                label="Maybe"
+                athletes={rsvpGroups.maybe}
+                dotClass="bg-amber-400"
+              />
+              <RsvpGroup
+                label="Declined"
+                athletes={rsvpGroups.declined}
+                dotClass="bg-red-400"
+              />
+              <RsvpGroup
+                label="No response"
+                athletes={rsvpGroups.no_response}
+                dotClass="bg-muted-foreground/40"
+              />
+            </div>
+          </div>
+        )}
+
+        {event && rsvpsQuery.isLoading && (
+          <div className="rounded-lg border border-border bg-background p-4 text-center text-xs text-muted-foreground">
+            Loading RSVP responses…
+          </div>
+        )}
+
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -171,5 +237,47 @@ export function StatusBadge({ status }: { status: EventStatus }) {
     >
       {eventStatusLabel(status)}
     </span>
+  );
+}
+
+/* ── RSVP breakdown sub-components ──────────────────────────────────────── */
+
+function RsvpGroup({
+  label,
+  athletes,
+  dotClass,
+}: {
+  label: string;
+  athletes: AthleteRsvp[];
+  dotClass: string;
+}) {
+  if (athletes.length === 0) return null;
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className={cn("size-2 rounded-full", dotClass)} />
+        <span className="text-xs font-semibold text-foreground">
+          {label} ({athletes.length})
+        </span>
+      </div>
+      <ul className="space-y-1 pl-3.5">
+        {athletes.map((a) => (
+          <li key={a.id} className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {a.firstName} {a.lastName}
+            </span>
+            {a.squadNumber != null && (
+              <span className="ml-1 text-[10px] text-muted-foreground">
+                #{a.squadNumber}
+              </span>
+            )}
+            {a.rsvpNote && (
+              <span className="ml-1 italic">“{a.rsvpNote}”</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
