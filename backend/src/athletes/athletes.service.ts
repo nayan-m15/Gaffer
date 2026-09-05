@@ -1,8 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, isNull, isNotNull } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull, isNotNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes } from '../database/schema';
+import { athletes, playerClaimInvites } from '../database/schema';
 import type { CreateAthleteDto, UpdateAthleteDto } from './athletes.schemas';
+
+export type ClaimStatus = 'unclaimed' | 'invited' | 'claimed';
+
+// Computed in the same query as the athlete rows via a left join on pending
+// invites — never a per-row lookup. 'claimed' wins over 'invited': a stray
+// pending invite alongside an attached userId is irrelevant.
+const claimStatus = sql<ClaimStatus>`case
+  when ${athletes.userId} is not null then 'claimed'
+  when count(${playerClaimInvites.id}) > 0 then 'invited'
+  else 'unclaimed'
+end`;
 
 @Injectable()
 export class AthletesService {
@@ -22,9 +33,20 @@ export class AthletesService {
 
   async findAll(teamId: string) {
     return this.databaseService.database
-      .select()
+      .select({
+        ...getTableColumns(athletes),
+        claimStatus,
+      })
       .from(athletes)
-      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)));
+      .leftJoin(
+        playerClaimInvites,
+        and(
+          eq(playerClaimInvites.athleteId, athletes.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      )
+      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)))
+      .groupBy(athletes.id);
   }
 
   async findArchived(teamId: string) {
@@ -36,8 +58,18 @@ export class AthletesService {
 
   async findOne(teamId: string, athleteId: string) {
     const [athlete] = await this.databaseService.database
-      .select()
+      .select({
+        ...getTableColumns(athletes),
+        claimStatus,
+      })
       .from(athletes)
+      .leftJoin(
+        playerClaimInvites,
+        and(
+          eq(playerClaimInvites.athleteId, athletes.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      )
       .where(
         and(
           eq(athletes.id, athleteId),
@@ -45,6 +77,7 @@ export class AthletesService {
           isNull(athletes.archivedAt),
         ),
       )
+      .groupBy(athletes.id)
       .limit(1);
 
     if (!athlete) {

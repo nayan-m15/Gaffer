@@ -11,6 +11,7 @@ import { StatisticsModule } from './statistics/statistics.module';
 import { TeamsModule } from './teams/teams.module';
 import { AthletesModule } from './athletes/athletes.module';
 import { ProfileModule } from './profile/profile.module';
+import { ClaimsModule } from './claims/claims.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ProfileModule } from './profile/profile.module';
     AuthModule,
     TeamsModule,
     AthletesModule,
+    ClaimsModule,
     EventsModule,
     GamePlansModule,
     MatchesModule,
