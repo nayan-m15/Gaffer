@@ -8,6 +8,7 @@ import {
 } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { clearPendingClaimToken } from "@/services/claims";
 
 export interface SessionUser {
   id: string;
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await apiFetch("/auth/sign-out", { method: "POST" });
+    clearPendingClaimToken();
     setUser(null);
     setTeam(null);
     setClaimedAthletes([]);

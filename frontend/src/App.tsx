@@ -25,6 +25,7 @@ import PlayerTeamPage from '@/features/player/PlayerTeamPage'
 import PlayerEventsPage from '@/features/player/PlayerEventsPage'
 import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
+import { ClaimResumer } from '@/components/ClaimResumer'
 
 /**
  * App — Root application component.
@@ -68,6 +69,7 @@ function App() {
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
+      <ClaimResumer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useId, type FormEvent } from "react";
 import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import signupBg from "@/assets/SignUp-bg.png";
 import { SportLogo } from "@/components/brand/SportLogo";
@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { acceptClaim, previewClaim, type ClaimPreview } from "@/services/claims";
+import {
+  acceptClaim,
+  previewClaim,
+  storePendingClaimToken,
+  type ClaimPreview,
+} from "@/services/claims";
 
 type ViewMode = "sign-up" | "sign-in";
 
@@ -59,6 +64,7 @@ export default function ClaimPage() {
   const passwordErrorId = `${baseId}-password-error`;
   const confirmPasswordErrorId = `${baseId}-confirmPassword-error`;
   const consentErrorId = `${baseId}-consent-error`;
+  const navigate = useNavigate();
 
   /* ── Force dark theme (mirrors SignUpPage) ─────────────────────────── */
   useEffect(() => {
@@ -163,9 +169,8 @@ export default function ClaimPage() {
         password,
       });
       if (emailVerificationRequired) {
-        setFormError(
-          "Please check your email to verify your account, then come back to this link.",
-        );
+        storePendingClaimToken(token);
+        navigate("/verify-email", { replace: true, state: { email } });
         return;
       }
       await doAccept();

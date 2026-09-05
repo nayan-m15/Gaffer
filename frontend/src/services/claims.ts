@@ -31,3 +31,27 @@ export async function acceptClaim(token: string): Promise<ClaimAcceptResult> {
     method: "POST",
   });
 }
+
+
+/**
+ * Persists a claim token across the email-verification round trip.
+ *
+ * Email/password sign-up doesn't issue a session until the address is
+ * verified, so ClaimPage can't call acceptClaim right after sign-up in
+ * that case — there's no auth yet. We stash the token here instead, and
+ * ClaimResumer finishes the job once a session actually exists, however
+ * the user gets there (verify link, manual sign-in, etc).
+ */
+const PENDING_CLAIM_TOKEN_KEY = "gaffer:pendingClaimToken";
+
+export function storePendingClaimToken(token: string): void {
+  localStorage.setItem(PENDING_CLAIM_TOKEN_KEY, token);
+}
+
+export function getPendingClaimToken(): string | null {
+  return localStorage.getItem(PENDING_CLAIM_TOKEN_KEY);
+}
+
+export function clearPendingClaimToken(): void {
+  localStorage.removeItem(PENDING_CLAIM_TOKEN_KEY);
+}
