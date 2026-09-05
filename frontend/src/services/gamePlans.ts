@@ -16,14 +16,19 @@ export type OffensiveStyle =
   | "long_ball";
 
 /**
- * A named tactical profile ("game plan") for a team, modeled on FIFA 20's
- * Custom Tactics. Names are unique per team.
+ * A named matchday plan for a team, modeled on FIFA 20's Custom Tactics. One
+ * record holds both halves of the plan — the squad selection (formation,
+ * starting XI, bench) and the tactical settings. Names are unique per team.
  */
 export interface BackendGamePlan {
   id: string;
   teamId: string;
   name: string;
   formationId: string;
+  /** Maps formation position IDs to athlete IDs (or null for an empty slot). */
+  assignments: Record<string, string | null>;
+  /** Athlete IDs on the substitutes bench. */
+  substituteIds: string[];
   defensiveStyle: DefensiveStyle;
   defensiveWidth: number;
   defensiveDepth: number;
@@ -45,6 +50,15 @@ export type GamePlanContent = Omit<
   BackendGamePlan,
   "id" | "teamId" | "name" | "createdAt" | "updatedAt"
 >;
+
+/** The squad half of a game plan — what the tactical board edits. */
+export type GamePlanSquad = Pick<
+  GamePlanContent,
+  "formationId" | "assignments" | "substituteIds"
+>;
+
+/** The tactics half of a game plan — what the Tactics and Roles tabs edit. */
+export type GamePlanTactics = Omit<GamePlanContent, keyof GamePlanSquad>;
 
 /** Fields accepted by POST /game-plans. */
 export interface CreateGamePlanInput extends Partial<GamePlanContent> {

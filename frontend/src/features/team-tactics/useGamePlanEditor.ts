@@ -1,39 +1,56 @@
 /**
- * State + persistence for the Team Tactics editor, extracted into a hook so
- * the save controls can live in the page header (next to the Squad section's
- * lineup controls) while the tabs and their bodies render further down the
- * page. `TeamManagementPage` owns the single instance and hands it to both
- * `GamePlanControls` and `TeamTacticsPanel`.
+ * State + persistence for a team's game plans. A game plan is one record
+ * covering both halves of a matchday plan — the squad selection (formation,
+ * starting XI, bench) and the tactical settings — so selecting, saving and
+ * deleting a plan moves both together.
+ *
+ * `TeamManagementPage` owns the single instance and hands it to the header
+ * controls, the tactical board (`editor.lineup`) and `<TeamTacticsPanel>`.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BackendAthlete } from "@/services/athletes";
-import type { BackendGamePlan, GamePlanContent } from "@/services/gamePlans";
+import type {
+  BackendGamePlan,
+  GamePlanSquad,
+  GamePlanTactics,
+} from "@/services/gamePlans";
+import { useLineupState } from "@/features/team-management/useLineupState";
 import {
-  useAthletes,
   useCreateGamePlan,
   useDeleteGamePlan,
   useGamePlans,
   useUpdateGamePlan,
 } from "./api";
 import {
-  DEFAULT_GAME_PLAN_CONTENT,
+  DEFAULT_GAME_PLAN_TACTICS,
   type TacticsTab as TacticsTabName,
 } from "./tactics-options";
 
-const CONTENT_KEYS = Object.keys(
-  DEFAULT_GAME_PLAN_CONTENT,
-) as (keyof GamePlanContent)[];
+const TACTICS_KEYS = Object.keys(
+  DEFAULT_GAME_PLAN_TACTICS,
+) as (keyof GamePlanTactics)[];
 
-/** Pulls the editable content out of a saved game plan record. */
-export function toContent(plan: BackendGamePlan): GamePlanContent {
-  const out = {} as GamePlanContent;
-  for (const key of CONTENT_KEYS) {
+/** Pulls the tactical settings out of a saved game plan record. */
+export function toTactics(plan: BackendGamePlan): GamePlanTactics {
+  const out = {} as GamePlanTactics;
+  for (const key of TACTICS_KEYS) {
     // Each key exists on BackendGamePlan with a compatible type.
     (out as Record<string, unknown>)[key] = plan[key];
   }
   return out;
 }
+
+/** Pulls the squad selection out of a saved game plan record. */
+export function toSquad(plan: BackendGamePlan): GamePlanSquad {
+  return {
+    formationId: plan.formationId,
+    assignments: plan.assignments,
+    substituteIds: plan.substituteIds,
+  };
+}
+
+export type LineupBoard = ReturnType<typeof useLineupState>;
 
 export interface GamePlanEditor {
   plans: BackendGamePlan[];
@@ -42,10 +59,13 @@ export interface GamePlanEditor {
   isError: boolean;
   refetch: () => void;
 
+  /** The tactical board: formation, starting XI, bench and drag-and-drop. */
+  lineup: LineupBoard;
+
   selectedId: string | null;
   selectedPlan: BackendGamePlan | null;
-  content: GamePlanContent;
-  patch: (p: Partial<GamePlanContent>) => void;
+  content: GamePlanTactics;
+  patch: (p: Partial<GamePlanTactics>) => void;
 
   activeTab: TacticsTabName;
   setActiveTab: (tab: TacticsTabName) => void;
@@ -70,7 +90,10 @@ export interface GamePlanEditor {
   confirmDelete: () => void;
 }
 
-export function useGamePlanEditor(): GamePlanEditor {
+export function useGamePlanEditor(
+  athletes: BackendAthlete[],
+  isAthletesLoading: boolean,
+): GamePlanEditor {
   const {
     data: gamePlans,
     isLoading: isPlansLoading,
@@ -79,17 +102,16 @@ export function useGamePlanEditor(): GamePlanEditor {
   } = useGamePlans();
   const plans = useMemo(() => gamePlans ?? [], [gamePlans]);
 
-  const { data: athletesData } = useAthletes();
-  const emptyAthletes = useRef<BackendAthlete[]>([]);
-  const athletes = athletesData ?? emptyAthletes.current;
-
   const createMutation = useCreateGamePlan();
   const updateMutation = useUpdateGamePlan();
   const deleteMutation = useDeleteGamePlan();
 
+  const lineup = useLineupState(athletes);
+  const { loadLineup } = lineup;
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [content, setContent] = useState<GamePlanContent>(
-    DEFAULT_GAME_PLAN_CONTENT,
+  const [content, setContent] = useState<GamePlanTactics>(
+    DEFAULT_GAME_PLAN_TACTICS,
   );
   const [activeTab, setActiveTab] = useState<TacticsTabName>("Tactics");
   const [isSaveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -102,25 +124,36 @@ export function useGamePlanEditor(): GamePlanEditor {
     [plans, selectedId],
   );
 
-  // Once the game plans have loaded, open the most recently updated one.
+  // Once the squad and the game plans have both loaded, open the most recently
+  // updated plan — its tactics and its board together.
   const hasHydrated = useRef(false);
   useEffect(() => {
-    if (hasHydrated.current || isPlansLoading) return;
+    if (hasHydrated.current || isPlansLoading || isAthletesLoading) return;
     hasHydrated.current = true;
     const initial = plans[0] ?? null;
     setSelectedId(initial?.id ?? null);
-    setContent(initial ? toContent(initial) : DEFAULT_GAME_PLAN_CONTENT);
-  }, [isPlansLoading, plans]);
+    setContent(initial ? toTactics(initial) : DEFAULT_GAME_PLAN_TACTICS);
+    loadLineup(initial ? toSquad(initial) : null);
+  }, [isAthletesLoading, isPlansLoading, loadLineup, plans]);
 
   const selectPlan = (id: string | null) => {
     setSaveError(null);
     setSelectedId(id);
     const target = id ? plans.find((p) => p.id === id) ?? null : null;
-    setContent(target ? toContent(target) : DEFAULT_GAME_PLAN_CONTENT);
+    setContent(target ? toTactics(target) : DEFAULT_GAME_PLAN_TACTICS);
+    loadLineup(target ? toSquad(target) : null);
   };
 
-  const patch = (p: Partial<GamePlanContent>) =>
+  const patch = (p: Partial<GamePlanTactics>) =>
     setContent((prev) => ({ ...prev, ...p }));
+
+  /** Everything the current plan would be saved as: tactics + live board. */
+  const currentInput = () => ({
+    ...content,
+    formationId: lineup.formationId,
+    assignments: lineup.assignments,
+    substituteIds: lineup.substituteIds,
+  });
 
   const flashSaved = () => {
     setJustSaved(true);
@@ -134,7 +167,7 @@ export function useGamePlanEditor(): GamePlanEditor {
       return;
     }
     updateMutation.mutate(
-      { id: selectedPlan.id, input: content },
+      { id: selectedPlan.id, input: currentInput() },
       {
         onSuccess: flashSaved,
         onError: (err) =>
@@ -146,9 +179,12 @@ export function useGamePlanEditor(): GamePlanEditor {
   };
 
   const saveAsNew = async (name: string) => {
-    const created = await createMutation.mutateAsync({ name, ...content });
+    const created = await createMutation.mutateAsync({
+      name,
+      ...currentInput(),
+    });
     setSelectedId(created.id);
-    setContent(toContent(created));
+    setContent(toTactics(created));
     flashSaved();
   };
 
@@ -158,7 +194,8 @@ export function useGamePlanEditor(): GamePlanEditor {
       onSuccess: () => {
         setDeleteDialogOpen(false);
         setSelectedId(null);
-        setContent(DEFAULT_GAME_PLAN_CONTENT);
+        setContent(DEFAULT_GAME_PLAN_TACTICS);
+        loadLineup(null);
       },
     });
   };
@@ -169,6 +206,8 @@ export function useGamePlanEditor(): GamePlanEditor {
     isPlansLoading,
     isError,
     refetch,
+
+    lineup,
 
     selectedId,
     selectedPlan,

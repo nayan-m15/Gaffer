@@ -4,13 +4,13 @@
  */
 
 import type { BackendAthlete } from "@/services/athletes";
-import type { GamePlanContent } from "@/services/gamePlans";
+import type { GamePlanTactics } from "@/services/gamePlans";
 import { AthleteSelect } from "./AthleteSelect";
 
 interface RolesTabProps {
-  content: GamePlanContent;
+  content: GamePlanTactics;
   athletes: BackendAthlete[];
-  onChange: (patch: Partial<GamePlanContent>) => void;
+  onChange: (patch: Partial<GamePlanTactics>) => void;
   disabled?: boolean;
 }
 

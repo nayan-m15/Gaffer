@@ -1,7 +1,10 @@
 /**
  * Team Management page — the tactical board where a coach configures their
  * starting XI, selects a formation, positions players on the pitch, and
- * manages substitutes through drag-and-drop.
+ * manages substitutes through drag-and-drop, plus the tactics editor.
+ *
+ * Both sections edit one saved record: a game plan holds the squad selection
+ * and the tactical settings together, so a single Save persists both.
  *
  * Data is loaded from the existing athlete API via TanStack Query. No dummy
  * data is used; empty and loading states are handled explicitly.
@@ -12,36 +15,18 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
-import {
-  RotateCcw,
-  Wand2,
-  Save,
-  Copy,
-  Trash2,
-  Users,
-  ShieldAlert,
-  Loader2,
-  Check,
-} from "lucide-react";
+import { RotateCcw, Wand2, Users, ShieldAlert, Loader2 } from "lucide-react";
 
-import {
-  useAthletes,
-  useLineups,
-  useCreateLineup,
-  useUpdateLineup,
-  useDeleteLineup,
-} from "./api";
-import { useLineupState } from "./useLineupState";
+import { useAthletes } from "./api";
 import { FootballPitch } from "./FootballPitch";
 import { PitchPlayer } from "./PitchPlayer";
 import { FormationSelector } from "./FormationSelector";
-import { LineupSelector } from "./LineupSelector";
-import { SaveLineupDialog } from "./SaveLineupDialog";
-import { DeleteLineupDialog } from "./DeleteLineupDialog";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
+import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDialog";
 import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
+import { SaveGamePlanDialog } from "@/features/team-tactics/SaveGamePlanDialog";
 import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 
 export default function TeamManagementPage() {
@@ -57,109 +42,18 @@ export default function TeamManagementPage() {
   const emptyRef = useRef<BackendAthlete[]>([]);
   const athleteList = athletes ?? emptyRef.current;
 
-  const lineup = useLineupState(athleteList);
-
-  // Shared game-plan editor state: its save controls render in the header
-  // (below), the tab strip + bodies render in <TeamTacticsPanel>.
-  const gamePlanEditor = useGamePlanEditor();
-
-  const { data: lineupsData, isLoading: isLineupsLoading } = useLineups();
-  const lineupsList = useMemo(() => lineupsData ?? [], [lineupsData]);
-
-  const createLineupMutation = useCreateLineup();
-  const updateLineupMutation = useUpdateLineup();
-  const deleteLineupMutation = useDeleteLineup();
-
-  const [selectedLineupId, setSelectedLineupId] = useState<string | null>(null);
-  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const selectedLineup = useMemo(
-    () => lineupsList.find((l) => l.id === selectedLineupId) ?? null,
-    [lineupsList, selectedLineupId],
-  );
-
-  const { loadLineup } = lineup;
-
-  // Once the squad and the saved lineups have both loaded, select and load
-  // the most recently updated lineup (if any); otherwise the board stays
-  // blank with everyone on the bench.
-  const hasHydratedRef = useRef(false);
-  useEffect(() => {
-    if (hasHydratedRef.current) return;
-    if (athleteList.length === 0) return;
-    if (isLineupsLoading) return;
-
-    hasHydratedRef.current = true;
-    const initial = lineupsList[0] ?? null;
-    setSelectedLineupId(initial?.id ?? null);
-    loadLineup(initial);
-  }, [athleteList, isLineupsLoading, lineupsList, loadLineup]);
-
-  const handleSelectLineup = (id: string | null) => {
-    if (id === null) {
-      setSelectedLineupId(null);
-      loadLineup(null);
-      return;
-    }
-    const target = lineupsList.find((l) => l.id === id);
-    if (!target) return;
-    setSelectedLineupId(target.id);
-    loadLineup(target);
-  };
-
-  const currentContent = {
-    formationId: lineup.formationId,
-    assignments: lineup.assignments,
-    substituteIds: lineup.substituteIds,
-  };
-
-  /** Save button: overwrite the selected lineup, or prompt for a name if none is selected. */
-  const handleSave = () => {
-    setSaveError(null);
-    if (!selectedLineup) {
-      setIsSaveDialogOpen(true);
-      return;
-    }
-    updateLineupMutation.mutate(
-      { id: selectedLineup.id, input: currentContent },
-      {
-        onSuccess: () => {
-          setJustSaved(true);
-          window.setTimeout(() => setJustSaved(false), 2500);
-        },
-        onError: (err) => {
-          setSaveError(
-            err instanceof Error ? err.message : "Failed to save lineup.",
-          );
-        },
-      },
-    );
-  };
-
-  /** "Save as new" always creates a fresh named lineup, even when one is selected. */
-  const handleSaveAsNew = async (name: string) => {
-    const created = await createLineupMutation.mutateAsync({
-      name,
-      ...currentContent,
-    });
-    setSelectedLineupId(created.id);
-    setJustSaved(true);
-    window.setTimeout(() => setJustSaved(false), 2500);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (!selectedLineup) return;
-    deleteLineupMutation.mutate(selectedLineup.id, {
-      onSuccess: () => {
-        setIsDeleteDialogOpen(false);
-        setSelectedLineupId(null);
-        loadLineup(null);
-      },
-    });
-  };
+  // The single game-plan editor: it owns the tactical board (`lineup`) and the
+  // tactics settings, so one Save persists both. Its controls render in the
+  // header, the board below, the tab strip + bodies in <TeamTacticsPanel>.
+  const gamePlanEditor = useGamePlanEditor(athleteList, isLoading);
+  const {
+    lineup,
+    selectedPlan,
+    saveError,
+    clearSaveError,
+    deleteError,
+    clearDeleteError,
+  } = gamePlanEditor;
 
   // Detect desktop viewport (lg breakpoint = 1024px) for horizontal pitch
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -260,89 +154,39 @@ export default function TeamManagementPage() {
       <PageHeader
         title="Team Management"
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
-        actions={activeSection === "tactics" ? (
-          <GamePlanControls editor={gamePlanEditor} />
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <LineupSelector
-              lineups={lineupsList}
-              selectedLineupId={selectedLineupId}
-              onSelect={handleSelectLineup}
-              disabled={isLineupsLoading}
-            />
+        actions={
+          <GamePlanControls editor={gamePlanEditor}>
+            {activeSection === "squad" && (
+              <>
+                <FormationSelector
+                  value={lineup.formationId}
+                  onChange={lineup.setFormation}
+                />
 
-            <FormationSelector
-              value={lineup.formationId}
-              onChange={lineup.setFormation}
-            />
+                <Button
+                  variant={lineup.autoFillEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={lineup.toggleAutoFill}
+                  className="gap-1.5"
+                  aria-pressed={lineup.autoFillEnabled}
+                >
+                  <Wand2 className="size-3.5" />
+                  Auto-fill {lineup.autoFillEnabled ? "On" : "Off"}
+                </Button>
 
-            <Button
-              variant={lineup.autoFillEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={lineup.toggleAutoFill}
-              className="gap-1.5"
-              aria-pressed={lineup.autoFillEnabled}
-            >
-              <Wand2 className="size-3.5" />
-              Auto-fill {lineup.autoFillEnabled ? "On" : "Off"}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={lineup.resetLineup}
-              className="gap-1.5"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-
-            {selectedLineup && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsDeleteDialogOpen(true)}
-                className="gap-1.5 text-destructive hover:text-destructive"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={lineup.resetLineup}
+                  className="gap-1.5"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Reset
+                </Button>
+              </>
             )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsSaveDialogOpen(true)}
-              className="gap-1.5"
-            >
-              <Copy className="size-3.5" />
-              Save As New
-            </Button>
-
-            <Button
-              variant="default"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleSave}
-              disabled={updateLineupMutation.isPending}
-            >
-              {updateLineupMutation.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : justSaved ? (
-                <Check className="size-3.5" />
-              ) : (
-                <Save className="size-3.5" />
-              )}
-              {updateLineupMutation.isPending
-                ? "Saving..."
-                : justSaved
-                  ? "Saved"
-                  : selectedLineup
-                    ? "Save"
-                    : "Save Lineup"}
-            </Button>
-          </div>
-        )}
+          </GamePlanControls>
+        }
       >
         <nav className="flex gap-1" aria-label="Team sections">
           <button
@@ -396,7 +240,7 @@ export default function TeamManagementPage() {
           ok={lineup.hasGoalkeeper}
           okText="Set"
           failText="Not set"
-            />
+        />
 
         {lineup.hasMisplacedPlayers && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
@@ -425,20 +269,20 @@ export default function TeamManagementPage() {
         {saveError && (
           <span
             className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
-            onClick={() => setSaveError(null)}
+            onClick={clearSaveError}
             role="alert"
           >
             {saveError} (dismiss)
           </span>
         )}
 
-        {deleteLineupMutation.isError && (
+        {deleteError && (
           <span
             className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
-            onClick={() => deleteLineupMutation.reset()}
+            onClick={clearDeleteError}
             role="alert"
           >
-            Failed to delete lineup. Please try again. (dismiss)
+            Failed to delete game plan. Please try again. (dismiss)
           </span>
         )}
       </div>
@@ -473,18 +317,18 @@ export default function TeamManagementPage() {
         )}
       </div>
 
-      <SaveLineupDialog
-        open={isSaveDialogOpen}
-        onOpenChange={setIsSaveDialogOpen}
-        onSave={handleSaveAsNew}
+      <SaveGamePlanDialog
+        open={gamePlanEditor.isSaveDialogOpen}
+        onOpenChange={gamePlanEditor.setSaveDialogOpen}
+        onSave={gamePlanEditor.saveAsNew}
       />
 
-      <DeleteLineupDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        lineupName={selectedLineup?.name ?? ""}
-        isDeleting={deleteLineupMutation.isPending}
+      <DeleteGamePlanDialog
+        isOpen={gamePlanEditor.isDeleteDialogOpen}
+        onClose={() => gamePlanEditor.setDeleteDialogOpen(false)}
+        onConfirm={gamePlanEditor.confirmDelete}
+        gamePlanName={selectedPlan?.name ?? ""}
+        isDeleting={gamePlanEditor.isDeleting}
       />
     </>
   );
