@@ -19,6 +19,7 @@ const DATA_COLUMNS = [
   { key: "name", label: "NAME", className: "min-w-[140px]" },
   { key: "position", label: "POS", className: "w-16" },
   { key: "status", label: "STATUS", className: "w-28" },
+  { key: "claimStatus", label: "CLAIM", className: "w-28" },
   { key: "appearances", label: "APPS", className: "w-16 text-center" },
   { key: "goals", label: "GOALS", className: "w-16 text-center" },
   { key: "assists", label: "AST", className: "w-16 text-center" },
@@ -107,6 +108,10 @@ export function RosterTable({
 
                 <td className="px-4 py-3">
                   <StatusBadge status={athlete.status} />
+                </td>
+
+                <td className="px-4 py-3">
+                  <StatusBadge status={athlete.claimStatus} />
                 </td>
 
                 <td className="px-4 py-3 text-center tabular-nums text-foreground">

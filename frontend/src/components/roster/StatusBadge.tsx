@@ -1,18 +1,23 @@
-import type { AthleteStatus } from "@/components/roster/data";
+import type { AthleteStatus, ClaimStatusUi } from "@/components/roster/data";
 import { cn } from "@/lib/utils";
 
+type BadgeStatus = AthleteStatus | ClaimStatusUi;
+
 interface StatusBadgeProps {
-  status: AthleteStatus;
+  status: BadgeStatus;
   className?: string;
 }
 
 /**
- * StatusBadge — compact availability pill for roster rows.
+ * StatusBadge — compact pill for roster rows.
  *
  * Colours per product spec, tuned for light and dark mode:
  *   - Available  → blue
  *   - Injured    → red
  *   - Suspended  → yellow
+ *   - Unclaimed  → muted grey
+ *   - Invited    → amber (claim invite pending)
+ *   - Claimed    → green (profile claimed by player)
  */
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const styles = {
@@ -22,7 +27,13 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
       "border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400",
     Suspended:
       "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-  } as const satisfies Record<AthleteStatus, string>;
+    Unclaimed:
+      "border-muted-foreground/20 bg-muted/30 text-muted-foreground",
+    Invited:
+      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    Claimed:
+      "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  } as const satisfies Record<BadgeStatus, string>;
 
   return (
     <span

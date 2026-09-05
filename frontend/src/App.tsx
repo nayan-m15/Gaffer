@@ -8,6 +8,7 @@ import { AppShell } from '@/layouts/AppShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
+import ClaimPage from '@/pages/ClaimPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
@@ -65,6 +66,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/claim/:token" element={<ClaimPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
           path="/matches/:matchId/live"

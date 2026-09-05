@@ -1,4 +1,4 @@
-import { Archive, Pencil, RotateCcw } from "lucide-react";
+import { Archive, Pencil, RotateCcw, UserPlus } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
 import type { Athlete, RecentAppearance } from "@/components/roster/data";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ interface AthleteDetailPanelProps {
   onEdit: (athlete: Athlete) => void;
   onArchive: (athlete: Athlete) => void;
   onRestore: (athlete: Athlete) => void;
+  onInviteClaim?: (athlete: Athlete) => void;
 }
 
 /**
@@ -23,6 +24,7 @@ export function AthleteDetailPanel({
   onEdit,
   onArchive,
   onRestore,
+  onInviteClaim,
 }: AthleteDetailPanelProps) {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-6">
@@ -97,6 +99,18 @@ export function AthleteDetailPanel({
                 <Archive className="size-4" />
                 Archive
               </Button>
+              {onInviteClaim && athlete.claimStatus === "Unclaimed" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onInviteClaim(athlete)}
+                  className="gap-1.5"
+                >
+                  <UserPlus className="size-4" />
+                  Invite
+                </Button>
+              )}
             </>
           )}
         </div>
