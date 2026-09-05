@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  Loader2,
-  ShieldAlert,
-  Users,
-} from "lucide-react";
+import { Loader2, ShieldAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useAthletes } from "@/features/team-management/api";
+import {
+  useAthletes,
+  useLineup,
+  useLineups,
+} from "@/features/team-management/api";
 import {
   formatEventDateTime,
   formatLocalDate,
@@ -17,6 +17,7 @@ import { useEvent, useStartMatch } from "@/features/events/hooks";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BackendAthlete } from "@/services/athletes";
+import type { BackendLineup } from "@/services/lineups";
 
 const STARTING_XI_SIZE = 11;
 
@@ -39,13 +40,54 @@ function athleteLabel(athlete: BackendAthlete) {
   return name;
 }
 
+function startingIdsFromLineup(
+  lineup: BackendLineup,
+  rosterIds: Set<string>,
+) {
+  const ids: string[] = [];
+  for (const athleteId of Object.values(lineup.assignments)) {
+    if (
+      athleteId &&
+      rosterIds.has(athleteId) &&
+      !ids.includes(athleteId) &&
+      ids.length < STARTING_XI_SIZE
+    ) {
+      ids.push(athleteId);
+    }
+  }
+  return new Set(ids);
+}
+
+const MAX_BENCH_SIZE = 20;
+
+function benchIdsFromRoster(
+  athletes: BackendAthlete[],
+  startingIds: Set<string>,
+  lineup: BackendLineup | undefined,
+) {
+  const nonStarters = athletes
+    .map((athlete) => athlete.id)
+    .filter((id) => !startingIds.has(id));
+  if (nonStarters.length <= MAX_BENCH_SIZE) {
+    return nonStarters;
+  }
+  const preferred = new Set(lineup?.substituteIds ?? []);
+  const fromLineupBench = nonStarters.filter((id) => preferred.has(id));
+  const remainder = nonStarters.filter((id) => !preferred.has(id));
+  return [...fromLineupBench, ...remainder].slice(0, MAX_BENCH_SIZE);
+}
+
 export default function ConfirmSquadPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const eventQuery = useEvent(eventId);
   const athletesQuery = useAthletes();
+  const lineupsQuery = useLineups();
   const startMatch = useStartMatch(eventId ?? "");
 
+  const [selectedLineupId, setSelectedLineupId] = useState<string | null>(
+    null,
+  );
   const [startingIds, setStartingIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -53,10 +95,37 @@ export default function ConfirmSquadPage() {
   const [isHome, setIsHome] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const lineupQuery = useLineup(selectedLineupId ?? undefined);
+  const appliedLineupIdRef = useRef<string | null>(null);
+
   const athletes = useMemo(
     () => athletesQuery.data ?? [],
     [athletesQuery.data],
   );
+  const lineups = useMemo(
+    () => lineupsQuery.data ?? [],
+    [lineupsQuery.data],
+  );
+  const rosterIds = useMemo(
+    () => new Set(athletes.map((athlete) => athlete.id)),
+    [athletes],
+  );
+
+  useEffect(() => {
+    if (!selectedLineupId) {
+      appliedLineupIdRef.current = null;
+      return;
+    }
+    if (!lineupQuery.data || lineupQuery.data.id !== selectedLineupId) {
+      return;
+    }
+    if (appliedLineupIdRef.current === selectedLineupId) {
+      return;
+    }
+    appliedLineupIdRef.current = selectedLineupId;
+    setStartingIds(startingIdsFromLineup(lineupQuery.data, rosterIds));
+  }, [selectedLineupId, lineupQuery.data, rosterIds]);
+
   const startingCount = startingIds.size;
   const opponentReady = opponentName.trim().length > 0;
   const beforeMatchDay = eventQuery.data
@@ -66,7 +135,8 @@ export default function ConfirmSquadPage() {
     startingCount === STARTING_XI_SIZE &&
     opponentReady &&
     !beforeMatchDay &&
-    !startMatch.isPending;
+    !startMatch.isPending &&
+    !(selectedLineupId && (lineupQuery.isFetching || lineupQuery.isError));
 
   const sortedAthletes = useMemo(() => {
     return [...athletes].sort((a, b) => {
@@ -103,6 +173,16 @@ export default function ConfirmSquadPage() {
         opponentName: opponentName.trim(),
         isHome,
         startingAthleteIds: [...startingIds],
+        ...(selectedLineupId
+          ? {
+              lineupId: selectedLineupId,
+              benchAthleteIds: benchIdsFromRoster(
+                athletes,
+                startingIds,
+                lineupQuery.data,
+              ),
+            }
+          : {}),
       });
       navigate(`/matches/${match.id}/live`, { replace: true });
     } catch (err) {
@@ -114,7 +194,11 @@ export default function ConfirmSquadPage() {
     }
   };
 
-  if (eventQuery.isLoading || athletesQuery.isLoading) {
+  if (
+    eventQuery.isLoading ||
+    athletesQuery.isLoading ||
+    lineupsQuery.isLoading
+  ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -125,8 +209,9 @@ export default function ConfirmSquadPage() {
     );
   }
 
-  if (eventQuery.isError || athletesQuery.isError) {
-    const error = eventQuery.error ?? athletesQuery.error;
+  if (eventQuery.isError || athletesQuery.isError || lineupsQuery.isError) {
+    const error =
+      eventQuery.error ?? athletesQuery.error ?? lineupsQuery.error;
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
@@ -145,6 +230,7 @@ export default function ConfirmSquadPage() {
             onClick={() => {
               void eventQuery.refetch();
               void athletesQuery.refetch();
+              void lineupsQuery.refetch();
             }}
           >
             Retry
@@ -254,6 +340,99 @@ export default function ConfirmSquadPage() {
             </div>
           </div>
         </div>
+
+        {lineups.length > 0 && (
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-medium text-foreground">
+                Saved lineup
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pick a lineup to pre-fill the starting XI, then adjust as
+                needed. Or pick from the roster without a saved lineup.
+              </p>
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLineupId(null)}
+                  className={cn(
+                    "flex w-full flex-col rounded-xl border bg-card p-4 text-left transition-colors",
+                    "hover:border-primary/40 hover:bg-card/80",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    selectedLineupId === null
+                      ? "border-primary/60 bg-primary/5"
+                      : "border-border",
+                  )}
+                >
+                  <span className="text-sm font-semibold text-foreground">
+                    Pick from roster
+                  </span>
+                  <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    No saved lineup
+                  </span>
+                </button>
+              </li>
+              {lineups.map((lineup) => {
+                const selected = selectedLineupId === lineup.id;
+                return (
+                  <li key={lineup.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedLineupId === lineup.id) {
+                          appliedLineupIdRef.current = null;
+                        }
+                        setSelectedLineupId(lineup.id);
+                        if (
+                          selectedLineupId === lineup.id &&
+                          lineupQuery.data?.id === lineup.id
+                        ) {
+                          setStartingIds(
+                            startingIdsFromLineup(
+                              lineupQuery.data,
+                              rosterIds,
+                            ),
+                          );
+                          appliedLineupIdRef.current = lineup.id;
+                        }
+                      }}
+                      className={cn(
+                        "flex w-full flex-col rounded-xl border bg-card p-4 text-left transition-colors",
+                        "hover:border-primary/40 hover:bg-card/80",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                        selected
+                          ? "border-primary/60 bg-primary/5"
+                          : "border-border",
+                      )}
+                    >
+                      <span className="text-sm font-semibold text-foreground">
+                        {lineup.name}
+                      </span>
+                      <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {lineup.formationId}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {selectedLineupId && lineupQuery.isFetching && (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading lineup…
+              </p>
+            )}
+            {selectedLineupId && lineupQuery.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                {lineupQuery.error instanceof Error
+                  ? lineupQuery.error.message
+                  : "Could not load this lineup."}
+              </p>
+            )}
+          </section>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <span

@@ -1,12 +1,18 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { teamMembers, teams } from '../database/schema';
+import type { UpdateTeamDto } from './teams.schemas';
 
 export interface TeamSummary {
   id: string;
   name: string;
   role: (typeof teamMembers.role.enumValues)[number];
+  primaryColor: string | null;
 }
 
 /**
@@ -26,6 +32,7 @@ export class TeamsService {
         id: teams.id,
         name: teams.name,
         role: teamMembers.role,
+        primaryColor: teams.primaryColor,
       })
       .from(teamMembers)
       .innerJoin(teams, eq(teamMembers.teamId, teams.id))
@@ -38,6 +45,7 @@ export class TeamsService {
   async createTeamForUser(
     userId: string,
     teamName: string,
+    primaryColor?: string,
   ): Promise<TeamSummary> {
     const existing = await this.findTeamForUser(userId);
     if (existing) {
@@ -49,7 +57,7 @@ export class TeamsService {
     // unlinked team row, which is an acceptable risk for Sprint 1 scope.
     const [team] = await this.databaseService.database
       .insert(teams)
-      .values({ name: teamName })
+      .values({ name: teamName, primaryColor })
       .returning();
 
     await this.databaseService.database.insert(teamMembers).values({
@@ -58,6 +66,44 @@ export class TeamsService {
       role: 'coach',
     });
 
-    return { id: team.id, name: team.name, role: 'coach' };
+    return {
+      id: team.id,
+      name: team.name,
+      role: 'coach',
+      primaryColor: team.primaryColor,
+    };
+  }
+
+  async updateTeamForUser(
+    userId: string,
+    input: UpdateTeamDto,
+  ): Promise<TeamSummary> {
+    const existing = await this.findTeamForUser(userId);
+    if (!existing) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    const [team] = await this.databaseService.database
+      .update(teams)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.primaryColor !== undefined
+          ? { primaryColor: input.primaryColor }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(teams.id, existing.id))
+      .returning();
+
+    if (!team) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    return {
+      id: team.id,
+      name: team.name,
+      role: existing.role,
+      primaryColor: team.primaryColor,
+    };
   }
 }

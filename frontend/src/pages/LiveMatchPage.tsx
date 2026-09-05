@@ -7,11 +7,18 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Loader2, Pencil, RotateCcw, ShieldAlert } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Loader2,
+  RotateCcw,
+  Settings,
+  ShieldAlert,
+} from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useLineup } from "@/features/team-management/api";
 import {
   useDeleteMatchEvent,
   useFinishMatch,
@@ -26,10 +33,9 @@ import type {
   MatchEventType,
   MatchLogEvent,
   MatchSquadAthlete,
+  OpponentMatchPlayer,
 } from "@/features/matches/types";
 import {
-  EVENT_COLOR,
-  EVENT_LABEL,
   PENALTY_MISSED_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
@@ -38,6 +44,21 @@ import {
   isSecondYellow,
 } from "@/features/matches/event-visuals";
 import { EventTypeGlyph } from "@/features/matches/EventTypeGlyph";
+import {
+  opponentPitchState,
+  ownPitchState,
+  placeOppPlayers,
+  placeOwnPlayers,
+  resolveOppColor,
+  resolveOwnColor,
+  runningScoreByEvent,
+  teamAbbrev,
+} from "@/features/matches/live-match-model";
+import {
+  LiveBenchRow,
+  LivePitch,
+  LivePitchPlayers,
+} from "@/features/matches/live-tactical-view";
 import "./LiveMatchPage.css";
 
 type Period =
@@ -49,19 +70,19 @@ type Period =
 
 type LogAction = Exclude<MatchEventType, "assist">;
 
+type LogTarget =
+  | { kind: "own"; athlete: MatchSquadAthlete }
+  | { kind: "opp"; player: OpponentMatchPlayer }
+  | { kind: "opp-generic" };
+
 type Composer =
   | { kind: "closed" }
-  | { kind: "team"; eventType: LogAction }
+  | { kind: "penalty-outcome" }
   | {
-      kind: "keypad";
-      eventType: LogAction;
+      kind: "sub-in";
       team: MatchEventTeam;
-      reassignId?: string;
-      detail?: string;
-    }
-  | { kind: "penalty-outcome"; team: MatchEventTeam }
-  | { kind: "sub-out"; team: MatchEventTeam }
-  | { kind: "sub-in"; team: MatchEventTeam; outgoing: MatchSquadAthlete | string };
+      outgoing: MatchSquadAthlete | OpponentMatchPlayer | "generic";
+    };
 
 type ConfirmKind = "pause" | "half" | "full" | null;
 
@@ -70,61 +91,10 @@ type PersistInput = {
   eventType: MatchEventType;
   athleteId?: string;
   opponentLabel?: string;
+  opponentPlayerId?: string;
   detail?: string;
   reassignId?: string;
 };
-
-const UNASSIGNED_SECONDS = 8;
-
-const ACTIONS: {
-  type: LogAction;
-  label: string;
-  color: string;
-  glow: string;
-}[] = [
-  {
-    type: "goal",
-    label: "GOAL",
-    color: EVENT_COLOR.goal,
-    glow: "0 0 22px rgba(0,217,154,0.45)",
-  },
-  {
-    type: "key_pass",
-    label: "KEY PASS",
-    color: EVENT_COLOR.key_pass,
-    glow: "0 0 22px rgba(91,159,255,0.4)",
-  },
-  {
-    type: "yellow_card",
-    label: "YELLOW",
-    color: EVENT_COLOR.yellow_card,
-    glow: "0 0 22px rgba(245,197,24,0.4)",
-  },
-  {
-    type: "red_card",
-    label: "RED",
-    color: EVENT_COLOR.red_card,
-    glow: "0 0 22px rgba(255,91,95,0.45)",
-  },
-  {
-    type: "substitution",
-    label: "SUB",
-    color: EVENT_COLOR.substitution,
-    glow: "0 0 22px rgba(192,132,252,0.4)",
-  },
-  {
-    type: "penalty",
-    label: "PENALTY",
-    color: EVENT_COLOR.penalty,
-    glow: "0 0 22px rgba(32,230,166,0.4)",
-  },
-  {
-    type: "injury",
-    label: "INJURY",
-    color: EVENT_COLOR.injury,
-    glow: "0 0 22px rgba(251,146,60,0.4)",
-  },
-];
 
 function formatClock(elapsedMs: number) {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
@@ -143,19 +113,68 @@ function shirtLabel(athlete: MatchSquadAthlete) {
     : `${athlete.firstName} ${athlete.lastName}`.trim();
 }
 
-function isUnassigned(event: MatchLogEvent) {
-  return !event.athleteId && !event.opponentLabel;
+function opponentShirtLabel(
+  player: OpponentMatchPlayer,
+  visibility: "none" | "numbers" | "full",
+) {
+  if (visibility === "full" && player.name) {
+    return `#${player.shirtNumber} ${player.name}`;
+  }
+  return `#${player.shirtNumber}`;
 }
 
 function substitutionIncoming(
   event: MatchLogEvent,
   squad: MatchSquadAthlete[],
+  opponentSquad: OpponentMatchPlayer[],
 ) {
   if (event.eventType !== "substitution" || !event.detail) {
     return "";
   }
-  const incoming = squad.find((athlete) => athlete.id === event.detail);
-  return incoming ? ` → ${shirtLabel(incoming)}` : ` → ${event.detail}`;
+  if (event.team === "own") {
+    const incoming = squad.find((athlete) => athlete.id === event.detail);
+    return incoming ? ` → ${shirtLabel(incoming)}` : ` → ${event.detail}`;
+  }
+  const incoming = opponentSquad.find((player) => player.id === event.detail);
+  return incoming
+    ? ` → #${incoming.shirtNumber}${incoming.name ? ` ${incoming.name}` : ""}`
+    : ` → ${event.detail}`;
+}
+
+function targetKey(target: LogTarget | null) {
+  if (!target) {
+    return null;
+  }
+  if (target.kind === "own") {
+    return `own:${target.athlete.id}`;
+  }
+  if (target.kind === "opp") {
+    return `opp:${target.player.id}`;
+  }
+  return "opp-generic";
+}
+
+function loggingForLabel(
+  target: LogTarget | null,
+  visibility: "none" | "numbers" | "full",
+) {
+  if (!target) {
+    return "TAP A PLAYER";
+  }
+  if (target.kind === "own") {
+    const number =
+      target.athlete.squadNumber != null
+        ? `#${target.athlete.squadNumber}`
+        : "";
+    return `LOGGING FOR ${number} ${lastName(target.athlete).toUpperCase()}`.replace(
+      /\s+/g,
+      " ",
+    );
+  }
+  if (target.kind === "opp-generic") {
+    return "LOGGING FOR OPPONENT";
+  }
+  return `LOGGING FOR ${opponentShirtLabel(target.player, visibility).toUpperCase()}`;
 }
 
 function WhistleIcon({ size = 56 }: { size?: number }) {
@@ -167,6 +186,19 @@ function WhistleIcon({ size = 56 }: { size?: number }) {
       />
       <circle cx="22" cy="30" r="5" fill="#070d12" />
       <path d="M42 22h10c4 0 7 3 7 7v2c0 4-3 7-7 7h-4" stroke="#00d99a" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function SoccerGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.2" />
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M12 7.2 13.7 10l3.2.3-2.4 2.3.7 3.1L12 14.2 8.8 15.7l.7-3.1-2.4-2.3 3.2-.3L12 7.2Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
@@ -183,6 +215,7 @@ export default function LiveMatchPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
+  const lineupQuery = useLineup(matchQuery.data?.lineupId ?? undefined);
   const logEvent = useLogMatchEvent(matchId ?? "");
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
@@ -193,25 +226,18 @@ export default function LiveMatchPage() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const baseRef = useRef(0);
 
+  const [target, setTarget] = useState<LogTarget | null>(null);
   const [composer, setComposer] = useState<Composer>({ kind: "closed" });
-  const [digits, setDigits] = useState("");
-  const [countdown, setCountdown] = useState(UNASSIGNED_SECONDS);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [endOpen, setEndOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{
     id?: string;
     label: string;
   } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [shirtError, setShirtError] = useState<string | null>(null);
   const elapsedRef = useRef(0);
-  const autoSavedRef = useRef(false);
   const persistLockRef = useRef(false);
-  const digitsRef = useRef("");
-  const shirtErrorTimerRef = useRef<number | null>(null);
-  const persistEventRef = useRef<(input: PersistInput) => Promise<void>>(
-    async () => {},
-  );
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
   const enteringIdsRef = useRef(new Set<string>());
@@ -219,14 +245,6 @@ export default function LiveMatchPage() {
   useEffect(() => {
     elapsedRef.current = elapsedMs;
   }, [elapsedMs]);
-
-  useEffect(() => {
-    return () => {
-      if (shirtErrorTimerRef.current != null) {
-        window.clearTimeout(shirtErrorTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (matchQuery.data?.eventStatus === "completed") {
@@ -253,8 +271,12 @@ export default function LiveMatchPage() {
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
   );
+  const opponentSquad = useMemo(
+    () => matchQuery.data?.opponentSquad ?? [],
+    [matchQuery.data?.opponentSquad],
+  );
+  const visibility = matchQuery.data?.opponentSquadVisibility ?? "none";
   const currentMinute = Math.floor(elapsedMs / 60_000);
-  digitsRef.current = digits;
 
   const rowKey = (event: MatchLogEvent) => event.optimisticKey ?? event.id;
 
@@ -271,50 +293,83 @@ export default function LiveMatchPage() {
     }
   }
 
-  const pitchState = useMemo(() => {
-    const onPitch = new Set(
-      squad.filter((athlete) => athlete.started).map((athlete) => athlete.id),
-    );
-    const bench = new Set(
-      squad.filter((athlete) => !athlete.started).map((athlete) => athlete.id),
-    );
-    const chronological = [...timeline].sort((a, b) => {
-      const byTime = a.minute - b.minute;
-      if (byTime !== 0) {
-        return byTime;
-      }
-      return a.createdAt.localeCompare(b.createdAt);
-    });
-    for (const event of chronological) {
-      if (event.eventType !== "substitution" || event.team !== "own") {
-        continue;
-      }
-      const outgoingId = event.athleteId;
-      const incomingId = event.detail;
-      if (outgoingId) {
-        onPitch.delete(outgoingId);
-        bench.add(outgoingId);
-      }
-      if (incomingId) {
-        onPitch.add(incomingId);
-        bench.delete(incomingId);
-      }
-    }
-    return {
-      onPitch: squad.filter((athlete) => onPitch.has(athlete.id)),
-      bench: squad.filter((athlete) => bench.has(athlete.id)),
-    };
-  }, [squad, timeline]);
+  const ownState = useMemo(
+    () => ownPitchState(squad, timeline),
+    [squad, timeline],
+  );
+  const oppState = useMemo(
+    () => opponentPitchState(opponentSquad, timeline),
+    [opponentSquad, timeline],
+  );
 
   const ownName = team?.name ?? "US";
   const oppName = matchQuery.data?.opponentName ?? "OPP";
   const isHome = matchQuery.data?.isHome ?? true;
+  const ownColor = resolveOwnColor(
+    matchQuery.data?.teamColor,
+    team?.primaryColor,
+  );
+  const oppColor = resolveOppColor(matchQuery.data?.opponentColor);
+  const homeColor = isHome ? ownColor : oppColor;
+  const awayColor = isHome ? oppColor : ownColor;
+  const ownHalf = isHome ? "left" : "right";
+  const oppHalf = isHome ? "right" : "left";
   const teamScore = matchQuery.data?.teamScore ?? 0;
   const oppScore = matchQuery.data?.opponentScore ?? 0;
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
   const awayScore = isHome ? oppScore : teamScore;
+  const homeAbbrev = teamAbbrev(homeName);
+  const awayAbbrev = teamAbbrev(awayName);
+  const ownAbbrev = teamAbbrev(ownName);
+  const oppAbbrev = teamAbbrev(oppName);
+
+  const ownPlaced = useMemo(
+    () =>
+      placeOwnPlayers(
+        ownState.onPitch,
+        lineupQuery.data,
+        ownHalf,
+        timeline,
+      ),
+    [ownState.onPitch, lineupQuery.data, ownHalf, timeline],
+  );
+  const oppPlaced = useMemo(
+    () => placeOppPlayers(oppState.onPitch, oppHalf),
+    [oppState.onPitch, oppHalf],
+  );
+  const ownPitchIds = useMemo(
+    () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
+    [ownPlaced],
+  );
+  const oppPitchIds = useMemo(
+    () => new Set(oppPlaced.map((placed) => placed.player.id)),
+    [oppPlaced],
+  );
+  const ownBench = useMemo(() => {
+    const overflow = ownState.onPitch.filter(
+      (athlete) => !ownPitchIds.has(athlete.id),
+    );
+    return [
+      ...ownState.bench.filter((athlete) => !ownPitchIds.has(athlete.id)),
+      ...overflow,
+    ];
+  }, [ownState.bench, ownState.onPitch, ownPitchIds]);
+  const oppBench = useMemo(() => {
+    const overflow = oppState.onPitch.filter(
+      (player) => !oppPitchIds.has(player.id),
+    );
+    return [
+      ...oppState.bench.filter((player) => !oppPitchIds.has(player.id)),
+      ...overflow,
+    ];
+  }, [oppState.bench, oppState.onPitch, oppPitchIds]);
+
+  const runningScores = useMemo(
+    () => runningScoreByEvent(timeline, isHome),
+    [timeline, isHome],
+  );
 
   const loggedGoalsOwn = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "own",
@@ -322,28 +377,6 @@ export default function LiveMatchPage() {
   const loggedGoalsOpp = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "opponent",
   ).length;
-
-  const keypadLookup = useMemo(() => {
-    if (!digits) {
-      return null;
-    }
-    const number = Number(digits);
-    if (composer.kind !== "keypad") {
-      return null;
-    }
-    if (composer.team === "opponent") {
-      return { label: `Opponent #${digits}`, athlete: null as MatchSquadAthlete | null };
-    }
-    const athlete = pitchState.onPitch.find(
-      (player) => player.squadNumber === number,
-    );
-    return {
-      label: athlete
-        ? `#${digits} ${lastName(athlete)}`
-        : `#${digits}`,
-      athlete: athlete ?? null,
-    };
-  }, [digits, composer, pitchState.onPitch]);
 
   const startClock = () => {
     setRunning(true);
@@ -366,6 +399,7 @@ export default function LiveMatchPage() {
     pauseClock();
     setPeriod("half_time");
     setConfirm(null);
+    setSettingsOpen(false);
   };
 
   const startSecondHalf = () => {
@@ -382,6 +416,7 @@ export default function LiveMatchPage() {
     pauseClock();
     setPeriod("full_time");
     setConfirm(null);
+    setSettingsOpen(false);
   };
 
   const backToFirstHalf = () => {
@@ -389,29 +424,8 @@ export default function LiveMatchPage() {
     setRunning(true);
   };
 
-  const openKeypad = (
-    eventType: LogAction,
-    team: MatchEventTeam,
-    options?: { reassignId?: string; detail?: string },
-  ) => {
-    autoSavedRef.current = false;
-    persistLockRef.current = false;
-    setShirtError(null);
-    setDigits("");
-    setCountdown(UNASSIGNED_SECONDS);
-    setComposer({
-      kind: "keypad",
-      eventType,
-      team,
-      reassignId: options?.reassignId,
-      detail: options?.detail,
-    });
-  };
-
   const closeComposer = useCallback(() => {
     setComposer({ kind: "closed" });
-    setDigits("");
-    setCountdown(UNASSIGNED_SECONDS);
   }, []);
 
   const persistEvent = useCallback(
@@ -420,7 +434,6 @@ export default function LiveMatchPage() {
         return;
       }
       persistLockRef.current = true;
-      autoSavedRef.current = true;
       setActionError(null);
 
       let eventType = input.eventType;
@@ -432,6 +445,7 @@ export default function LiveMatchPage() {
           input.team,
           input.athleteId,
           input.opponentLabel,
+          input.opponentPlayerId,
         )
       ) {
         eventType = "red_card";
@@ -447,6 +461,7 @@ export default function LiveMatchPage() {
             input: {
               athleteId: input.athleteId ?? null,
               opponentLabel: input.opponentLabel ?? null,
+              opponentPlayerId: input.opponentPlayerId ?? null,
             },
           });
         } else {
@@ -458,6 +473,9 @@ export default function LiveMatchPage() {
             ...(input.opponentLabel
               ? { opponentLabel: input.opponentLabel }
               : {}),
+            ...(input.opponentPlayerId
+              ? { opponentPlayerId: input.opponentPlayerId }
+              : {}),
             ...(detail ? { detail } : {}),
           });
           setToast({
@@ -466,7 +484,6 @@ export default function LiveMatchPage() {
           });
           window.setTimeout(() => setToast(null), 5000);
           if (eventType === "injury") {
-            persistLockRef.current = false;
             if (input.team === "own" && input.athleteId) {
               const outgoing = squad.find(
                 (athlete) => athlete.id === input.athleteId,
@@ -478,18 +495,20 @@ export default function LiveMatchPage() {
                   outgoing,
                 });
               }
-            } else if (input.team === "opponent" && input.opponentLabel) {
+            } else if (input.team === "opponent") {
+              const outgoing =
+                opponentSquad.find(
+                  (player) => player.id === input.opponentPlayerId,
+                ) ?? "generic";
               setComposer({
                 kind: "sub-in",
                 team: "opponent",
-                outgoing: input.opponentLabel,
+                outgoing,
               });
             }
           }
         }
       } catch (err) {
-        autoSavedRef.current = false;
-        persistLockRef.current = false;
         const message =
           err instanceof ApiError
             ? err.message
@@ -497,79 +516,150 @@ export default function LiveMatchPage() {
         setActionError(message);
         setToast({ label: message });
         window.setTimeout(() => setToast(null), 5000);
+      } finally {
+        persistLockRef.current = false;
       }
     },
-    [matchId, currentMinute, timeline, squad, updateEvent, logEvent, closeComposer],
+    [
+      matchId,
+      currentMinute,
+      timeline,
+      squad,
+      opponentSquad,
+      updateEvent,
+      logEvent,
+      closeComposer,
+    ],
   );
 
-  persistEventRef.current = persistEvent;
-
-  useEffect(() => {
-    if (composer.kind !== "keypad") {
+  const persistFromTarget = (eventType: LogAction, detail?: string) => {
+    if (!target) {
+      setActionError("Select a player first.");
       return;
     }
-    setCountdown(UNASSIGNED_SECONDS);
-    const keypad = composer;
-    const id = window.setInterval(() => {
-      setCountdown((value) => {
-        if (value <= 1) {
-          window.clearInterval(id);
-          if (!digitsRef.current && !autoSavedRef.current) {
-            autoSavedRef.current = true;
-            void persistEventRef.current({
-              team: keypad.team,
-              eventType: keypad.eventType,
-              detail: keypad.detail,
-              reassignId: keypad.reassignId,
-            });
-          }
-          return 0;
-        }
-        return value - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [composer]);
-
-  const flashUnknownShirt = () => {
-    setShirtError("No player with that number on the field");
-    if (shirtErrorTimerRef.current != null) {
-      window.clearTimeout(shirtErrorTimerRef.current);
-    }
-    shirtErrorTimerRef.current = window.setTimeout(() => {
-      setShirtError(null);
-      setDigits("");
-      setCountdown(UNASSIGNED_SECONDS);
-      shirtErrorTimerRef.current = null;
-    }, 1800);
-  };
-
-  const submitKeypad = () => {
-    if (composer.kind !== "keypad" || persistLockRef.current) {
+    if (persistLockRef.current) {
       return;
     }
-    if (composer.team === "own" && digits && !keypadLookup?.athlete) {
-      flashUnknownShirt();
-      return;
-    }
-    autoSavedRef.current = true;
-    if (composer.team === "own") {
+    if (target.kind === "own") {
       void persistEvent({
         team: "own",
-        eventType: composer.eventType,
-        athleteId: keypadLookup?.athlete?.id,
-        detail: composer.detail,
-        reassignId: composer.reassignId,
+        eventType,
+        athleteId: target.athlete.id,
+        detail,
+      });
+      return;
+    }
+    if (target.kind === "opp") {
+      void persistEvent({
+        team: "opponent",
+        eventType,
+        opponentPlayerId: target.player.id,
+        opponentLabel: opponentShirtLabel(target.player, visibility),
+        detail,
       });
       return;
     }
     void persistEvent({
       team: "opponent",
-      eventType: composer.eventType,
-      opponentLabel: digits ? `Opponent #${digits}` : undefined,
-      detail: composer.detail,
-      reassignId: composer.reassignId,
+      eventType,
+      opponentLabel: oppName,
+      detail,
     });
+  };
+
+  const handleAction = (eventType: LogAction) => {
+    if (!target) {
+      setActionError("Tap a player marker to log an event.");
+      return;
+    }
+    setActionError(null);
+    if (eventType === "substitution") {
+      if (target.kind === "own") {
+        if (!ownPitchIds.has(target.athlete.id)) {
+          setActionError("Select the player coming off the pitch.");
+          return;
+        }
+        setComposer({ kind: "sub-in", team: "own", outgoing: target.athlete });
+        return;
+      }
+      if (target.kind === "opp") {
+        if (!oppPitchIds.has(target.player.id)) {
+          setActionError("Select the player coming off the pitch.");
+          return;
+        }
+        setComposer({ kind: "sub-in", team: "opponent", outgoing: target.player });
+        return;
+      }
+      setComposer({ kind: "sub-in", team: "opponent", outgoing: "generic" });
+      return;
+    }
+    if (eventType === "penalty") {
+      setComposer({ kind: "penalty-outcome" });
+      return;
+    }
+    persistFromTarget(eventType);
+  };
+
+  const completeSubIn = (
+    incoming: MatchSquadAthlete | OpponentMatchPlayer,
+  ) => {
+    if (composer.kind !== "sub-in") {
+      return;
+    }
+    if (composer.team === "own" && "firstName" in incoming) {
+      const outgoing = composer.outgoing as MatchSquadAthlete;
+      void persistEvent({
+        team: "own",
+        eventType: "substitution",
+        athleteId: outgoing.id,
+        detail: incoming.id,
+      });
+      return;
+    }
+    if (composer.team === "opponent" && "shirtNumber" in incoming) {
+      const outgoing = composer.outgoing;
+      void persistEvent({
+        team: "opponent",
+        eventType: "substitution",
+        opponentPlayerId:
+          outgoing !== "generic" && "shirtNumber" in outgoing
+            ? outgoing.id
+            : undefined,
+        opponentLabel:
+          outgoing !== "generic" && "shirtNumber" in outgoing
+            ? opponentShirtLabel(outgoing, visibility)
+            : oppName,
+        detail: incoming.id,
+      });
+    }
+  };
+
+  const selectOwn = (athlete: MatchSquadAthlete) => {
+    if (
+      composer.kind === "sub-in" &&
+      composer.team === "own" &&
+      ownBench.some((player) => player.id === athlete.id)
+    ) {
+      completeSubIn(athlete);
+      return;
+    }
+    setComposer({ kind: "closed" });
+    setTarget({ kind: "own", athlete });
+    setActionError(null);
+  };
+
+  const selectOpp = (player: OpponentMatchPlayer) => {
+    if (
+      composer.kind === "sub-in" &&
+      composer.team === "opponent" &&
+      oppBench.some((item) => item.id === player.id)
+    ) {
+      completeSubIn(player);
+      return;
+    }
+    setComposer({ kind: "closed" });
+    setTarget({ kind: "opp", player });
+    setActionError(null);
   };
 
   const handleUndo = async (eventId: string) => {
@@ -613,8 +703,9 @@ export default function LiveMatchPage() {
             ? "2ND HALF"
             : "FULL TIME";
 
-  const liveLogging =
-    period === "first_half" || period === "second_half";
+  const liveLogging = period === "first_half" || period === "second_half";
+  const selectedKey = targetKey(target);
+  const logEnabled = liveLogging && Boolean(target);
 
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
@@ -660,103 +751,138 @@ export default function LiveMatchPage() {
   }
 
   return (
-    <div className="live-match flex min-h-screen flex-col overflow-x-hidden">
-      <header className="flex items-center justify-between gap-3 border-b border-[#1c2b36] px-4 py-3">
+    <div className="live-match flex min-h-dvh flex-col">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
-          <SportLogo size={36} className="shrink-0 rounded-lg" />
-          <div className="min-w-0">
-            <h1 className="font-display text-base font-bold tracking-wide text-[#e8ecef]">
-              GAFFER
-            </h1>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[#8e9ba8]">
-              Live Logger
-            </p>
-          </div>
+          <SportLogo size={36} className="rounded-lg" />
+          <h1 className="font-display text-base font-bold tracking-wide text-[#00d99a]">
+            GAFFER
+          </h1>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-3 py-1 font-oswald text-xs tracking-widest",
-            period === "not_started"
-              ? "bg-[#1a2530] text-[#8e9ba8]"
-              : period === "full_time"
-                ? "bg-[#ff5b5f]/15 text-[#ff5b5f]"
-                : "bg-[#00d99a]/15 text-[#00d99a]",
-          )}
-        >
-          {periodLabel}
-        </span>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="Match settings"
+              className="rounded-md p-2 text-[#c5ced6] hover:bg-white/5"
+              onClick={() => setSettingsOpen((open) => !open)}
+            >
+              <Settings className="size-5" />
+            </button>
+            {settingsOpen && (
+              <div className="absolute right-0 z-30 mt-1 w-52 rounded-xl border border-[#1c2b36] bg-[#101920] p-2 shadow-xl">
+                {period === "not_started" && (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      startFirstHalf();
+                    }}
+                  >
+                    Start game
+                  </SettingsItem>
+                )}
+                {liveLogging && (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setConfirm("pause");
+                    }}
+                  >
+                    {running ? "Pause time" : "Resume time"}
+                  </SettingsItem>
+                )}
+                {period === "first_half" && (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setConfirm("half");
+                    }}
+                  >
+                    Half time
+                  </SettingsItem>
+                )}
+                {period === "half_time" && (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      startSecondHalf();
+                    }}
+                  >
+                    Start 2nd half
+                  </SettingsItem>
+                )}
+                {period === "second_half" && (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setConfirm("full");
+                    }}
+                  >
+                    Full time
+                  </SettingsItem>
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
+            onClick={() => {
+              if (period !== "full_time") {
+                goFullTime();
+              }
+              setEndOpen(true);
+            }}
+          >
+            End Match
+          </button>
+        </div>
       </header>
 
-      <div className="px-4 pb-28 pt-5">
-        <div className="text-center">
+      <div className="flex flex-col gap-2 px-4 pb-3 pt-0">
+        <div className="mx-auto w-full max-w-5xl shrink-0">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-            <p className="truncate text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8] sm:text-[11px]">
-              {homeName}
+            <div className="flex flex-col items-end">
+              <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {homeAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: homeColor }}
+              />
+            </div>
+            <p className="font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+              <span style={{ color: homeColor }}>{homeScore}</span>
+              <span className="mx-1.5 text-2xl text-[#8e9ba8]">-</span>
+              <span style={{ color: awayColor }}>{awayScore}</span>
             </p>
-            <p className="font-oswald text-5xl leading-none tabular-nums text-white sm:text-7xl">
-              {homeScore}
-              <span className="mx-1 text-2xl text-[#8e9ba8] sm:mx-2 sm:text-3xl">–</span>
-              {awayScore}
-            </p>
-            <p className="truncate text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8] sm:text-[11px]">
-              {awayName}
-            </p>
+            <div className="flex flex-col items-start">
+              <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {awayAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: awayColor }}
+              />
+            </div>
           </div>
-          <p className="mt-4 font-oswald text-4xl tabular-nums tracking-wide text-white sm:text-5xl">
-            {formatClock(elapsedMs)}
-          </p>
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#8e9ba8]">
-            {periodLabel}
-          </p>
+          <div className="mt-1.5 flex justify-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#1c2b36] bg-[#0c1218] px-3 py-0.5">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  running ? "animate-pulse bg-[#ff5b5f]" : "bg-[#5d6b76]",
+                )}
+              />
+              <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
+                {formatClock(elapsedMs)}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
+                {periodLabel}
+              </span>
+            </span>
+          </div>
         </div>
-
-        {period === "not_started" && (
-          <div className="mt-12 flex flex-col items-center">
-            <button
-              type="button"
-              onClick={startFirstHalf}
-              className="relative flex flex-col items-center gap-4"
-            >
-              <span className="absolute size-40 rounded-full bg-[#00d99a] opacity-25 blur-2xl animate-pulse" />
-              <span className="relative flex size-32 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#101920] shadow-[0_0_40px_rgba(0,217,154,0.45)]">
-                <WhistleIcon />
-              </span>
-              <span className="relative font-oswald text-2xl tracking-[0.28em] text-[#00d99a]">
-                START GAME
-              </span>
-            </button>
-          </div>
-        )}
-
-        {liveLogging && (
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-[#233747] bg-[#101920] px-4 py-2 font-oswald text-xs tracking-widest"
-              onClick={() => setConfirm("pause")}
-            >
-              {running ? "PAUSE TIME" : "RESUME TIME"}
-            </button>
-            {period === "first_half" && (
-              <button
-                type="button"
-                className="rounded-lg border border-[#233747] bg-[#101920] px-4 py-2 font-oswald text-xs tracking-widest"
-                onClick={() => setConfirm("half")}
-              >
-                HALF TIME
-              </button>
-            )}
-            {period === "second_half" && (
-              <button
-                type="button"
-                className="rounded-lg border border-[#233747] bg-[#101920] px-4 py-2 font-oswald text-xs tracking-widest"
-                onClick={() => setConfirm("full")}
-              >
-                FULL TIME
-              </button>
-            )}
-          </div>
-        )}
 
         {period === "half_time" && (
           <PeriodSummary
@@ -768,6 +894,7 @@ export default function LiveMatchPage() {
             continueLabel="START 2ND HALF"
             onBack={backToFirstHalf}
             backLabel="← Back to 1st Half"
+            compact
           />
         )}
 
@@ -780,106 +907,149 @@ export default function LiveMatchPage() {
             onContinue={() => setEndOpen(true)}
             continueLabel="END MATCH & SAVE REPORT"
             continueDisabled={match.eventStatus === "completed" || finishMatch.isPending}
+            compact
           />
         )}
 
         {actionError && (
-          <p role="alert" className="mt-4 text-center text-sm text-[#ff5b5f]">
+          <p role="alert" className="shrink-0 text-center text-xs text-[#ff5b5f]">
             {actionError}
           </p>
         )}
 
-        {liveLogging && (
-          <div className="mt-8 grid grid-cols-2 gap-2 sm:gap-3">
-            {ACTIONS.map((action) => (
+        <section className="flex shrink-0 flex-col">
+          <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+            Tactical view
+          </h2>
+          <LivePitch>
+            <LivePitchPlayers
+              ownPlaced={ownPlaced}
+              oppPlaced={oppPlaced}
+              ownColor={ownColor}
+              oppColor={oppColor}
+              visibility={visibility}
+              timeline={timeline}
+              selectedKey={selectedKey}
+              onSelectOwn={selectOwn}
+              onSelectOpp={selectOpp}
+            />
+            {visibility === "none" && (
               <button
-                key={action.type}
                 type="button"
-                className="rounded-xl border bg-[#101920] px-2 py-3 font-oswald text-xs tracking-[0.18em] sm:px-3 sm:py-4 sm:text-sm disabled:opacity-40"
-                style={{
-                  borderColor: action.color,
-                  color: action.color,
-                  boxShadow: action.glow,
-                }}
                 onClick={() => {
-                  persistLockRef.current = false;
-                  setComposer({ kind: "team", eventType: action.type });
+                  setComposer({ kind: "closed" });
+                  setTarget({ kind: "opp-generic" });
+                  setActionError(null);
                 }}
+                className={cn(
+                  "absolute top-2 rounded-full border border-white/35 bg-[#123528]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/90 shadow-sm backdrop-blur-[1px]",
+                  "hover:border-white/60 hover:bg-[#1b4d36]/90",
+                  isHome ? "right-[12%]" : "left-[12%]",
+                  selectedKey === "opp-generic" &&
+                    "border-[#00d99a] text-[#00d99a] ring-1 ring-[#00d99a]/70",
+                )}
               >
-                {action.label}
+                {oppAbbrev} · log opponent
               </button>
-            ))}
-          </div>
+            )}
+            {period === "not_started" && (
+              <button
+                type="button"
+                onClick={startFirstHalf}
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/35"
+              >
+                <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#101920] shadow-[0_0_24px_rgba(0,217,154,0.4)]">
+                  <WhistleIcon size={36} />
+                </span>
+                <span className="mt-2 font-oswald text-lg tracking-[0.28em] text-[#00d99a]">
+                  START GAME
+                </span>
+              </button>
+            )}
+          </LivePitch>
+        </section>
+
+        <section className="shrink-0 rounded-xl border border-[#1c2b36] bg-[#0c1218] px-3 py-1.5">
+          <LiveBenchRow
+            label={`${ownAbbrev} bench`}
+            color={ownColor}
+            athletes={ownBench}
+            timeline={timeline}
+            selectedKey={selectedKey}
+            onSelectOwn={selectOwn}
+          />
+          <LiveBenchRow
+            label={`${oppAbbrev} bench`}
+            color={oppColor}
+            opponents={oppBench}
+            visibility={visibility}
+            timeline={timeline}
+            selectedKey={selectedKey}
+            onSelectOpp={selectOpp}
+          />
+        </section>
+
+        {composer.kind === "sub-in" && (
+          <p className="shrink-0 text-center text-xs text-[#ffbe2e]">
+            Tap a {composer.team === "own" ? ownAbbrev : oppAbbrev} bench
+            player to come on
+            {composer.team === "opponent" && visibility === "none"
+              ? " — no opponent bench is available"
+              : ""}
+            .
+          </p>
         )}
 
-        <section className="mt-8">
-          <h2 className="font-oswald text-sm tracking-[0.22em] text-[#8e9ba8]">
-            TIMELINE
-          </h2>
-          {timeline.length === 0 ? (
-            <p className="mt-4 text-center text-sm text-[#8e9ba8]">
-              No events yet.
-            </p>
-          ) : (
-            <ul className="mt-3 flex flex-col gap-2 overflow-x-hidden">
-              {timeline.map((event) => {
-                const unassigned = isUnassigned(event);
-                const who = event.athlete
-                  ? shirtLabel(event.athlete)
-                  : event.opponentLabel ?? "Unassigned";
-                const accent = EVENT_COLOR[event.eventType];
-                const key = rowKey(event);
-                return (
-                  <li
-                    key={key}
-                    className={cn(
-                      "flex items-center justify-between gap-2 rounded-xl border border-l-4 px-3 py-3",
-                      unassigned
-                        ? "border-[#ffbe2e] bg-[#ffbe2e]/10"
-                        : "border-[#1c2b36] bg-[#101920]",
-                      event.pending && "opacity-55",
-                      enteringIdsRef.current.has(key) &&
-                        "live-timeline-enter",
-                    )}
-                    style={{ borderLeftColor: accent }}
-                  >
-                    <div className="flex min-w-0 items-start gap-2">
-                      <EventTypeGlyph
-                        eventType={event.eventType}
-                        secondYellow={isSecondYellow(event)}
-                      />
-                      <div className="min-w-0">
-                        <p className="font-oswald text-sm tracking-wide">
-                          {event.minute}&apos; {eventDisplayLabel(event)}
-                        </p>
-                        <p
-                          className={cn(
-                            "truncate text-xs",
-                            unassigned ? "text-[#ffbe2e]" : "text-[#8e9ba8]",
-                          )}
-                        >
-                          {event.team === "own" ? ownName : oppName} · {who}
-                          {substitutionIncoming(event, squad)}
-                        </p>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-2">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5">
+            <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+              Match log
+            </h2>
+            {timeline.length === 0 ? (
+              <p className="mt-3 text-center text-sm text-[#8e9ba8]">
+                No events yet.
+              </p>
+            ) : (
+              <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+                {timeline.map((event) => {
+                  const who = event.athlete
+                    ? shirtLabel(event.athlete)
+                    : event.opponentPlayer
+                      ? opponentShirtLabel(event.opponentPlayer, visibility)
+                      : event.opponentLabel ?? "Unassigned";
+                  const key = rowKey(event);
+                  const teamBorder =
+                    event.team === "own" ? ownColor : oppColor;
+                  const score = runningScores.get(key);
+                  return (
+                    <li
+                      key={key}
+                      className={cn(
+                        "flex items-center justify-between gap-2 rounded-lg border border-[#1c2b36] border-l-4 bg-[#101920] px-3 py-2.5",
+                        event.pending && "opacity-55",
+                        enteringIdsRef.current.has(key) && "live-timeline-enter",
+                      )}
+                      style={{ borderLeftColor: teamBorder }}
+                    >
+                      <div className="flex min-w-0 items-start gap-2">
+                        <EventTypeGlyph
+                          eventType={event.eventType}
+                          secondYellow={isSecondYellow(event)}
+                        />
+                        <div className="min-w-0">
+                          <p className="font-oswald text-sm tracking-wide">
+                            {event.minute}&apos; {eventDisplayLabel(event)}
+                            {event.eventType === "goal" && score
+                              ? `  ${score}`
+                              : ""}
+                          </p>
+                          <p className="truncate text-xs text-[#8e9ba8]">
+                            {event.team === "own" ? ownName : oppName} · {who}
+                            {substitutionIncoming(event, squad, opponentSquad)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    {period !== "full_time" && !event.pending && (
-                      <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          aria-label="Edit attribution"
-                          className={cn(
-                            "rounded-md p-2",
-                            unassigned ? "text-[#ffbe2e]" : "text-[#8e9ba8]",
-                          )}
-                          onClick={() =>
-                            openKeypad(event.eventType as LogAction, event.team, {
-                              reassignId: event.id,
-                            })
-                          }
-                        >
-                          <Pencil className="size-4" />
-                        </button>
+                      {period !== "full_time" && !event.pending && (
                         <button
                           type="button"
                           aria-label="Undo event"
@@ -888,14 +1058,76 @@ export default function LiveMatchPage() {
                         >
                           <RotateCcw className="size-4" />
                         </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="flex min-h-0 flex-col overflow-y-auto rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5">
+            <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+              {loggingForLabel(target, visibility)}
+            </h2>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <LogButton
+                label="Goal"
+                color="#00d99a"
+                disabled={!logEnabled}
+                onClick={() => handleAction("goal")}
+                icon={<SoccerGlyph className="size-6" />}
+              />
+              <LogButton
+                label="Key Pass"
+                color="#5b9fff"
+                disabled={!logEnabled}
+                onClick={() => handleAction("key_pass")}
+                icon={<span className="text-lg font-bold">»»</span>}
+              />
+              <LogButton
+                label="Yellow"
+                color="#f5c518"
+                disabled={!logEnabled}
+                onClick={() => handleAction("yellow_card")}
+                icon={
+                  <span className="inline-block h-5 w-3.5 rounded-[2px] bg-[#f5c518]" />
+                }
+              />
+              <LogButton
+                label="Red"
+                color="#ff5b5f"
+                disabled={!logEnabled}
+                onClick={() => handleAction("red_card")}
+                icon={
+                  <span className="inline-block h-5 w-3.5 rounded-[2px] bg-[#ff5b5f]" />
+                }
+              />
+              <LogButton
+                label="Substitution"
+                color="#f5c518"
+                disabled={!logEnabled}
+                onClick={() => handleAction("substitution")}
+                className="col-span-2"
+                icon={<ArrowLeftRight className="size-5" />}
+              />
+              <LogButton
+                label="Penalty"
+                color="#20e6a6"
+                disabled={!logEnabled}
+                onClick={() => handleAction("penalty")}
+                icon={<span className="font-oswald text-lg">P</span>}
+              />
+              <LogButton
+                label="Injury"
+                color="#fb923c"
+                disabled={!logEnabled}
+                onClick={() => handleAction("injury")}
+                icon={<span className="text-lg font-bold">+</span>}
+              />
+            </div>
+          </section>
+        </div>
       </div>
 
       {toast && (
@@ -920,128 +1152,17 @@ export default function LiveMatchPage() {
         </div>
       )}
 
-      {composer.kind === "team" && (
-        <Overlay onClose={closeComposer}>
-          <p className="font-oswald text-2xl tracking-widest">WHO?</p>
-          <p className="mt-1 text-sm text-[#8e9ba8]">
-            {EVENT_LABEL[composer.eventType]}
-          </p>
-          <div className="mt-8 grid gap-3">
-            <button
-              type="button"
-              className="rounded-2xl border-2 border-[#00d99a] bg-[#00d99a]/10 py-6 font-oswald text-xl tracking-widest text-[#00d99a] sm:text-2xl"
-              onClick={() =>
-                composer.eventType === "substitution"
-                  ? setComposer({ kind: "sub-out", team: "own" })
-                  : composer.eventType === "penalty"
-                    ? setComposer({ kind: "penalty-outcome", team: "own" })
-                    : openKeypad(composer.eventType, "own")
-              }
-            >
-              {ownName}
-            </button>
-            <button
-              type="button"
-              className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest sm:text-2xl"
-              onClick={() =>
-                composer.eventType === "substitution"
-                  ? setComposer({ kind: "sub-out", team: "opponent" })
-                  : composer.eventType === "penalty"
-                    ? setComposer({ kind: "penalty-outcome", team: "opponent" })
-                    : openKeypad(composer.eventType, "opponent")
-              }
-            >
-              {oppName}
-            </button>
-          </div>
-        </Overlay>
-      )}
-
-      {composer.kind === "keypad" && (
-        <Overlay onClose={closeComposer} fullScreen>
-          <p className="font-oswald text-xl tracking-widest">
-            {composer.detail === PENALTY_SCORED_DETAIL
-              ? "PENALTY SCORED"
-              : composer.detail === PENALTY_MISSED_DETAIL
-                ? "PENALTY MISSED"
-                : EVENT_LABEL[composer.eventType]}{" "}
-            · {composer.team === "own" ? ownName : oppName}
-          </p>
-          <p className="mt-4 font-oswald text-5xl tabular-nums text-white">
-            {digits || "—"}
-          </p>
-          <p
-            className={cn(
-              "mt-2 min-h-7 text-lg",
-              shirtError ? "text-[#ff5b5f]" : "text-[#00d99a]",
-            )}
-          >
-            {shirtError
-              ? shirtError
-              : keypadLookup?.athlete
-                ? `→ ${keypadLookup.label}`
-                : countdown > 0
-                  ? `Unassigned in ${countdown}s`
-                  : digits
-                    ? ""
-                    : "Saving as Unassigned…"}
-          </p>
-          <Keypad
-            value={digits}
-            onChange={(value) => {
-              setShirtError(null);
-              setDigits(value);
-              setCountdown(UNASSIGNED_SECONDS);
-              if (
-                composer.kind === "keypad" &&
-                composer.team === "own" &&
-                value.length >= 1
-              ) {
-                const number = Number(value);
-                const onPitch = pitchState.onPitch.some(
-                  (player) => player.squadNumber === number,
-                );
-                if (!onPitch && value.length === 2) {
-                  flashUnknownShirt();
-                }
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="mt-4 w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f]"
-            onClick={submitKeypad}
-            disabled={
-              logEvent.isPending || updateEvent.isPending || Boolean(shirtError)
-            }
-          >
-            CONFIRM
-          </button>
-          <button
-            type="button"
-            className="mt-3 w-full rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
-            onClick={closeComposer}
-          >
-            NO, GO BACK
-          </button>
-        </Overlay>
-      )}
-
       {composer.kind === "penalty-outcome" && (
         <Overlay onClose={closeComposer}>
           <p className="font-oswald text-2xl tracking-widest">PENALTY</p>
           <p className="mt-1 text-sm text-[#8e9ba8]">
-            {composer.team === "own" ? ownName : oppName}
+            {loggingForLabel(target, visibility)}
           </p>
           <div className="mt-8 grid gap-3">
             <button
               type="button"
               className="rounded-2xl border-2 border-[#00d99a] bg-[#00d99a]/10 py-6 font-oswald text-xl tracking-widest text-[#00d99a]"
-              onClick={() =>
-                openKeypad("goal", composer.team, {
-                  detail: PENALTY_SCORED_DETAIL,
-                })
-              }
+              onClick={() => persistFromTarget("goal", PENALTY_SCORED_DETAIL)}
             >
               SCORED
             </button>
@@ -1049,74 +1170,12 @@ export default function LiveMatchPage() {
               type="button"
               className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest"
               onClick={() =>
-                openKeypad("penalty", composer.team, {
-                  detail: PENALTY_MISSED_DETAIL,
-                })
+                persistFromTarget("penalty", PENALTY_MISSED_DETAIL)
               }
             >
               MISSED
             </button>
           </div>
-        </Overlay>
-      )}
-
-      {composer.kind === "sub-out" && (
-        <Overlay onClose={closeComposer}>
-          <p className="font-oswald text-xl tracking-widest">COMING OFF</p>
-          {composer.team === "own" ? (
-            <PlayerList
-              athletes={pitchState.onPitch}
-              onPick={(athlete) =>
-                setComposer({ kind: "sub-in", team: "own", outgoing: athlete })
-              }
-            />
-          ) : (
-            <KeypadPicker
-              label="Outgoing number"
-              onConfirm={(num) =>
-                setComposer({
-                  kind: "sub-in",
-                  team: "opponent",
-                  outgoing: `Opponent #${num}`,
-                })
-              }
-            />
-          )}
-        </Overlay>
-      )}
-
-      {composer.kind === "sub-in" && (
-        <Overlay onClose={closeComposer}>
-          <p className="font-oswald text-xl tracking-widest">COMING ON</p>
-          {composer.team === "own" ? (
-            <PlayerList
-              athletes={pitchState.bench}
-              onPick={(incoming) => {
-                const outgoing = composer.outgoing as MatchSquadAthlete;
-                void persistEvent({
-                  team: "own",
-                  eventType: "substitution",
-                  athleteId: outgoing.id,
-                  detail: incoming.id,
-                });
-              }}
-            />
-          ) : (
-            <KeypadPicker
-              label="Incoming number"
-              onConfirm={(num) => {
-                void persistEvent({
-                  team: "opponent",
-                  eventType: "substitution",
-                  opponentLabel:
-                    typeof composer.outgoing === "string"
-                      ? composer.outgoing
-                      : undefined,
-                  detail: `Opponent #${num}`,
-                });
-              }}
-            />
-          )}
         </Overlay>
       )}
 
@@ -1196,32 +1255,63 @@ export default function LiveMatchPage() {
   );
 }
 
+function SettingsItem({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="w-full rounded-lg px-3 py-2 text-left text-sm text-[#e8ecef] hover:bg-white/5"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LogButton({
+  label,
+  color,
+  icon,
+  onClick,
+  disabled,
+  className,
+}: {
+  label: string;
+  color: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl border bg-[#101920] px-2 py-2 font-oswald text-[11px] tracking-[0.18em] disabled:opacity-35 sm:min-h-14 sm:text-xs",
+        className,
+      )}
+      style={{ borderColor: color, color }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 function Overlay({
   children,
   onClose,
-  fullScreen = false,
 }: {
   children: ReactNode;
   onClose: () => void;
-  fullScreen?: boolean;
 }) {
-  if (fullScreen) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#070d12] p-5">
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-          <button
-            type="button"
-            className="mb-4 self-end font-oswald text-xs tracking-widest text-[#8e9ba8]"
-            onClick={onClose}
-          >
-            CLOSE
-          </button>
-          {children}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 sm:items-center">
       <button
@@ -1237,90 +1327,6 @@ function Overlay({
   );
 }
 
-function Keypad({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0"];
-  return (
-    <div className="mt-5 grid grid-cols-3 gap-2">
-      {keys.map((key) => (
-        <button
-          key={key}
-          type="button"
-          className="rounded-xl border border-[#1c2b36] bg-[#101920] py-4 font-oswald text-2xl"
-          onClick={() => {
-            if (key === "⌫") {
-              onChange(value.slice(0, -1));
-              return;
-            }
-            if (value.length >= 2) {
-              return;
-            }
-            onChange(`${value}${key}`);
-          }}
-        >
-          {key}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function KeypadPicker({
-  label,
-  onConfirm,
-}: {
-  label: string;
-  onConfirm: (num: string) => void;
-}) {
-  const [digits, setDigits] = useState("");
-  return (
-    <div>
-      <p className="mt-2 text-sm text-[#8e9ba8]">{label}</p>
-      <p className="mt-3 font-oswald text-5xl tabular-nums">{digits || "—"}</p>
-      <Keypad value={digits} onChange={setDigits} />
-      <button
-        type="button"
-        className="mt-4 w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f] disabled:opacity-40"
-        disabled={!digits}
-        onClick={() => onConfirm(digits)}
-      >
-        CONFIRM
-      </button>
-    </div>
-  );
-}
-
-function PlayerList({
-  athletes,
-  onPick,
-}: {
-  athletes: MatchSquadAthlete[];
-  onPick: (athlete: MatchSquadAthlete) => void;
-}) {
-  if (athletes.length === 0) {
-    return <p className="mt-6 text-sm text-[#8e9ba8]">No players available.</p>;
-  }
-  return (
-    <div className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto">
-      {athletes.map((athlete) => (
-        <button
-          key={athlete.id}
-          type="button"
-          className="flex w-full rounded-xl border border-[#1c2b36] bg-[#101920] px-4 py-3 text-left font-oswald tracking-wide"
-          onClick={() => onPick(athlete)}
-        >
-          {shirtLabel(athlete)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function PeriodSummary({
   title,
   ownName,
@@ -1331,6 +1337,7 @@ function PeriodSummary({
   continueDisabled,
   onBack,
   backLabel,
+  compact = false,
 }: {
   title: string;
   ownName: string;
@@ -1341,13 +1348,41 @@ function PeriodSummary({
   continueDisabled?: boolean;
   onBack?: () => void;
   backLabel?: string;
+  compact?: boolean;
 }) {
   const count = (type: MatchEventType, side: MatchEventTeam) =>
     timeline.filter((event) => event.eventType === type && event.team === side)
       .length;
 
+  if (compact) {
+    return (
+      <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-1.5">
+        <p className="font-oswald text-sm tracking-widest">{title}</p>
+        <div className="flex shrink-0 gap-2">
+          {onBack && (
+            <button
+              type="button"
+              className="rounded-md border border-[#233747] px-3 py-1 text-xs tracking-wide"
+              onClick={onBack}
+            >
+              {backLabel}
+            </button>
+          )}
+          <button
+            type="button"
+            className="rounded-md bg-[#00d99a] px-3 py-1 font-oswald text-xs tracking-widest text-[#07110f] disabled:opacity-40"
+            onClick={onContinue}
+            disabled={continueDisabled}
+          >
+            {continueLabel}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-8 rounded-2xl border border-[#1c2b36] bg-[#101920] p-5">
+    <div className="mt-6 rounded-2xl border border-[#1c2b36] bg-[#101920] p-5">
       <p className="font-oswald text-center text-2xl tracking-widest">{title}</p>
       <div className="mt-5 grid grid-cols-3 text-center text-sm">
         <p className="text-[#8e9ba8]">{ownName}</p>

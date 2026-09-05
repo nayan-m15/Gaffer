@@ -15,6 +15,7 @@
   font-family: "Inter Variable", Inter, system-ui, sans-serif;
   background: var(--lm-bg);
   color: var(--lm-white);
+  min-height: 100dvh;
 }
 
 .live-match .font-oswald {
@@ -23,6 +24,23 @@
 
 .live-match .font-display {
   font-family: var(--font-display);
+}
+
+.live-pitch {
+  height: 48vh;
+  min-height: 48vh;
+  background: #123528;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+}
+
+.live-pitch-grass {
+  background: repeating-linear-gradient(
+    to right,
+    #1b4d36 0,
+    #1b4d36 7.14%,
+    #164530 7.14%,
+    #164530 14.28%
+  );
 }
 
 @keyframes live-timeline-in {

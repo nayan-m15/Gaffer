@@ -56,8 +56,9 @@ export function hasPriorYellow(
   team: "own" | "opponent",
   athleteId?: string,
   opponentLabel?: string,
+  opponentPlayerId?: string,
 ) {
-  if (!athleteId && !opponentLabel) {
+  if (!athleteId && !opponentLabel && !opponentPlayerId) {
     return false;
   }
   return events.some((event) => {
@@ -66,6 +67,9 @@ export function hasPriorYellow(
     }
     if (athleteId) {
       return event.athleteId === athleteId;
+    }
+    if (opponentPlayerId) {
+      return event.opponentPlayerId === opponentPlayerId;
     }
     return event.opponentLabel === opponentLabel;
   });

@@ -64,6 +64,13 @@
       "when": 1788512128164,
       "tag": "0008_known_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788531255298,
+      "tag": "0009_lyrical_hellion",
+      "breakpoints": true
     }
   ]
 }

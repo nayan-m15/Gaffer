@@ -4,13 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
   events,
+  lineups,
   matches,
+  opponentMatchPlayers,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import type {
@@ -126,21 +128,41 @@ export class EventsService {
       );
     }
 
+    if (dto.lineupId) {
+      await this.requireTeamLineup(team.id, dto.lineupId);
+    }
+
     const teamAthletes = await this.databaseService.database
       .select()
       .from(athletes)
       .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
 
     const teamAthleteIds = new Set(teamAthletes.map((athlete) => athlete.id));
-    for (const athleteId of dto.startingAthleteIds) {
+    const requestedIds = dto.benchAthleteIds
+      ? [...dto.startingAthleteIds, ...dto.benchAthleteIds]
+      : dto.startingAthleteIds;
+
+    for (const athleteId of requestedIds) {
       if (!teamAthleteIds.has(athleteId)) {
         throw new BadRequestException(
-          'One or more starting athletes are not on this team.',
+          dto.benchAthleteIds
+            ? 'One or more selected athletes are not on this team.'
+            : 'One or more starting athletes are not on this team.',
         );
       }
     }
 
     const startingIds = new Set(dto.startingAthleteIds);
+    const teamColor = dto.teamColor ?? team.primaryColor ?? null;
+    const matchValues = {
+      opponentName: dto.opponentName,
+      isHome: dto.isHome,
+      lineupId: dto.lineupId ?? null,
+      opponentSquadVisibility: dto.opponentSquadVisibility,
+      teamColor,
+      opponentColor: dto.opponentColor ?? null,
+      updatedAt: new Date(),
+    };
 
     const [existingMatch] = await this.databaseService.database
       .select()
@@ -152,11 +174,7 @@ export class EventsService {
     if (match) {
       const [updated] = await this.databaseService.database
         .update(matches)
-        .set({
-          opponentName: dto.opponentName,
-          isHome: dto.isHome,
-          updatedAt: new Date(),
-        })
+        .set(matchValues)
         .where(eq(matches.id, match.id))
         .returning();
       match = updated;
@@ -165,8 +183,12 @@ export class EventsService {
         .insert(matches)
         .values({
           eventId: event.id,
-          opponentName: dto.opponentName,
-          isHome: dto.isHome,
+          opponentName: matchValues.opponentName,
+          isHome: matchValues.isHome,
+          lineupId: matchValues.lineupId,
+          opponentSquadVisibility: matchValues.opponentSquadVisibility,
+          teamColor: matchValues.teamColor,
+          opponentColor: matchValues.opponentColor,
         })
         .returning();
       match = created;
@@ -176,11 +198,26 @@ export class EventsService {
       throw new NotFoundException('Event not found.');
     }
 
-    if (teamAthletes.length > 0) {
+    const squadAthletes = dto.benchAthleteIds
+      ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
+      : teamAthletes;
+
+    if (dto.benchAthleteIds && requestedIds.length > 0) {
+      await this.databaseService.database
+        .delete(athleteMatchStats)
+        .where(
+          and(
+            eq(athleteMatchStats.matchId, match.id),
+            notInArray(athleteMatchStats.athleteId, requestedIds),
+          ),
+        );
+    }
+
+    if (squadAthletes.length > 0) {
       await this.databaseService.database
         .insert(athleteMatchStats)
         .values(
-          teamAthletes.map((athlete) => ({
+          squadAthletes.map((athlete) => ({
             matchId: match.id,
             athleteId: athlete.id,
             started: startingIds.has(athlete.id),
@@ -195,7 +232,41 @@ export class EventsService {
         });
     }
 
+    await this.replaceOpponentSquad(match.id, dto);
+
     return match;
+  }
+
+  private async replaceOpponentSquad(matchId: string, dto: StartMatchDto) {
+    await this.databaseService.database
+      .delete(opponentMatchPlayers)
+      .where(eq(opponentMatchPlayers.matchId, matchId));
+
+    const players = dto.opponentSquad ?? [];
+    if (players.length === 0) {
+      return;
+    }
+
+    await this.databaseService.database.insert(opponentMatchPlayers).values(
+      players.map((player) => ({
+        matchId,
+        shirtNumber: player.shirtNumber,
+        name:
+          dto.opponentSquadVisibility === 'full' ? (player.name ?? null) : null,
+      })),
+    );
+  }
+
+  private async requireTeamLineup(teamId: string, lineupId: string) {
+    const [lineup] = await this.databaseService.database
+      .select({ id: lineups.id })
+      .from(lineups)
+      .where(and(eq(lineups.id, lineupId), eq(lineups.teamId, teamId)))
+      .limit(1);
+
+    if (!lineup) {
+      throw new BadRequestException('Lineup not found.');
+    }
   }
 
   private async requireTeam(userId: string) {
