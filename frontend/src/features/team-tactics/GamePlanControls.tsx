@@ -1,9 +1,11 @@
 /**
- * The game-plan selector + Save As New / Save / Delete row, shaped to match
- * the Squad section's lineup controls so both sit identically in the page
- * header. Driven entirely by the shared `useGamePlanEditor` instance.
+ * The game-plan selector + Save As New / Save / Delete row shown in the Team
+ * Management page header. Both sections render it — the squad board and the
+ * tactics tabs edit two halves of the same saved plan — with the Squad
+ * section passing its board-only buttons in as `children`.
  */
 
+import type { ReactNode } from "react";
 import { Check, Copy, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GamePlanSelector } from "./GamePlanSelector";
@@ -11,9 +13,11 @@ import type { GamePlanEditor } from "./useGamePlanEditor";
 
 interface GamePlanControlsProps {
   editor: GamePlanEditor;
+  /** Section-specific controls, rendered between the selector and Save. */
+  children?: ReactNode;
 }
 
-export function GamePlanControls({ editor }: GamePlanControlsProps) {
+export function GamePlanControls({ editor, children }: GamePlanControlsProps) {
   const {
     plans,
     selectedId,
@@ -35,6 +39,8 @@ export function GamePlanControls({ editor }: GamePlanControlsProps) {
         onSelect={selectPlan}
         disabled={isPlansLoading}
       />
+
+      {children}
 
       {selectedPlan && (
         <Button

@@ -8,9 +8,148 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gaffer - The football coaching platform built for the touchline</title>
+    <script>
+      /* ── Theme detection + background colour before first paint ──────────
+       * Sets the "dark" class AND hardcoded background colours on <html>
+       * and <body> so the very first frame the browser paints already has
+       * the correct theme — no white flash, no dark-mode flash.
+       * Uses hardcoded hex values because CSS custom properties from
+       * index.css have not loaded at this point.                            */
+      try {
+        var t = localStorage.getItem("sport-coaching-theme");
+        var d = t === "dark" || (!t && matchMedia("(prefers-color-scheme:dark)").matches);
+        if (d) {
+          document.documentElement.className = "dark";
+          document.documentElement.style.background = "#0B1218";
+        } else {
+          document.documentElement.style.background = "#F5F3F0";
+        }
+      } catch(e) {
+        document.documentElement.style.background = "#F5F3F0";
+      }
+    </script>
+    <style>
+      /* ── Pre-React preloader styles ──────────────────────────────────────
+       * Visually identical to the React <LoadingScreen> component.  Uses
+       * hardcoded colours (CSS custom properties aren't available yet) and
+       * duplicates only the keyframes / layout needed for the preloader.
+       * The handoff script removes this element once React's own
+       * .loading-overlay is in the DOM, so the user sees one continuous
+       * loading experience.                                                  */
+      body { margin: 0; background: inherit; }
+
+      #preloader {
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden;
+      }
+      #preloader .pl-content {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 0.75rem;
+        animation: pl-enter 0.5s ease-out both;
+      }
+      #preloader .pl-logo {
+        width: 56px; height: 56px; border-radius: 0.5rem;
+        animation: pl-pulse 2.5s ease-in-out infinite;
+      }
+      #preloader .pl-brand {
+        font-family: "Lyon", Georgia, "Times New Roman", serif;
+        font-size: clamp(1.4rem, 4vw, 2rem);
+        font-weight: 700; letter-spacing: -0.025em; line-height: 1;
+      }
+      #preloader .pl-dots {
+        display: flex; gap: 0.4rem; margin-top: 0.25rem;
+      }
+      #preloader .pl-dots span {
+        width: 5px; height: 5px; border-radius: 50%;
+        opacity: 0.4;
+        animation: pl-dot 1.4s ease-in-out infinite;
+      }
+      #preloader .pl-dots span:nth-child(2) { animation-delay: 0.15s; }
+      #preloader .pl-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+      @keyframes pl-enter {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes pl-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.75; }
+      }
+      @keyframes pl-dot {
+        0%, 100% { opacity: 0.3; transform: scale(0.85); }
+        50%      { opacity: 1;   transform: scale(1.15); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Pre-React preloader: visually identical to React's <LoadingScreen>.
+         Sits above #root so React can mount invisibly underneath.             -->
+    <div id="preloader">
+      <div class="pl-content">
+        <img src="/logo.png" alt="GAFFER logo" width="56" height="56" class="pl-logo" draggable="false" />
+        <span class="pl-brand">GAFFER</span>
+        <div class="pl-dots" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- React root — hidden until the React LoadingScreen is mounted. -->
+    <div id="root" style="display:none"></div>
+
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Seamless preloader → React handoff.
+         Polls for React's .loading-overlay inside #root, then un-hides
+         #root and removes #preloader on the next animation frame.
+         A 15 s fallback ensures the page isn't stuck if JS fails.           -->
+    <script>
+      (function () {
+        var pre = document.getElementById("preloader");
+        var root = document.getElementById("root");
+        if (!pre || !root) return;
+
+        /* Apply theme-aware colours to the preloader. */
+        var isDark = document.documentElement.classList.contains("dark");
+        pre.style.background = isDark ? "#0B1218" : "#F5F3F0";
+        var brand = pre.querySelector(".pl-brand");
+        if (brand) brand.style.color = isDark ? "#E8ECEF" : "#171717";
+        var dots = pre.querySelectorAll(".pl-dots span");
+        var dotColor = isDark ? "#00D99A" : "#059669";
+        for (var i = 0; i < dots.length; i++) dots[i].style.background = dotColor;
+
+        var done = false;
+
+        function check() {
+          if (done) return;
+          if (root.querySelector(".loading-overlay")) {
+            done = true;
+            /* Double-rAF: first frame ensures the browser has committed
+               React's paint; second frame swaps layers seamlessly. */
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                root.style.display = "";
+                pre.remove();
+              });
+            });
+            return;
+          }
+          requestAnimationFrame(check);
+        }
+        requestAnimationFrame(check);
+
+        /* Fallback: if React never mounts, reveal the root after 15 s. */
+        setTimeout(function () {
+          if (!done) {
+            done = true;
+            root.style.display = "";
+            pre.remove();
+          }
+        }, 15000);
+      })();
+    </script>
   </body>
 </html>

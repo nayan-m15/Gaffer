@@ -1,13 +1,17 @@
 /**
  * TanStack Query hooks for the Team Tactics screen.
  *
- * `useGamePlans` lists a team's saved game plans (FIFA-style tactical
- * profiles); the mutation hooks persist changes so a coach can keep several
- * named plans and switch between them per fixture.
+ * `useGamePlans` lists a team's saved game plans (squad selection + FIFA-style
+ * tactical profile in one record); the mutation hooks persist changes so a
+ * coach can keep several named plans and switch between them per fixture.
+ *
+ * Athletes are not queried here — the Team Management board owns the roster
+ * query (`useAthletes` in `@/features/team-management/api`, keyed
+ * `["athletes", "active"]` to share the Athlete Roster's cache) and passes
+ * the data down.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAthletes, type BackendAthlete } from "@/services/athletes";
 import {
   createGamePlan,
   deleteGamePlan,
@@ -17,19 +21,6 @@ import {
   type CreateGamePlanInput,
   type UpdateGamePlanInput,
 } from "@/services/gamePlans";
-
-/**
- * Active athletes for the current team — shares the roster's active-athletes
- * query key (`["athletes", "active"]`), so roster edits (e.g. status changes)
- * invalidate this cache too.
- */
-export function useAthletes() {
-  return useQuery<BackendAthlete[]>({
-    queryKey: ["athletes", "active"],
-    queryFn: getAthletes,
-    staleTime: 30_000,
-  });
-}
 
 export const gamePlansQueryKey = ["game-plans"] as const;
 

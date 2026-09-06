@@ -23,6 +23,12 @@ test('team management reflects athlete status badges and roster edits', async ({
   const { email, teamName } = uniqueTestIdentity('tm-status-e2e');
   const coach = 'TM Status Coach';
 
+  // The app shell also renders a footer nav (development change); scope
+  // navigation to the sidebar so link locators stay unambiguous in strict
+  // mode.
+  const sidebarLink = (name: string) =>
+    page.getByLabel('Main navigation').getByRole('link', { name });
+
   try {
     await test.step('register a new coach', async () => {
       await page.goto('/signup');
@@ -81,7 +87,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       ];
 
       for (const athlete of athletes) {
-        await page.getByRole('link', { name: 'Roster' }).click();
+        await sidebarLink('Roster').click();
         await expect(page).toHaveURL(/\/athletes$/);
         await page.getByRole('button', { name: 'Add Athlete' }).click();
 
@@ -98,7 +104,7 @@ test('team management reflects athlete status badges and roster edits', async ({
     });
 
     await test.step('team management bench shows each status badge', async () => {
-      await page.getByRole('link', { name: 'Team' }).click();
+      await sidebarLink('Team').click();
       await expect(page).toHaveURL(/\/team$/);
       await expect(
         page.getByRole('heading', { name: 'Team Management' }),
@@ -149,7 +155,7 @@ test('team management reflects athlete status badges and roster edits', async ({
 
     await test.step('roster status edit is reflected in team management', async () => {
       // Change Ines Injured → Available in the Roster.
-      await page.getByRole('link', { name: 'Roster' }).click();
+      await sidebarLink('Roster').click();
       await page
         .getByRole('button', { name: `Edit Ines Injured` })
         .click();
@@ -160,7 +166,7 @@ test('team management reflects athlete status badges and roster edits', async ({
 
       // Navigate to Team Management — the same shared athletes cache was
       // invalidated, so the bench badge updates without a hard reload.
-      await page.getByRole('link', { name: 'Team' }).click();
+      await sidebarLink('Team').click();
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
       await expect(inesCard).toBeVisible();

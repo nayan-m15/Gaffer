@@ -6,7 +6,6 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
 import { GamePlansModule } from './game-plans/game-plans.module';
-import { LineupsModule } from './lineups/lineups.module';
 import { MatchesModule } from './matches/matches.module';
 import { StatisticsModule } from './statistics/statistics.module';
 import { TeamsModule } from './teams/teams.module';
@@ -21,7 +20,6 @@ import { ProfileModule } from './profile/profile.module';
     AthletesModule,
     EventsModule,
     GamePlansModule,
-    LineupsModule,
     MatchesModule,
     DashboardModule,
     StatisticsModule,

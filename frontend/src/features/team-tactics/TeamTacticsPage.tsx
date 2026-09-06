@@ -1,21 +1,19 @@
 /**
  * Team Tactics panel — a FIFA-style "Custom Tactics" editor rendered inside
- * the Team Management page's "Tactics" section. A coach keeps several named
- * game plans (each a full snapshot of defensive / offensive settings +
- * set-piece roles) and switches between them per fixture.
+ * the Team Management page's "Tactics" section. It edits the tactical half of
+ * the selected game plan; the squad half lives on the board in the "Squad"
+ * section and is saved with it.
  *
- * The save controls live in the page header via `GamePlanControls`; this
- * component renders the tab strip, the active tab body, and the save/delete
- * dialogs. All state comes from the shared `useGamePlanEditor` instance.
+ * The save controls and dialogs live on the page itself; this component
+ * renders the tab strip and the active tab body. All state comes from the
+ * shared `useGamePlanEditor` instance.
  */
 
 import { ClipboardList, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DeleteGamePlanDialog } from "./DeleteGamePlanDialog";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { RolesTab } from "./RolesTab";
-import { SaveGamePlanDialog } from "./SaveGamePlanDialog";
 import { TacticsTab } from "./TacticsTab";
 import { TACTICS_TABS } from "./tactics-options";
 import type { GamePlanEditor } from "./useGamePlanEditor";
@@ -30,7 +28,6 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
     isPlansLoading,
     isError,
     refetch,
-    selectedPlan,
     content,
     patch,
     activeTab,
@@ -40,13 +37,6 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
     clearSaveError,
     deleteError,
     clearDeleteError,
-    isDeleting,
-    isSaveDialogOpen,
-    setSaveDialogOpen,
-    isDeleteDialogOpen,
-    setDeleteDialogOpen,
-    saveAsNew,
-    confirmDelete,
   } = editor;
 
   if (isError) {
@@ -69,8 +59,7 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
   }
 
   return (
-    <>
-      <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4">
         <nav
           className="flex gap-1 overflow-x-auto"
           aria-label="Tactics sections"
@@ -140,21 +129,6 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
             )}
           </>
         )}
-      </div>
-
-      <SaveGamePlanDialog
-        open={isSaveDialogOpen}
-        onOpenChange={setSaveDialogOpen}
-        onSave={saveAsNew}
-      />
-
-      <DeleteGamePlanDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        onConfirm={confirmDelete}
-        gamePlanName={selectedPlan?.name ?? ""}
-        isDeleting={isDeleting}
-      />
-    </>
+    </div>
   );
 }

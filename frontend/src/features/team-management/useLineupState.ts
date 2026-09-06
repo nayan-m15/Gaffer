@@ -15,7 +15,6 @@ import type { BackendAthlete } from "@/services/athletes";
 import {
   FORMATIONS,
   DEFAULT_FORMATION_ID,
-  remapPlayers,
   autoFillFormation,
 } from "./formations";
 import type { DragItem, PitchAssignments, SavedLineup } from "./types";
@@ -45,6 +44,8 @@ export function useLineupState(athletes: BackendAthlete[]) {
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [autoFillEnabled, setAutoFillEnabled] = useState(false);
+
   /**
    * Replace the entire board with a saved lineup, or with a blank board
    * (all athletes on the bench, default formation) when passed `null`.
@@ -62,6 +63,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
         setFormationIdState(DEFAULT_FORMATION_ID);
         setAssignments(emptyAssignments(DEFAULT_FORMATION_ID));
         setSubstituteIds(athletes.map((a) => a.id));
+        setAutoFillEnabled(false);
         setError(null);
         return;
       }
@@ -98,6 +100,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
       setFormationIdState(saved.formationId);
       setAssignments(restoredAssignments);
       setSubstituteIds(restoredSubs);
+      setAutoFillEnabled(false);
       setError(null);
     },
     [athletes],
@@ -133,6 +136,72 @@ export function useLineupState(athletes: BackendAthlete[]) {
     return isGoalkeeper(athlete?.position ?? null);
   }, [formation, assignments, athletes]);
 
+  const misplacedAthleteIds = useMemo(() => {
+    if (!formation) return [];
+
+    const ids: string[] = [];
+
+    for (const pos of formation.positions) {
+      const athleteId = assignments[pos.id];
+
+      if (!athleteId) continue;
+
+      const athlete = athletes.find((a) => a.id === athleteId);
+
+      const athletePosition = (athlete?.position ?? "")
+        .trim()
+        .toUpperCase();
+
+      const slotPosition = pos.label
+        .trim()
+        .toUpperCase();
+
+      // Player is considered "misplaced" when they are not playing
+      // their exact recorded position.
+      if (athletePosition && athletePosition !== slotPosition) {
+        ids.push(athleteId);
+      }
+    }
+
+    return ids;
+  }, [formation, assignments, athletes]);
+
+  const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
+
+  /* ── Auto-fill ─────────────────────────────────────────────────────────── */
+
+  /**
+   * Auto-fill the formation from the recorded positions.
+   *
+   * Only available players are auto-assigned: injured and suspended athletes
+   * stay on the bench (clearly badged) rather than being placed into the
+   * starting XI automatically. The coach can still place them manually via
+   * drag-and-drop — this only affects the automated helper.
+   */
+  const runAutoFill = useCallback(
+    (targetFormationId: string) => {
+      const eligibleIds = athletes
+        .filter((a) => a.status === "available")
+        .map((a) => a.id);
+
+      const getPosition = (id: string) =>
+        athletes.find((a) => a.id === id)?.position ?? null;
+
+      const {
+        assignments: newAssignments,
+        substituteIds: newSubs,
+      } = autoFillFormation(targetFormationId, eligibleIds, getPosition);
+
+      setAssignments(newAssignments);
+      // Unavailable players (injured/suspended) remain on the bench.
+      const unavailableIds = athletes
+        .filter((a) => a.status !== "available")
+        .map((a) => a.id);
+      setSubstituteIds([...newSubs, ...unavailableIds]);
+    },
+    [athletes],
+  );
+
   /* ── Formation change ──────────────────────────────────────────────────── */
 
   const setFormation = useCallback(
@@ -140,24 +209,24 @@ export function useLineupState(athletes: BackendAthlete[]) {
       if (newFormationId === formationId) return;
       if (!FORMATIONS[newFormationId]) return;
 
-      const { assignments: newAssignments, overflowToSubs } = remapPlayers(
-        formationId,
-        newFormationId,
-        assignments,
-      );
-
       setFormationIdState(newFormationId);
-      setAssignments(newAssignments);
 
-      // Merge overflow into existing substitutes (avoid duplicates)
-      setSubstituteIds((prev) => {
-        const merged = new Set([...prev, ...overflowToSubs]);
-        return Array.from(merged);
-      });
+      // Auto-fill ON:
+      // Re-run autofill for the newly selected formation.
+      if (autoFillEnabled) {
+        runAutoFill(newFormationId);
+        setError(null);
+        return;
+      }
 
+      // Auto-fill OFF:
+      // Changing formation starts with an empty pitch.
+      // Nothing is automatically placed.
+      setAssignments(emptyAssignments(newFormationId));
+      setSubstituteIds(athletes.map((a) => a.id));
       setError(null);
     },
-    [formationId, assignments],
+    [formationId, athletes, autoFillEnabled, runAutoFill],
   );
 
   /* ── Drag start / end ──────────────────────────────────────────────────── */
@@ -325,37 +394,26 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
   const resetLineup = useCallback(() => {
     setAssignments(emptyAssignments(formationId));
-    // Return all athletes to the substitutes bench
     setSubstituteIds(athletes.map((a) => a.id));
+    setAutoFillEnabled(false);
     setError(null);
   }, [formationId, athletes]);
 
-  /**
-   * Auto-fill the formation from the recorded positions.
-   *
-   * Only available players are auto-assigned: injured and suspended athletes
-   * stay on the bench (clearly badged) rather than being placed into the
-   * starting XI automatically. The coach can still place them manually via
-   * drag-and-drop — this only affects the automated helper.
-   */
-  const autoFill = useCallback(() => {
-    const eligibleIds = athletes
-      .filter((a) => a.status === "available")
-      .map((a) => a.id);
-    const getPosition = (id: string) =>
-      athletes.find((a) => a.id === id)?.position ?? null;
+  const toggleAutoFill = useCallback(() => {
+    // Turning Auto-fill OFF:
+    // keep the current lineup exactly as it is.
+    if (autoFillEnabled) {
+      setAutoFillEnabled(false);
+      setError(null);
+      return;
+    }
 
-    const { assignments: newAssignments, substituteIds: newSubs } =
-      autoFillFormation(formationId, eligibleIds, getPosition);
-
-    setAssignments(newAssignments);
-    // Unavailable players (injured/suspended) remain on the bench.
-    const unavailableIds = athletes
-      .filter((a) => a.status !== "available")
-      .map((a) => a.id);
-    setSubstituteIds([...newSubs, ...unavailableIds]);
+    // Turning Auto-fill ON:
+    // immediately autofill the current formation.
+    runAutoFill(formationId);
+    setAutoFillEnabled(true);
     setError(null);
-  }, [athletes, formationId]);
+  }, [autoFillEnabled, formationId, runAutoFill]);
 
   /* ── Public API ────────────────────────────────────────────────────────── */
 
@@ -367,9 +425,12 @@ export function useLineupState(athletes: BackendAthlete[]) {
     substituteIds,
     dragItem,
     error,
+    autoFillEnabled,
     pitchCount,
     isXiComplete,
     hasGoalkeeper,
+    misplacedAthleteIds,     
+    hasMisplacedPlayers,
     pitchAthleteIds,
 
     // Derived athlete counts
@@ -382,7 +443,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
     endDrag,
     handleDrop,
     resetLineup,
-    autoFill,
+    toggleAutoFill,
     loadLineup,
     clearError: () => setError(null),
   };
