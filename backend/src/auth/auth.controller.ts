@@ -15,6 +15,7 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
+import { AuthService } from './auth.service';
 import {
   resendVerificationEmailSchema,
   signInSchema,
@@ -68,7 +69,10 @@ function toHttpException(error: unknown): HttpException {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly teamsService: TeamsService) {}
+  constructor(
+    private readonly teamsService: TeamsService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Post('sign-up')
   async signUp(
@@ -149,6 +153,25 @@ export class AuthController {
 
       return { user: response.user };
     } catch (error) {
+      // Better Auth deliberately returns the same "Invalid email or
+      // password" 401 whether the address is unknown, the account has no
+      // password (e.g. Google-only), or the password is wrong — a standard
+      // defence against account enumeration. The product backlog asks for
+      // the unknown-address case to be explicit, so on a credentials
+      // rejection we re-check the address: no user row at all means the
+      // account genuinely doesn't exist, while an existing row (wrong
+      // password, unverified, Google-only) keeps Better Auth's own message.
+      if (
+        error instanceof APIError &&
+        error.statusCode === 401 &&
+        !(await this.authService.userEmailExists(dto.email))
+      ) {
+        throw new HttpException(
+          'No account found with this email address.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
       throw toHttpException(error);
     }
   }
