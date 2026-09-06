@@ -18,10 +18,14 @@ import {
   type UpdateGamePlanInput,
 } from "@/services/gamePlans";
 
-/** Active athletes for the current team — shares the roster query cache. */
+/**
+ * Active athletes for the current team — shares the roster's active-athletes
+ * query key (`["athletes", "active"]`), so roster edits (e.g. status changes)
+ * invalidate this cache too.
+ */
 export function useAthletes() {
   return useQuery<BackendAthlete[]>({
-    queryKey: ["athletes"],
+    queryKey: ["athletes", "active"],
     queryFn: getAthletes,
     staleTime: 30_000,
   });

@@ -191,6 +191,17 @@ export default function TeamManagementPage() {
     [lineup.substituteIds, athleteMap],
   );
 
+  /** Squad-wide availability counts for the status bar (0 values stay hidden). */
+  const unavailableCounts = useMemo(() => {
+    let injured = 0;
+    let suspended = 0;
+    for (const athlete of athleteList) {
+      if (athlete.status === "injured") injured += 1;
+      else if (athlete.status === "suspended") suspended += 1;
+    }
+    return { injured, suspended };
+  }, [athleteList]);
+
   /* ── Loading state ───────────────────────────────────────────────────────── */
 
   if (isLoading) {
@@ -396,6 +407,18 @@ export default function TeamManagementPage() {
           okText="Set"
           failText="Not set"
         />
+
+        {unavailableCounts.injured > 0 && (
+          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+            Injured: {unavailableCounts.injured}
+          </span>
+        )}
+
+        {unavailableCounts.suspended > 0 && (
+          <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-400">
+            Suspended: {unavailableCounts.suspended}
+          </span>
+        )}
 
         {!lineup.hasEnoughForXi && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">

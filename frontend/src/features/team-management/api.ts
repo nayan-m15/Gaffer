@@ -18,9 +18,17 @@ import {
   type UpdateLineupInput,
 } from "@/services/lineups";
 
+/**
+ * Same key the Athlete Roster uses for its active-athletes query
+ * (`["athletes", "active"]`), so roster edits (e.g. changing a player's
+ * status) invalidate this cache too and Team Management always reflects
+ * the persisted status.
+ */
+const athletesQueryKey = ["athletes", "active"] as const;
+
 export function useAthletes() {
   return useQuery<BackendAthlete[]>({
-    queryKey: ["athletes"],
+    queryKey: athletesQueryKey,
     queryFn: getAthletes,
     staleTime: 30_000,
   });

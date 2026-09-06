@@ -6,10 +6,24 @@
  * - **sub**: Horizontal card for the substitutes bench.
  *
  * Both variants are draggable and display only data that actually exists
- * in the database (name via initials, position, squad number).
+ * in the database (name via initials, position, squad number, availability
+ * status).
  */
 
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/roster/StatusBadge";
+import { STATUS_LABELS, type AthleteStatusValue } from "@/services/athletes";
+
+/**
+ * Availability dot colours for the compact pitch variant, matching the
+ * roster StatusBadge palette (Available → blue, Injured → red, Suspended →
+ * yellow). Kept readable against the grass with a light border.
+ */
+const STATUS_DOT_STYLES: Record<AthleteStatusValue, string> = {
+  available: "bg-blue-500 dark:bg-blue-400",
+  injured: "bg-red-500 dark:bg-red-400",
+  suspended: "bg-yellow-500 dark:bg-yellow-400",
+};
 
 interface PlayerCardProps {
   /** Player initials for the avatar circle. */
@@ -20,6 +34,8 @@ interface PlayerCardProps {
   position: string;
   /** Squad number, or null if not set. */
   squadNumber: number | null;
+  /** Persisted availability status, or null/undefined when unknown. */
+  status?: AthleteStatusValue | null;
   /** Card variant. */
   variant: "pitch" | "sub";
   /** Whether this card is currently being dragged. */
@@ -41,6 +57,7 @@ export function PlayerCard({
   name,
   position,
   squadNumber,
+  status,
   variant,
   isDragging = false,
   isDropTarget = false,
@@ -49,6 +66,8 @@ export function PlayerCard({
   onDragEnd,
   className,
 }: PlayerCardProps) {
+  const statusSuffix = status ? ` · ${STATUS_LABELS[status]}` : "";
+
   if (variant === "pitch") {
     return (
       <div
@@ -62,13 +81,13 @@ export function PlayerCard({
           className,
         )}
         role="button"
-        aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}`}
+        aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}${statusSuffix}`}
         tabIndex={0}
       >
         {/* Avatar */}
         <div
           className={cn(
-            "flex items-center justify-center rounded-full",
+            "relative flex items-center justify-center rounded-full",
             "size-[clamp(32px,5vw,42px)]",
             "text-[10px] font-bold uppercase",
             "border-2 shadow-sm transition-colors duration-150",
@@ -80,6 +99,18 @@ export function PlayerCard({
           )}
         >
           {initials}
+          {/* Availability indicator */}
+          {status && (
+            <span
+              className={cn(
+                "absolute -right-0.5 -top-0.5 size-2.5 rounded-full",
+                "border border-white/80 shadow-sm",
+                STATUS_DOT_STYLES[status],
+              )}
+              title={STATUS_LABELS[status]}
+              aria-hidden="true"
+            />
+          )}
         </div>
 
         {/* Name */}
@@ -114,13 +145,13 @@ export function PlayerCard({
         className,
       )}
       role="button"
-      aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}`}
+      aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}${statusSuffix}`}
       tabIndex={0}
     >
       {/* Avatar */}
       <div
         className={cn(
-          "flex shrink-0 items-center justify-center rounded-full",
+          "relative flex shrink-0 items-center justify-center rounded-full",
           "size-8 text-[10px] font-bold uppercase",
           "border",
           position.toUpperCase() === "GK"
@@ -129,6 +160,17 @@ export function PlayerCard({
         )}
       >
         {initials}
+        {/* Availability indicator */}
+        {status && (
+          <span
+            className={cn(
+              "absolute -right-0.5 -top-0.5 size-2 rounded-full",
+              "border border-background shadow-sm",
+              STATUS_DOT_STYLES[status],
+            )}
+            aria-hidden="true"
+          />
+        )}
       </div>
 
       {/* Info */}
@@ -140,6 +182,9 @@ export function PlayerCard({
           {position}
           {squadNumber ? ` · #${squadNumber}` : ""}
         </p>
+        {status && (
+          <StatusBadge status={STATUS_LABELS[status]} className="mt-1 px-2 py-0.5 text-[10px]" />
+        )}
       </div>
     </div>
   );

@@ -330,16 +330,30 @@ export function useLineupState(athletes: BackendAthlete[]) {
     setError(null);
   }, [formationId, athletes]);
 
+  /**
+   * Auto-fill the formation from the recorded positions.
+   *
+   * Only available players are auto-assigned: injured and suspended athletes
+   * stay on the bench (clearly badged) rather than being placed into the
+   * starting XI automatically. The coach can still place them manually via
+   * drag-and-drop — this only affects the automated helper.
+   */
   const autoFill = useCallback(() => {
-    const allIds = athletes.map((a) => a.id);
+    const eligibleIds = athletes
+      .filter((a) => a.status === "available")
+      .map((a) => a.id);
     const getPosition = (id: string) =>
       athletes.find((a) => a.id === id)?.position ?? null;
 
     const { assignments: newAssignments, substituteIds: newSubs } =
-      autoFillFormation(formationId, allIds, getPosition);
+      autoFillFormation(formationId, eligibleIds, getPosition);
 
     setAssignments(newAssignments);
-    setSubstituteIds(newSubs);
+    // Unavailable players (injured/suspended) remain on the bench.
+    const unavailableIds = athletes
+      .filter((a) => a.status !== "available")
+      .map((a) => a.id);
+    setSubstituteIds([...newSubs, ...unavailableIds]);
     setError(null);
   }, [athletes, formationId]);
 
