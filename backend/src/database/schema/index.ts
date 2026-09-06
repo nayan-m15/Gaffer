@@ -163,32 +163,6 @@ export const athletes = pgTable(
   ],
 );
 
-// A coach's saved starting XI / substitutes for the tactical board. A team
-// may save multiple named lineups (e.g. "vs City", "High press") and switch
-// between them; names are unique per team.
-export const lineups = pgTable(
-  'lineups',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    teamId: uuid('team_id')
-      .notNull()
-      .references(() => teams.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    formationId: text('formation_id').notNull(),
-    // Maps formation position IDs to athlete IDs (or null for an empty slot).
-    assignments: jsonb('assignments')
-      .notNull()
-      .$type<Record<string, string | null>>(),
-    // Athlete IDs currently on the substitutes bench.
-    substituteIds: jsonb('substitute_ids').notNull().$type<string[]>(),
-    ...timestamps,
-  },
-  (table) => [
-    index('lineups_team_id_index').on(table.teamId),
-    uniqueIndex('lineups_team_name_unique').on(table.teamId, table.name),
-  ],
-);
-
 // FIFA-style "custom tactics" for a team. Each defensive/offensive style is a
 // single enum value; the sliders are integers on a 1–10 scale.
 export const defensiveStyle = pgEnum('defensive_style', [
@@ -209,8 +183,8 @@ export const offensiveStyle = pgEnum('offensive_style', [
 // A named tactical profile ("game plan") for a team, modeled on FIFA 20's
 // Custom Tactics. A team keeps several (e.g. "Balanced", "Cup final low
 // block") and swaps between them per fixture; names are unique per team. Each
-// row is a complete snapshot of formation + defensive/offensive settings +
-// set-piece takers.
+// row is a complete snapshot of the matchday plan: the starting XI and bench
+// alongside the formation + defensive/offensive settings + set-piece takers.
 export const gamePlans = pgTable(
   'game_plans',
   {
@@ -220,6 +194,17 @@ export const gamePlans = pgTable(
       .references(() => teams.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     formationId: text('formation_id').notNull().default('4-3-3'),
+    // Squad selection — maps formation position IDs to athlete IDs (or null
+    // for an empty slot).
+    assignments: jsonb('assignments')
+      .notNull()
+      .default({})
+      .$type<Record<string, string | null>>(),
+    // Athlete IDs on the substitutes bench.
+    substituteIds: jsonb('substitute_ids')
+      .notNull()
+      .default([])
+      .$type<string[]>(),
     // Defence
     defensiveStyle: defensiveStyle('defensive_style')
       .notNull()

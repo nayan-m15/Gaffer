@@ -62,10 +62,11 @@ export interface LineupState {
 }
 
 /**
- * A previously saved lineup, as loaded from the backend.
+ * A previously saved lineup, as loaded from the backend — the squad half of a
+ * game plan (see `GamePlanSquad` in `@/services/gamePlans`).
  *
- * Used to hydrate `useLineupState` on first load so a coach's saved XI
- * survives a page reload.
+ * Used to hydrate `useLineupState` when a game plan is opened, so a coach's
+ * saved XI survives a page reload and follows the plan they select.
  */
 export type SavedLineup = LineupState;
 

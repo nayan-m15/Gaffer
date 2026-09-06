@@ -1,6 +1,9 @@
+import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
+import { LoadingScreen } from '@/components/loading/LoadingScreen'
+import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
@@ -29,8 +32,35 @@ import LandingPage from '@/pages/LandingPage'
  * stays reachable without a team, since it's how a team-less coach gets one.
  */
 function App() {
+  const { status } = useAuth();
+  const [loadingDone, setLoadingDone] = useState(false);
+  const [appReady, setAppReady] = useState(false);
+
+  /* Signal that the application is ready once auth has resolved (no longer
+   * in the "loading" state) AND the browser's fonts have finished loading.
+   * A maximum timeout prevents the loader from getting stuck indefinitely
+   * if a non-critical resource fails.                                      */
+  useEffect(() => {
+    if (status === "loading") return;
+
+    Promise.race([
+      document.fonts?.ready ?? Promise.resolve(),
+      new Promise<void>((r) => setTimeout(r, 3000)),
+    ]).then(() => setAppReady(true));
+
+    // Fallback: force-dismiss the loader after 10 s regardless.
+    const fallback = setTimeout(() => setAppReady(true), 10_000);
+    return () => clearTimeout(fallback);
+  }, [status]);
+
+  const handleLoadingDone = useCallback(() => setLoadingDone(true), []);
+
   return (
-    <BrowserRouter useTransitions={false}>
+    <>
+      {!loadingDone && (
+        <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
+      )}
+      <BrowserRouter useTransitions={false}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -122,7 +152,8 @@ function App() {
           />
         </Route>
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </>
   )
 }
 

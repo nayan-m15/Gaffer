@@ -64,17 +64,17 @@ export default function LandingPage() {
   return (
     <div
       ref={pageRef}
-      className="relative flex min-h-screen flex-col bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground"
+      className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
     >
       {/* Background Stadium Atmosphere */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
         <img
           src="/hero-stadium-bg.png"
           alt=""
-          className="size-full object-cover object-center opacity-30"
+          className="size-full object-cover object-center opacity-20 dark:opacity-30"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0B1218]/90 via-[#0B1218]/85 to-[#0B1218]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(11,18,24,0.95)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/85 to-background" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,var(--background)_100%)]" />
       </div>
 
       {/* Sticky Navbar */}
@@ -147,18 +147,18 @@ function PhilosophySection() {
   return (
     <section
       id="philosophy"
-      className="animate-on-scroll scroll-mt-20 border-t border-white/10 bg-[#0B1218]/60 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/60 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-3.5 py-1 text-xs font-semibold tracking-wide text-brand">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-3.5 py-1 text-xs font-semibold tracking-wide text-brand dark:text-brand">
             <Sparkles className="size-3 text-brand" />
             Core Philosophy &amp; Workflow
           </span>
-          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Engineered for the Realities of Amateur Football
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-white/65 sm:text-base">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
             Everything in {brand.name} is designed around simplicity, offline reliability, and practical matchday speed.
           </p>
         </div>
@@ -170,32 +170,32 @@ function PhilosophySection() {
             return (
               <div
                 key={p.title}
-                className="hover-lift rounded-2xl border border-white/10 bg-white/[0.03] p-7 shadow-lg backdrop-blur-sm transition-all hover:border-brand/40 hover:bg-white/[0.05]"
+                className="hover-lift rounded-2xl border border-border bg-card p-7 shadow-lg transition-all hover:border-brand/40 hover:bg-muted/50"
               >
                 <div className="flex size-12 items-center justify-center rounded-xl border border-brand/30 bg-brand/10">
                   <Icon className="size-6 text-brand" />
                 </div>
-                <h3 className="mt-5 text-lg font-semibold text-white">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/60">{p.desc}</p>
+                <h3 className="mt-5 text-lg font-semibold text-foreground">{p.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.desc}</p>
               </div>
             );
           })}
         </div>
 
         {/* 4-Step Workflow Banner */}
-        <div className="mt-12 rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-md">
+        <div className="mt-12 rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 text-xs font-mono font-semibold uppercase tracking-wider text-brand">
             Matchday Workflow in 4 Steps
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((s) => (
-              <div key={s.step} className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3.5">
+              <div key={s.step} className="flex items-start gap-3 rounded-xl border border-border bg-muted/50 p-3.5">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-xs font-mono font-bold text-brand">
                   {s.step}
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-white">{s.label}</p>
-                  <p className="text-xs text-white/50">{s.desc}</p>
+                  <p className="text-sm font-semibold text-foreground">{s.label}</p>
+                  <p className="text-xs text-muted-foreground">{s.desc}</p>
                 </div>
               </div>
             ))}
@@ -306,18 +306,18 @@ function FinalCtaSection() {
   return (
     <section
       id="cta"
-      className="animate-on-scroll scroll-mt-20 border-t border-white/10 bg-gradient-to-b from-[#0B1218]/90 via-[#0A161E] to-[#0B1218] py-20 backdrop-blur-sm sm:py-28"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-gradient-to-b from-background via-muted/30 to-background py-20 sm:py-28"
     >
       <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
           Ready for Matchday
         </span>
 
-        <h2 className="mt-5 font-display text-3xl font-bold tracking-tight text-white sm:text-5xl">
+        <h2 className="mt-5 font-display text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
           Run your season with confidence.
         </h2>
 
-        <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:text-lg">
+        <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
           Join amateur and grassroots football coaches managing rosters, tactical lineups, and live matches with {brand.name}.
         </p>
 
@@ -337,7 +337,7 @@ function FinalCtaSection() {
             href="/login"
             className={cn(
               buttonVariants({ variant: "outline", size: "lg" }),
-              "w-full gap-2 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white sm:w-auto",
+              "w-full gap-2 sm:w-auto",
             )}
           >
             <LogIn className="size-4" />
@@ -345,7 +345,7 @@ function FinalCtaSection() {
           </a>
         </div>
 
-        <p className="mt-5 text-xs text-white/40">
+        <p className="mt-5 text-xs text-muted-foreground">
           Free to get started &bull; 100% grassroots focused &bull; Zero credit card required
         </p>
       </div>
@@ -379,7 +379,7 @@ function SectionLayout({
   return (
     <section
       id={id}
-      className="animate-on-scroll scroll-mt-20 border-t border-white/10 bg-[#0B1218]/45 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/45 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
@@ -394,15 +394,15 @@ function SectionLayout({
               {icon}
               <span>{badge}</span>
             </div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
+            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               {title}
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-white/65 sm:text-base">
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
               {description}
             </p>
             <ul className="mt-6 space-y-3">
               {bullets.map((b, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm text-white/75">
+                <li key={idx} className="flex items-start gap-3 text-sm text-muted-foreground">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
                   <span>{b}</span>
                 </li>
@@ -434,7 +434,7 @@ function MockupCard({
   return (
     <div
       className={cn(
-        "hover-lift w-full max-w-lg rounded-2xl border border-white/10 bg-[#0E1720]/95 p-5 shadow-2xl backdrop-blur-md sm:p-6",
+        "hover-lift w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6",
         className,
       )}
     >
@@ -456,10 +456,10 @@ function RosterMockup() {
 
   return (
     <MockupCard>
-      <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-white">Squad Roster</span>
-          <p className="text-[11px] text-white/50">18 Players &bull; Season 2026</p>
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Squad Roster</span>
+          <p className="text-[11px] text-muted-foreground">18 Players &bull; Season 2026</p>
         </div>
         <span className="rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand">
           + Add Athlete
@@ -470,19 +470,19 @@ function RosterMockup() {
         {athletes.map((a) => (
           <div
             key={a.num}
-            className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-xs transition-colors hover:bg-white/[0.07]"
+            className="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs transition-colors hover:bg-muted"
           >
             <div className="flex items-center gap-3">
               <span className="flex size-6 shrink-0 items-center justify-center rounded bg-brand/15 text-[11px] font-bold text-brand">
                 {a.num}
               </span>
               <div>
-                <p className="font-semibold text-white">{a.name}</p>
-                <p className="text-[10px] text-white/40">{a.foot}-footed &bull; {a.apps} apps</p>
+                <p className="font-semibold text-foreground">{a.name}</p>
+                <p className="text-[10px] text-muted-foreground">{a.foot}-footed &bull; {a.apps} apps</p>
               </div>
             </div>
             <div className="flex items-center gap-2.5">
-              <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
+              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
                 {a.pos}
               </span>
               <span className="text-[11px] font-bold text-brand">
@@ -546,10 +546,10 @@ function TacticalPitchMockup() {
 
   return (
     <MockupCard className="max-w-md">
-      <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2.5">
+      <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-white">Tactical Pitch</span>
-          <p className="text-[10px] text-white/50">11 Starters &bull; 1 GK Rule Confirmed</p>
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Tactical Pitch</span>
+          <p className="text-[10px] text-muted-foreground">11 Starters &bull; 1 GK Rule Confirmed</p>
         </div>
         <div className="flex gap-1">
           {(["4-3-3", "4-4-2", "3-5-2"] as const).map((f) => (
@@ -561,7 +561,7 @@ function TacticalPitchMockup() {
                 "rounded px-2 py-0.5 text-[10px] font-semibold transition-all",
                 formation === f
                   ? "bg-brand text-brand-foreground shadow-sm shadow-brand/40"
-                  : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white",
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
               )}
             >
               {f}
@@ -571,13 +571,13 @@ function TacticalPitchMockup() {
       </div>
 
       {/* Football Pitch Visual */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/15 shadow-inner">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border shadow-inner">
         {/* Grass mowing stripes */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "repeating-linear-gradient(to bottom, #4f9b3a 0, #4f9b3a 10%, #3c7c2b 10%, #3c7c2b 20%)",
+              "repeating-linear-gradient(to bottom, var(--pitch-grass-light) 0, var(--pitch-grass-light) 10%, var(--pitch-grass-dark) 10%, var(--pitch-grass-dark) 20%)",
           }}
         />
 
@@ -629,12 +629,12 @@ function TacticalPitchMockup() {
       </div>
 
       {/* Subs Bench */}
-      <div className="mt-3 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px]">
-        <span className="font-medium text-white/50">Subs Bench (5):</span>
-        <div className="flex gap-1.5 text-white/80">
-          <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">12 Evans (GK)</span>
-          <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">14 Reed</span>
-          <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">17 King</span>
+      <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11px]">
+        <span className="font-medium text-muted-foreground">Subs Bench (5):</span>
+        <div className="flex gap-1.5 text-foreground">
+          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">12 Evans (GK)</span>
+          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">14 Reed</span>
+          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">17 King</span>
         </div>
       </div>
     </MockupCard>
@@ -647,15 +647,15 @@ function LiveMatchMockup() {
   return (
     <MockupCard>
       {/* Live Match Clock Header */}
-      <div className="mb-4 rounded-xl border border-brand/30 bg-black/40 p-3.5 text-center">
+      <div className="mb-4 rounded-xl border border-brand/30 bg-muted/50 p-3.5 text-center">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-white">St. Jude FC</span>
-          <span className="rounded bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400 animate-pulse">
+          <span className="font-semibold text-foreground">St. Jude FC</span>
+          <span className="rounded bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-500 dark:text-red-400 animate-pulse">
             LIVE 64&apos;
           </span>
-          <span className="font-semibold text-white/60">Riverside Utd</span>
+          <span className="font-semibold text-muted-foreground">Riverside Utd</span>
         </div>
-        <div className="mt-2 text-2xl font-black tracking-wider text-white">
+        <div className="mt-2 text-2xl font-black tracking-wider text-foreground">
           2 &mdash; 1
         </div>
       </div>
@@ -664,9 +664,9 @@ function LiveMatchMockup() {
       <div className="mb-4 grid grid-cols-4 gap-2">
         {[
           { label: "Goal", color: "bg-brand text-brand-foreground" },
-          { label: "Card", color: "bg-amber-500/20 border border-amber-500/40 text-amber-300" },
-          { label: "Sub", color: "bg-blue-500/20 border border-blue-500/40 text-blue-300" },
-          { label: "Undo", color: "bg-white/10 text-white/60" },
+          { label: "Card", color: "bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-300" },
+          { label: "Sub", color: "bg-blue-500/20 border border-blue-500/40 text-blue-600 dark:text-blue-300" },
+          { label: "Undo", color: "bg-muted text-muted-foreground" },
         ].map((btn) => (
           <button
             key={btn.label}
@@ -682,24 +682,24 @@ function LiveMatchMockup() {
 
       {/* Timeline Feed */}
       <div className="space-y-2 text-xs">
-        <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] p-2">
+        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-2">
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-brand">58&apos;</span>
-            <span className="text-white">Goal &bull; Alexander Cole (#9)</span>
+            <span className="text-foreground">Goal &bull; Alexander Cole (#9)</span>
           </div>
-          <span className="text-[10px] text-white/40">Assist: Vance</span>
+          <span className="text-[10px] text-muted-foreground">Assist: Vance</span>
         </div>
-        <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] p-2">
+        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-2">
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-amber-400">41&apos;</span>
-            <span className="text-white">Yellow Card &bull; Marcus Walker (#4)</span>
+            <span className="font-mono font-bold text-amber-600 dark:text-amber-400">41&apos;</span>
+            <span className="text-foreground">Yellow Card &bull; Marcus Walker (#4)</span>
           </div>
-          <span className="text-[10px] text-white/40">Foul</span>
+          <span className="text-[10px] text-muted-foreground">Foul</span>
         </div>
       </div>
 
       {/* Offline Status Badge */}
-      <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-400">
+      <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
         <span className="inline-flex items-center gap-1.5 font-medium">
           <RefreshCw className="size-3 animate-spin" />
           Offline Sync Ready (0ms latency)
@@ -723,12 +723,12 @@ function AnalyticsMockup() {
 
   return (
     <MockupCard>
-      <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2.5">
+      <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-white">League Division Standings</span>
-          <p className="text-[10px] text-white/50">Derived dynamically from fixture logs</p>
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">League Division Standings</span>
+          <p className="text-[10px] text-muted-foreground">Derived dynamically from fixture logs</p>
         </div>
-        <span className="inline-flex items-center gap-1 rounded bg-white/10 px-2 py-1 text-[10px] font-medium text-white/80">
+        <span className="inline-flex items-center gap-1 rounded bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">
           <Download className="size-3 text-brand" />
           PDF Report
         </span>
@@ -737,21 +737,21 @@ function AnalyticsMockup() {
       <div className="overflow-x-auto text-xs">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-white/10 text-[10px] uppercase text-white/40">
+            <tr className="border-b border-border text-[10px] uppercase text-muted-foreground">
               <th className="pb-1.5">#</th>
               <th className="pb-1.5">Team</th>
               <th className="pb-1.5 text-center">P</th>
               <th className="pb-1.5 text-center">GD</th>
-              <th className="pb-1.5 text-right font-bold text-white">PTS</th>
+              <th className="pb-1.5 text-right font-bold text-foreground">PTS</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-border">
             {standings.map((s) => (
-              <tr key={s.pos} className={s.pos === 1 ? "bg-brand/10 font-semibold" : "text-white/80"}>
-                <td className="py-2 text-white/50">{s.pos}</td>
-                <td className="py-2 text-white">{s.team}</td>
-                <td className="py-2 text-center text-white/60">{s.p}</td>
-                <td className="py-2 text-center text-white/60">{s.gd}</td>
+              <tr key={s.pos} className={cn(s.pos === 1 ? "bg-brand/10 font-semibold" : "text-foreground/80")}>
+                <td className="py-2 text-muted-foreground">{s.pos}</td>
+                <td className="py-2 text-foreground">{s.team}</td>
+                <td className="py-2 text-center text-muted-foreground">{s.p}</td>
+                <td className="py-2 text-center text-muted-foreground">{s.gd}</td>
                 <td className="py-2 text-right font-bold text-brand">{s.pts}</td>
               </tr>
             ))}

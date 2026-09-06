@@ -4,7 +4,7 @@
  * Custom Tactics screen.
  */
 
-import type { GamePlanContent } from "@/services/gamePlans";
+import type { GamePlanTactics } from "@/services/gamePlans";
 import { StyleField } from "./StyleField";
 import { TacticsSlider } from "./TacticsSlider";
 import {
@@ -14,8 +14,8 @@ import {
 } from "./tactics-options";
 
 interface TacticsTabProps {
-  content: GamePlanContent;
-  onChange: (patch: Partial<GamePlanContent>) => void;
+  content: GamePlanTactics;
+  onChange: (patch: Partial<GamePlanTactics>) => void;
   disabled?: boolean;
 }
 
