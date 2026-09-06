@@ -10,7 +10,7 @@ import {
   athleteMatchStats,
   athletes,
   events,
-  lineups,
+  gamePlans,
   matches,
   opponentMatchPlayers,
 } from '../database/schema';
@@ -128,8 +128,8 @@ export class EventsService {
       );
     }
 
-    if (dto.lineupId) {
-      await this.requireTeamLineup(team.id, dto.lineupId);
+    if (dto.gamePlanId) {
+      await this.requireTeamGamePlan(team.id, dto.gamePlanId);
     }
 
     const teamAthletes = await this.databaseService.database
@@ -157,7 +157,7 @@ export class EventsService {
     const matchValues = {
       opponentName: dto.opponentName,
       isHome: dto.isHome,
-      lineupId: dto.lineupId ?? null,
+      gamePlanId: dto.gamePlanId ?? null,
       opponentSquadVisibility: dto.opponentSquadVisibility,
       teamColor,
       opponentColor: dto.opponentColor ?? null,
@@ -185,7 +185,7 @@ export class EventsService {
           eventId: event.id,
           opponentName: matchValues.opponentName,
           isHome: matchValues.isHome,
-          lineupId: matchValues.lineupId,
+          gamePlanId: matchValues.gamePlanId,
           opponentSquadVisibility: matchValues.opponentSquadVisibility,
           teamColor: matchValues.teamColor,
           opponentColor: matchValues.opponentColor,
@@ -253,19 +253,20 @@ export class EventsService {
         shirtNumber: player.shirtNumber,
         name:
           dto.opponentSquadVisibility === 'full' ? (player.name ?? null) : null,
+        position: player.position ?? null,
       })),
     );
   }
 
-  private async requireTeamLineup(teamId: string, lineupId: string) {
-    const [lineup] = await this.databaseService.database
-      .select({ id: lineups.id })
-      .from(lineups)
-      .where(and(eq(lineups.id, lineupId), eq(lineups.teamId, teamId)))
+  private async requireTeamGamePlan(teamId: string, gamePlanId: string) {
+    const [plan] = await this.databaseService.database
+      .select({ id: gamePlans.id })
+      .from(gamePlans)
+      .where(and(eq(gamePlans.id, gamePlanId), eq(gamePlans.teamId, teamId)))
       .limit(1);
 
-    if (!lineup) {
-      throw new BadRequestException('Lineup not found.');
+    if (!plan) {
+      throw new BadRequestException('Game plan not found.');
     }
   }
 

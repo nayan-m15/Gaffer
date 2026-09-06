@@ -51,6 +51,109 @@ export function eventDisplayLabel(event: {
   return EVENT_LABEL[event.eventType];
 }
 
+export function pairAssistsToGoals(timeline: MatchLogEvent[]) {
+  const chronological = [...timeline].sort((a, b) => {
+    const byMinute = a.minute - b.minute;
+    if (byMinute !== 0) {
+      return byMinute;
+    }
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+  const goals = chronological.filter((event) => event.eventType === "goal");
+  const assists = chronological.filter((event) => event.eventType === "assist");
+  const used = new Set<string>();
+  const byGoalId = new Map<string, MatchLogEvent>();
+
+  for (const goal of goals) {
+    const linked = assists.find(
+      (event) => !used.has(event.id) && event.detail === goal.id,
+    );
+    if (linked) {
+      used.add(linked.id);
+      byGoalId.set(goal.id, linked);
+    }
+  }
+
+  for (const goal of goals) {
+    if (byGoalId.has(goal.id)) {
+      continue;
+    }
+    const fallback = assists.find(
+      (event) =>
+        !used.has(event.id) &&
+        event.team === goal.team &&
+        event.minute === goal.minute,
+    );
+    if (fallback) {
+      used.add(fallback.id);
+      byGoalId.set(goal.id, fallback);
+    }
+  }
+
+  return byGoalId;
+}
+
+export function isPairedAssistEvent(
+  event: MatchLogEvent,
+  assistsByGoal: Map<string, MatchLogEvent>,
+) {
+  if (event.eventType !== "assist") {
+    return false;
+  }
+  for (const assist of assistsByGoal.values()) {
+    if (assist.id === event.id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Collapse duplicate timeline rows before the report renders them.
+ *
+ * The events query key is shared with the live logger. That cache can keep
+ * both the optimistic substitution (temp id) and the confirmed server row
+ * (real id) when they describe the same swap. Historical double-POSTs can
+ * also leave two persisted rows with the same minute, team, and players.
+ * The Substitutions list previously mapped every row, so those showed twice.
+ */
+export function uniqueTimelineEvents(events: MatchLogEvent[]): MatchLogEvent[] {
+  const seenIds = new Set<string>();
+  const seenSubstitutions = new Set<string>();
+  const unique: MatchLogEvent[] = [];
+  const ordered = [...events].sort((left, right) => {
+    const byCreated = left.createdAt.localeCompare(right.createdAt);
+    if (byCreated !== 0) {
+      return byCreated;
+    }
+    return left.id.localeCompare(right.id);
+  });
+
+  for (const event of ordered) {
+    if (seenIds.has(event.id)) {
+      continue;
+    }
+    seenIds.add(event.id);
+    if (event.eventType === "substitution") {
+      const fingerprint = [
+        event.minute,
+        event.team,
+        event.athleteId ?? "",
+        event.opponentPlayerId ?? "",
+        event.opponentLabel ?? "",
+        event.detail ?? "",
+      ].join("\0");
+      if (seenSubstitutions.has(fingerprint)) {
+        continue;
+      }
+      seenSubstitutions.add(fingerprint);
+    }
+    unique.push(event);
+  }
+
+  return unique;
+}
+
 export function hasPriorYellow(
   events: MatchLogEvent[],
   team: "own" | "opponent",

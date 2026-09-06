@@ -9,16 +9,18 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
+  HeartPulse,
   Loader2,
   RotateCcw,
   Settings,
   ShieldAlert,
+  Target,
 } from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useLineup } from "@/features/team-management/api";
+import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useDeleteMatchEvent,
   useFinishMatch,
@@ -41,9 +43,18 @@ import {
   SECOND_YELLOW_DETAIL,
   eventDisplayLabel,
   hasPriorYellow,
+  isPairedAssistEvent,
   isSecondYellow,
+  pairAssistsToGoals,
 } from "@/features/matches/event-visuals";
 import { EventTypeGlyph } from "@/features/matches/EventTypeGlyph";
+import {
+  dimEventGridFor,
+  isAssistCallout,
+  isBenchIncomingCallout,
+  isMandatorySubCallout,
+  isSubOutCallout,
+} from "@/features/matches/live-callouts";
 import {
   opponentPitchState,
   ownPitchState,
@@ -54,6 +65,7 @@ import {
   runningScoreByEvent,
   teamAbbrev,
 } from "@/features/matches/live-match-model";
+import { SoccerBallIcon, BootIcon } from "@/features/matches/match-icons";
 import {
   LiveBenchRow,
   LivePitch,
@@ -82,7 +94,58 @@ type Composer =
       kind: "sub-in";
       team: MatchEventTeam;
       outgoing: MatchSquadAthlete | OpponentMatchPlayer | "generic";
+    }
+  | {
+      kind: "mandatory-sub-in";
+      team: MatchEventTeam;
+      outgoing: MatchSquadAthlete | OpponentMatchPlayer | "generic";
+    }
+  | {
+      kind: "sub-out";
+      team: MatchEventTeam;
+      incoming: MatchSquadAthlete | OpponentMatchPlayer;
+    }
+  | {
+      kind: "assist-pick";
+      team: MatchEventTeam;
+      goalEventId: string;
+      goalMinute: number;
+      scorerAthleteId?: string;
+      scorerOpponentPlayerId?: string;
     };
+
+type SubIncomingComposer = Extract<
+  Composer,
+  { kind: "sub-in" | "mandatory-sub-in" }
+>;
+
+function isSubIncomingComposer(
+  composer: Composer,
+): composer is SubIncomingComposer {
+  return composer.kind === "sub-in" || composer.kind === "mandatory-sub-in";
+}
+
+function mandatorySubInComposer(target: LogTarget): SubIncomingComposer {
+  if (target.kind === "own") {
+    return {
+      kind: "mandatory-sub-in",
+      team: "own",
+      outgoing: target.athlete,
+    };
+  }
+  if (target.kind === "opp") {
+    return {
+      kind: "mandatory-sub-in",
+      team: "opponent",
+      outgoing: target.player,
+    };
+  }
+  return {
+    kind: "mandatory-sub-in",
+    team: "opponent",
+    outgoing: "generic",
+  };
+}
 
 type ConfirmKind = "pause" | "half" | "full" | null;
 
@@ -93,6 +156,7 @@ type PersistInput = {
   opponentLabel?: string;
   opponentPlayerId?: string;
   detail?: string;
+  minute?: number;
   reassignId?: string;
 };
 
@@ -190,19 +254,6 @@ function WhistleIcon({ size = 56 }: { size?: number }) {
   );
 }
 
-function SoccerGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.2" />
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M12 7.2 13.7 10l3.2.3-2.4 2.3.7 3.1L12 14.2 8.8 15.7l.7-3.1-2.4-2.3 3.2-.3L12 7.2Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 /**
  * Full-screen live logger. Period/pause/clock are client-side only and reset
  * on refresh — v1 does not persist elapsed time.
@@ -215,7 +266,7 @@ export default function LiveMatchPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
-  const lineupQuery = useLineup(matchQuery.data?.lineupId ?? undefined);
+  const gamePlanQuery = useGamePlan(matchQuery.data?.gamePlanId ?? undefined);
   const logEvent = useLogMatchEvent(matchId ?? "");
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
@@ -228,6 +279,16 @@ export default function LiveMatchPage() {
 
   const [target, setTarget] = useState<LogTarget | null>(null);
   const [composer, setComposer] = useState<Composer>({ kind: "closed" });
+  useEffect(() => {
+    console.log("[live-callout:render]", {
+      kind: composer.kind,
+      injuryBanner: isMandatorySubCallout(composer.kind),
+      voluntarySubInBanner: isBenchIncomingCallout(composer.kind),
+      subOutBanner: isSubOutCallout(composer.kind),
+      assist: isAssistCallout(composer.kind),
+      dimGrid: dimEventGridFor(composer.kind),
+    });
+  }, [composer]);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [endOpen, setEndOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -270,6 +331,10 @@ export default function LiveMatchPage() {
   const timeline = useMemo(
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
+  );
+  const assistsByGoal = useMemo(
+    () => pairAssistsToGoals(timeline),
+    [timeline],
   );
   const opponentSquad = useMemo(
     () => matchQuery.data?.opponentSquad ?? [],
@@ -329,15 +394,16 @@ export default function LiveMatchPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        lineupQuery.data,
+        gamePlanQuery.data,
         ownHalf,
         timeline,
+        visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, lineupQuery.data, ownHalf, timeline],
+    [ownState.onPitch, gamePlanQuery.data, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
-    () => placeOppPlayers(oppState.onPitch, oppHalf),
-    [oppState.onPitch, oppHalf],
+    () => placeOppPlayers(oppState.onPitch, oppHalf, timeline),
+    [oppState.onPitch, oppHalf, timeline],
   );
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
@@ -452,7 +518,12 @@ export default function LiveMatchPage() {
         detail = SECOND_YELLOW_DETAIL;
       }
 
-      closeComposer();
+      const keepComposerForFollowUp =
+        eventType === "injury" ||
+        (eventType === "goal" && detail !== PENALTY_SCORED_DETAIL);
+      if (!keepComposerForFollowUp) {
+        closeComposer();
+      }
 
       try {
         if (input.reassignId) {
@@ -468,7 +539,7 @@ export default function LiveMatchPage() {
           const created = await logEvent.mutateAsync({
             team: input.team,
             eventType,
-            minute: currentMinute,
+            minute: input.minute ?? currentMinute,
             ...(input.athleteId ? { athleteId: input.athleteId } : {}),
             ...(input.opponentLabel
               ? { opponentLabel: input.opponentLabel }
@@ -484,13 +555,17 @@ export default function LiveMatchPage() {
           });
           window.setTimeout(() => setToast(null), 5000);
           if (eventType === "injury") {
+            console.log("[live-callout:persist]", {
+              eventType,
+              nextKind: "mandatory-sub-in",
+            });
             if (input.team === "own" && input.athleteId) {
               const outgoing = squad.find(
                 (athlete) => athlete.id === input.athleteId,
               );
               if (outgoing) {
                 setComposer({
-                  kind: "sub-in",
+                  kind: "mandatory-sub-in",
                   team: "own",
                   outgoing,
                 });
@@ -501,11 +576,27 @@ export default function LiveMatchPage() {
                   (player) => player.id === input.opponentPlayerId,
                 ) ?? "generic";
               setComposer({
-                kind: "sub-in",
+                kind: "mandatory-sub-in",
                 team: "opponent",
                 outgoing,
               });
             }
+          } else if (
+            eventType === "goal" &&
+            detail !== PENALTY_SCORED_DETAIL
+          ) {
+            console.log("[live-callout:persist]", {
+              eventType,
+              nextKind: "assist-pick",
+            });
+            setComposer({
+              kind: "assist-pick",
+              team: input.team,
+              goalEventId: created.id,
+              goalMinute: created.minute,
+              scorerAthleteId: input.athleteId,
+              scorerOpponentPlayerId: input.opponentPlayerId,
+            });
           }
         }
       } catch (err) {
@@ -516,6 +607,9 @@ export default function LiveMatchPage() {
         setActionError(message);
         setToast({ label: message });
         window.setTimeout(() => setToast(null), 5000);
+        if (keepComposerForFollowUp) {
+          closeComposer();
+        }
       } finally {
         persistLockRef.current = false;
       }
@@ -573,24 +667,75 @@ export default function LiveMatchPage() {
       return;
     }
     setActionError(null);
+    const benchTarget =
+      (target.kind === "own" && !ownPitchIds.has(target.athlete.id)) ||
+      (target.kind === "opp" && !oppPitchIds.has(target.player.id));
+    if (
+      benchTarget &&
+      (eventType === "goal" ||
+        eventType === "key_pass" ||
+        eventType === "penalty" ||
+        eventType === "injury")
+    ) {
+      setActionError("That event can only be logged for a player on the pitch.");
+      return;
+    }
+    console.log("[live-callout:handleAction]", eventType);
     if (eventType === "substitution") {
       if (target.kind === "own") {
-        if (!ownPitchIds.has(target.athlete.id)) {
-          setActionError("Select the player coming off the pitch.");
+        if (ownPitchIds.has(target.athlete.id)) {
+          const next = {
+            kind: "sub-in" as const,
+            team: "own" as const,
+            outgoing: target.athlete,
+          };
+          console.log("[live-callout:sub-button] setting composer", next.kind);
+          setComposer(next);
           return;
         }
-        setComposer({ kind: "sub-in", team: "own", outgoing: target.athlete });
+        const next = {
+          kind: "sub-out" as const,
+          team: "own" as const,
+          incoming: target.athlete,
+        };
+        console.log("[live-callout:sub-button] setting composer", next.kind);
+        setComposer(next);
         return;
       }
       if (target.kind === "opp") {
-        if (!oppPitchIds.has(target.player.id)) {
-          setActionError("Select the player coming off the pitch.");
+        if (oppPitchIds.has(target.player.id)) {
+          const next = {
+            kind: "sub-in" as const,
+            team: "opponent" as const,
+            outgoing: target.player,
+          };
+          console.log("[live-callout:sub-button] setting composer", next.kind);
+          setComposer(next);
           return;
         }
-        setComposer({ kind: "sub-in", team: "opponent", outgoing: target.player });
+        const next = {
+          kind: "sub-out" as const,
+          team: "opponent" as const,
+          incoming: target.player,
+        };
+        console.log("[live-callout:sub-button] setting composer", next.kind);
+        setComposer(next);
         return;
       }
-      setComposer({ kind: "sub-in", team: "opponent", outgoing: "generic" });
+      const next = {
+        kind: "sub-in" as const,
+        team: "opponent" as const,
+        outgoing: "generic" as const,
+      };
+      console.log("[live-callout:sub-button] setting composer", next.kind);
+      setComposer(next);
+      return;
+    }
+    if (eventType === "injury") {
+      const next = mandatorySubInComposer(target);
+      console.log("[live-callout:handleAction] opening", next.kind);
+      setComposer(next);
+      persistFromTarget("injury");
       return;
     }
     if (eventType === "penalty") {
@@ -600,10 +745,89 @@ export default function LiveMatchPage() {
     persistFromTarget(eventType);
   };
 
+  const skipAssist = () => {
+    setComposer({ kind: "closed" });
+  };
+
+  const completeAssist = (
+    incoming: MatchSquadAthlete | OpponentMatchPlayer,
+  ) => {
+    if (composer.kind !== "assist-pick") {
+      return;
+    }
+    if (composer.team === "own" && "firstName" in incoming) {
+      if (incoming.id === composer.scorerAthleteId) {
+        setActionError("Pick a teammate, or skip.");
+        return;
+      }
+      if (!ownPitchIds.has(incoming.id)) {
+        setActionError("Pick a teammate on the pitch, or skip.");
+        return;
+      }
+      void persistEvent({
+        team: "own",
+        eventType: "assist",
+        athleteId: incoming.id,
+        detail: composer.goalEventId,
+        minute: composer.goalMinute,
+      });
+      return;
+    }
+    if (composer.team === "opponent" && "shirtNumber" in incoming) {
+      if (incoming.id === composer.scorerOpponentPlayerId) {
+        setActionError("Pick a teammate, or skip.");
+        return;
+      }
+      if (!oppPitchIds.has(incoming.id)) {
+        setActionError("Pick a teammate on the pitch, or skip.");
+        return;
+      }
+      void persistEvent({
+        team: "opponent",
+        eventType: "assist",
+        opponentPlayerId: incoming.id,
+        opponentLabel: opponentShirtLabel(incoming, visibility),
+        detail: composer.goalEventId,
+        minute: composer.goalMinute,
+      });
+    }
+  };
+
+  const completeSubOut = (
+    outgoing: MatchSquadAthlete | OpponentMatchPlayer,
+  ) => {
+    if (composer.kind !== "sub-out") {
+      return;
+    }
+    if (composer.team === "own" && "firstName" in outgoing) {
+      const incoming = composer.incoming as MatchSquadAthlete;
+      void persistEvent({
+        team: "own",
+        eventType: "substitution",
+        athleteId: outgoing.id,
+        detail: incoming.id,
+      });
+      return;
+    }
+    if (composer.team === "opponent" && "shirtNumber" in outgoing) {
+      const incoming = composer.incoming;
+      if (!("shirtNumber" in incoming)) {
+        return;
+      }
+      void persistEvent({
+        team: "opponent",
+        eventType: "substitution",
+        opponentPlayerId: outgoing.id,
+        opponentLabel: opponentShirtLabel(outgoing, visibility),
+        detail: incoming.id,
+      });
+    }
+  };
+
   const completeSubIn = (
     incoming: MatchSquadAthlete | OpponentMatchPlayer,
   ) => {
-    if (composer.kind !== "sub-in") {
+    if (composer.kind !== "sub-in" && composer.kind !== "mandatory-sub-in") {
       return;
     }
     if (composer.team === "own" && "firstName" in incoming) {
@@ -635,12 +859,24 @@ export default function LiveMatchPage() {
   };
 
   const selectOwn = (athlete: MatchSquadAthlete) => {
+    if (composer.kind === "assist-pick" && composer.team === "own") {
+      completeAssist(athlete);
+      return;
+    }
     if (
-      composer.kind === "sub-in" &&
+      isSubIncomingComposer(composer) &&
       composer.team === "own" &&
       ownBench.some((player) => player.id === athlete.id)
     ) {
       completeSubIn(athlete);
+      return;
+    }
+    if (
+      composer.kind === "sub-out" &&
+      composer.team === "own" &&
+      ownPitchIds.has(athlete.id)
+    ) {
+      completeSubOut(athlete);
       return;
     }
     setComposer({ kind: "closed" });
@@ -649,12 +885,24 @@ export default function LiveMatchPage() {
   };
 
   const selectOpp = (player: OpponentMatchPlayer) => {
+    if (composer.kind === "assist-pick" && composer.team === "opponent") {
+      completeAssist(player);
+      return;
+    }
     if (
-      composer.kind === "sub-in" &&
+      isSubIncomingComposer(composer) &&
       composer.team === "opponent" &&
       oppBench.some((item) => item.id === player.id)
     ) {
       completeSubIn(player);
+      return;
+    }
+    if (
+      composer.kind === "sub-out" &&
+      composer.team === "opponent" &&
+      oppPitchIds.has(player.id)
+    ) {
+      completeSubOut(player);
       return;
     }
     setComposer({ kind: "closed" });
@@ -664,8 +912,27 @@ export default function LiveMatchPage() {
 
   const handleUndo = async (eventId: string) => {
     setActionError(null);
+    const targetEvent = timeline.find((event) => event.id === eventId);
+    const linkedAssists =
+      targetEvent?.eventType === "goal"
+        ? timeline.filter(
+            (event) =>
+              event.eventType === "assist" &&
+              event.detail === eventId &&
+              !event.pending,
+          )
+        : [];
     try {
       await deleteEvent.mutateAsync(eventId);
+      for (const assist of linkedAssists) {
+        await deleteEvent.mutateAsync(assist.id);
+      }
+      if (
+        composer.kind === "assist-pick" &&
+        composer.goalEventId === eventId
+      ) {
+        setComposer({ kind: "closed" });
+      }
       setToast(null);
     } catch (err) {
       const message =
@@ -706,6 +973,49 @@ export default function LiveMatchPage() {
   const liveLogging = period === "first_half" || period === "second_half";
   const selectedKey = targetKey(target);
   const logEnabled = liveLogging && Boolean(target);
+  const targetIsBench =
+    (target?.kind === "own" && !ownPitchIds.has(target.athlete.id)) ||
+    (target?.kind === "opp" && !oppPitchIds.has(target.player.id));
+  const pitchLogEnabled = logEnabled && !targetIsBench;
+  const benchIncomingCallout = isBenchIncomingCallout(composer.kind);
+  const subOutCallout = composer.kind === "sub-out";
+  const assistPick = composer.kind === "assist-pick";
+  const dimEventGrid = dimEventGridFor(composer.kind);
+  const ownBenchCallToAction =
+    (composer.kind === "mandatory-sub-in" || composer.kind === "sub-in") &&
+    composer.team === "own";
+  const oppBenchCallToAction =
+    (composer.kind === "mandatory-sub-in" || composer.kind === "sub-in") &&
+    composer.team === "opponent";
+  const assistHighlightOwnIds =
+    assistPick && composer.team === "own"
+      ? new Set(
+          ownPlaced
+            .filter((placed) => placed.athlete.id !== composer.scorerAthleteId)
+            .map((placed) => placed.athlete.id),
+        )
+      : undefined;
+  const assistHighlightOppIds =
+    assistPick && composer.team === "opponent"
+      ? new Set(
+          oppPlaced
+            .filter(
+              (placed) => placed.player.id !== composer.scorerOpponentPlayerId,
+            )
+            .map((placed) => placed.player.id),
+        )
+      : undefined;
+  const subOutHighlightOwnIds =
+    subOutCallout && composer.team === "own"
+      ? new Set(ownPlaced.map((placed) => placed.athlete.id))
+      : undefined;
+  const subOutHighlightOppIds =
+    subOutCallout && composer.team === "opponent"
+      ? new Set(oppPlaced.map((placed) => placed.player.id))
+      : undefined;
+  const pitchCallOwnIds = assistHighlightOwnIds ?? subOutHighlightOwnIds;
+  const pitchCallOppIds = assistHighlightOppIds ?? subOutHighlightOppIds;
+  const pitchCallTone = assistPick ? "positive" : "warning";
 
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
@@ -921,83 +1231,220 @@ export default function LiveMatchPage() {
           <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
             Tactical view
           </h2>
-          <LivePitch>
-            <LivePitchPlayers
-              ownPlaced={ownPlaced}
-              oppPlaced={oppPlaced}
+          <div className="relative">
+            <LivePitch
+              layout={visibility === "none" ? "own" : "full"}
+              ownHalf={ownHalf}
               ownColor={ownColor}
               oppColor={oppColor}
-              visibility={visibility}
-              timeline={timeline}
-              selectedKey={selectedKey}
-              onSelectOwn={selectOwn}
-              onSelectOpp={selectOpp}
-            />
-            {visibility === "none" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setComposer({ kind: "closed" });
-                  setTarget({ kind: "opp-generic" });
-                  setActionError(null);
-                }}
-                className={cn(
-                  "absolute top-2 rounded-full border border-white/35 bg-[#123528]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/90 shadow-sm backdrop-blur-[1px]",
-                  "hover:border-white/60 hover:bg-[#1b4d36]/90",
-                  isHome ? "right-[12%]" : "left-[12%]",
-                  selectedKey === "opp-generic" &&
-                    "border-[#00d99a] text-[#00d99a] ring-1 ring-[#00d99a]/70",
-                )}
-              >
-                {oppAbbrev} · log opponent
-              </button>
-            )}
+            >
+              <LivePitchPlayers
+                ownPlaced={ownPlaced}
+                oppPlaced={oppPlaced}
+                ownColor={ownColor}
+                oppColor={oppColor}
+                visibility={visibility}
+                timeline={timeline}
+                selectedKey={selectedKey}
+                onSelectOwn={selectOwn}
+                onSelectOpp={selectOpp}
+                callToActionOwnIds={pitchCallOwnIds}
+                callToActionOppIds={pitchCallOppIds}
+                callToActionTone={pitchCallTone}
+              />
+              {visibility === "none" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      isAssistCallout(composer.kind) ||
+                      isBenchIncomingCallout(composer.kind) ||
+                      isSubOutCallout(composer.kind)
+                    ) {
+                      return;
+                    }
+                    setComposer({ kind: "closed" });
+                    setTarget({ kind: "opp-generic" });
+                    setActionError(null);
+                  }}
+                  className={cn(
+                    "absolute top-2 rounded-full border border-white/35 bg-[#123528]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/90 shadow-sm backdrop-blur-[1px]",
+                    "hover:border-white/60 hover:bg-[#1b4d36]/90",
+                    isHome ? "right-2" : "left-2",
+                    selectedKey === "opp-generic" &&
+                      "border-[#00d99a] text-[#00d99a] ring-1 ring-[#00d99a]/70",
+                  )}
+                >
+                  {oppAbbrev} · log opponent
+                </button>
+              )}
+            </LivePitch>
             {period === "not_started" && (
-              <button
-                type="button"
-                onClick={startFirstHalf}
-                className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/35"
-              >
-                <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#101920] shadow-[0_0_24px_rgba(0,217,154,0.4)]">
-                  <WhistleIcon size={36} />
-                </span>
-                <span className="mt-2 font-oswald text-lg tracking-[0.28em] text-[#00d99a]">
-                  START GAME
-                </span>
-              </button>
+              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/60 backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={startFirstHalf}
+                  className={cn(
+                    "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
+                    "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
+                    "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
+                  )}
+                >
+                  <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
+                    <WhistleIcon size={36} />
+                  </span>
+                  <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
+                    START GAME
+                  </span>
+                </button>
+              </div>
             )}
-          </LivePitch>
+          </div>
         </section>
 
-        <section className="shrink-0 rounded-xl border border-[#1c2b36] bg-[#0c1218] px-3 py-1.5">
-          <LiveBenchRow
-            label={`${ownAbbrev} bench`}
-            color={ownColor}
-            athletes={ownBench}
-            timeline={timeline}
-            selectedKey={selectedKey}
-            onSelectOwn={selectOwn}
-          />
-          <LiveBenchRow
-            label={`${oppAbbrev} bench`}
-            color={oppColor}
-            opponents={oppBench}
-            visibility={visibility}
-            timeline={timeline}
-            selectedKey={selectedKey}
-            onSelectOpp={selectOpp}
-          />
+        <section
+          className={cn(
+            "grid shrink-0 grid-cols-2 gap-3 rounded-xl border bg-[#0c1218] px-3 py-1.5",
+            benchIncomingCallout || subOutCallout
+              ? "border-[#ffbe2e]/55"
+              : assistPick
+                ? "border-[#00d99a]/40"
+                : "border-[#1c2b36]",
+          )}
+        >
+          {ownHalf === "left" ? (
+            <>
+              <LiveBenchRow
+                label={`${ownAbbrev} bench`}
+                color={ownColor}
+                athletes={ownBench}
+                timeline={timeline}
+                selectedKey={selectedKey}
+                onSelectOwn={selectOwn}
+                align="left"
+                callToAction={ownBenchCallToAction}
+              />
+              <LiveBenchRow
+                label={`${oppAbbrev} bench`}
+                color={oppColor}
+                opponents={oppBench}
+                visibility={visibility}
+                timeline={timeline}
+                selectedKey={selectedKey}
+                onSelectOpp={selectOpp}
+                align="right"
+                callToAction={oppBenchCallToAction}
+              />
+            </>
+          ) : (
+            <>
+              <LiveBenchRow
+                label={`${oppAbbrev} bench`}
+                color={oppColor}
+                opponents={oppBench}
+                visibility={visibility}
+                timeline={timeline}
+                selectedKey={selectedKey}
+                onSelectOpp={selectOpp}
+                align="left"
+                callToAction={oppBenchCallToAction}
+              />
+              <LiveBenchRow
+                label={`${ownAbbrev} bench`}
+                color={ownColor}
+                athletes={ownBench}
+                timeline={timeline}
+                selectedKey={selectedKey}
+                onSelectOwn={selectOwn}
+                align="right"
+                callToAction={ownBenchCallToAction}
+              />
+            </>
+          )}
         </section>
 
-        {composer.kind === "sub-in" && (
-          <p className="shrink-0 text-center text-xs text-[#ffbe2e]">
-            Tap a {composer.team === "own" ? ownAbbrev : oppAbbrev} bench
-            player to come on
-            {composer.team === "opponent" && visibility === "none"
-              ? " — no opponent bench is available"
-              : ""}
-            .
-          </p>
+        {composer.kind === "mandatory-sub-in" || composer.kind === "sub-in" ? (
+          <div
+            role="alert"
+            data-callout={
+              composer.kind === "mandatory-sub-in"
+                ? "mandatory-sub"
+                : "voluntary-sub-in"
+            }
+            className="live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
+          >
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
+              {composer.kind === "mandatory-sub-in" ? (
+                <HeartPulse className="size-5" aria-hidden="true" />
+              ) : (
+                <ArrowLeftRight className="size-5" aria-hidden="true" />
+              )}
+            </span>
+            <div className="relative z-[1] min-w-0">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#ffbe2e]">
+                {composer.kind === "mandatory-sub-in"
+                  ? "SUBSTITUTION REQUIRED"
+                  : "PICK WHO COMES ON"}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+                Tap a {composer.team === "own" ? ownAbbrev : oppAbbrev} bench
+                player to come on
+                {composer.team === "opponent" && visibility === "none"
+                  ? " — no opponent bench is available"
+                  : ""}
+                .
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {composer.kind === "sub-out" ? (
+          <div
+            role="alert"
+            data-callout="voluntary-sub-out"
+            className="live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
+          >
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
+              <ArrowLeftRight className="size-5" aria-hidden="true" />
+            </span>
+            <div className="relative z-[1] min-w-0">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#ffbe2e]">
+                PICK WHO COMES OFF
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+                Tap the {composer.team === "own" ? ownAbbrev : oppAbbrev} player
+                coming off the pitch.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {composer.kind === "assist-pick" && (
+          <div
+            role="status"
+            data-callout="assist-pick"
+            className="live-callout-banner live-callout-banner-positive flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
+          >
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#00d99a]/20 text-[#00d99a]">
+              <BootIcon className="size-5" />
+            </span>
+            <div className="relative z-[1] min-w-0 flex-1">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#00d99a]">
+                WHO ASSISTED?
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+                Goal logged — tap a teammate on the pitch who assisted, or skip
+              </p>
+            </div>
+            <button
+              type="button"
+              className="relative z-[1] rounded-lg border border-[#8e9ba8] px-3 py-1.5 font-oswald text-[10px] tracking-widest text-[#8e9ba8]"
+              onClick={skipAssist}
+            >
+              NO ASSIST
+            </button>
+          </div>
         )}
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-2">
@@ -1011,12 +1458,24 @@ export default function LiveMatchPage() {
               </p>
             ) : (
               <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
-                {timeline.map((event) => {
+                {timeline
+                  .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
+                  .map((event) => {
                   const who = event.athlete
                     ? shirtLabel(event.athlete)
                     : event.opponentPlayer
                       ? opponentShirtLabel(event.opponentPlayer, visibility)
                       : event.opponentLabel ?? "Unassigned";
+                  const assist = event.eventType === "goal"
+                    ? assistsByGoal.get(event.id)
+                    : undefined;
+                  const assistWho = assist
+                    ? assist.athlete
+                      ? shirtLabel(assist.athlete)
+                      : assist.opponentPlayer
+                        ? opponentShirtLabel(assist.opponentPlayer, visibility)
+                        : assist.opponentLabel ?? "Unassigned"
+                    : null;
                   const key = rowKey(event);
                   const teamBorder =
                     event.team === "own" ? ownColor : oppColor;
@@ -1045,6 +1504,7 @@ export default function LiveMatchPage() {
                           </p>
                           <p className="truncate text-xs text-[#8e9ba8]">
                             {event.team === "own" ? ownName : oppName} · {who}
+                            {assistWho ? `, Assist: ${assistWho}` : ""}
                             {substitutionIncoming(event, squad, opponentSquad)}
                           </p>
                         </div>
@@ -1066,24 +1526,26 @@ export default function LiveMatchPage() {
             )}
           </section>
 
-          <section className="flex min-h-0 flex-col overflow-y-auto rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5">
+          <section
+            className="relative flex min-h-0 flex-col overflow-y-auto rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5"
+            inert={dimEventGrid || undefined}
+          >
+            {dimEventGrid ? (
+              <div
+                className="absolute inset-0 z-10 rounded-xl bg-[#070d12]/60"
+                aria-hidden="true"
+              />
+            ) : null}
             <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
               {loggingForLabel(target, visibility)}
             </h2>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <div className="mt-2 grid grid-cols-1 gap-2">
               <LogButton
                 label="Goal"
                 color="#00d99a"
-                disabled={!logEnabled}
+                disabled={!pitchLogEnabled}
                 onClick={() => handleAction("goal")}
-                icon={<SoccerGlyph className="size-6" />}
-              />
-              <LogButton
-                label="Key Pass"
-                color="#5b9fff"
-                disabled={!logEnabled}
-                onClick={() => handleAction("key_pass")}
-                icon={<span className="text-lg font-bold">»»</span>}
+                icon={<SoccerBallIcon className="size-7" />}
               />
               <LogButton
                 label="Yellow"
@@ -1091,7 +1553,7 @@ export default function LiveMatchPage() {
                 disabled={!logEnabled}
                 onClick={() => handleAction("yellow_card")}
                 icon={
-                  <span className="inline-block h-5 w-3.5 rounded-[2px] bg-[#f5c518]" />
+                  <span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />
                 }
               />
               <LogButton
@@ -1100,30 +1562,50 @@ export default function LiveMatchPage() {
                 disabled={!logEnabled}
                 onClick={() => handleAction("red_card")}
                 icon={
-                  <span className="inline-block h-5 w-3.5 rounded-[2px] bg-[#ff5b5f]" />
+                  <span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
                 }
               />
               <LogButton
                 label="Substitution"
                 color="#f5c518"
                 disabled={!logEnabled}
-                onClick={() => handleAction("substitution")}
-                className="col-span-2"
-                icon={<ArrowLeftRight className="size-5" />}
+                onClick={() => {
+                  const selectedOnPitch =
+                    target?.kind === "own"
+                      ? ownPitchIds.has(target.athlete.id)
+                      : target?.kind === "opp"
+                        ? oppPitchIds.has(target.player.id)
+                        : false;
+                  const nextKind =
+                    target == null
+                      ? "none"
+                      : target.kind === "opp-generic"
+                        ? "sub-in"
+                        : selectedOnPitch
+                          ? "sub-in"
+                          : "sub-out";
+                  console.log("[live-callout:sub-button]", {
+                    targetKind: target?.kind,
+                    selectedOnPitch,
+                    nextKind,
+                  });
+                  handleAction("substitution");
+                }}
+                icon={<ArrowLeftRight className="size-6" />}
               />
               <LogButton
                 label="Penalty"
                 color="#20e6a6"
-                disabled={!logEnabled}
+                disabled={!pitchLogEnabled}
                 onClick={() => handleAction("penalty")}
-                icon={<span className="font-oswald text-lg">P</span>}
+                icon={<Target className="size-7" />}
               />
               <LogButton
                 label="Injury"
                 color="#fb923c"
-                disabled={!logEnabled}
+                disabled={!pitchLogEnabled}
                 onClick={() => handleAction("injury")}
-                icon={<span className="text-lg font-bold">+</span>}
+                icon={<HeartPulse className="size-7" />}
               />
             </div>
           </section>
@@ -1273,6 +1755,42 @@ function SettingsItem({
   );
 }
 
+function mixHex(accent: string, base: string, amount: number) {
+  const parse = (hex: string) => {
+    const value = hex.replace("#", "");
+    return [
+      Number.parseInt(value.slice(0, 2), 16),
+      Number.parseInt(value.slice(2, 4), 16),
+      Number.parseInt(value.slice(4, 6), 16),
+    ] as const;
+  };
+  const [r1, g1, b1] = parse(accent);
+  const [r2, g2, b2] = parse(base);
+  const toHex = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r1 * amount + r2 * (1 - amount))}${toHex(g1 * amount + g2 * (1 - amount))}${toHex(b1 * amount + b2 * (1 - amount))}`;
+}
+
+function accentIsLight(color: string) {
+  const value = color.replace("#", "");
+  if (value.length !== 6) {
+    return false;
+  }
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 155;
+}
+
+function logButtonFill(color: string) {
+  if (color.replace("#", "").length !== 6) {
+    return mixHex("#00d99a", "#101920", 0.48);
+  }
+  return mixHex(color, "#101920", accentIsLight(color) ? 0.82 : 0.48);
+}
+
 function LogButton({
   label,
   color,
@@ -1288,19 +1806,28 @@ function LogButton({
   disabled?: boolean;
   className?: string;
 }) {
+  const fill = logButtonFill(color);
+  const fg = accentIsLight(color) ? "#102018" : "#ffffff";
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl border bg-[#101920] px-2 py-2 font-oswald text-[11px] tracking-[0.18em] disabled:opacity-35 sm:min-h-14 sm:text-xs",
+        "live-log-btn inline-flex min-h-14 w-full flex-row items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 font-oswald text-xs font-semibold tracking-[0.16em] sm:min-h-16 sm:text-sm",
         className,
       )}
-      style={{ borderColor: color, color }}
+      style={{
+        backgroundColor: fill,
+        borderColor: color,
+        color: fg,
+        ["--log-btn-color" as string]: color,
+      }}
     >
-      {icon}
-      {label}
+      <span className="inline-flex shrink-0 items-center justify-center">
+        {icon}
+      </span>
+      <span>{label}</span>
     </button>
   );
 }

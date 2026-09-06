@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createGamePlan,
   deleteGamePlan,
+  getGamePlan,
   getGamePlans,
   updateGamePlan,
   type BackendGamePlan,
@@ -23,6 +24,15 @@ export function useGamePlans() {
   return useQuery<BackendGamePlan[]>({
     queryKey: gamePlansQueryKey,
     queryFn: getGamePlans,
+    staleTime: 30_000,
+  });
+}
+
+export function useGamePlan(id: string | undefined) {
+  return useQuery<BackendGamePlan>({
+    queryKey: [...gamePlansQueryKey, id],
+    queryFn: () => getGamePlan(id!),
+    enabled: Boolean(id),
     staleTime: 30_000,
   });
 }

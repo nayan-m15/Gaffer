@@ -1,8 +1,10 @@
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
+  inferFormationIdFromPositions,
+  previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
-import type { BackendLineup } from "@/services/lineups";
+import type { BackendGamePlan } from "@/services/gamePlans";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
 import type {
   MatchLogEvent,
@@ -23,6 +25,36 @@ export interface MarkerStats {
   secondYellow: boolean;
   subMinute: number | null;
   subOut: boolean;
+  subIn: boolean;
+}
+
+export type MarkerBadgeKind = "sub-out" | "sub-in" | "card" | "assist" | "goal";
+
+export type MarkerBadgeSlot = "top-left" | "middle-left" | "bottom-left" | "bottom-right";
+
+export interface MarkerBadge {
+  slot: MarkerBadgeSlot;
+  kind: MarkerBadgeKind;
+}
+
+/** Corner/edge badges for a player's token, keyed to that athlete even after they leave the pitch. */
+export function markerBadgeSlots(stats: MarkerStats): MarkerBadge[] {
+  const badges: MarkerBadge[] = [];
+  if (stats.subOut) {
+    badges.push({ slot: "top-left", kind: "sub-out" });
+  } else if (stats.subIn) {
+    badges.push({ slot: "top-left", kind: "sub-in" });
+  }
+  if (stats.yellow || stats.red || stats.secondYellow) {
+    badges.push({ slot: "middle-left", kind: "card" });
+  }
+  if (stats.assists > 0) {
+    badges.push({ slot: "bottom-left", kind: "assist" });
+  }
+  if (stats.goals > 0) {
+    badges.push({ slot: "bottom-right", kind: "goal" });
+  }
+  return badges;
 }
 
 export interface PlacedOwnPlayer {
@@ -92,24 +124,41 @@ export function shirtNumberLabel(value: number | null | undefined) {
   return value != null ? String(value) : "–";
 }
 
+function spreadFromCenter(value: number, factor: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, 50 + (value - 50) * factor));
+}
+
 /**
- * Map a vertical formation slot (attack at y=0, GK at y≈94) onto one
- * horizontal half of the live pitch. Home always occupies the left half.
+ * Map a vertical formation slot (attack at y=0, GK at y≈94) onto the live
+ * pitch. Home occupies the left half (own goal left, attack right); away the
+ * right. `own` layout uses the same rotation but spans the full panel.
+ *
+ * Rotation is a true 90° turn of the tactics board: formation x (left/right)
+ * becomes the vertical axis, formation y (attack/own goal) becomes length.
+ * Across/depth are opened slightly from centre so tokens and labels in a back
+ * four or narrow midfield do not collide.
  */
 export function formationToHalf(
   formationX: number,
   formationY: number,
   half: PitchHalf,
+  layout: "full" | "own" = "full",
 ) {
+  const across = spreadFromCenter(formationX, 1.12, 6, 94);
+  const depth = spreadFromCenter(formationY, 1.06, 6, 98);
+  const span = layout === "own" ? 88 : 44;
+  const start = layout === "own" ? 6 : half === "left" ? 3 : 53;
+  const yInset = 4;
+  const ySpan = 92;
   if (half === "left") {
     return {
-      x: 3 + ((100 - formationY) / 100) * 44,
-      y: 8 + ((100 - formationX) / 100) * 84,
+      x: start + ((100 - depth) / 100) * span,
+      y: yInset + (across / 100) * ySpan,
     };
   }
   return {
-    x: 53 + (formationY / 100) * 44,
-    y: 8 + (formationX / 100) * 84,
+    x: start + (depth / 100) * span,
+    y: yInset + ((100 - across) / 100) * ySpan,
   };
 }
 
@@ -184,23 +233,45 @@ export function ownPitchState(
   };
 }
 
+function hasRecordedPosition(player: OpponentMatchPlayer) {
+  return Boolean(player.position?.trim());
+}
+
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
   timeline: MatchLogEvent[],
 ) {
   const unique = uniqueOpponents(players);
   const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
-  const seenNumbers = new Set<number>();
+  const positioned = sorted.filter(hasRecordedPosition);
+  const unpositioned = sorted.filter((player) => !hasRecordedPosition(player));
   const starters: OpponentMatchPlayer[] = [];
-  const extras: OpponentMatchPlayer[] = [];
-  for (const player of sorted) {
+  const seenNumbers = new Set<number>();
+
+  const takeStarter = (player: OpponentMatchPlayer) => {
     if (seenNumbers.has(player.shirtNumber) || starters.length >= 11) {
-      extras.push(player);
-      continue;
+      return false;
     }
     seenNumbers.add(player.shirtNumber);
     starters.push(player);
+    return true;
+  };
+
+  if (positioned.length > 0) {
+    for (const player of positioned) {
+      takeStarter(player);
+    }
+    for (const player of unpositioned) {
+      takeStarter(player);
+    }
+  } else {
+    for (const player of sorted) {
+      takeStarter(player);
+    }
   }
+
+  const starterIds = new Set(starters.map((player) => player.id));
+  const extras = unique.filter((player) => !starterIds.has(player.id));
   const onPitch = new Set(starters.map((player) => player.id));
   const bench = new Set(extras.map((player) => player.id));
 
@@ -232,18 +303,19 @@ export function opponentPitchState(
 
 export function placeOwnPlayers(
   onPitch: MatchSquadAthlete[],
-  lineup: BackendLineup | undefined,
+  gamePlan: BackendGamePlan | undefined,
   half: PitchHalf,
   timeline: MatchLogEvent[],
+  layout: "full" | "own" = "full",
 ): PlacedOwnPlayer[] {
-  const formationId = lineup?.formationId ?? DEFAULT_FORMATION_ID;
+  const formationId = gamePlan?.formationId ?? DEFAULT_FORMATION_ID;
   const formation =
     FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
   const uniqueOnPitch = uniqueAthletes(onPitch);
   const byId = new Map(uniqueOnPitch.map((athlete) => [athlete.id, athlete]));
 
-  const assignments: Record<string, string | null> = {
-    ...(lineup?.assignments ?? {}),
+  const preferred: Record<string, string | null> = {
+    ...(gamePlan?.assignments ?? {}),
   };
 
   for (const event of chronological(timeline)) {
@@ -255,65 +327,36 @@ export function placeOwnPlayers(
     if (!outgoingId || !incomingId) {
       continue;
     }
-    const slot = Object.keys(assignments).find(
-      (key) => assignments[key] === outgoingId,
+    const slot = Object.keys(preferred).find(
+      (key) => preferred[key] === outgoingId,
     );
     if (slot) {
-      assignments[slot] = incomingId;
+      preferred[slot] = incomingId;
     }
   }
 
-  const usedIds = new Set<string>();
-  const usedNumbers = new Set<number>();
-  const filledSlots = new Set<string>();
-  const placed: PlacedOwnPlayer[] = [];
+  const assignments = previewAssignmentsForStarters(
+    formationId,
+    uniqueOnPitch.map((athlete) => athlete.id),
+    (id) => byId.get(id)?.position ?? null,
+    preferred,
+  );
 
-  const tryPlace = (athlete: MatchSquadAthlete, x: number, y: number, slotId?: string) => {
-    if (usedIds.has(athlete.id)) {
-      return false;
-    }
-    if (
-      athlete.squadNumber != null &&
-      usedNumbers.has(athlete.squadNumber)
-    ) {
-      return false;
-    }
-    usedIds.add(athlete.id);
-    if (athlete.squadNumber != null) {
-      usedNumbers.add(athlete.squadNumber);
-    }
-    if (slotId) {
-      filledSlots.add(slotId);
-    }
-    placed.push({ athlete, x, y });
-    return true;
-  };
+  const placed: PlacedOwnPlayer[] = [];
+  const usedIds = new Set<string>();
 
   if (formation) {
     for (const position of formation.positions) {
       const athleteId = assignments[position.id];
       const athlete = athleteId ? byId.get(athleteId) : undefined;
-      if (!athlete) {
+      if (!athlete || usedIds.has(athlete.id)) {
         continue;
       }
-      const mapped = formationToHalf(position.x, position.y, half);
-      tryPlace(athlete, mapped.x, mapped.y, position.id);
-    }
-
-    const leftovers = uniqueOnPitch.filter((athlete) => !usedIds.has(athlete.id));
-    let leftoverIndex = 0;
-    for (const position of formation.positions) {
-      if (filledSlots.has(position.id) || leftoverIndex >= leftovers.length) {
-        continue;
-      }
-      const mapped = formationToHalf(position.x, position.y, half);
-      while (leftoverIndex < leftovers.length) {
-        const athlete = leftovers[leftoverIndex];
-        leftoverIndex += 1;
-        if (tryPlace(athlete, mapped.x, mapped.y, position.id)) {
-          break;
-        }
-      }
+      usedIds.add(athlete.id);
+      placed.push({
+        athlete,
+        ...formationToHalf(position.x, position.y, half, layout),
+      });
     }
   }
 
@@ -323,34 +366,94 @@ export function placeOwnPlayers(
 export function placeOppPlayers(
   onPitch: OpponentMatchPlayer[],
   half: PitchHalf,
+  timeline: MatchLogEvent[] = [],
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
-  const ordered = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
-  const formation = FORMATIONS[DEFAULT_FORMATION_ID];
-  const usedIds = new Set<string>();
-  const usedNumbers = new Set<number>();
+  const byId = new Map(unique.map((player) => [player.id, player]));
+  const hasPositions = unique.some(hasRecordedPosition);
+  const formationId = hasPositions
+    ? inferFormationIdFromPositions(unique.map((player) => player.position))
+    : DEFAULT_FORMATION_ID;
+  const formation =
+    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
   const placed: PlacedOppPlayer[] = [];
   if (!formation) {
     return placed;
   }
 
-  let index = 0;
+  const preferred: Record<string, string | null> = {};
   for (const position of formation.positions) {
-    while (index < ordered.length) {
-      const player = ordered[index];
-      index += 1;
-      if (
-        usedIds.has(player.id) ||
-        usedNumbers.has(player.shirtNumber)
-      ) {
-        continue;
+    preferred[position.id] = null;
+  }
+
+  if (hasPositions) {
+    const used = new Set<string>();
+    for (const position of formation.positions) {
+      const candidate = unique.find((player) => {
+        if (used.has(player.id)) {
+          return false;
+        }
+        return (
+          (player.position ?? "").trim().toUpperCase() ===
+          position.label.trim().toUpperCase()
+        );
+      });
+      if (candidate) {
+        preferred[position.id] = candidate.id;
+        used.add(candidate.id);
       }
-      usedIds.add(player.id);
-      usedNumbers.add(player.shirtNumber);
-      const mapped = formationToHalf(position.x, position.y, half);
-      placed.push({ player, ...mapped });
-      break;
     }
+  } else {
+    const ordered = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
+    let index = 0;
+    for (const position of formation.positions) {
+      const player = ordered[index];
+      if (!player) {
+        break;
+      }
+      preferred[position.id] = player.id;
+      index += 1;
+    }
+  }
+
+  for (const event of chronological(timeline)) {
+    if (event.eventType !== "substitution" || event.team !== "opponent") {
+      continue;
+    }
+    const outgoingId = event.opponentPlayerId;
+    const incomingId = event.detail;
+    if (!outgoingId || !incomingId) {
+      continue;
+    }
+    const slot = Object.keys(preferred).find(
+      (key) => preferred[key] === outgoingId,
+    );
+    if (slot) {
+      preferred[slot] = incomingId;
+    }
+  }
+
+  const assignments = hasPositions
+    ? previewAssignmentsForStarters(
+        formationId,
+        unique.map((player) => player.id),
+        (id) => byId.get(id)?.position ?? null,
+        preferred,
+      )
+    : preferred;
+
+  const usedIds = new Set<string>();
+  for (const position of formation.positions) {
+    const playerId = assignments[position.id];
+    const player = playerId ? byId.get(playerId) : undefined;
+    if (!player || usedIds.has(player.id)) {
+      continue;
+    }
+    usedIds.add(player.id);
+    placed.push({
+      player,
+      ...formationToHalf(position.x, position.y, half),
+    });
   }
   return placed;
 }
@@ -385,6 +488,7 @@ export function markerStatsFor(
     secondYellow: false,
     subMinute: null,
     subOut: false,
+    subIn: false,
   };
 
   for (const event of chronological(timeline)) {
@@ -416,6 +520,7 @@ export function markerStatsFor(
     if (event.eventType === "substitution" && matchesPlayer(event, athleteId, opponentPlayerId)) {
       stats.subMinute = event.minute;
       stats.subOut = isSubject && !isIncoming;
+      stats.subIn = isIncoming && !isSubject;
     }
   }
 

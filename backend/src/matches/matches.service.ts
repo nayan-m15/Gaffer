@@ -295,6 +295,7 @@ export class MatchesService {
         id: opponentMatchPlayers.id,
         shirtNumber: opponentMatchPlayers.shirtNumber,
         name: opponentMatchPlayers.name,
+        position: opponentMatchPlayers.position,
       })
       .from(opponentMatchPlayers)
       .where(eq(opponentMatchPlayers.matchId, matchId))

@@ -4,6 +4,7 @@ import {
   eventStatus,
   eventType,
   opponentSquadVisibility,
+  PLAYER_POSITIONS,
 } from '../database/schema';
 
 export const eventTypeSchema = z.enum(eventType.enumValues);
@@ -62,6 +63,20 @@ export const updateEventSchema = createEventSchema
   );
 export type UpdateEventDto = z.infer<typeof updateEventSchema>;
 
+export const playerPositionSchema = z
+  .string()
+  .trim()
+  .transform((value) => (value === '' ? null : value.toUpperCase()))
+  .pipe(
+    z.union([
+      z.null(),
+      z.enum(PLAYER_POSITIONS, {
+        error:
+          'Position must be a valid abbreviation such as GK, CB, CM, or ST.',
+      }),
+    ]),
+  );
+
 const opponentSquadPlayerSchema = z.object({
   shirtNumber: z
     .number()
@@ -74,6 +89,7 @@ const opponentSquadPlayerSchema = z.object({
     .min(1, 'Opponent name is required.')
     .max(80, 'Opponent name must be 80 characters or fewer.')
     .optional(),
+  position: playerPositionSchema.optional(),
 });
 
 export const startMatchSchema = z
@@ -99,7 +115,7 @@ export const startMatchSchema = z
         message: 'Bench athletes must be unique.',
       })
       .optional(),
-    lineupId: z.uuid().optional(),
+    gamePlanId: z.uuid().optional(),
     opponentSquadVisibility: opponentSquadVisibilitySchema.default('none'),
     opponentSquad: z.array(opponentSquadPlayerSchema).max(30).optional(),
     teamColor: hexColorSchema.optional(),
@@ -187,6 +203,9 @@ export class OpponentSquadPlayerBodyDto {
 
   @ApiPropertyOptional({ example: 'Smith' })
   name?: string;
+
+  @ApiPropertyOptional({ enum: PLAYER_POSITIONS, example: 'ST' })
+  position?: (typeof PLAYER_POSITIONS)[number] | null;
 }
 
 export class StartMatchBodyDto {
@@ -208,7 +227,7 @@ export class StartMatchBodyDto {
   benchAthleteIds?: string[];
 
   @ApiPropertyOptional({ format: 'uuid' })
-  lineupId?: string;
+  gamePlanId?: string;
 
   @ApiPropertyOptional({
     enum: opponentSquadVisibility.enumValues,

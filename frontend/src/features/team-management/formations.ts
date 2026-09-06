@@ -40,16 +40,16 @@ const fourThreeThree: Formation = {
   name: "4-3-3",
   positions: [
     pos("433", "GK", "GK", 50, 94),
-    pos("433", "LB", "DEF", 14, 72),
-    pos("433", "CB", "DEF", 37, 76, "1"),
-    pos("433", "CB", "DEF", 63, 76, "2"),
-    pos("433", "RB", "DEF", 86, 72),
-    pos("433", "CM", "MID", 28, 52, "1"),
-    pos("433", "CM", "MID", 50, 46, "2"),
-    pos("433", "CM", "MID", 72, 52, "3"),
-    pos("433", "LW", "FWD", 18, 22),
+    pos("433", "LB", "DEF", 12, 72),
+    pos("433", "CB", "DEF", 32, 78, "1"),
+    pos("433", "CB", "DEF", 68, 78, "2"),
+    pos("433", "RB", "DEF", 88, 72),
+    pos("433", "CM", "MID", 24, 52, "1"),
+    pos("433", "CM", "MID", 50, 44, "2"),
+    pos("433", "CM", "MID", 76, 52, "3"),
+    pos("433", "LW", "FWD", 16, 22),
     pos("433", "ST", "FWD", 50, 14),
-    pos("433", "RW", "FWD", 82, 22),
+    pos("433", "RW", "FWD", 84, 22),
   ],
 };
 
@@ -59,16 +59,16 @@ const fourFourTwo: Formation = {
   name: "4-4-2",
   positions: [
     pos("442", "GK", "GK", 50, 94),
-    pos("442", "LB", "DEF", 14, 72),
-    pos("442", "CB", "DEF", 37, 76, "1"),
-    pos("442", "CB", "DEF", 63, 76, "2"),
-    pos("442", "RB", "DEF", 86, 72),
-    pos("442", "LM", "MID", 14, 48),
-    pos("442", "CM", "MID", 38, 50, "1"),
-    pos("442", "CM", "MID", 62, 50, "2"),
-    pos("442", "RM", "MID", 86, 48),
-    pos("442", "ST", "FWD", 38, 16, "1"),
-    pos("442", "ST", "FWD", 62, 16, "2"),
+    pos("442", "LB", "DEF", 12, 72),
+    pos("442", "CB", "DEF", 32, 78, "1"),
+    pos("442", "CB", "DEF", 68, 78, "2"),
+    pos("442", "RB", "DEF", 88, 72),
+    pos("442", "LM", "MID", 12, 48),
+    pos("442", "CM", "MID", 32, 50, "1"),
+    pos("442", "CM", "MID", 68, 50, "2"),
+    pos("442", "RM", "MID", 88, 48),
+    pos("442", "ST", "FWD", 36, 16, "1"),
+    pos("442", "ST", "FWD", 64, 16, "2"),
   ],
 };
 
@@ -78,15 +78,15 @@ const fourTwoThreeOne: Formation = {
   name: "4-2-3-1",
   positions: [
     pos("4231", "GK", "GK", 50, 94),
-    pos("4231", "LB", "DEF", 14, 72),
-    pos("4231", "CB", "DEF", 37, 76, "1"),
-    pos("4231", "CB", "DEF", 63, 76, "2"),
-    pos("4231", "RB", "DEF", 86, 72),
-    pos("4231", "CDM", "MID", 38, 60, "1"),
-    pos("4231", "CDM", "MID", 62, 60, "2"),
-    pos("4231", "LAM", "MID", 18, 38),
-    pos("4231", "CAM", "MID", 50, 34),
-    pos("4231", "RAM", "MID", 82, 38),
+    pos("4231", "LB", "DEF", 12, 72),
+    pos("4231", "CB", "DEF", 32, 78, "1"),
+    pos("4231", "CB", "DEF", 68, 78, "2"),
+    pos("4231", "RB", "DEF", 88, 72),
+    pos("4231", "CDM", "MID", 32, 58, "1"),
+    pos("4231", "CDM", "MID", 68, 58, "2"),
+    pos("4231", "LAM", "MID", 16, 38),
+    pos("4231", "CAM", "MID", 50, 32),
+    pos("4231", "RAM", "MID", 84, 38),
     pos("4231", "ST", "FWD", 50, 14),
   ],
 };
@@ -97,15 +97,15 @@ const fourOneFourOne: Formation = {
   name: "4-1-4-1",
   positions: [
     pos("4141", "GK", "GK", 50, 94),
-    pos("4141", "LB", "DEF", 14, 72),
-    pos("4141", "CB", "DEF", 37, 76, "1"),
-    pos("4141", "CB", "DEF", 63, 76, "2"),
-    pos("4141", "RB", "DEF", 86, 72),
-    pos("4141", "CDM", "MID", 50, 60),
-    pos("4141", "LM", "MID", 14, 42),
-    pos("4141", "CM", "MID", 38, 44, "1"),
-    pos("4141", "CM", "MID", 62, 44, "2"),
-    pos("4141", "RM", "MID", 86, 42),
+    pos("4141", "LB", "DEF", 12, 72),
+    pos("4141", "CB", "DEF", 32, 78, "1"),
+    pos("4141", "CB", "DEF", 68, 78, "2"),
+    pos("4141", "RB", "DEF", 88, 72),
+    pos("4141", "CDM", "MID", 50, 58),
+    pos("4141", "LM", "MID", 12, 42),
+    pos("4141", "CM", "MID", 32, 44, "1"),
+    pos("4141", "CM", "MID", 68, 44, "2"),
+    pos("4141", "RM", "MID", 88, 42),
     pos("4141", "ST", "FWD", 50, 14),
   ],
 };
@@ -116,16 +116,16 @@ const threeFiveTwo: Formation = {
   name: "3-5-2",
   positions: [
     pos("352", "GK", "GK", 50, 94),
-    pos("352", "CB", "DEF", 28, 76, "1"),
-    pos("352", "CB", "DEF", 50, 78, "2"),
-    pos("352", "CB", "DEF", 72, 76, "3"),
-    pos("352", "LWB", "MID", 10, 52),
-    pos("352", "CM", "MID", 32, 50, "1"),
-    pos("352", "CM", "MID", 50, 44, "2"),
-    pos("352", "CM", "MID", 68, 50, "3"),
-    pos("352", "RWB", "MID", 90, 52),
-    pos("352", "ST", "FWD", 38, 16, "1"),
-    pos("352", "ST", "FWD", 62, 16, "2"),
+    pos("352", "CB", "DEF", 26, 76, "1"),
+    pos("352", "CB", "DEF", 50, 80, "2"),
+    pos("352", "CB", "DEF", 74, 76, "3"),
+    pos("352", "LWB", "MID", 8, 52),
+    pos("352", "CM", "MID", 30, 50, "1"),
+    pos("352", "CM", "MID", 50, 42, "2"),
+    pos("352", "CM", "MID", 70, 50, "3"),
+    pos("352", "RWB", "MID", 92, 52),
+    pos("352", "ST", "FWD", 36, 16, "1"),
+    pos("352", "ST", "FWD", 64, 16, "2"),
   ],
 };
 
@@ -135,16 +135,16 @@ const threeFourThree: Formation = {
   name: "3-4-3",
   positions: [
     pos("343", "GK", "GK", 50, 94),
-    pos("343", "CB", "DEF", 28, 76, "1"),
-    pos("343", "CB", "DEF", 50, 78, "2"),
-    pos("343", "CB", "DEF", 72, 76, "3"),
-    pos("343", "LM", "MID", 14, 50),
-    pos("343", "CM", "MID", 38, 52, "1"),
-    pos("343", "CM", "MID", 62, 52, "2"),
-    pos("343", "RM", "MID", 86, 50),
-    pos("343", "LW", "FWD", 20, 22),
+    pos("343", "CB", "DEF", 26, 76, "1"),
+    pos("343", "CB", "DEF", 50, 80, "2"),
+    pos("343", "CB", "DEF", 74, 76, "3"),
+    pos("343", "LM", "MID", 12, 50),
+    pos("343", "CM", "MID", 32, 52, "1"),
+    pos("343", "CM", "MID", 68, 52, "2"),
+    pos("343", "RM", "MID", 88, 50),
+    pos("343", "LW", "FWD", 18, 22),
     pos("343", "ST", "FWD", 50, 14),
-    pos("343", "RW", "FWD", 80, 22),
+    pos("343", "RW", "FWD", 82, 22),
   ],
 };
 
@@ -154,16 +154,16 @@ const fiveThreeTwo: Formation = {
   name: "5-3-2",
   positions: [
     pos("532", "GK", "GK", 50, 94),
-    pos("532", "LWB", "DEF", 10, 68),
-    pos("532", "CB", "DEF", 30, 76, "1"),
-    pos("532", "CB", "DEF", 50, 78, "2"),
-    pos("532", "CB", "DEF", 70, 76, "3"),
-    pos("532", "RWB", "DEF", 90, 68),
-    pos("532", "CM", "MID", 28, 50, "1"),
-    pos("532", "CM", "MID", 50, 44, "2"),
-    pos("532", "CM", "MID", 72, 50, "3"),
-    pos("532", "ST", "FWD", 38, 16, "1"),
-    pos("532", "ST", "FWD", 62, 16, "2"),
+    pos("532", "LWB", "DEF", 8, 68),
+    pos("532", "CB", "DEF", 28, 76, "1"),
+    pos("532", "CB", "DEF", 50, 80, "2"),
+    pos("532", "CB", "DEF", 72, 76, "3"),
+    pos("532", "RWB", "DEF", 92, 68),
+    pos("532", "CM", "MID", 26, 50, "1"),
+    pos("532", "CM", "MID", 50, 42, "2"),
+    pos("532", "CM", "MID", 74, 50, "3"),
+    pos("532", "ST", "FWD", 36, 16, "1"),
+    pos("532", "ST", "FWD", 64, 16, "2"),
   ],
 };
 
@@ -173,15 +173,15 @@ const fiveFourOne: Formation = {
   name: "5-4-1",
   positions: [
     pos("541", "GK", "GK", 50, 94),
-    pos("541", "LWB", "DEF", 10, 68),
-    pos("541", "CB", "DEF", 30, 76, "1"),
-    pos("541", "CB", "DEF", 50, 78, "2"),
-    pos("541", "CB", "DEF", 70, 76, "3"),
-    pos("541", "RWB", "DEF", 90, 68),
-    pos("541", "LM", "MID", 14, 48),
-    pos("541", "CM", "MID", 38, 50, "1"),
-    pos("541", "CM", "MID", 62, 50, "2"),
-    pos("541", "RM", "MID", 86, 48),
+    pos("541", "LWB", "DEF", 8, 68),
+    pos("541", "CB", "DEF", 28, 76, "1"),
+    pos("541", "CB", "DEF", 50, 80, "2"),
+    pos("541", "CB", "DEF", 72, 76, "3"),
+    pos("541", "RWB", "DEF", 92, 68),
+    pos("541", "LM", "MID", 12, 48),
+    pos("541", "CM", "MID", 32, 50, "1"),
+    pos("541", "CM", "MID", 68, 50, "2"),
+    pos("541", "RM", "MID", 88, 48),
     pos("541", "ST", "FWD", 50, 14),
   ],
 };
@@ -206,6 +206,42 @@ export const FORMATION_OPTIONS: { value: string; label: string }[] =
 
 /** Default formation used when the page first loads. */
 export const DEFAULT_FORMATION_ID = "4-3-3";
+
+/**
+ * Pick the formation whose slot labels best match a set of recorded
+ * positions (own athletes or opponent players). Ties keep 4-3-3.
+ */
+export function inferFormationIdFromPositions(
+  positions: Array<string | null | undefined>,
+): string {
+  const labels = positions
+    .map((value) => (value ?? "").trim().toUpperCase())
+    .filter(Boolean);
+  if (labels.length === 0) {
+    return DEFAULT_FORMATION_ID;
+  }
+
+  let bestId = DEFAULT_FORMATION_ID;
+  let bestScore = -1;
+  for (const formation of Object.values(FORMATIONS)) {
+    const remaining = formation.positions.map((pos) =>
+      pos.label.trim().toUpperCase(),
+    );
+    let score = 0;
+    for (const label of labels) {
+      const index = remaining.indexOf(label);
+      if (index >= 0) {
+        remaining.splice(index, 1);
+        score += 1;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = formation.id;
+    }
+  }
+  return bestId;
+}
 
 /* ─── Formation change remapping ─────────────────────────────────────────── */
 
@@ -429,4 +465,78 @@ export function autoFillFormation(
     assignments,
     substituteIds,
   };
+}
+
+/**
+ * Place the current starting XI onto a formation for a live preview.
+ *
+ * Prefers saved game-plan slots when those athletes are still starters, then
+ * fills remaining slots (exact position, then role, then any leftover) so a
+ * starter/bench swap always shows up on the pitch instead of a frozen plan.
+ */
+export function previewAssignmentsForStarters(
+  formationId: string,
+  starterIds: string[],
+  getPosition: (athleteId: string) => string | null,
+  preferredAssignments?: PitchAssignments,
+): PitchAssignments {
+  const formation =
+    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const starterSet = new Set(starterIds);
+  const assignments: PitchAssignments = {};
+  const used = new Set<string>();
+
+  for (const pos of formation.positions) {
+    assignments[pos.id] = null;
+  }
+
+  if (preferredAssignments) {
+    for (const pos of formation.positions) {
+      const athleteId = preferredAssignments[pos.id];
+      if (athleteId && starterSet.has(athleteId) && !used.has(athleteId)) {
+        assignments[pos.id] = athleteId;
+        used.add(athleteId);
+      }
+    }
+  }
+
+  const remaining = starterIds.filter((id) => !used.has(id));
+
+  for (const pos of formation.positions) {
+    if (assignments[pos.id]) continue;
+    const candidate = remaining.find((id) => {
+      if (used.has(id)) return false;
+      return (
+        (getPosition(id) ?? "").trim().toUpperCase() ===
+        pos.label.trim().toUpperCase()
+      );
+    });
+    if (candidate) {
+      assignments[pos.id] = candidate;
+      used.add(candidate);
+    }
+  }
+
+  for (const pos of formation.positions) {
+    if (assignments[pos.id]) continue;
+    const candidate = remaining.find((id) => {
+      if (used.has(id)) return false;
+      return getPositionRole(getPosition(id)) === pos.role;
+    });
+    if (candidate) {
+      assignments[pos.id] = candidate;
+      used.add(candidate);
+    }
+  }
+
+  for (const pos of formation.positions) {
+    if (assignments[pos.id]) continue;
+    const candidate = remaining.find((id) => !used.has(id));
+    if (candidate) {
+      assignments[pos.id] = candidate;
+      used.add(candidate);
+    }
+  }
+
+  return assignments;
 }

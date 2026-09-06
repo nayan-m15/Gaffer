@@ -307,9 +307,9 @@ export const matches = pgTable(
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
     opponentScore: integer('opponent_score').default(0).notNull(),
-    // Saved Team Management lineup this match sheet was based on. Null when
-    // the coach locked a squad without picking a named lineup (legacy flow).
-    lineupId: uuid('lineup_id').references(() => lineups.id, {
+    // Saved game plan this match sheet was based on. Null when the coach
+    // locked a squad without picking a named plan (legacy flow).
+    gamePlanId: uuid('game_plan_id').references(() => gamePlans.id, {
       onDelete: 'set null',
     }),
     opponentSquadVisibility: opponentSquadVisibility(
@@ -323,12 +323,41 @@ export const matches = pgTable(
   },
   (table) => [
     index('matches_competition_id_index').on(table.competitionId),
-    index('matches_lineup_id_index').on(table.lineupId),
+    index('matches_game_plan_id_index').on(table.gamePlanId),
   ],
 );
 
+/**
+ * Shirt-position abbreviations stored on own athletes and opponent players.
+ * Matches the roster picker plus every label `POSITION_ROLE_MAP` understands
+ * for formation auto-fill (GK, CB, LB, RB, CM, LW, RW, ST, …).
+ */
+export const PLAYER_POSITIONS = [
+  'GK',
+  'CB',
+  'LB',
+  'RB',
+  'LWB',
+  'RWB',
+  'CDM',
+  'CM',
+  'CAM',
+  'DM',
+  'LM',
+  'RM',
+  'LAM',
+  'RAM',
+  'AM',
+  'ST',
+  'LW',
+  'RW',
+  'CF',
+] as const;
+export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
+
 // Per-match opponent players. Empty when visibility is `none`. `name` is
-// null in numbers-only mode and required in full mode.
+// null in numbers-only mode and required in full mode. `position` is optional
+// so numbers-only / unknown-formation squads still persist without a XI.
 export const opponentMatchPlayers = pgTable(
   'opponent_match_players',
   {
@@ -338,6 +367,7 @@ export const opponentMatchPlayers = pgTable(
       .references(() => matches.id, { onDelete: 'cascade' }),
     shirtNumber: integer('shirt_number').notNull(),
     name: text('name'),
+    position: text('position'),
     ...timestamps,
   },
   (table) => [

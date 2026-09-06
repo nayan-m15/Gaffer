@@ -39,6 +39,7 @@ export interface OpponentMatchPlayer {
   id?: string;
   shirtNumber: number;
   name?: string | null;
+  position?: string | null;
 }
 
 export interface StartMatchInput {
@@ -46,7 +47,7 @@ export interface StartMatchInput {
   isHome: boolean;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
-  lineupId?: string;
+  gamePlanId?: string;
   opponentSquadVisibility?: OpponentSquadVisibility;
   opponentSquad?: OpponentMatchPlayer[];
   teamColor?: string;
@@ -62,7 +63,7 @@ export interface MatchRecord {
   isHome: boolean;
   teamScore: number;
   opponentScore: number;
-  lineupId: string | null;
+  gamePlanId: string | null;
   opponentSquadVisibility: OpponentSquadVisibility;
   teamColor: string | null;
   opponentColor: string | null;
