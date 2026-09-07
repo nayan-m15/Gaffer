@@ -29,6 +29,7 @@ import {
   useUpdateStanding,
 } from "@/features/statistics/hooks";
 import type {
+  AthleteMatchBreakdown,
   CompetitionFormValues,
   CompetitionWithStandings,
   PlayerStatLine,
@@ -770,27 +771,24 @@ function AthleteStatsPanel({
             {stats.matches.map((m) => (
               <div
                 key={m.matchId}
-                className="flex items-center justify-between rounded-xl border border-border bg-background p-3"
+                className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background p-3"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">
                     vs. {m.opponent}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(m.date)}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{formatDate(m.date)}</span>
+                    <StartedTag started={m.started} />
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <ResultBadge result={m.result} />
                   <div className="text-right">
                     <p className="text-sm font-bold tabular-nums text-foreground">
                       {m.teamScore}–{m.opponentScore}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {m.goals > 0 && `${m.goals}G `}
-                      {m.assists > 0 && `${m.assists}A`}
-                      {m.goals === 0 && m.assists === 0 && "—"}
-                    </p>
+                    <MatchPerformance m={m} />
                   </div>
                 </div>
               </div>
@@ -825,6 +823,85 @@ function DetailStat({
         {value}
       </p>
     </div>
+  );
+}
+
+/** "Started"/"Sub" pill shown beside a match date in the athlete panel. */
+function StartedTag({ started }: { started: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        started
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {started ? "Started" : "Sub"}
+    </span>
+  );
+}
+
+/** Small coloured card glyph with its count, e.g. for bookings. */
+function CardGlyph({
+  count,
+  className,
+  label,
+}: {
+  count: number;
+  className: string;
+  label: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      title={`${count} ${label}${count === 1 ? "" : "s"}`}
+    >
+      <span className={cn("inline-block size-2 rounded-sm", className)} />
+      {count > 1 && <span className="tabular-nums">{count}</span>}
+    </span>
+  );
+}
+
+/**
+ * Compact per-match contribution line under the score: minutes played,
+ * goals, assists and cards. Zero or unrecorded values are omitted so a
+ * quiet match stays visually quiet.
+ */
+function MatchPerformance({ m }: { m: AthleteMatchBreakdown }) {
+  const hasContributions =
+    m.minutesPlayed !== null ||
+    m.goals > 0 ||
+    m.assists > 0 ||
+    m.yellowCards > 0 ||
+    m.redCards > 0;
+
+  if (!hasContributions) {
+    return <p className="text-[11px] text-muted-foreground">—</p>;
+  }
+
+  return (
+    <p className="flex flex-wrap items-center justify-end gap-x-1.5 text-[11px] text-muted-foreground">
+      {m.minutesPlayed !== null && (
+        <span className="tabular-nums">{m.minutesPlayed}'</span>
+      )}
+      {m.goals > 0 && <span className="tabular-nums">{m.goals}G</span>}
+      {m.assists > 0 && <span className="tabular-nums">{m.assists}A</span>}
+      {m.yellowCards > 0 && (
+        <CardGlyph
+          count={m.yellowCards}
+          className="bg-amber-400"
+          label="yellow card"
+        />
+      )}
+      {m.redCards > 0 && (
+        <CardGlyph
+          count={m.redCards}
+          className="bg-red-400"
+          label="red card"
+        />
+      )}
+    </p>
   );
 }
 
