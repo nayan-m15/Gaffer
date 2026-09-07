@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { signJWT } from 'better-auth/crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -60,6 +61,30 @@ describe('Auth (e2e)', () => {
     return identity;
   }
 
+  /**
+   * Marks a freshly-registered address verified so sign-in may issue a
+   * session (`requireEmailVerification` withholds it until then).
+   *
+   * Better Auth 1.6's verification token is a self-contained HS256 JWT over
+   * `{ email }` signed with the auth secret — minted here the same way its
+   * `createEmailVerificationToken` does, then redeemed through the real
+   * GET /auth/verify-email endpoint.
+   */
+  async function verifyEmail(email: string): Promise<void> {
+    const token = await signJWT(
+      { email: email.toLowerCase() },
+      process.env.BETTER_AUTH_SECRET!,
+      60 * 60,
+    );
+    const callbackURL = encodeURIComponent(
+      'http://localhost:5173/login?verified=1',
+    );
+
+    await request(app.getHttpServer())
+      .get(`/auth/verify-email?token=${token}&callbackURL=${callbackURL}`)
+      .expect(302);
+  }
+
   describe('POST /auth/sign-up', () => {
     it('creates a user and their team, and sets a session cookie', async () => {
       const { email, teamName } = newIdentity();
@@ -114,13 +139,14 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /auth/sign-in', () => {
-    it('signs an existing user in and sets a session cookie', async () => {
+    it('signs an existing verified user in and sets a session cookie', async () => {
       const { email, teamName } = newIdentity();
 
       await request(app.getHttpServer())
         .post('/auth/sign-up')
         .send({ name: 'Grace Hopper', email, password: PASSWORD, teamName })
         .expect(201);
+      await verifyEmail(email);
 
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')
@@ -132,16 +158,17 @@ describe('Auth (e2e)', () => {
       expect(response.headers['set-cookie']).toBeDefined();
     });
 
-    it('rejects an unknown email', async () => {
+    it('rejects an unknown email with a "no account" message', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')
-        .send({ email: uniqueTestIdentity().email, password: PASSWORD });
+        .send({ email: uniqueTestIdentity().email, password: PASSWORD })
+        .expect(401);
+      const body = response.body as ErrorResponseBody;
 
-      expect(response.status).toBeGreaterThanOrEqual(400);
-      expect(response.status).toBeLessThan(500);
+      expect(body.message).toBe('No account found with this email address.');
     });
 
-    it('rejects the wrong password', async () => {
+    it('rejects the wrong password with the generic credentials message', async () => {
       const { email, teamName } = newIdentity();
 
       await request(app.getHttpServer())
@@ -151,10 +178,11 @@ describe('Auth (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')
-        .send({ email, password: 'wrong-password' });
+        .send({ email, password: 'wrong-password' })
+        .expect(401);
+      const body = response.body as ErrorResponseBody;
 
-      expect(response.status).toBeGreaterThanOrEqual(400);
-      expect(response.status).toBeLessThan(500);
+      expect(body.message).toBe('Invalid email or password');
     });
   });
 
