@@ -14,6 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import {
   createEventSchema,
+  createRsvpSchema,
   startMatchSchema,
   updateEventSchema,
 } from './events.schemas';
@@ -46,6 +47,26 @@ export class EventsController {
   ) {
     const dto = zodValidate(startMatchSchema, body);
     return this.eventsService.startMatch(user.id, eventId, dto);
+  }
+
+  /** A claimed player records (or updates) their RSVP for an event. */
+  @Post(':eventId/rsvp')
+  async rsvp(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(createRsvpSchema, body);
+    return this.eventsService.rsvp(user.id, eventId, dto);
+  }
+
+  /** Coach-only roster breakdown of RSVPs for one of the team's events. */
+  @Get(':eventId/rsvps')
+  async listRsvps(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.eventsService.listRsvps(user.id, eventId);
   }
 
   @Get(':id')

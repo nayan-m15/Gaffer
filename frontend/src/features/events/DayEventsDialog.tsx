@@ -21,6 +21,7 @@ interface DayEventsDialogProps {
   onOpenChange: (open: boolean) => void;
   onSelectEvent: (event: TeamEvent) => void;
   onAddEvent: (date: Date) => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -35,6 +36,7 @@ export function DayEventsDialog({
   onOpenChange,
   onSelectEvent,
   onAddEvent,
+  readOnly = false,
 }: DayEventsDialogProps) {
   if (!date) return null;
 
@@ -126,21 +128,23 @@ export function DayEventsDialog({
         </div>
 
         {/* Bottom "Add on [Date] +" Capsule Button (Samsung Calendar style) */}
-        <button
-          type="button"
-          onClick={() => {
-            onOpenChange(false);
-            onAddEvent(date);
-          }}
-          className={cn(
-            "mt-2 w-full rounded-full bg-muted/80 hover:bg-muted text-foreground py-3 px-5",
-            "flex items-center justify-between text-sm font-bold transition-all duration-150 active:scale-[0.99] border border-border/50 shadow-xs",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          )}
-        >
-          <span>Add on {dateSubLabel}</span>
-          <Plus className="size-4.5 text-foreground" />
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => {
+              onOpenChange(false);
+              onAddEvent(date);
+            }}
+            className={cn(
+              "mt-2 w-full rounded-full bg-muted/80 hover:bg-muted text-foreground py-3 px-5",
+              "flex items-center justify-between text-sm font-bold transition-all duration-150 active:scale-[0.99] border border-border/50 shadow-xs",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            )}
+          >
+            <span>Add on {dateSubLabel}</span>
+            <Plus className="size-4.5 text-foreground" />
+          </button>
+        )}
       </DialogContent>
     </Dialog>
   );

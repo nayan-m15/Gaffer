@@ -8,6 +8,7 @@ import {
 } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { clearPendingClaimToken } from "@/services/claims";
 
 export interface SessionUser {
   id: string;
@@ -22,6 +23,22 @@ export interface SessionTeam {
   name: string;
   role: "coach" | "assistant";
 }
+
+/**
+ * A single athlete row the signed-in user has claimed as themselves.
+ * Returned by `GET /auth/session` alongside `user` and `team`.
+ */
+export interface ClaimedAthleteSummary {
+  id: string;
+  teamId: string;
+  teamName: string;
+  firstName: string;
+  lastName: string;
+  position: string | null;
+  squadNumber: number | null;
+}
+
+export type AccountKind = "coach" | "player" | "new";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -49,6 +66,9 @@ interface AuthContextValue {
   status: AuthStatus;
   user: SessionUser | null;
   team: SessionTeam | null;
+  claimedAthletes: ClaimedAthleteSummary[];
+  /** Derived account type: coach (has team), player (has claimed athletes), new (neither). */
+  accountKind: AccountKind;
   signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -70,14 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<SessionUser | null>(null);
   const [team, setTeam] = useState<SessionTeam | null>(null);
+  const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const data = await apiFetch<{ user: SessionUser; team: SessionTeam | null }>(
-        "/auth/session",
-      );
+      const data = await apiFetch<{
+        user: SessionUser;
+        team: SessionTeam | null;
+        claimedAthletes: ClaimedAthleteSummary[];
+      }>("/auth/session");
       setUser(data.user);
       setTeam(data.team);
+      setClaimedAthletes(data.claimedAthletes ?? []);
       setStatus("authenticated");
     } catch (error) {
       // Treat "no session" (401) and "couldn't reach the API at all" (e.g.
@@ -89,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(null);
       setTeam(null);
+      setClaimedAthletes([]);
       setStatus("unauthenticated");
     }
   }, []);
@@ -139,8 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await apiFetch("/auth/sign-out", { method: "POST" });
+    clearPendingClaimToken();
     setUser(null);
     setTeam(null);
+    setClaimedAthletes([]);
     setStatus("unauthenticated");
   }, []);
 
@@ -155,11 +182,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+    // Derived: coach (has team) > player (has claimed athletes) > new (neither).
+    const accountKind: AccountKind = team
+      ? "coach"
+      : claimedAthletes.length > 0
+        ? "player"
+        : "new";
+
     const value = useMemo(
       () => ({
         status,
         user,
         team,
+        claimedAthletes,
+        accountKind,
         signUp,
         signIn,
         signInWithGoogle,
@@ -171,6 +207,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status,
         user,
         team,
+        claimedAthletes,
+        accountKind,
         signUp,
         signIn,
         signInWithGoogle,

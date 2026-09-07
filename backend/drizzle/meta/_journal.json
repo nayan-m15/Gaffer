@@ -71,6 +71,13 @@
       "when": 1788550609315,
       "tag": "0009_outstanding_hellcat",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788615025154,
+      "tag": "0010_round_black_cat",
+      "breakpoints": true
     }
   ]
 }
