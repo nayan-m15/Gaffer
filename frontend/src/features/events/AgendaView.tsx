@@ -15,6 +15,7 @@ interface AgendaViewProps {
   now: Date;
   onOpenEvent: (event: TeamEvent) => void;
   onCreateEvent: () => void;
+  readOnly?: boolean;
   /** Optional handler to navigate months. */
   onNavigateMonth?: (direction: 1 | -1) => void;
   className?: string;
@@ -30,6 +31,7 @@ export function AgendaView({
   now,
   onOpenEvent,
   onCreateEvent,
+  readOnly = false,
   onNavigateMonth,
   className,
 }: AgendaViewProps) {
@@ -86,14 +88,16 @@ export function AgendaView({
           <p className="mt-1 text-xs text-muted-foreground">
             Add a training session, match, or meeting to fill the calendar.
           </p>
-          <Button
-            size="sm"
-            className="mt-4 gap-1.5 text-xs font-semibold tracking-wide"
-            onClick={onCreateEvent}
-          >
-            <Plus className="size-3.5" />
-            New Event
-          </Button>
+          {!readOnly && (
+            <Button
+              size="sm"
+              className="mt-4 gap-1.5 text-xs font-semibold tracking-wide"
+              onClick={onCreateEvent}
+            >
+              <Plus className="size-3.5" />
+              New Event
+            </Button>
+          )}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card pr-0.5 shadow-xs">

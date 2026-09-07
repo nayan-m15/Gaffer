@@ -1,8 +1,11 @@
 import { apiFetch } from "@/lib/api";
-import type { Athlete, AthleteStatus } from "@/components/roster/data";
+import type { Athlete, AthleteStatus, ClaimStatusUi } from "@/components/roster/data";
 
 /** Athlete availability status values persisted by the backend (Drizzle enum). */
 export type AthleteStatusValue = "available" | "injured" | "suspended";
+
+/** Claim lifecycle state for an athlete, computed server-side. */
+export type ClaimStatus = "unclaimed" | "invited" | "claimed";
 
 /** All accepted status values, in UI display order. */
 export const ATHLETE_STATUS_VALUES: readonly AthleteStatusValue[] = [
@@ -11,11 +14,19 @@ export const ATHLETE_STATUS_VALUES: readonly AthleteStatusValue[] = [
   "suspended",
 ] as const;
 
-/** Maps backend status values to the labels shown in the roster UI. */
-const STATUS_LABELS: Record<AthleteStatusValue, AthleteStatus> = {
+/** Maps backend status values to the labels shown in the roster and team
+ * management UIs (StatusBadge consumes these display labels). */
+export const STATUS_LABELS: Record<AthleteStatusValue, AthleteStatus> = {
   available: "Available",
   injured: "Injured",
   suspended: "Suspended",
+};
+
+/** Maps backend claim status to the labels shown in the roster UI. */
+const CLAIM_STATUS_LABELS: Record<ClaimStatus, ClaimStatusUi> = {
+  unclaimed: "Unclaimed",
+  invited: "Invited",
+  claimed: "Claimed",
 };
 
 /**
@@ -33,6 +44,8 @@ export interface BackendAthlete {
   position: string | null;
   squadNumber: number | null;
   status: AthleteStatusValue;
+  /** Computed by the active-athlete query; absent on archived-only responses. */
+  claimStatus?: ClaimStatus;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -154,6 +167,7 @@ export function toUiAthlete(backend: BackendAthlete): Athlete {
     recentAppearances: [],
     initials: getInitials(firstName, lastName),
     isArchived: backend.archivedAt !== null,
+    claimStatus: CLAIM_STATUS_LABELS[backend.claimStatus ?? "unclaimed"],
   };
 }
 
@@ -169,4 +183,26 @@ export function toFormValues(backend: BackendAthlete): AthleteFormValues {
     squadNumber: backend.squadNumber ?? 0,
     status: backend.status,
   };
+}
+
+/* ── Claim-invite endpoints ───────────────────────────────────────────── */
+
+export interface ClaimInviteResult {
+  token: string;
+  claimUrl: string;
+  expiresAt: string;
+}
+
+/** POST /athletes/:athleteId/claim-invite — generate a one-time invite link. */
+export async function createClaimInvite(athleteId: string): Promise<ClaimInviteResult> {
+  return apiFetch<ClaimInviteResult>(`${ATHLETES_PATH}/${athleteId}/claim-invite`, {
+    method: "POST",
+  });
+}
+
+/** DELETE /athletes/:athleteId/claim-invite — revoke the active pending invite. */
+export async function revokeClaimInvite(athleteId: string): Promise<{ revoked: boolean }> {
+  return apiFetch<{ revoked: boolean }>(`${ATHLETES_PATH}/${athleteId}/claim-invite`, {
+    method: "DELETE",
+  });
 }

@@ -1,8 +1,37 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, isNull, isNotNull } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  getTableColumns,
+  isNull,
+  isNotNull,
+  sql,
+} from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes } from '../database/schema';
+import { athletes, playerClaimInvites, teams } from '../database/schema';
 import type { CreateAthleteDto, UpdateAthleteDto } from './athletes.schemas';
+
+export type ClaimStatus = 'unclaimed' | 'invited' | 'claimed';
+
+export interface ClaimedAthleteSummary {
+  id: string;
+  teamId: string;
+  teamName: string;
+  firstName: string;
+  lastName: string;
+  position: string | null;
+  squadNumber: number | null;
+}
+
+// Computed in the same query as the athlete rows via a left join on pending
+// invites — never a per-row lookup. 'claimed' wins over 'invited': a stray
+// pending invite alongside an attached userId is irrelevant.
+const claimStatus = sql<ClaimStatus>`case
+  when ${athletes.userId} is not null then 'claimed'
+  when count(${playerClaimInvites.id}) > 0 then 'invited'
+  else 'unclaimed'
+end`;
 
 @Injectable()
 export class AthletesService {
@@ -22,9 +51,20 @@ export class AthletesService {
 
   async findAll(teamId: string) {
     return this.databaseService.database
-      .select()
+      .select({
+        ...getTableColumns(athletes),
+        claimStatus,
+      })
       .from(athletes)
-      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)));
+      .leftJoin(
+        playerClaimInvites,
+        and(
+          eq(playerClaimInvites.athleteId, athletes.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      )
+      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)))
+      .groupBy(athletes.id);
   }
 
   async findArchived(teamId: string) {
@@ -34,10 +74,85 @@ export class AthletesService {
       .where(and(eq(athletes.teamId, teamId), isNotNull(athletes.archivedAt)));
   }
 
+  /**
+   * Every athlete record this user has claimed as themselves, joined to the
+   * owning team for display. Empty array — never null — when they have
+   * claimed nothing.
+   */
+  async findClaimedByUser(userId: string): Promise<ClaimedAthleteSummary[]> {
+    return this.databaseService.database
+      .select({
+        id: athletes.id,
+        teamId: athletes.teamId,
+        teamName: teams.name,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        position: athletes.position,
+        squadNumber: athletes.squadNumber,
+      })
+      .from(athletes)
+      .innerJoin(teams, eq(athletes.teamId, teams.id))
+      .where(eq(athletes.userId, userId));
+  }
+
+  /**
+   * The claimed athlete a player endpoint should act as: the row matching
+   * `athleteId` when provided (and claimed by this user — anyone else's id
+   * resolves to nothing), else the first athlete this user claimed. Null
+   * when this user has no matching claim.
+   */
+  async findClaimedAthleteForUser(userId: string, athleteId?: string) {
+    const conditions = [eq(athletes.userId, userId)];
+    if (athleteId) {
+      conditions.push(eq(athletes.id, athleteId));
+    }
+
+    const [athlete] = await this.databaseService.database
+      .select({
+        id: athletes.id,
+        teamId: athletes.teamId,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        position: athletes.position,
+        squadNumber: athletes.squadNumber,
+      })
+      .from(athletes)
+      .where(and(...conditions))
+      .orderBy(asc(athletes.createdAt))
+      .limit(1);
+
+    return athlete ?? null;
+  }
+
+  /**
+   * The athlete this user claimed on a specific team, if any — used by the
+   * RSVP flow, which resolves a player against the event's own team so a
+   * multi-team player RSVPs as the right athlete.
+   */
+  async findClaimedAthleteOnTeam(userId: string, teamId: string) {
+    const [athlete] = await this.databaseService.database
+      .select({ id: athletes.id })
+      .from(athletes)
+      .where(and(eq(athletes.userId, userId), eq(athletes.teamId, teamId)))
+      .limit(1);
+
+    return athlete ?? null;
+  }
+
   async findOne(teamId: string, athleteId: string) {
     const [athlete] = await this.databaseService.database
-      .select()
+      .select({
+        ...getTableColumns(athletes),
+        claimStatus,
+      })
       .from(athletes)
+      .leftJoin(
+        playerClaimInvites,
+        and(
+          eq(playerClaimInvites.athleteId, athletes.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      )
       .where(
         and(
           eq(athletes.id, athleteId),
@@ -45,6 +160,7 @@ export class AthletesService {
           isNull(athletes.archivedAt),
         ),
       )
+      .groupBy(athletes.id)
       .limit(1);
 
     if (!athlete) {

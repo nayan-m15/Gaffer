@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -619,7 +619,7 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
-  const { user, team } = useAuth();
+  const { user, team, accountKind } = useAuth();
   const navigate = useNavigate();
   const [addTeamOpen, setAddTeamOpen] = useState(false);
 
@@ -634,6 +634,11 @@ export default function DashboardPage() {
     queryFn: fetchDashboardData,
     staleTime: 30_000,
   });
+
+  // Route player accounts to their own dashboard.
+  if (accountKind === "player") {
+    return <Navigate to="/player/dashboard" replace />;
+  }
 
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {

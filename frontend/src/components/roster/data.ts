@@ -9,6 +9,9 @@
 /** Player availability state shown in the roster table. */
 export type AthleteStatus = "Available" | "Injured" | "Suspended";
 
+/** Claim lifecycle state displayed as a status badge in the roster table. */
+export type ClaimStatusUi = "Unclaimed" | "Invited" | "Claimed";
+
 /** A single recent match appearance used in the athlete detail panel. */
 export interface RecentAppearance {
   /** Opposing team name. */
@@ -55,6 +58,8 @@ export interface Athlete {
   initials: string;
   /** Whether the athlete has been archived (soft-delete state). */
   isArchived: boolean;
+  /** Claim lifecycle state (unclaimed / invited / claimed). */
+  claimStatus: ClaimStatusUi;
 }
 
 /**
@@ -82,6 +87,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "DC",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "2 Saves" },
@@ -104,6 +110,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "SS",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Goal" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "Clean Sheet" },
@@ -126,6 +133,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "TV",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Metro Rovers", minutes: 23, contribution: "Injured 23'" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
@@ -148,6 +156,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "LM",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Assist" },
       { opponent: "Riverside United", minutes: 82, contribution: "1 Assist, 1 Yellow Card" },
@@ -170,6 +179,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "ZK",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "1 Goal, 2 Assists" },
       { opponent: "Riverside United", minutes: 82, contribution: "1 Assist, 1 Yellow Card" },
@@ -194,6 +204,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "MR",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 78, contribution: "1 Goal" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "1 Goal, 1 Assist" },
@@ -216,6 +227,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 1,
     initials: "CB",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Riverside United", minutes: 90, contribution: "1 Goal" },
       { opponent: "Metro Rovers", minutes: 90, contribution: "Red Card" },
@@ -238,6 +250,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "JM",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Eastside Athletic", minutes: 90, contribution: "1 Assist" },
@@ -260,6 +273,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "AC",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
@@ -282,6 +296,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "NF",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Eastside Athletic", minutes: 65, contribution: "1 Goal" },
       { opponent: "Metro Rovers", minutes: 74, contribution: "1 Assist" },
@@ -304,6 +319,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "OT",
     isArchived: false,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 90, contribution: "Clean Sheet" },
       { opponent: "Riverside United", minutes: 90, contribution: "Clean Sheet" },
@@ -326,6 +342,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "FH",
     isArchived: true,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Apex Wanderers", minutes: 45, contribution: "1 Goal" },
     ],
@@ -347,6 +364,7 @@ export const MOCK_ATHLETES: Athlete[] = [
     redCards: 0,
     initials: "EB",
     isArchived: true,
+    claimStatus: "Unclaimed",
     recentAppearances: [
       { opponent: "Metro Rovers", minutes: 12, contribution: "Injured 12'" },
     ],

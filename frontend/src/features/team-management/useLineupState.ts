@@ -168,6 +168,40 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
   const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
 
+  /* ── Auto-fill ─────────────────────────────────────────────────────────── */
+
+  /**
+   * Auto-fill the formation from the recorded positions.
+   *
+   * Only available players are auto-assigned: injured and suspended athletes
+   * stay on the bench (clearly badged) rather than being placed into the
+   * starting XI automatically. The coach can still place them manually via
+   * drag-and-drop — this only affects the automated helper.
+   */
+  const runAutoFill = useCallback(
+    (targetFormationId: string) => {
+      const eligibleIds = athletes
+        .filter((a) => a.status === "available")
+        .map((a) => a.id);
+
+      const getPosition = (id: string) =>
+        athletes.find((a) => a.id === id)?.position ?? null;
+
+      const {
+        assignments: newAssignments,
+        substituteIds: newSubs,
+      } = autoFillFormation(targetFormationId, eligibleIds, getPosition);
+
+      setAssignments(newAssignments);
+      // Unavailable players (injured/suspended) remain on the bench.
+      const unavailableIds = athletes
+        .filter((a) => a.status !== "available")
+        .map((a) => a.id);
+      setSubstituteIds([...newSubs, ...unavailableIds]);
+    },
+    [athletes],
+  );
+
   /* ── Formation change ──────────────────────────────────────────────────── */
 
   const setFormation = useCallback(
@@ -180,22 +214,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
       // Auto-fill ON:
       // Re-run autofill for the newly selected formation.
       if (autoFillEnabled) {
-        const allIds = athletes.map((a) => a.id);
-
-        const getPosition = (id: string) =>
-        athletes.find((a) => a.id === id)?.position ?? null;
-
-        const {
-          assignments: newAssignments,
-          substituteIds: newSubs,
-      } = autoFillFormation(
-          newFormationId,
-          allIds,
-          getPosition,
-        );
-
-        setAssignments(newAssignments);
-        setSubstituteIds(newSubs);
+        runAutoFill(newFormationId);
         setError(null);
         return;
       }
@@ -207,11 +226,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
       setSubstituteIds(athletes.map((a) => a.id));
       setError(null);
     },
-    [
-      formationId,
-      athletes,
-      autoFillEnabled,
-    ],
+    [formationId, athletes, autoFillEnabled, runAutoFill],
   );
 
   /* ── Drag start / end ──────────────────────────────────────────────────── */
@@ -395,29 +410,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
     // Turning Auto-fill ON:
     // immediately autofill the current formation.
-    const allIds = athletes.map((a) => a.id);
-
-    const getPosition = (id: string) =>
-      athletes.find((a) => a.id === id)?.position ?? null;
-
-    const {
-      assignments: newAssignments,
-      substituteIds: newSubs,
-    } = autoFillFormation(
-      formationId,
-      allIds,
-      getPosition,
-    );
-
-    setAssignments(newAssignments);
-    setSubstituteIds(newSubs);
+    runAutoFill(formationId);
     setAutoFillEnabled(true);
     setError(null);
-  }, [
-    athletes,
-    formationId,
-    autoFillEnabled,
-  ]);
+  }, [autoFillEnabled, formationId, runAutoFill]);
 
   /* ── Public API ────────────────────────────────────────────────────────── */
 

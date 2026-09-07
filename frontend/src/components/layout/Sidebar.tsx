@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   Shield,
+  Trophy,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -31,7 +32,7 @@ interface NavItem {
   requiresTeam?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const COACH_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Roster", path: "/athletes", icon: Users, requiresTeam: true },
   { label: "Events", path: "/events", icon: Calendar, requiresTeam: true },
@@ -40,20 +41,32 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
 
+const PLAYER_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", path: "/player/dashboard", icon: Home },
+  { label: "Team", path: "/player/team", icon: Users },
+  { label: "Events", path: "/player/events", icon: Calendar },
+  { label: "Standings", path: "/player/standings", icon: Trophy },
+];
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SIDEBAR COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 interface SidebarProps {
   className?: string;
+  /** Which navigation set to render. Defaults to the signed-in user's accountKind. */
+  variant?: "coach" | "player";
 }
 
-export function Sidebar({ className }: SidebarProps) {
-  const { user, team, signOut } = useAuth();
+export function Sidebar({ className, variant }: SidebarProps) {
+  const { user, team, accountKind, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  const resolvedVariant = variant ?? (accountKind === "player" ? "player" : "coach");
+  const navItems = resolvedVariant === "player" ? PLAYER_NAV_ITEMS : COACH_NAV_ITEMS;
 
   const handleSignOut = async () => {
     try {
@@ -75,14 +88,14 @@ export function Sidebar({ className }: SidebarProps) {
             GAFFER
           </h2>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Coach Command
+            {resolvedVariant === "player" ? "Player Hub" : "Coach Command"}
           </p>
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
 
           if (item.requiresTeam && !team) {
@@ -122,7 +135,8 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border px-4 py-4">
-        {/* Coach profile — clickable to open the profile editor */}
+        {/* Profile — clickable to open the profile editor (coach only) */}
+        {resolvedVariant !== "player" && (
         <button
           onClick={() => {
             setIsMobileOpen(false);
@@ -151,6 +165,7 @@ export function Sidebar({ className }: SidebarProps) {
             </p>
           </div>
         </button>
+        )}
 
         {/* Theme toggle */}
         <button
