@@ -200,7 +200,7 @@ export type StartMatchDto = z.infer<typeof startMatchSchema>;
  */
 export class OpponentSquadPlayerBodyDto {
   @ApiProperty({ example: 9, minimum: 1, maximum: 99 })
-  shirtNumber: number;
+  shirtNumber!: number;
 
   @ApiPropertyOptional({ example: 'Smith' })
   name?: string;
@@ -211,10 +211,10 @@ export class OpponentSquadPlayerBodyDto {
 
 export class StartMatchBodyDto {
   @ApiProperty({ example: 'Riverside FC' })
-  opponentName: string;
+  opponentName!: string;
 
   @ApiProperty({ example: true })
-  isHome: boolean;
+  isHome!: boolean;
 
   @ApiProperty({
     type: [String],
@@ -222,7 +222,7 @@ export class StartMatchBodyDto {
     minItems: 11,
     maxItems: 11,
   })
-  startingAthleteIds: string[];
+  startingAthleteIds!: string[];
 
   @ApiPropertyOptional({ type: [String], format: 'uuid' })
   benchAthleteIds?: string[];
