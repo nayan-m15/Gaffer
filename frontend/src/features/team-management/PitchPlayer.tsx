@@ -190,6 +190,7 @@ export function PitchPlayer({
         name={name}
         position={athlete.position ?? position.label}
         squadNumber={athlete.squadNumber}
+        status={athlete.status}
         variant="pitch"
         isDragging={isDragging}
         isDropTarget={isDragOver && isValidDrop}

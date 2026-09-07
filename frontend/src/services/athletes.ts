@@ -14,8 +14,9 @@ export const ATHLETE_STATUS_VALUES: readonly AthleteStatusValue[] = [
   "suspended",
 ] as const;
 
-/** Maps backend availability status to the labels shown in the roster UI. */
-const STATUS_LABELS: Record<AthleteStatusValue, AthleteStatus> = {
+/** Maps backend status values to the labels shown in the roster and team
+ * management UIs (StatusBadge consumes these display labels). */
+export const STATUS_LABELS: Record<AthleteStatusValue, AthleteStatus> = {
   available: "Available",
   injured: "Injured",
   suspended: "Suspended",
