@@ -5,10 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, asc, eq, isNull, notInArray, sql } from 'drizzle-orm';
+import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
+  eventRsvps,
   events,
   gamePlans,
   matches,
@@ -17,6 +19,7 @@ import {
 import { TeamsService } from '../teams/teams.service';
 import type {
   CreateEventDto,
+  CreateRsvpDto,
   StartMatchDto,
   UpdateEventDto,
 } from './events.schemas';
@@ -31,6 +34,7 @@ export class EventsService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly athletesService: AthletesService,
   ) {}
 
   async create(userId: string, dto: CreateEventDto) {
@@ -53,7 +57,15 @@ export class EventsService {
 
   async list(userId: string) {
     const team = await this.requireTeam(userId);
+    return this.listForTeam(team.id);
+  }
 
+  /**
+   * All events for a team (with their match ids) in schedule order — shared
+   * with the player module, which scopes by the claimed athlete's team
+   * instead of a coach's owned team.
+   */
+  async listForTeam(teamId: string) {
     const rows = await this.databaseService.database
       .select({
         event: events,
@@ -61,13 +73,104 @@ export class EventsService {
       })
       .from(events)
       .leftJoin(matches, eq(matches.eventId, events.id))
-      .where(eq(events.teamId, team.id))
+      .where(eq(events.teamId, teamId))
       .orderBy(asc(events.scheduledAt));
 
     return rows.map((row) => ({
       ...row.event,
       matchId: row.matchId,
     }));
+  }
+
+  /**
+   * Every RSVP row for one athlete, across all events — used to annotate a
+   * player's event list with their own responses.
+   */
+  async findRsvpsForAthlete(athleteId: string) {
+    return this.databaseService.database
+      .select()
+      .from(eventRsvps)
+      .where(eq(eventRsvps.athleteId, athleteId));
+  }
+
+  /**
+   * Records (or updates) the caller's RSVP for an event. The caller must
+   * have claimed an athlete on that event's team — a coach or unclaimed
+   * user gets a 403. Upserts on the (eventId, athleteId) unique index so a
+   * fresh response updates the existing row.
+   */
+  async rsvp(userId: string, eventId: string, dto: CreateRsvpDto) {
+    const [event] = await this.databaseService.database
+      .select()
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException('Event not found.');
+    }
+
+    const athlete = await this.athletesService.findClaimedAthleteOnTeam(
+      userId,
+      event.teamId,
+    );
+
+    if (!athlete) {
+      throw new ForbiddenException('No claimed player profile on this team.');
+    }
+
+    const [rsvp] = await this.databaseService.database
+      .insert(eventRsvps)
+      .values({
+        eventId,
+        athleteId: athlete.id,
+        status: dto.status,
+        note: dto.note,
+      })
+      .onConflictDoUpdate({
+        target: [eventRsvps.eventId, eventRsvps.athleteId],
+        set: {
+          status: dto.status,
+          note: dto.note,
+          respondedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+
+    return rsvp;
+  }
+
+  /**
+   * Coach-only roster-style RSVP breakdown for one of their team's events:
+   * every active athlete with their RSVP status (null when not yet
+   * responded).
+   */
+  async listRsvps(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireEvent(team.id, eventId);
+
+    return this.databaseService.database
+      .select({
+        id: athletes.id,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        position: athletes.position,
+        squadNumber: athletes.squadNumber,
+        rsvpStatus: eventRsvps.status,
+        rsvpNote: eventRsvps.note,
+        rsvpRespondedAt: eventRsvps.respondedAt,
+      })
+      .from(athletes)
+      .leftJoin(
+        eventRsvps,
+        and(
+          eq(eventRsvps.athleteId, athletes.id),
+          eq(eventRsvps.eventId, eventId),
+        ),
+      )
+      .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)))
+      .orderBy(asc(athletes.lastName), asc(athletes.firstName));
   }
 
   async findOne(userId: string, eventId: string) {

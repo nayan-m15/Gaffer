@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveConfirmDialog } from "@/components/roster/ArchiveConfirmDialog";
 import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
+import { ClaimInviteDialog } from "@/components/roster/ClaimInviteDialog";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
@@ -14,14 +15,17 @@ import { cn } from "@/lib/utils";
 import {
   archiveAthlete,
   createAthlete,
+  createClaimInvite,
   getArchivedAthletes,
   getAthletes,
   restoreAthlete,
+  revokeClaimInvite,
   toFormValues,
   toUiAthlete,
   updateAthlete,
   type AthleteFormValues,
   type BackendAthlete,
+  type ClaimInviteResult,
   type CreateAthleteInput,
   type UpdateAthleteInput,
 } from "@/services/athletes";
@@ -47,6 +51,13 @@ export default function AthletesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const [archivingAthlete, setArchivingAthlete] = useState<Athlete | null>(null);
+
+  // Claim-invite dialog state
+  const [claimInvite, setClaimInvite] = useState<{
+    athleteName: string;
+    athleteId: string;
+    result: ClaimInviteResult;
+  } | null>(null);
 
   const activeQuery = useQuery({
     queryKey: QUERY_KEY_ACTIVE,
@@ -139,6 +150,27 @@ export default function AthletesPage() {
     },
   });
 
+  const claimInviteMutation = useMutation({
+    mutationFn: createClaimInvite,
+    onSuccess: (result, athleteId) => {
+      const backend = activeQuery.data?.find((a) => a.id === athleteId);
+      const name = backend
+        ? `${backend.firstName} ${backend.lastName}`
+        : "Athlete";
+      setClaimInvite({ athleteName: name, athleteId, result });
+      // Refresh roster to show "Invited" status
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+    },
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: (athleteId: string) => revokeClaimInvite(athleteId),
+    onSuccess: () => {
+      setClaimInvite(null);
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+    },
+  });
+
   const handleSelect = (athlete: Athlete) => setSelectedId(athlete.id);
 
   const openAddForm = () => {
@@ -191,6 +223,15 @@ export default function AthletesPage() {
 
   const handleRestore = (athlete: Athlete) => {
     restoreMutation.mutate(athlete.id);
+  };
+
+  const handleInviteClaim = (athlete: Athlete) => {
+    claimInviteMutation.mutate(athlete.id);
+  };
+
+  const handleCloseClaimDialog = () => {
+    setClaimInvite(null);
+    revokeInviteMutation.reset();
   };
 
   const switchTab = (archived: boolean) => {
@@ -328,6 +369,7 @@ export default function AthletesPage() {
                   onEdit={openEditForm}
                   onArchive={openArchiveDialog}
                   onRestore={handleRestore}
+                  onInviteClaim={handleInviteClaim}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -350,6 +392,17 @@ export default function AthletesPage() {
         onClose={closeArchiveDialog}
         onConfirm={handleArchiveConfirm}
         athleteName={archivingAthlete?.name ?? ""}
+      />
+
+      <ClaimInviteDialog
+        isOpen={claimInvite !== null}
+        onClose={handleCloseClaimDialog}
+        claimUrl={claimInvite?.result.claimUrl ?? ""}
+        athleteName={claimInvite?.athleteName ?? ""}
+        onRevoke={() => {
+          if (claimInvite) revokeInviteMutation.mutate(claimInvite.athleteId);
+        }}
+        isRevoking={revokeInviteMutation.isPending}
       />
     </>
   );

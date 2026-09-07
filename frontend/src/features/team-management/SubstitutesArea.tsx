@@ -155,6 +155,7 @@ export function SubstitutesArea({
               name={name}
               position={athlete.position ?? "UN"}
               squadNumber={athlete.squadNumber}
+              status={athlete.status}
               variant="sub"
               isDragging={isDragging}
               onDragStart={handleDragStart(athlete)}

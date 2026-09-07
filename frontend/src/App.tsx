@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
+import { RequirePlayer } from '@/components/RequirePlayer'
 import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
+import { PlayerShell } from '@/layouts/PlayerShell'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
+import ClaimPage from '@/pages/ClaimPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
@@ -18,7 +21,12 @@ import LiveMatchPage from '@/pages/LiveMatchPage'
 import MatchReportPage from '@/pages/MatchReportPage'
 import StatisticsPage from '@/pages/StatisticsPage'
 import TeamManagementPage from '@/features/team-management/TeamManagementPage'
+import PlayerDashboardPage from '@/features/player/PlayerDashboardPage'
+import PlayerTeamPage from '@/features/player/PlayerTeamPage'
+import PlayerEventsPage from '@/features/player/PlayerEventsPage'
+import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
+import { ClaimResumer } from '@/components/ClaimResumer'
 
 /**
  * App — Root application component.
@@ -62,10 +70,12 @@ function App() {
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
+      <ClaimResumer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/claim/:token" element={<ClaimPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
           path="/matches/:matchId/live"
@@ -156,6 +166,22 @@ function App() {
               </RequireTeam>
             }
           />
+        </Route>
+
+        {/* ── Player routes ──────────────────────────────────────────── */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <RequirePlayer>
+                <PlayerShell />
+              </RequirePlayer>
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
+          <Route path="/player/team" element={<PlayerTeamPage />} />
+          <Route path="/player/events" element={<PlayerEventsPage />} />
+          <Route path="/player/standings" element={<PlayerStandingsPage />} />
         </Route>
       </Routes>
       </BrowserRouter>

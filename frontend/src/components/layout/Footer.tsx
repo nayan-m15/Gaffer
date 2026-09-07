@@ -7,7 +7,12 @@ interface FooterLink {
   path: string;
 }
 
-const FOOTER_LINKS: FooterLink[] = [
+interface FooterProps {
+  /** Which navigation set to render. Defaults to the coach link set. */
+  variant?: "coach" | "player";
+}
+
+const COACH_FOOTER_LINKS: FooterLink[] = [
   { label: "Dashboard", path: "/dashboard" },
   { label: "Roster", path: "/athletes" },
   { label: "Events", path: "/events" },
@@ -16,14 +21,25 @@ const FOOTER_LINKS: FooterLink[] = [
   { label: "Team", path: "/team" },
 ];
 
+const PLAYER_FOOTER_LINKS: FooterLink[] = [
+  { label: "Dashboard", path: "/player/dashboard" },
+  { label: "Team", path: "/player/team" },
+  { label: "Events", path: "/player/events" },
+  { label: "Standings", path: "/player/standings" },
+];
+
 /**
  * Application footer for authenticated views.
  *
- * Rendered once inside AppShell so it appears consistently at the bottom
- * of every signed-in page (Dashboard, Roster, Events, Stats, Team).
+ * Rendered once inside AppShell (coach) and PlayerShell (player) so it
+ * appears consistently at the bottom of every signed-in page. The link
+ * set mirrors whichever Sidebar variant is active — coach links point at
+ * roster/events/live-logger/stats/team-tactics, player links point at the
+ * read-only /player/* routes.
  */
-export function Footer() {
+export function Footer({ variant = "coach" }: FooterProps) {
   const year = new Date().getFullYear();
+  const links = variant === "player" ? PLAYER_FOOTER_LINKS : COACH_FOOTER_LINKS;
 
   return (
     <footer className="border-t border-border px-6 py-6 text-sm text-muted-foreground sm:px-8">
@@ -41,7 +57,7 @@ export function Footer() {
 
         <nav aria-label="Footer navigation">
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            {FOOTER_LINKS.map((link) => (
+            {links.map((link) => (
               <li key={link.path}>
                 <Link
                   to={link.path}

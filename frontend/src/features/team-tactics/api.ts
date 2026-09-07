@@ -4,6 +4,11 @@
  * `useGamePlans` lists a team's saved game plans (squad selection + FIFA-style
  * tactical profile in one record); the mutation hooks persist changes so a
  * coach can keep several named plans and switch between them per fixture.
+ *
+ * Athletes are not queried here — the Team Management board owns the roster
+ * query (`useAthletes` in `@/features/team-management/api`, keyed
+ * `["athletes", "active"]` to share the Athlete Roster's cache) and passes
+ * the data down.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

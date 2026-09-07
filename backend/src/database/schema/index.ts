@@ -151,6 +151,10 @@ export const athletes = pgTable(
     squadNumber: integer('squad_number'),
     status: athleteStatus('status').default('available').notNull(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    // The user who claimed this athlete record as themselves via a claim
+    // invite. Nullable and deliberately not unique — one person may claim
+    // athlete rows on more than one team.
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
     ...timestamps,
   },
   (table) => [
@@ -160,6 +164,39 @@ export const athletes = pgTable(
       table.lastName,
       table.firstName,
     ),
+    index('athletes_user_id_index').on(table.userId),
+  ],
+);
+
+// A one-time invite a coach generates so a player can claim their athlete
+// record as themselves. Only sha256(token) is stored in tokenHash — the raw
+// token is shown to the coach once and never persisted.
+export const claimInviteStatus = pgEnum('claim_invite_status', [
+  'pending',
+  'used',
+  'revoked',
+]);
+
+export const playerClaimInvites = pgTable(
+  'player_claim_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athletes.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: claimInviteStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByUserId: text('used_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('player_claim_invites_athlete_id_index').on(table.athleteId),
+    index('player_claim_invites_token_hash_index').on(table.tokenHash),
   ],
 );
 
@@ -258,6 +295,36 @@ export const events = pgTable(
   (table) => [
     index('events_team_id_index').on(table.teamId),
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
+  ],
+);
+
+// A claimed player's RSVP for a team event. One row per (event, athlete) —
+// a fresh response updates the existing row rather than adding a new one.
+export const rsvpStatus = pgEnum('rsvp_status', ['going', 'not_going', 'maybe']);
+
+export const eventRsvps = pgTable(
+  'event_rsvps',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athletes.id, { onDelete: 'cascade' }),
+    status: rsvpStatus('status').notNull(),
+    note: text('note'),
+    respondedAt: timestamp('responded_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('event_rsvps_event_id_index').on(table.eventId),
+    uniqueIndex('event_rsvps_event_athlete_unique').on(
+      table.eventId,
+      table.athleteId,
+    ),
   ],
 );
 

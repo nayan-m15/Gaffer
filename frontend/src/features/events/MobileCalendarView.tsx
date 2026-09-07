@@ -35,6 +35,7 @@ interface MobileCalendarViewProps {
   eventsByDay: Map<string, TeamEvent[]>;
   visibleEvents: TeamEvent[];
   hiddenTypes: ReadonlySet<EventType>;
+  readOnly?: boolean;
   onToggleType: (type: EventType) => void;
   onViewChange: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
@@ -60,6 +61,7 @@ export function MobileCalendarView({
   eventsByDay,
   visibleEvents,
   hiddenTypes,
+  readOnly = false,
   onToggleType,
   onViewChange,
   onSelectDate,
@@ -225,6 +227,7 @@ export function MobileCalendarView({
           now={now}
           onOpenEvent={onOpenEvent}
           onCreateEvent={() => onCreateEvent()}
+          readOnly={readOnly}
         />
       )}
       {view === "week" && (
@@ -234,20 +237,23 @@ export function MobileCalendarView({
           now={now}
           onOpenEvent={onOpenEvent}
           onCreateEvent={() => onCreateEvent(selectedDate)}
+          readOnly={readOnly}
         />
       )}
 
       {/* ── 4. Floating Action Button (FAB) ────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => onCreateEvent(selectedDate)}
-        aria-label="Add new event"
-        className={cn(
-          "fixed bottom-6 right-5 z-40 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        )}
-      >
-        <Plus className="size-6" />
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => onCreateEvent(selectedDate)}
+          aria-label="Add new event"
+          className={cn(
+            "fixed bottom-6 right-5 z-40 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <Plus className="size-6" />
+        </button>
+      )}
     </div>
   );
 }
@@ -447,12 +453,14 @@ function MobileDayDetailSection({
   now,
   onOpenEvent,
   onCreateEvent,
+  readOnly = false,
 }: {
   selectedDate: Date;
   events: TeamEvent[];
   now: Date;
   onOpenEvent: (event: TeamEvent) => void;
   onCreateEvent: () => void;
+  readOnly?: boolean;   
 }) {
   const formattedDate = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
@@ -477,12 +485,14 @@ function MobileDayDetailSection({
           <CalendarDays className="size-8 text-muted-foreground/60" />
           <p className="mt-2 text-sm font-semibold text-foreground">No events scheduled</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Tap below to create an event for this date.
+            {readOnly ? "Nothing scheduled for this date." : "Tap below to create an event for this date."}
           </p>
-          <Button size="sm" variant="outline" className="mt-3.5 gap-1.5" onClick={onCreateEvent}>
-            <Plus className="size-3.5" />
-            Add Event
-          </Button>
+          {!readOnly && (
+            <Button size="sm" variant="outline" className="mt-3.5 gap-1.5" onClick={onCreateEvent}>
+              <Plus className="size-3.5" />
+              Add Event
+            </Button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -569,11 +579,13 @@ function MobileAgendaList({
   now,
   onOpenEvent,
   onCreateEvent,
+  readOnly = false,
 }: {
   events: TeamEvent[];
   now: Date;
   onOpenEvent: (event: TeamEvent) => void;
   onCreateEvent: () => void;
+  readOnly?: boolean;
 }) {
   const groups = useMemo(() => {
     const map = new Map<string, TeamEvent[]>();
@@ -595,12 +607,14 @@ function MobileAgendaList({
         <CalendarDays className="size-8 text-muted-foreground/60" />
         <p className="mt-2 text-sm font-semibold text-foreground">No events found</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Create an event to fill the agenda schedule.
+          {readOnly ? "Your team has no events yet." : "Create an event to fill the agenda schedule."}
         </p>
-        <Button size="sm" className="mt-4 gap-1.5" onClick={onCreateEvent}>
-          <Plus className="size-3.5" />
-          New Event
-        </Button>
+        {!readOnly && (
+          <Button size="sm" className="mt-4 gap-1.5" onClick={onCreateEvent}>
+            <Plus className="size-3.5" />
+            New Event
+          </Button>
+        )}
       </div>
     );
   }
@@ -618,6 +632,7 @@ function MobileAgendaList({
             now={now}
             onOpenEvent={onOpenEvent}
             onCreateEvent={onCreateEvent}
+            readOnly={readOnly}
           />
         );
       })}

@@ -169,7 +169,9 @@ export class StatisticsService {
 
     const players = Array.from(playerMap.values()).sort(
       (a, b) =>
-        b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name),
+        b.goals - a.goals ||
+        b.assists - a.assists ||
+        a.name.localeCompare(b.name),
     );
 
     return {
@@ -215,6 +217,23 @@ export class StatisticsService {
     if (!athlete) {
       throw new NotFoundException('Athlete not found.');
     }
+
+    return this.aggregateAthleteStatistics(athlete);
+  }
+
+  /**
+   * Season totals and match-by-match breakdown for an already-verified
+   * athlete row. Shared with the player module, which verifies access via
+   * the athlete claim instead of a coach's team.
+   */
+  async aggregateAthleteStatistics(athlete: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    position: string | null;
+    squadNumber: number | null;
+  }) {
+    const athleteId = athlete.id;
 
     const statsRows = await this.databaseService.database
       .select({
@@ -290,15 +309,22 @@ export class StatisticsService {
       matches: matchesBreakdown,
     };
   }
-
   /** All competitions for the team, each with its standings rows attached. */
   async getCompetitions(userId: string) {
     const team = await this.requireTeam(userId);
+    return this.getCompetitionsForTeam(team.id);
+  }
 
+  /**
+   * Competitions and their standings for an already-resolved team — shared
+   * with the player module, which scopes by the claimed athlete's team
+   * instead of a coach's owned team.
+   */
+  async getCompetitionsForTeam(teamId: string) {
     const teamCompetitions = await this.databaseService.database
       .select()
       .from(competitions)
-      .where(eq(competitions.teamId, team.id))
+      .where(eq(competitions.teamId, teamId))
       .orderBy(asc(competitions.name));
 
     if (teamCompetitions.length === 0) {
@@ -345,7 +371,10 @@ export class StatisticsService {
       .update(competitions)
       .set({ ...dto, updatedAt: new Date() })
       .where(
-        and(eq(competitions.id, competitionId), eq(competitions.teamId, team.id)),
+        and(
+          eq(competitions.id, competitionId),
+          eq(competitions.teamId, team.id),
+        ),
       )
       .returning();
 
@@ -359,7 +388,10 @@ export class StatisticsService {
     await this.databaseService.database
       .delete(competitions)
       .where(
-        and(eq(competitions.id, competitionId), eq(competitions.teamId, team.id)),
+        and(
+          eq(competitions.id, competitionId),
+          eq(competitions.teamId, team.id),
+        ),
       );
 
     return { success: true };
@@ -447,10 +479,7 @@ export class StatisticsService {
     const [row] = await this.databaseService.database
       .select({ id: standings.id })
       .from(standings)
-      .innerJoin(
-        competitions,
-        eq(standings.competitionId, competitions.id),
-      )
+      .innerJoin(competitions, eq(standings.competitionId, competitions.id))
       .where(and(eq(standings.id, standingId), eq(competitions.teamId, teamId)))
       .limit(1);
 

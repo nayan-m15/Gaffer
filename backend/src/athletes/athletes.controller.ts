@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard, type SessionUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ClaimsService } from '../claims/claims.service';
 import { zodValidate } from '../common/zod-validate';
 import { TeamsService } from '../teams/teams.service';
 import { createAthleteSchema, updateAthleteSchema } from './athletes.schemas';
@@ -23,6 +24,7 @@ export class AthletesController {
   constructor(
     private readonly athletesService: AthletesService,
     private readonly teamsService: TeamsService,
+    private readonly claimsService: ClaimsService,
   ) {}
 
   private async getTeamId(userId: string): Promise<string> {
@@ -94,5 +96,32 @@ export class AthletesController {
     const teamId = await this.getTeamId(user.id);
 
     return this.athletesService.restore(teamId, id);
+  }
+
+  // Claim-invite endpoints live here rather than on ClaimsController because
+  // they need the coach's team context — findOne doubles as the team-ownership
+  // check, mirroring how the CRUD routes above scope by teamId.
+  @Post(':athleteId/claim-invite')
+  async createClaimInvite(
+    @CurrentUser() user: SessionUser,
+    @Param('athleteId', ParseUUIDPipe) athleteId: string,
+  ) {
+    const teamId = await this.getTeamId(user.id);
+    await this.athletesService.findOne(teamId, athleteId);
+
+    return this.claimsService.createInvite(athleteId, user.id);
+  }
+
+  @Delete(':athleteId/claim-invite')
+  async revokeClaimInvite(
+    @CurrentUser() user: SessionUser,
+    @Param('athleteId', ParseUUIDPipe) athleteId: string,
+  ) {
+    const teamId = await this.getTeamId(user.id);
+    await this.athletesService.findOne(teamId, athleteId);
+
+    await this.claimsService.revokeInvite(athleteId);
+
+    return { revoked: true };
   }
 }

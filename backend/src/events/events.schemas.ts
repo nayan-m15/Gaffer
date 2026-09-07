@@ -5,6 +5,7 @@ import {
   eventType,
   opponentSquadVisibility,
   PLAYER_POSITIONS,
+  rsvpStatus,
 } from '../database/schema';
 
 export const eventTypeSchema = z.enum(eventType.enumValues);
@@ -244,3 +245,17 @@ export class StartMatchBodyDto {
   @ApiPropertyOptional({ example: '#FF5500' })
   opponentColor?: string;
 }
+
+export const rsvpStatusSchema = z.enum(rsvpStatus.enumValues, {
+  error: 'RSVP status must be one of: going, not_going, maybe.',
+});
+
+export const createRsvpSchema = z.object({
+  status: rsvpStatusSchema,
+  note: z
+    .string()
+    .trim()
+    .max(280, 'Note must be 280 characters or fewer.')
+    .optional(),
+});
+export type CreateRsvpDto = z.infer<typeof createRsvpSchema>;

@@ -17,6 +17,7 @@ interface CalendarToolbarProps {
   onNext: () => void;
   onToday: () => void;
   onNewEvent: () => void;
+  readOnly?: boolean;
   /** Opens the calendars drawer on screens where the sidebar is hidden. */
   onToggleSidebar: () => void;
 }
@@ -41,6 +42,7 @@ export function CalendarToolbar({
   onNext,
   onToday,
   onNewEvent,
+  readOnly = false,
   onToggleSidebar,
 }: CalendarToolbarProps) {
   return (
@@ -160,11 +162,13 @@ export function CalendarToolbar({
           })}
         </div>
 
-        <Button size="sm" className="gap-1.5" onClick={onNewEvent}>
-          <Plus className="size-4" />
-          <span className="hidden sm:inline">New Event</span>
-          <span className="sm:hidden">Add</span>
-        </Button>
+        {!readOnly && ( 
+          <Button size="sm" className="gap-1.5" onClick={onNewEvent}>
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">New Event</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+        )}
       </div>
     </div>
   );
