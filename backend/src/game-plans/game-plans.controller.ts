@@ -37,6 +37,18 @@ export class GamePlansController {
     return team.id;
   }
 
+  /**
+   * Game-plan mutations are coach-only: assistants may view the Team
+   * Management page but cannot modify the squad selection or tactics.
+   * `requireCoachTeam` resolves the caller's own team and throws 403 for
+   * any non-coach member (and for users without a team).
+   */
+  private async getCoachTeamId(userId: string): Promise<string> {
+    const team = await this.teamsService.requireCoachTeam(userId);
+
+    return team.id;
+  }
+
   @Get()
   async findAll(@CurrentUser() user: SessionUser) {
     const teamId = await this.getTeamId(user.id);
@@ -54,7 +66,7 @@ export class GamePlansController {
   @Post()
   async create(@CurrentUser() user: SessionUser, @Body() body: unknown) {
     const input = zodValidate(createGamePlanSchema, body);
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.gamePlansService.create(teamId, input);
   }
@@ -66,14 +78,14 @@ export class GamePlansController {
     @Body() body: unknown,
   ) {
     const input = zodValidate(updateGamePlanSchema, body);
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.gamePlansService.update(teamId, id, input);
   }
 
   @Delete(':id')
   async remove(@CurrentUser() user: SessionUser, @Param('id') id: string) {
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.gamePlansService.remove(teamId, id);
   }

@@ -44,6 +44,8 @@ interface PlayerCardProps {
   isDropTarget?: boolean;
   /** Whether this drop target is invalid. */
   isInvalid?: boolean;
+  /** Coach-only: when true the card is not draggable (assistant view). */
+  readOnly?: boolean;
   /** Called when the card drag starts. */
   onDragStart?: (e: React.DragEvent) => void;
   /** Called when the card drag ends. */
@@ -62,6 +64,7 @@ export function PlayerCard({
   isDragging = false,
   isDropTarget = false,
   isInvalid = false,
+  readOnly = false,
   onDragStart,
   onDragEnd,
   className,
@@ -71,11 +74,12 @@ export function PlayerCard({
   if (variant === "pitch") {
     return (
       <div
-        draggable
+        draggable={!readOnly}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         className={cn(
-          "flex flex-col items-center gap-0.5 cursor-grab select-none",
+          "flex flex-col items-center gap-0.5 select-none",
+          !readOnly && "cursor-grab",
           "w-[clamp(52px,8vw,68px)]",
           isDragging && "opacity-40 cursor-grabbing",
           className,
@@ -130,14 +134,15 @@ export function PlayerCard({
   /* ─── Sub variant (horizontal card) ──────────────────────────────────── */
   return (
     <div
-      draggable
+      draggable={!readOnly}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={cn(
         "flex items-center gap-2.5 rounded-lg border px-2.5 py-2",
         "bg-card text-card-foreground",
-        "cursor-grab select-none transition-colors duration-150",
-        "hover:border-primary/40 hover:bg-primary/5",
+        "select-none",
+        !readOnly &&
+          "cursor-grab transition-colors duration-150 hover:border-primary/40 hover:bg-primary/5",
         "min-w-[160px] max-w-[200px] shrink-0",
         isDragging && "opacity-40 cursor-grabbing",
         isDropTarget && !isInvalid && "ring-2 ring-primary border-primary",

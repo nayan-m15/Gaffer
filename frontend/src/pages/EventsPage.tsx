@@ -43,6 +43,9 @@ type CalendarView = "month" | "week" | "agenda";
  */
 export default function EventsPage() {
   const { team } = useAuth();
+  // Assistants view the calendar only — creating, editing and cancelling
+  // events are coach actions (also enforced by the backend mutations).
+  const canManageEvents = team?.role === "coach";
   const { data: events, isLoading, isError, error, refetch } = useEvents();
   const now = useNow();
 
@@ -87,6 +90,7 @@ export default function EventsPage() {
    * Clicking a date on the calendar:
    * - If the day has events, opens DayEventsDialog popup (Samsung style).
    * - If the day has no events, directly opens EventFormDialog to add an event.
+   *   Assistants get no create flow, so an empty day does nothing for them.
    */
   const handleDayClick = useCallback(
     (date: Date) => {
@@ -103,12 +107,14 @@ export default function EventsPage() {
 
       const dayEvents = getDayEvents(eventsByDay, date);
       if (dayEvents.length === 0) {
-        setPanel({ kind: "create", date });
+        if (canManageEvents) {
+          setPanel({ kind: "create", date });
+        }
       } else {
         setPanel({ kind: "day", date });
       }
     },
-    [cursor, eventsByDay, view],
+    [canManageEvents, cursor, eventsByDay, view],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
@@ -151,6 +157,7 @@ export default function EventsPage() {
       eventDays={eventDays}
       teamName={team?.name}
       undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
+      readOnly={!canManageEvents}
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
         handleDayClick(date);
@@ -202,6 +209,7 @@ export default function EventsPage() {
           month={cursor}
           events={visibleEvents}
           now={now}
+          readOnly={!canManageEvents}
           onOpenEvent={handleOpenEvent}
           onCreateEvent={() => setPanel({ kind: "create" })}
         />
@@ -253,6 +261,7 @@ export default function EventsPage() {
             eventsByDay={eventsByDay}
             visibleEvents={visibleEvents}
             hiddenTypes={hiddenTypes}
+            readOnly={!canManageEvents}
             onToggleType={handleToggleType}
             onViewChange={setView}
             onSelectDate={handleDayClick}
@@ -272,6 +281,7 @@ export default function EventsPage() {
             view={view}
             label={label}
             hiddenTypes={hiddenTypes}
+            readOnly={!canManageEvents}
             onToggleType={handleToggleType}
             onViewChange={setView}
             onPrevious={() => navigate(-1)}
@@ -332,6 +342,7 @@ export default function EventsPage() {
         date={panel.kind === "day" ? panel.date : null}
         events={panel.kind === "day" ? getDayEvents(eventsByDay, panel.date) : []}
         now={now}
+        readOnly={!canManageEvents}
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });
@@ -358,6 +369,7 @@ export default function EventsPage() {
         open={panel.kind === "view"}
         event={selectedEvent}
         now={now}
+        canManage={canManageEvents}
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });

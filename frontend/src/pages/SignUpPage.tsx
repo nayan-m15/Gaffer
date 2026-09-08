@@ -9,20 +9,18 @@ import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 /**
- * SignUpPage — Dugout registration page for new coaches and assistants.
+ * SignUpPage — Dugout registration page.
  *
  * Forces dark theme on mount so the signup experience is always consistent.
- * The form collects the user's command role, name, email, password
- * and terms agreement.  The actual authentication integration is intentionally
- * left as a clean TODO boundary — the UI is fully wired and validated, ready
- * to be connected to the backend auth flow.
+ * There is deliberately no role selector: coaches register here and create
+ * their team from the dashboard afterwards, while assistants never
+ * self-register — a coach invites them and they sign up (or sign in) from
+ * the /join-team/:token invitation link instead.
  */
 export default function SignUpPage() {
   /* ── Form state ──────────────────────────────────────────────────────── */
-  const [role, setRole] = useState<"coach" | "assistant">("coach");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -100,10 +98,9 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
 
-    // Sprint 1 only supports coaches registering and owning their own team —
-    // the role selector above is left in place for the invite flow planned
-    // for a later sprint, but every sign-up here creates the account as the
-    // coach. A coach will be able to add teams on their dashboard once logged in.
+    // Every sign-up here creates a plain account with no team — coaches add
+    // a team from the dashboard once signed in, and assistants join through
+    // a coach's /join-team/:token invitation instead of this page.
     try {
       const { emailVerificationRequired } = await signUp({
         name: fullName,
@@ -146,10 +143,6 @@ export default function SignUpPage() {
   };
 
   /* ── Render helpers ──────────────────────────────────────────────────── */
-  const roleOptions = [
-    { value: "coach" as const, label: "Coach" },
-    { value: "assistant" as const, label: "Assistant" },
-  ];
 
   return (
     <main className="relative flex min-h-screen items-center overflow-hidden bg-background">
@@ -199,41 +192,6 @@ export default function SignUpPage() {
 
           {/* ── Signup form ────────────────────────────────────────────── */}
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-            {/* ── Command role selector ────────────────────────────────── */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Your command role
-              </span>
-
-              <div
-                role="group"
-                aria-label="Your command role"
-                className="grid grid-cols-2 gap-3"
-              >
-                {roleOptions.map((option) => {
-                  const selected = role === option.value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => setRole(option.value)}
-                      className={cn(
-                        "rounded-md border px-4 py-3 text-sm font-medium outline-none transition-all duration-200",
-                        "focus-visible:ring-2 focus-visible:ring-ring/50",
-                        selected
-                          ? "border-brand bg-accent text-brand"
-                          : "border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* ── Full name ────────────────────────────────────────────── */}
             <div className="space-y-1.5">
               <FloatingLabelInput
@@ -415,14 +373,8 @@ export default function SignUpPage() {
         {/* ── Footer navigation ───────────────────────────────────────── */}
         <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
           <p>
-            Have an invite code?{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              // TODO: Navigate to the team-invite flow when it exists.
-            >
-              Join an existing team instead
-            </button>
+            Have a team invitation from your coach? Open the invite link they
+            sent you to join their team.
           </p>
           <p>
             Already have an account?{" "}

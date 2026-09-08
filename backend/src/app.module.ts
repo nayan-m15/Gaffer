@@ -12,6 +12,7 @@ import { TeamsModule } from './teams/teams.module';
 import { AthletesModule } from './athletes/athletes.module';
 import { ProfileModule } from './profile/profile.module';
 import { ClaimsModule } from './claims/claims.module';
+import { TeamInvitesModule } from './team-invites/team-invites.module';
 import { PlayerModule } from './player/player.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { PlayerModule } from './player/player.module';
     TeamsModule,
     AthletesModule,
     ClaimsModule,
+    TeamInvitesModule,
     PlayerModule,
     EventsModule,
     GamePlansModule,

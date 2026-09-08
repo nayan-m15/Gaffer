@@ -23,6 +23,7 @@ import { PitchPlayer } from "./PitchPlayer";
 import { FormationSelector } from "./FormationSelector";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
+import { useAuth } from "@/hooks/useAuth";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
 import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDialog";
 import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
@@ -31,6 +32,11 @@ import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 
 export default function TeamManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { team } = useAuth();
+  // Assistants may view the squad and tactics but not modify them — the
+  // management controls are hidden here and the backend rejects game-plan
+  // mutations from non-coaches with 403.
+  const canManageTeam = team?.role === "coach";
   const activeSection =
     searchParams.get("section") === "tactics" ? "tactics" : "squad";
 
@@ -166,8 +172,8 @@ export default function TeamManagementPage() {
         title="Team Management"
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
         actions={
-          <GamePlanControls editor={gamePlanEditor}>
-            {activeSection === "squad" && (
+          <GamePlanControls editor={gamePlanEditor} readOnly={!canManageTeam}>
+            {activeSection === "squad" && canManageTeam && (
               <>
                 <FormationSelector
                   value={lineup.formationId}
@@ -231,7 +237,7 @@ export default function TeamManagementPage() {
 
       <div className="space-y-6 p-6 sm:p-8">
         {activeSection === "tactics" ? (
-          <TeamTacticsPanel editor={gamePlanEditor} />
+          <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (
           <>
         {/* ── Status bar ────────────────────────────────────────────────────── */}
@@ -320,6 +326,7 @@ export default function TeamManagementPage() {
               athlete={getAthlete(lineup.assignments[pos.id] ?? null)}
               dragItem={lineup.dragItem}
               horizontal={isDesktop}
+              readOnly={!canManageTeam}
               onDragStart={lineup.startDrag}
               onDragEnd={lineup.endDrag}
               onDrop={lineup.handleDrop}
@@ -332,6 +339,7 @@ export default function TeamManagementPage() {
       <SubstitutesArea
         athletes={substituteAthletes}
         dragItem={lineup.dragItem}
+        readOnly={!canManageTeam}
         onDragStart={lineup.startDrag}
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}

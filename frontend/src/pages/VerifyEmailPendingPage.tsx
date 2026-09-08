@@ -20,6 +20,10 @@ export default function VerifyEmailPendingPage() {
   const { resendVerificationEmail } = useAuth();
   const location = useLocation();
   const email = (location.state as { email?: string } | null)?.email;
+  // JoinTeamPage passes the invite token along so a resend from here keeps
+  // routing the verification email back to the invitation.
+  const inviteToken = (location.state as { inviteToken?: string } | null)
+    ?.inviteToken;
 
   const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
   const [cooldown, setCooldown] = useState(0);
@@ -38,7 +42,7 @@ export default function VerifyEmailPendingPage() {
   const handleResend = async () => {
     setStatus("sending");
     try {
-      await resendVerificationEmail(email);
+      await resendVerificationEmail(email, inviteToken);
       setStatus("idle");
       setCooldown(RESEND_COOLDOWN_SECONDS);
       timerRef.current = setInterval(() => {
@@ -77,6 +81,13 @@ export default function VerifyEmailPendingPage() {
             <span className="font-medium text-foreground">{email}</span>.
             Click it to finish setting up your account.
           </p>
+
+          {inviteToken && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              After verifying, you&apos;ll return to your team invitation to
+              finish joining.
+            </p>
+          )}
 
           {status === "error" && (
             <p role="alert" className="mt-4 text-sm text-destructive">

@@ -15,9 +15,18 @@ interface GamePlanControlsProps {
   editor: GamePlanEditor;
   /** Section-specific controls, rendered between the selector and Save. */
   children?: ReactNode;
+  /**
+   * Assistant mode: hides Delete / Save As New / Save — assistants may view
+   * plans but not modify them. The plan selector stays so they can browse.
+   */
+  readOnly?: boolean;
 }
 
-export function GamePlanControls({ editor, children }: GamePlanControlsProps) {
+export function GamePlanControls({
+  editor,
+  children,
+  readOnly = false,
+}: GamePlanControlsProps) {
   const {
     plans,
     selectedId,
@@ -42,7 +51,7 @@ export function GamePlanControls({ editor, children }: GamePlanControlsProps) {
 
       {children}
 
-      {selectedPlan && (
+      {!readOnly && selectedPlan && (
         <Button
           variant="outline"
           size="sm"
@@ -54,38 +63,42 @@ export function GamePlanControls({ editor, children }: GamePlanControlsProps) {
         </Button>
       )}
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setSaveDialogOpen(true)}
-        className="gap-1.5"
-      >
-        <Copy className="size-3.5" />
-        Save As New
-      </Button>
+      {!readOnly && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSaveDialogOpen(true)}
+          className="gap-1.5"
+        >
+          <Copy className="size-3.5" />
+          Save As New
+        </Button>
+      )}
 
-      <Button
-        variant="default"
-        size="sm"
-        className="gap-1.5"
-        onClick={save}
-        disabled={saving}
-      >
-        {saving ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : justSaved ? (
-          <Check className="size-3.5" />
-        ) : (
-          <Save className="size-3.5" />
-        )}
-        {saving
-          ? "Saving..."
-          : justSaved
-            ? "Saved"
-            : selectedPlan
-              ? "Save"
-              : "Save Game Plan"}
-      </Button>
+      {!readOnly && (
+        <Button
+          variant="default"
+          size="sm"
+          className="gap-1.5"
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : justSaved ? (
+            <Check className="size-3.5" />
+          ) : (
+            <Save className="size-3.5" />
+          )}
+          {saving
+            ? "Saving..."
+            : justSaved
+              ? "Saved"
+              : selectedPlan
+                ? "Save"
+                : "Save Game Plan"}
+        </Button>
+      )}
     </div>
   );
 }

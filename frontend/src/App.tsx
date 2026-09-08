@@ -11,6 +11,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
 import ClaimPage from '@/pages/ClaimPage'
+import JoinTeamPage from '@/pages/JoinTeamPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
@@ -26,6 +27,7 @@ import PlayerEventsPage from '@/features/player/PlayerEventsPage'
 import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
 import { ClaimResumer } from '@/components/ClaimResumer'
+import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 
 /**
  * App — Root application component.
@@ -70,11 +72,13 @@ function App() {
       )}
       <BrowserRouter useTransitions={false}>
       <ClaimResumer />
+      <TeamInviteResumer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
+        <Route path="/join-team/:token" element={<JoinTeamPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
           path="/matches/:matchId/live"

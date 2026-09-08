@@ -31,6 +31,21 @@ const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 /** Where Better Auth redirects the browser after a verification link is clicked. */
 const VERIFIED_REDIRECT_URL = `${FRONTEND_URL}/login?verified=1`;
 
+/**
+ * Where the verification email should send the user afterwards: back to the
+ * pending team invite when the sign-up/resend originated from
+ * /join-team/:token, otherwise the standard verified-login page. Better Auth
+ * embeds this URL in the verification link and 302s to it (session cookie
+ * included) once the address is confirmed — which is what lets the invite
+ * survive the verification round trip, even across browsers, without any
+ * persisted state.
+ */
+function verifiedRedirectUrl(inviteToken?: string): string {
+  return inviteToken
+    ? `${FRONTEND_URL}/join-team/${inviteToken}`
+    : VERIFIED_REDIRECT_URL;
+}
+
 /** Copies any `Set-Cookie` header Better Auth returned onto the Nest response. */
 function forwardSetCookie(res: Response, headers: Headers): void {
   const cookies = headers.getSetCookie();
@@ -92,7 +107,7 @@ export class AuthController {
           name: dto.name,
           email: dto.email,
           password: dto.password,
-          callbackURL: VERIFIED_REDIRECT_URL,
+          callbackURL: verifiedRedirectUrl(dto.inviteToken),
         },
         returnHeaders: true,
       });
@@ -116,7 +131,10 @@ export class AuthController {
 
     try {
       await auth.api.sendVerificationEmail({
-        body: { email: dto.email, callbackURL: VERIFIED_REDIRECT_URL },
+        body: {
+          email: dto.email,
+          callbackURL: verifiedRedirectUrl(dto.inviteToken),
+        },
       });
     } catch (error) {
       // Better Auth's own errors here (rate limiting, etc.) still map through

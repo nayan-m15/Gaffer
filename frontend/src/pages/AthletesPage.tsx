@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Search, Plus, Users, Archive, Loader2, AlertCircle } from "lucide-react";
+import { Search, Plus, Users, Archive, Loader2, AlertCircle, UserPlus, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveConfirmDialog } from "@/components/roster/ArchiveConfirmDialog";
 import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
 import { ClaimInviteDialog } from "@/components/roster/ClaimInviteDialog";
+import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
@@ -29,9 +30,17 @@ import {
   type CreateAthleteInput,
   type UpdateAthleteInput,
 } from "@/services/athletes";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  createTeamInvite,
+  getTeamInvites,
+  revokeTeamInvite,
+  type TeamInviteResult,
+} from "@/services/team-invites";
 
 const QUERY_KEY_ACTIVE = ["athletes", "active"] as const;
 const QUERY_KEY_ARCHIVED = ["athletes", "archived"] as const;
+const QUERY_KEY_TEAM_INVITES = ["team-invites"] as const;
 
 /**
  * AthletesPage — Squad roster command centre (S1-03).
@@ -42,6 +51,8 @@ const QUERY_KEY_ARCHIVED = ["athletes", "archived"] as const;
  */
 export default function AthletesPage() {
   const queryClient = useQueryClient();
+  const { team } = useAuth();
+  const canManageRoster = team?.role === "coach";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,6 +69,10 @@ export default function AthletesPage() {
     athleteId: string;
     result: ClaimInviteResult;
   } | null>(null);
+
+  // Assistant-invite dialog state
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviteResult, setInviteResult] = useState<TeamInviteResult | null>(null);
 
   const activeQuery = useQuery({
     queryKey: QUERY_KEY_ACTIVE,
@@ -168,6 +183,28 @@ export default function AthletesPage() {
     onSuccess: () => {
       setClaimInvite(null);
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+    },
+  });
+
+  /* ── Team-invite queries & mutations (coach-only) ──────────────────── */
+  const invitesQuery = useQuery({
+    queryKey: QUERY_KEY_TEAM_INVITES,
+    queryFn: getTeamInvites,
+    enabled: canManageRoster,
+  });
+
+  const assistantInviteMutation = useMutation({
+    mutationFn: createTeamInvite,
+    onSuccess: (result) => {
+      setInviteResult(result);
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_TEAM_INVITES });
+    },
+  });
+
+  const revokeTeamInviteMutation = useMutation({
+    mutationFn: revokeTeamInvite,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_TEAM_INVITES });
     },
   });
 
@@ -303,7 +340,7 @@ export default function AthletesPage() {
                     />
                   </div>
 
-                  {!showArchived && (
+                  {!showArchived && canManageRoster && (
                     <Button
                       type="button"
                       onClick={openAddForm}
@@ -335,6 +372,7 @@ export default function AthletesPage() {
                     athletes={filteredAthletes}
                     selectedId={selectedId}
                     showArchived={showArchived}
+                    readOnly={!canManageRoster}
                     onSelect={handleSelect}
                     onEdit={openEditForm}
                     onArchive={openArchiveDialog}
@@ -370,6 +408,7 @@ export default function AthletesPage() {
                   onArchive={openArchiveDialog}
                   onRestore={handleRestore}
                   onInviteClaim={handleInviteClaim}
+                  readOnly={!canManageRoster}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -378,6 +417,80 @@ export default function AthletesPage() {
               )}
             </section>
           </div>
+
+        {/* ── Assistants management card (coach-only) ────────────────── */}
+        {canManageRoster && (
+          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
+                  Assistants
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Invite assistants to help manage your squad. They can view
+                  the roster, events and statistics but cannot make changes.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setInviteResult(null);
+                  setIsInviteDialogOpen(true);
+                }}
+                className="gap-1.5"
+              >
+                <UserPlus className="size-4" />
+                Invite Assistant
+              </Button>
+            </div>
+
+            {invitesQuery.isLoading ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading invites…
+              </div>
+            ) : (invitesQuery.data ?? []).length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                No pending assistant invites.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {invitesQuery.data!.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {inv.email}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Expires{" "}
+                        {new Date(inv.expiresAt).toLocaleDateString(undefined, {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => revokeTeamInviteMutation.mutate(inv.id)}
+                      disabled={revokeTeamInviteMutation.isPending}
+                      className="gap-1 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
 
       <AthleteFormDialog
@@ -403,6 +516,23 @@ export default function AthletesPage() {
           if (claimInvite) revokeInviteMutation.mutate(claimInvite.athleteId);
         }}
         isRevoking={revokeInviteMutation.isPending}
+      />
+
+      <AssistantInviteDialog
+        isOpen={isInviteDialogOpen}
+        onClose={() => {
+          setIsInviteDialogOpen(false);
+          setInviteResult(null);
+          assistantInviteMutation.reset();
+        }}
+        onInvite={(email) => assistantInviteMutation.mutate(email)}
+        isSubmitting={assistantInviteMutation.isPending}
+        submitError={
+          assistantInviteMutation.error instanceof Error
+            ? assistantInviteMutation.error.message
+            : null
+        }
+        result={inviteResult}
       />
     </>
   );

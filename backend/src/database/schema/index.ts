@@ -197,6 +197,41 @@ export const playerClaimInvites = pgTable(
   ],
 );
 
+// A one-time invite a coach generates so another person can join their team
+// as an assistant. Only sha256(token) is stored in tokenHash — the raw token
+// is shown to the coach once and never persisted. Each invite is bound to a
+// specific email address: only a signed-in user whose email matches may
+// accept, so the one-time link cannot be forwarded to someone else.
+export const teamInviteStatus = pgEnum('team_invite_status', [
+  'pending',
+  'used',
+  'revoked',
+]);
+
+export const teamInvites = pgTable(
+  'team_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: teamInviteStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByUserId: text('used_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('team_invites_team_id_index').on(table.teamId),
+    index('team_invites_token_hash_index').on(table.tokenHash),
+  ],
+);
+
 // FIFA-style "custom tactics" for a team. Each defensive/offensive style is a
 // single enum value; the sliders are integers on a 1–10 scale.
 export const defensiveStyle = pgEnum('defensive_style', [

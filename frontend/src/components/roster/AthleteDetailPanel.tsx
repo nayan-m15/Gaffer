@@ -10,6 +10,9 @@ interface AthleteDetailPanelProps {
   onArchive: (athlete: Athlete) => void;
   onRestore: (athlete: Athlete) => void;
   onInviteClaim?: (athlete: Athlete) => void;
+  /** When true, hides the Edit / Archive / Restore / Invite buttons — used
+   * for assistants, who can view the roster but not mutate it. */
+  readOnly?: boolean;
 }
 
 /**
@@ -25,7 +28,13 @@ export function AthleteDetailPanel({
   onArchive,
   onRestore,
   onInviteClaim,
+  readOnly = false,
 }: AthleteDetailPanelProps) {
+  const showClaimInvite =
+    !athlete.isArchived &&
+    athlete.claimStatus === "Unclaimed" &&
+    Boolean(onInviteClaim);
+
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-6">
       {/* Profile header */}
@@ -64,56 +73,62 @@ export function AthleteDetailPanel({
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="mt-4 flex items-center gap-2">
-          {athlete.isArchived ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onRestore(athlete)}
-              className="gap-1.5"
-            >
-              <RotateCcw className="size-4 text-brand" />
-              Restore
-            </Button>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onEdit(athlete)}
-                className="gap-1.5"
-              >
-                <Pencil className="size-4" />
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onArchive(athlete)}
-                className="gap-1.5 border-amber-400/30 text-amber-400 hover:bg-amber-400/10 hover:text-amber-400"
-              >
-                <Archive className="size-4" />
-                Archive
-              </Button>
-              {onInviteClaim && athlete.claimStatus === "Unclaimed" && (
+        {/* Action buttons — mutation controls (Edit / Archive / Restore) are
+            hidden for assistants via readOnly; the player claim invite stays
+            available to every team member, mirroring the backend where the
+            claim-invite routes are not coach-gated. */}
+        {(!readOnly || showClaimInvite) && (
+          <div className="mt-4 flex items-center gap-2">
+            {!readOnly &&
+              (athlete.isArchived ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => onInviteClaim(athlete)}
+                  onClick={() => onRestore(athlete)}
                   className="gap-1.5"
                 >
-                  <UserPlus className="size-4" />
-                  Invite
+                  <RotateCcw className="size-4 text-brand" />
+                  Restore
                 </Button>
-              )}
-            </>
-          )}
-        </div>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEdit(athlete)}
+                    className="gap-1.5"
+                  >
+                    <Pencil className="size-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onArchive(athlete)}
+                    className="gap-1.5 border-amber-400/30 text-amber-400 hover:bg-amber-400/10 hover:text-amber-400"
+                  >
+                    <Archive className="size-4" />
+                    Archive
+                  </Button>
+                </>
+              ))}
+            {showClaimInvite && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onInviteClaim?.(athlete)}
+                className="gap-1.5"
+              >
+                <UserPlus className="size-4" />
+                Invite
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quick info cards */}
