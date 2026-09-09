@@ -44,6 +44,11 @@ export interface BackendAthlete {
   position: string | null;
   squadNumber: number | null;
   status: AthleteStatusValue;
+  appearances?: number;
+  goals?: number;
+  assists?: number;
+  yellowCards?: number;
+  redCards?: number;
   /** Computed by the active-athlete query; absent on archived-only responses. */
   claimStatus?: ClaimStatus;
   archivedAt: string | null;
@@ -156,14 +161,14 @@ export function toUiAthlete(backend: BackendAthlete): Athlete {
     position,
     positionLong: position,
     status: STATUS_LABELS[backend.status],
-    appearances: 0,
-    goals: 0,
-    assists: 0,
+    appearances: backend.appearances ?? 0,
+    goals: backend.goals ?? 0,
+    assists: backend.assists ?? 0,
     age: calculateAge(backend.dateOfBirth),
     joinedDate: formatJoinedDate(backend.createdAt),
     preferredFoot: "Right",
-    yellowCards: 0,
-    redCards: 0,
+    yellowCards: backend.yellowCards ?? 0,
+    redCards: backend.redCards ?? 0,
     recentAppearances: [],
     initials: getInitials(firstName, lastName),
     isArchived: backend.archivedAt !== null,

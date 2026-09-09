@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useAuth } from "@/hooks/useAuth";
 import { CompetitionFormDialog } from "@/features/statistics/CompetitionFormDialog";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { StandingFormDialog } from "@/features/statistics/StandingFormDialog";
@@ -29,6 +30,7 @@ import {
   useUpdateStanding,
 } from "@/features/statistics/hooks";
 import type {
+  AthleteMatchBreakdown,
   CompetitionFormValues,
   CompetitionWithStandings,
   PlayerStatLine,
@@ -57,6 +59,13 @@ function formatDate(iso: string): string {
   return DATE_FMT.format(new Date(iso));
 }
 
+function formatMatchDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatRate(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -82,6 +91,7 @@ function formatDiff(value: number): string {
  * the app doesn't track other teams' results.
  */
 export default function StatisticsPage() {
+  const { team } = useAuth();
   const [competitionId, setCompetitionId] = useState<string | undefined>();
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(
     null,
@@ -253,7 +263,10 @@ export default function StatisticsPage() {
             <StatCardsGrid overview={overview} />
 
             {/* Trends charts */}
-            <TrendsSection trends={overview.trends} />
+            <TrendsSection
+              trends={overview.trends}
+              teamName={team?.name ?? "Our Team"}
+            />
 
             {/* Player stats + detail panel */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
@@ -453,8 +466,20 @@ function StatCard({
  *  TRENDS SECTION
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function TrendsSection({ trends }: { trends: TrendEntry[] }) {
+function TrendsSection({
+  trends,
+  teamName,
+}: {
+  trends: TrendEntry[];
+  teamName: string;
+}) {
+  const recentMatches = trends.slice(-10).reverse();
+  const [selectedId, setSelectedId] = useState(recentMatches[0]?.matchId);
   if (trends.length === 0) return null;
+
+  const selected =
+    recentMatches.find((match) => match.matchId === selectedId) ??
+    recentMatches[0]!;
 
   const maxGoals = Math.max(
     1,
@@ -471,10 +496,30 @@ function TrendsSection({ trends }: { trends: TrendEntry[] }) {
             Recent Form
           </h2>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {trends.slice(-8).map((t, i) => (
-            <ResultBadge key={i} result={t.result} />
+        <div className="flex flex-wrap gap-2" aria-label="Recent results">
+          {recentMatches.map((match) => (
+            <ResultBadge
+              key={match.matchId}
+              result={match.result}
+              selected={match.matchId === selected.matchId}
+              onSelect={() => setSelectedId(match.matchId)}
+            />
           ))}
+        </div>
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="text-sm font-medium text-foreground">
+            {selected.isHome
+              ? `${teamName} vs ${selected.opponent}`
+              : `${selected.opponent} vs ${teamName}`}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span className="font-semibold tabular-nums text-foreground">
+              {selected.isHome
+                ? `${selected.goalsFor}-${selected.goalsAgainst}`
+                : `${selected.goalsAgainst}-${selected.goalsFor}`}
+            </span>
+            <span>{formatMatchDateTime(selected.date)}</span>
+          </p>
         </div>
       </div>
 
@@ -565,23 +610,50 @@ function TrendsSection({ trends }: { trends: TrendEntry[] }) {
   );
 }
 
-function ResultBadge({ result }: { result: "W" | "D" | "L" }) {
+function ResultBadge({
+  result,
+  selected,
+  onSelect,
+}: {
+  result: "W" | "D" | "L";
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   const config = {
     W: { className: "bg-primary text-primary-foreground", label: "Win" },
     D: { className: "bg-muted text-foreground", label: "Draw" },
     L: { className: "bg-destructive text-primary-foreground", label: "Loss" },
   } as const;
 
+  const badgeClassName = cn(
+    "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
+    config[result].className,
+    onSelect &&
+      "transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+    selected
+      ? "scale-110 ring-2 ring-foreground/70 ring-offset-2 ring-offset-card"
+      : onSelect && "hover:scale-105",
+  );
+
+  if (!onSelect) {
+    return (
+      <span className={badgeClassName} title={config[result].label}>
+        {result}
+      </span>
+    );
+  }
+
   return (
-    <span
-      className={cn(
-        "inline-flex size-7 items-center justify-center rounded-full text-xs font-bold",
-        config[result].className,
-      )}
+    <button
+      type="button"
+      className={badgeClassName}
       title={config[result].label}
+      aria-label={`Show ${config[result].label.toLowerCase()} match details`}
+      aria-pressed={selected}
+      onClick={onSelect}
     >
       {result}
-    </span>
+    </button>
   );
 }
 
@@ -770,27 +842,24 @@ function AthleteStatsPanel({
             {stats.matches.map((m) => (
               <div
                 key={m.matchId}
-                className="flex items-center justify-between rounded-xl border border-border bg-background p-3"
+                className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background p-3"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">
                     vs. {m.opponent}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(m.date)}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{formatDate(m.date)}</span>
+                    <StartedTag started={m.started} />
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <ResultBadge result={m.result} />
                   <div className="text-right">
                     <p className="text-sm font-bold tabular-nums text-foreground">
                       {m.teamScore}–{m.opponentScore}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {m.goals > 0 && `${m.goals}G `}
-                      {m.assists > 0 && `${m.assists}A`}
-                      {m.goals === 0 && m.assists === 0 && "—"}
-                    </p>
+                    <MatchPerformance m={m} />
                   </div>
                 </div>
               </div>
@@ -825,6 +894,85 @@ function DetailStat({
         {value}
       </p>
     </div>
+  );
+}
+
+/** "Started"/"Sub" pill shown beside a match date in the athlete panel. */
+function StartedTag({ started }: { started: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        started
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {started ? "Started" : "Sub"}
+    </span>
+  );
+}
+
+/** Small coloured card glyph with its count, e.g. for bookings. */
+function CardGlyph({
+  count,
+  className,
+  label,
+}: {
+  count: number;
+  className: string;
+  label: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      title={`${count} ${label}${count === 1 ? "" : "s"}`}
+    >
+      <span className={cn("inline-block size-2 rounded-sm", className)} />
+      {count > 1 && <span className="tabular-nums">{count}</span>}
+    </span>
+  );
+}
+
+/**
+ * Compact per-match contribution line under the score: minutes played,
+ * goals, assists and cards. Zero or unrecorded values are omitted so a
+ * quiet match stays visually quiet.
+ */
+function MatchPerformance({ m }: { m: AthleteMatchBreakdown }) {
+  const hasContributions =
+    m.minutesPlayed !== null ||
+    m.goals > 0 ||
+    m.assists > 0 ||
+    m.yellowCards > 0 ||
+    m.redCards > 0;
+
+  if (!hasContributions) {
+    return <p className="text-[11px] text-muted-foreground">—</p>;
+  }
+
+  return (
+    <p className="flex flex-wrap items-center justify-end gap-x-1.5 text-[11px] text-muted-foreground">
+      {m.minutesPlayed !== null && (
+        <span className="tabular-nums">{m.minutesPlayed}'</span>
+      )}
+      {m.goals > 0 && <span className="tabular-nums">{m.goals}G</span>}
+      {m.assists > 0 && <span className="tabular-nums">{m.assists}A</span>}
+      {m.yellowCards > 0 && (
+        <CardGlyph
+          count={m.yellowCards}
+          className="bg-amber-400"
+          label="yellow card"
+        />
+      )}
+      {m.redCards > 0 && (
+        <CardGlyph
+          count={m.redCards}
+          className="bg-red-400"
+          label="red card"
+        />
+      )}
+    </p>
   );
 }
 

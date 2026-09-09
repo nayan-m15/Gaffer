@@ -25,6 +25,8 @@ const DATA_COLUMNS = [
   { key: "appearances", label: "APPS", className: "w-16 text-center" },
   { key: "goals", label: "GOALS", className: "w-16 text-center" },
   { key: "assists", label: "AST", className: "w-16 text-center" },
+  { key: "yellowCards", label: "YC", className: "w-14 text-center" },
+  { key: "redCards", label: "RC", className: "w-14 text-center" },
 ] as const;
 
 /**
@@ -140,6 +142,14 @@ export function RosterTable({
                   )}
                 >
                   {athlete.assists}
+                </td>
+
+                <td className="px-4 py-3 text-center font-semibold tabular-nums text-amber-400">
+                  {athlete.yellowCards}
+                </td>
+
+                <td className="px-4 py-3 text-center font-semibold tabular-nums text-red-400">
+                  {athlete.redCards}
                 </td>
 
                 {!readOnly && (

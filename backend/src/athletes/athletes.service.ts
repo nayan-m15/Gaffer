@@ -9,7 +9,13 @@ import {
   sql,
 } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes, playerClaimInvites, teams } from '../database/schema';
+import {
+  athleteMatchStats,
+  athletes,
+  matchEvents,
+  playerClaimInvites,
+  teams,
+} from '../database/schema';
 import type { CreateAthleteDto, UpdateAthleteDto } from './athletes.schemas';
 
 export type ClaimStatus = 'unclaimed' | 'invited' | 'claimed';
@@ -33,6 +39,30 @@ const claimStatus = sql<ClaimStatus>`case
   else 'unclaimed'
 end`;
 
+const appearances = sql<number>`coalesce((
+  select count(*)::int from ${athleteMatchStats}
+  where ${athleteMatchStats.athleteId} = ${athletes.id}
+), 0)`;
+
+function loggedEventTotal(
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+) {
+  return sql<number>`coalesce((
+    select count(*)::int from ${matchEvents}
+    where ${matchEvents.athleteId} = ${athletes.id}
+      and ${matchEvents.team} = 'own'
+      and ${matchEvents.eventType} = ${eventType}
+  ), 0)`;
+}
+
+const athleteStatistics = {
+  appearances,
+  goals: loggedEventTotal('goal'),
+  assists: loggedEventTotal('assist'),
+  yellowCards: loggedEventTotal('yellow_card'),
+  redCards: loggedEventTotal('red_card'),
+};
+
 @Injectable()
 export class AthletesService {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -54,6 +84,7 @@ export class AthletesService {
       .select({
         ...getTableColumns(athletes),
         claimStatus,
+        ...athleteStatistics,
       })
       .from(athletes)
       .leftJoin(
@@ -69,7 +100,10 @@ export class AthletesService {
 
   async findArchived(teamId: string) {
     return this.databaseService.database
-      .select()
+      .select({
+        ...getTableColumns(athletes),
+        ...athleteStatistics,
+      })
       .from(athletes)
       .where(and(eq(athletes.teamId, teamId), isNotNull(athletes.archivedAt)));
   }
@@ -144,6 +178,7 @@ export class AthletesService {
       .select({
         ...getTableColumns(athletes),
         claimStatus,
+        ...athleteStatistics,
       })
       .from(athletes)
       .leftJoin(
