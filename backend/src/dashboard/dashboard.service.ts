@@ -73,6 +73,7 @@ export class DashboardService {
         .select({
           id: matches.id,
           opponent: matches.opponentName,
+          isHome: matches.isHome,
           teamScore: matches.teamScore,
           opponentScore: matches.opponentScore,
           date: events.scheduledAt,
@@ -100,8 +101,11 @@ export class DashboardService {
       return {
         id: match.id,
         opponent: match.opponent,
+        isHome: match.isHome,
         result,
-        score: `${match.teamScore}-${match.opponentScore}`,
+        score: match.isHome
+          ? `${match.teamScore}-${match.opponentScore}`
+          : `${match.opponentScore}-${match.teamScore}`,
         date: match.date.toISOString(),
       };
     });

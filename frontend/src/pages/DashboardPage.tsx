@@ -52,6 +52,7 @@ interface SeasonSummaryData {
 interface RecentResult {
   id: string;
   opponent: string;
+  isHome: boolean;
   result: "W" | "D" | "L";
   score: string;
   date: string;
@@ -432,7 +433,15 @@ function SeasonSummaryCard({
  *  RECENT FORM  (Sprint 2 — deferred)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function ResultBadge({ result }: { result: "W" | "D" | "L" }) {
+function ResultBadge({
+  result,
+  selected,
+  onSelect,
+}: {
+  result: "W" | "D" | "L";
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const config = {
     W: { bg: "bg-primary", label: "Win" },
     D: { bg: "bg-muted", label: "Draw" },
@@ -441,21 +450,49 @@ function ResultBadge({ result }: { result: "W" | "D" | "L" }) {
   const { bg, label } = config[result];
 
   return (
-    <span
+    <button
+      type="button"
       className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
+        "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
         bg,
         result === "D" ? "text-foreground" : "text-primary-foreground",
+        selected
+          ? "scale-110 ring-2 ring-foreground/70 ring-offset-2 ring-offset-card"
+          : "hover:scale-105",
       )}
       title={label}
-      aria-label={`${label} result`}
+      aria-label={`Show ${label.toLowerCase()} match details`}
+      aria-pressed={selected}
+      onClick={onSelect}
     >
       {result}
-    </span>
+    </button>
   );
 }
 
-function RecentFormCard({ results }: { results: RecentResult[] }) {
+function formatRecentMatchDate(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function RecentFormCard({
+  results,
+  teamName,
+}: {
+  results: RecentResult[];
+  teamName: string;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(
+    results[0]?.id ?? null,
+  );
+  const recentResults = results.slice(0, 5);
+  const selected =
+    recentResults.find((result) => result.id === selectedId) ?? recentResults[0];
+
   return (
     <Card aria-label="Recent form">
       <SectionTitle
@@ -466,16 +503,26 @@ function RecentFormCard({ results }: { results: RecentResult[] }) {
       {results.length > 0 ? (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2" aria-label="Recent results">
-            {results.slice(0, 5).map((r) => (
-              <ResultBadge key={r.id} result={r.result} />
+            {recentResults.map((result) => (
+              <ResultBadge
+                key={result.id}
+                result={result.result}
+                selected={result.id === selected?.id}
+                onSelect={() => setSelectedId(result.id)}
+              />
             ))}
           </div>
           <div className="border-t border-border pt-3">
             <p className="text-sm font-medium text-foreground">
-              vs {results[0].opponent}
+              {selected.isHome
+                ? `${teamName} vs ${selected.opponent}`
+                : `${selected.opponent} vs ${teamName}`}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {results[0].score} \u00b7 {results[0].date}
+            <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+              <span className="font-semibold tabular-nums text-foreground">
+                {selected.score}
+              </span>
+              <span>{formatRecentMatchDate(selected.date)}</span>
             </p>
           </div>
         </div>
@@ -753,7 +800,10 @@ export default function DashboardPage() {
             <UpcomingEventsCard events={upcomingEvents} />
           </div>
           <div className="lg:col-span-2">
-            <RecentFormCard results={recentForm ?? []} />
+            <RecentFormCard
+              results={recentForm ?? []}
+              teamName={team?.name ?? "Our Team"}
+            />
           </div>
         </div>
 
