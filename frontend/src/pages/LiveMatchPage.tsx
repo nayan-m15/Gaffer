@@ -1022,7 +1022,7 @@ export default function LiveMatchPage() {
       : undefined;
   const pitchCallOwnIds = assistHighlightOwnIds ?? subOutHighlightOwnIds;
   const pitchCallOppIds = assistHighlightOppIds ?? subOutHighlightOppIds;
-  const pitchCallTone = assistPick ? "positive" : "warning";
+  const pitchCallTone = assistPick ? "assist" : "warning";
 
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
@@ -1410,22 +1410,22 @@ export default function LiveMatchPage() {
           <div
             role="status"
             data-callout="assist-pick"
-            className="live-match-callout live-callout-banner live-callout-banner-positive flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
+            className="live-match-callout live-callout-banner live-callout-banner-assist flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
           >
-            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#00d99a]/20 text-[#00d99a]">
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#3b82f6]/20 text-[#60a5fa]">
               <BootIcon className="size-5" />
             </span>
             <div className="relative z-[1] min-w-0 flex-1">
-              <p className="font-oswald text-sm tracking-[0.22em] text-[#00d99a]">
-                WHO ASSISTED?
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#60a5fa]">
+                GOAL LOGGED — SELECT THE ASSIST
               </p>
               <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
-                Goal logged — tap a teammate on the pitch who assisted, or skip
+                Tap the assisting teammate on the pitch, or choose no assist.
               </p>
             </div>
             <button
               type="button"
-              className="relative z-[1] rounded-lg border border-[#8e9ba8] px-3 py-1.5 font-oswald text-[10px] tracking-widest text-[#8e9ba8]"
+              className="relative z-[1] rounded-lg border border-[#60a5fa]/70 px-3 py-1.5 font-oswald text-[10px] tracking-widest text-[#93c5fd]"
               onClick={skipAssist}
             >
               NO ASSIST

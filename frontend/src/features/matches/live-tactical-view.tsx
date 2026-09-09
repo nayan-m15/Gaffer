@@ -276,7 +276,7 @@ function PlayerMarker({
   selected: boolean;
   stats: MarkerStats;
   callToAction?: boolean;
-  callToActionTone?: "warning" | "positive";
+  callToActionTone?: "warning" | "positive" | "assist";
   onClick: () => void;
 }) {
   const { pressing, onPointerDown, onAnimationEnd } = useTokenPress();
@@ -295,6 +295,7 @@ function PlayerMarker({
           "inline-flex rounded-md",
           callToAction && "live-token-call",
           callToAction && callToActionTone === "positive" && "live-token-call-positive",
+          callToAction && callToActionTone === "assist" && "live-token-call-assist",
         )}
       >
         <SquadToken
@@ -308,7 +309,7 @@ function PlayerMarker({
         />
       </span>
       {name ? (
-        <span className="pointer-events-none absolute left-1/2 top-full mt-0.5 max-w-[4.75rem] -translate-x-1/2 truncate text-[10px] font-semibold uppercase leading-none tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+        <span className="live-player-name pointer-events-none absolute left-1/2 top-full mt-0.5 max-w-[4.75rem] -translate-x-1/2 truncate text-[10px] font-semibold uppercase leading-none tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {name}
         </span>
       ) : null}
@@ -556,7 +557,7 @@ export function LivePitchPlayers({
   onSelectOpp: (player: OpponentMatchPlayer) => void;
   callToActionOwnIds?: Set<string>;
   callToActionOppIds?: Set<string>;
-  callToActionTone?: "warning" | "positive";
+  callToActionTone?: "warning" | "positive" | "assist";
   orientation?: "horizontal" | "vertical";
 }) {
   return (
@@ -622,7 +623,7 @@ function BenchPlayer({
       onClick={onClick}
       onPointerDown={onPointerDown}
       className={cn(
-        "live-marker-hit flex min-w-16 flex-col items-center focus-visible:outline-none",
+        "live-bench-player live-marker-hit flex min-w-16 flex-col items-center focus-visible:outline-none",
         selected && "is-selected",
       )}
     >
@@ -643,7 +644,7 @@ function BenchPlayer({
         />
       </span>
       {name ? (
-        <span className="mt-1 max-w-[4.5rem] truncate text-[8px] font-semibold uppercase tracking-wide text-[#c5ced6]">
+        <span className="live-bench-name mt-1 max-w-[4.5rem] truncate text-[8px] font-semibold uppercase tracking-wide text-[#c5ced6]">
           {name}
         </span>
       ) : null}
@@ -682,7 +683,7 @@ export function LiveBenchRow({
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center gap-3 py-0.5",
+        "live-bench-row flex min-w-0 items-center gap-3 py-0.5",
         orientation === "vertical"
           ? "h-full flex-col"
           : align === "right" && "flex-row-reverse",
@@ -690,7 +691,7 @@ export function LiveBenchRow({
     >
       <p
         className={cn(
-          "shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]",
+          "live-bench-label shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]",
           orientation === "vertical" ? "w-full text-center" : "w-24",
           callToAction && "text-[#ffbe2e]",
         )}
@@ -699,7 +700,7 @@ export function LiveBenchRow({
       </p>
       <div
         className={cn(
-          "flex min-w-0 items-end gap-3",
+          "live-bench-list flex min-w-0 items-end gap-3",
           orientation === "vertical"
             ? "min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-2 pb-3 pt-5"
             : "overflow-x-auto pb-3 pt-6",

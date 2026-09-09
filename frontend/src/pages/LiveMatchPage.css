@@ -66,10 +66,11 @@
 .live-match-layout {
   display: grid;
   grid-template-columns: minmax(0, 4fr) minmax(16rem, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-areas:
-    "score score"
+    "score ."
     "pitch activity"
+    "callout activity"
     "bench activity";
   min-height: 0;
 }
@@ -88,11 +89,7 @@
   overflow: hidden;
 }
 .live-match-callout {
-  z-index: 20;
-  grid-column: 1;
-  grid-row: 2 / 4;
-  align-self: end;
-  margin: 0.5rem;
+  grid-area: callout;
 }
 
 .live-pitch-panel-landscape {
@@ -105,10 +102,11 @@
 @media (max-width: 1024px) {
   .live-match-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto minmax(20rem, 28rem);
+    grid-template-rows: auto auto auto auto minmax(20rem, 28rem);
     grid-template-areas:
       "score"
       "pitch"
+      "callout"
       "bench"
       "activity";
   }
@@ -119,19 +117,64 @@
   }
 
   .live-pitch-panel-landscape {
-    min-height: 18rem;
+    min-height: 0;
   }
 
   .live-match-bench-area {
-    max-height: 16rem;
+    grid-template-columns: 1fr;
+    max-height: 15rem;
+  }
+
+  .live-pitch-panel-landscape .live-squad-token {
+    width: 1.7rem;
+    height: 1.7rem;
+    font-size: 0.62rem;
+  }
+
+  .live-pitch-panel-landscape .live-player-name {
+    max-width: 2.8rem;
+    font-size: 0.38rem;
+    letter-spacing: 0;
+  }
+
+  .live-match-bench-area .live-bench-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2rem;
+  }
+
+  .live-match-bench-area .live-bench-label {
+    width: 100%;
+    text-align: left;
+    font-size: 0.5rem;
+  }
+
+  .live-match-bench-area .live-bench-list {
+    width: 100%;
+    flex-direction: row;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.1rem 0.35rem;
+  }
+
+  .live-match-bench-area .live-bench-player {
+    min-width: 2.2rem;
+  }
+
+  .live-match-bench-area .live-squad-token {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.65rem;
+  }
+
+  .live-match-bench-area .live-bench-name {
+    max-width: 2.2rem;
+    font-size: 0.38rem;
+    letter-spacing: 0;
   }
 
   .live-match-callout {
-    position: fixed;
-    right: 0.75rem;
-    bottom: 0.75rem;
-    left: 0.75rem;
-    margin: 0;
+    position: static;
   }
 
   .live-match-activity { min-height: 20rem; }
@@ -311,6 +354,10 @@
   --callout-color: var(--lm-green);
 }
 
+.live-callout-banner-assist {
+  --callout-color: #3b82f6;
+}
+
 .live-callout-banner::before {
   content: "";
   position: absolute;
@@ -334,6 +381,10 @@
 
 .live-token-call-positive {
   --call-color: var(--lm-green);
+}
+
+.live-token-call-assist {
+  --call-color: #3b82f6;
 }
 
 @media (prefers-reduced-motion: reduce) {
