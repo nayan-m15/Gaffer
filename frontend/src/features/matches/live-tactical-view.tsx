@@ -319,10 +319,22 @@ function PlayerMarker({
 function PositionedMarker({
   x,
   y,
+  orientation = "horizontal",
   ...markerProps
-}: ComponentProps<typeof PlayerMarker> & { x: number; y: number }) {
+}: ComponentProps<typeof PlayerMarker> & {
+  x: number;
+  y: number;
+  orientation?: "horizontal" | "vertical";
+}) {
   return (
-    <div className="absolute" style={{ left: `${x}%`, top: `${y}%` }}>
+    <div
+      className="absolute"
+      style={
+        orientation === "vertical"
+          ? { left: `${y}%`, top: `${100 - x}%` }
+          : { left: `${x}%`, top: `${y}%` }
+      }
+    >
       <PlayerMarker {...markerProps} />
     </div>
   );
@@ -335,6 +347,7 @@ export function LivePitch({
   ownHalf = "left",
   ownColor,
   oppColor,
+  orientation = "horizontal",
 }: {
   children: ReactNode;
   className?: string;
@@ -342,6 +355,7 @@ export function LivePitch({
   ownHalf?: PitchHalf;
   ownColor?: string;
   oppColor?: string;
+  orientation?: "horizontal" | "vertical";
 }) {
   const leftColor = ownHalf === "left" ? ownColor : oppColor;
   const rightColor = ownHalf === "left" ? oppColor : ownColor;
@@ -359,13 +373,17 @@ export function LivePitch({
       if (width < 1 || height < 1) {
         return;
       }
-      setViewLength((width / height) * 100);
+      setViewLength(
+        orientation === "vertical"
+          ? (height / width) * 100
+          : (width / height) * 100,
+      );
     };
     syncViewBox();
     const observer = new ResizeObserver(syncViewBox);
     observer.observe(panel);
     return () => observer.disconnect();
-  }, []);
+  }, [orientation]);
 
   return (
     <div
@@ -376,12 +394,20 @@ export function LivePitch({
       )}
     >
       <div className="live-pitch">
-        <div className="live-pitch-grass absolute inset-0" />
+        <div
+          className={cn(
+            "live-pitch-grass absolute inset-0",
+            orientation === "vertical" && "live-pitch-grass-vertical",
+          )}
+        />
         {layout === "full" && leftColor && rightColor ? (
           <div
             className="pointer-events-none absolute inset-0"
             style={{
-              background: `linear-gradient(to right, color-mix(in oklab, ${leftColor} 18%, transparent) 0%, transparent 20%, transparent 80%, color-mix(in oklab, ${rightColor} 18%, transparent) 100%)`,
+              background:
+                orientation === "vertical"
+                  ? `linear-gradient(to top, color-mix(in oklab, ${leftColor} 18%, transparent) 0%, transparent 20%, transparent 80%, color-mix(in oklab, ${rightColor} 18%, transparent) 100%)`
+                  : `linear-gradient(to right, color-mix(in oklab, ${leftColor} 18%, transparent) 0%, transparent 20%, transparent 80%, color-mix(in oklab, ${rightColor} 18%, transparent) 100%)`,
             }}
           />
         ) : null}
@@ -394,16 +420,28 @@ export function LivePitch({
           />
         ) : null}
         <svg
-          viewBox={`0 0 ${viewLength} 100`}
+          viewBox={
+            orientation === "vertical"
+              ? `0 0 100 ${viewLength}`
+              : `0 0 ${viewLength} 100`
+          }
           className="absolute inset-0 size-full text-white/70"
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          {layout === "own" ? (
-            <OwnHalfMarkings half={ownHalf} length={viewLength} />
-          ) : (
-            <FullPitchMarkings length={viewLength} />
-          )}
+          <g
+            transform={
+              orientation === "vertical"
+                ? `matrix(0 -1 1 0 0 ${viewLength})`
+                : undefined
+            }
+          >
+            {layout === "own" ? (
+              <OwnHalfMarkings half={ownHalf} length={viewLength} />
+            ) : (
+              <FullPitchMarkings length={viewLength} />
+            )}
+          </g>
         </svg>
         <div className="absolute inset-0">{children}</div>
       </div>
@@ -505,6 +543,7 @@ export function LivePitchPlayers({
   callToActionOwnIds,
   callToActionOppIds,
   callToActionTone = "positive",
+  orientation = "horizontal",
 }: {
   ownPlaced: Array<{ athlete: MatchSquadAthlete; x: number; y: number }>;
   oppPlaced: Array<{ player: OpponentMatchPlayer; x: number; y: number }>;
@@ -518,6 +557,7 @@ export function LivePitchPlayers({
   callToActionOwnIds?: Set<string>;
   callToActionOppIds?: Set<string>;
   callToActionTone?: "warning" | "positive";
+  orientation?: "horizontal" | "vertical";
 }) {
   return (
     <>
@@ -526,6 +566,7 @@ export function LivePitchPlayers({
           key={placed.athlete.id}
           x={placed.x}
           y={placed.y}
+          orientation={orientation}
           number={shirtNumberLabel(placed.athlete.squadNumber)}
           name={surnameOf(placed.athlete)}
           color={ownColor}
@@ -542,6 +583,7 @@ export function LivePitchPlayers({
             key={placed.player.id}
             x={placed.x}
             y={placed.y}
+            orientation={orientation}
             number={shirtNumberLabel(placed.player.shirtNumber)}
             name={opponentSurname(placed.player, visibility)}
             color={oppColor}
@@ -621,6 +663,7 @@ export function LiveBenchRow({
   onSelectOpp,
   align = "left",
   callToAction = false,
+  orientation = "horizontal",
 }: {
   label: string;
   color: string;
@@ -633,18 +676,22 @@ export function LiveBenchRow({
   onSelectOpp?: (player: OpponentMatchPlayer) => void;
   align?: "left" | "right";
   callToAction?: boolean;
+  orientation?: "horizontal" | "vertical";
 }) {
   const empty = (athletes?.length ?? 0) === 0 && (opponents?.length ?? 0) === 0;
   return (
     <div
       className={cn(
         "flex min-w-0 items-center gap-3 py-0.5",
-        align === "right" && "flex-row-reverse",
+        orientation === "vertical"
+          ? "h-full flex-col"
+          : align === "right" && "flex-row-reverse",
       )}
     >
       <p
         className={cn(
-          "w-24 shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]",
+          "shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]",
+          orientation === "vertical" ? "w-full text-center" : "w-24",
           callToAction && "text-[#ffbe2e]",
         )}
       >
@@ -652,7 +699,10 @@ export function LiveBenchRow({
       </p>
       <div
         className={cn(
-          "flex min-w-0 items-end gap-3 overflow-x-auto pt-6 pb-3",
+          "flex min-w-0 items-end gap-3",
+          orientation === "vertical"
+            ? "min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-2 pb-3 pt-5"
+            : "overflow-x-auto pb-3 pt-6",
           callToAction ? "px-2" : "px-1",
         )}
       >

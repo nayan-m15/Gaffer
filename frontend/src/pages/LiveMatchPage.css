@@ -16,6 +16,8 @@
   background: var(--lm-bg);
   color: var(--lm-white);
   min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .live-match .font-oswald {
@@ -49,6 +51,90 @@
     #164530 7.14%,
     #164530 14.28%
   );
+}
+
+.live-pitch-grass-vertical {
+  background: repeating-linear-gradient(
+    to bottom,
+    #1b4d36 0,
+    #1b4d36 7.14%,
+    #164530 7.14%,
+    #164530 14.28%
+  );
+}
+
+.live-match-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(16rem, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "score score"
+    "pitch activity"
+    "bench activity";
+  min-height: 0;
+}
+
+.live-match-score { grid-area: score; }
+.live-match-pitch-area {
+  grid-area: pitch;
+  overflow: hidden;
+}
+.live-match-activity { grid-area: activity; min-height: 0; }
+.live-match-activity > section { height: 100%; }
+.live-match-bench-area {
+  grid-area: bench;
+  min-height: 0;
+  max-height: 9rem;
+  overflow: hidden;
+}
+.live-match-callout {
+  z-index: 20;
+  grid-column: 1;
+  grid-row: 2 / 4;
+  align-self: end;
+  margin: 0.5rem;
+}
+
+.live-pitch-panel-landscape {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 105 / 58;
+}
+
+@media (max-width: 1024px) {
+  .live-match-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto minmax(20rem, 28rem);
+    grid-template-areas:
+      "score"
+      "pitch"
+      "bench"
+      "activity";
+  }
+
+  .live-match {
+    height: auto;
+    overflow: auto;
+  }
+
+  .live-pitch-panel-landscape {
+    min-height: 18rem;
+  }
+
+  .live-match-bench-area {
+    max-height: 16rem;
+  }
+
+  .live-match-callout {
+    position: fixed;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    margin: 0;
+  }
+
+  .live-match-activity { min-height: 20rem; }
 }
 
 @keyframes live-timeline-in {

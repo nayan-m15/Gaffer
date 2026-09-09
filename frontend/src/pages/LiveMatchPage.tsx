@@ -278,6 +278,7 @@ export default function LiveMatchPage() {
   const baseRef = useRef(0);
 
   const [target, setTarget] = useState<LogTarget | null>(null);
+  const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [composer, setComposer] = useState<Composer>({ kind: "closed" });
   useEffect(() => {
     console.log("[live-callout:render]", {
@@ -666,6 +667,7 @@ export default function LiveMatchPage() {
       setActionError("Tap a player marker to log an event.");
       return;
     }
+    setEventPickerOpen(false);
     setActionError(null);
     const benchTarget =
       (target.kind === "own" && !ownPitchIds.has(target.athlete.id)) ||
@@ -881,6 +883,9 @@ export default function LiveMatchPage() {
     }
     setComposer({ kind: "closed" });
     setTarget({ kind: "own", athlete });
+    setEventPickerOpen(
+      period === "first_half" || period === "second_half",
+    );
     setActionError(null);
   };
 
@@ -907,6 +912,9 @@ export default function LiveMatchPage() {
     }
     setComposer({ kind: "closed" });
     setTarget({ kind: "opp", player });
+    setEventPickerOpen(
+      period === "first_half" || period === "second_half",
+    );
     setActionError(null);
   };
 
@@ -980,7 +988,6 @@ export default function LiveMatchPage() {
   const benchIncomingCallout = isBenchIncomingCallout(composer.kind);
   const subOutCallout = composer.kind === "sub-out";
   const assistPick = composer.kind === "assist-pick";
-  const dimEventGrid = dimEventGridFor(composer.kind);
   const ownBenchCallToAction =
     (composer.kind === "mandatory-sub-in" || composer.kind === "sub-in") &&
     composer.team === "own";
@@ -1149,8 +1156,8 @@ export default function LiveMatchPage() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-2 px-4 pb-3 pt-0">
-        <div className="mx-auto w-full max-w-5xl shrink-0">
+      <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
+        <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="flex flex-col items-end">
               <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
@@ -1192,47 +1199,53 @@ export default function LiveMatchPage() {
               </span>
             </span>
           </div>
+
+          {period === "half_time" && (
+            <PeriodSummary
+              title="HALF-TIME"
+              ownName={ownName}
+              oppName={oppName}
+              timeline={timeline}
+              onContinue={startSecondHalf}
+              continueLabel="START 2ND HALF"
+              onBack={backToFirstHalf}
+              backLabel="← Back to 1st Half"
+              compact
+            />
+          )}
+
+          {period === "full_time" && (
+            <PeriodSummary
+              title="FULL TIME"
+              ownName={ownName}
+              oppName={oppName}
+              timeline={timeline}
+              onContinue={() => setEndOpen(true)}
+              continueLabel="END MATCH & SAVE REPORT"
+              continueDisabled={
+                match.eventStatus === "completed" || finishMatch.isPending
+              }
+              compact
+            />
+          )}
+
+          {actionError && (
+            <p
+              role="alert"
+              className="shrink-0 text-center text-xs text-[#ff5b5f]"
+            >
+              {actionError}
+            </p>
+          )}
         </div>
 
-        {period === "half_time" && (
-          <PeriodSummary
-            title="HALF-TIME"
-            ownName={ownName}
-            oppName={oppName}
-            timeline={timeline}
-            onContinue={startSecondHalf}
-            continueLabel="START 2ND HALF"
-            onBack={backToFirstHalf}
-            backLabel="← Back to 1st Half"
-            compact
-          />
-        )}
-
-        {period === "full_time" && (
-          <PeriodSummary
-            title="FULL TIME"
-            ownName={ownName}
-            oppName={oppName}
-            timeline={timeline}
-            onContinue={() => setEndOpen(true)}
-            continueLabel="END MATCH & SAVE REPORT"
-            continueDisabled={match.eventStatus === "completed" || finishMatch.isPending}
-            compact
-          />
-        )}
-
-        {actionError && (
-          <p role="alert" className="shrink-0 text-center text-xs text-[#ff5b5f]">
-            {actionError}
-          </p>
-        )}
-
-        <section className="flex shrink-0 flex-col">
+        <section className="live-match-pitch-area flex min-h-0 flex-col">
           <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
             Tactical view
           </h2>
-          <div className="relative">
+          <div className="relative min-h-0 flex-1">
             <LivePitch
+              className="live-pitch-panel-landscape"
               layout={visibility === "none" ? "own" : "full"}
               ownHalf={ownHalf}
               ownColor={ownColor}
@@ -1265,6 +1278,7 @@ export default function LiveMatchPage() {
                     }
                     setComposer({ kind: "closed" });
                     setTarget({ kind: "opp-generic" });
+                    setEventPickerOpen(liveLogging);
                     setActionError(null);
                   }}
                   className={cn(
@@ -1305,7 +1319,7 @@ export default function LiveMatchPage() {
 
         <section
           className={cn(
-            "grid shrink-0 grid-cols-2 gap-3 rounded-xl border bg-[#0c1218] px-3 py-1.5",
+            "live-match-bench-area grid min-h-0 grid-cols-2 gap-1 rounded-xl border bg-[#0c1218] px-1.5 py-2",
             benchIncomingCallout || subOutCallout
               ? "border-[#ffbe2e]/55"
               : assistPick
@@ -1313,55 +1327,27 @@ export default function LiveMatchPage() {
                 : "border-[#1c2b36]",
           )}
         >
-          {ownHalf === "left" ? (
-            <>
-              <LiveBenchRow
-                label={`${ownAbbrev} bench`}
-                color={ownColor}
-                athletes={ownBench}
-                timeline={timeline}
-                selectedKey={selectedKey}
-                onSelectOwn={selectOwn}
-                align="left"
-                callToAction={ownBenchCallToAction}
-              />
-              <LiveBenchRow
-                label={`${oppAbbrev} bench`}
-                color={oppColor}
-                opponents={oppBench}
-                visibility={visibility}
-                timeline={timeline}
-                selectedKey={selectedKey}
-                onSelectOpp={selectOpp}
-                align="right"
-                callToAction={oppBenchCallToAction}
-              />
-            </>
-          ) : (
-            <>
-              <LiveBenchRow
-                label={`${oppAbbrev} bench`}
-                color={oppColor}
-                opponents={oppBench}
-                visibility={visibility}
-                timeline={timeline}
-                selectedKey={selectedKey}
-                onSelectOpp={selectOpp}
-                align="left"
-                callToAction={oppBenchCallToAction}
-              />
-              <LiveBenchRow
-                label={`${ownAbbrev} bench`}
-                color={ownColor}
-                athletes={ownBench}
-                timeline={timeline}
-                selectedKey={selectedKey}
-                onSelectOwn={selectOwn}
-                align="right"
-                callToAction={ownBenchCallToAction}
-              />
-            </>
-          )}
+          <LiveBenchRow
+            label={`${ownAbbrev} bench`}
+            color={ownColor}
+            athletes={ownBench}
+            timeline={timeline}
+            selectedKey={selectedKey}
+            onSelectOwn={selectOwn}
+            callToAction={ownBenchCallToAction}
+            align="left"
+          />
+          <LiveBenchRow
+            label={`${oppAbbrev} bench`}
+            color={oppColor}
+            opponents={oppBench}
+            visibility={visibility}
+            timeline={timeline}
+            selectedKey={selectedKey}
+            onSelectOpp={selectOpp}
+            callToAction={oppBenchCallToAction}
+            align="right"
+          />
         </section>
 
         {composer.kind === "mandatory-sub-in" || composer.kind === "sub-in" ? (
@@ -1372,7 +1358,7 @@ export default function LiveMatchPage() {
                 ? "mandatory-sub"
                 : "voluntary-sub-in"
             }
-            className="live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
+            className="live-match-callout live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
           >
             <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
               {composer.kind === "mandatory-sub-in" ? (
@@ -1403,7 +1389,7 @@ export default function LiveMatchPage() {
           <div
             role="alert"
             data-callout="voluntary-sub-out"
-            className="live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
+            className="live-match-callout live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
           >
             <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
               <ArrowLeftRight className="size-5" aria-hidden="true" />
@@ -1424,7 +1410,7 @@ export default function LiveMatchPage() {
           <div
             role="status"
             data-callout="assist-pick"
-            className="live-callout-banner live-callout-banner-positive flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
+            className="live-match-callout live-callout-banner live-callout-banner-positive flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
           >
             <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#00d99a]/20 text-[#00d99a]">
               <BootIcon className="size-5" />
@@ -1447,7 +1433,7 @@ export default function LiveMatchPage() {
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="live-match-activity min-h-0">
           <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5">
             <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
               Match log
@@ -1526,91 +1512,80 @@ export default function LiveMatchPage() {
             )}
           </section>
 
-          <section
-            className="relative flex min-h-0 flex-col overflow-y-auto rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5"
-            inert={dimEventGrid || undefined}
-          >
-            {dimEventGrid ? (
-              <div
-                className="absolute inset-0 z-10 rounded-xl bg-[#070d12]/60"
-                aria-hidden="true"
-              />
-            ) : null}
-            <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
-              {loggingForLabel(target, visibility)}
-            </h2>
-            <div className="mt-2 grid grid-cols-1 gap-2">
-              <LogButton
-                label="Goal"
-                color="#00d99a"
-                disabled={!pitchLogEnabled}
-                onClick={() => handleAction("goal")}
-                icon={<SoccerBallIcon className="size-7" />}
-              />
-              <LogButton
-                label="Yellow"
-                color="#f5c518"
-                disabled={!logEnabled}
-                onClick={() => handleAction("yellow_card")}
-                icon={
-                  <span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />
-                }
-              />
-              <LogButton
-                label="Red"
-                color="#ff5b5f"
-                disabled={!logEnabled}
-                onClick={() => handleAction("red_card")}
-                icon={
-                  <span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
-                }
-              />
-              <LogButton
-                label="Substitution"
-                color="#f5c518"
-                disabled={!logEnabled}
-                onClick={() => {
-                  const selectedOnPitch =
-                    target?.kind === "own"
-                      ? ownPitchIds.has(target.athlete.id)
-                      : target?.kind === "opp"
-                        ? oppPitchIds.has(target.player.id)
-                        : false;
-                  const nextKind =
-                    target == null
-                      ? "none"
-                      : target.kind === "opp-generic"
-                        ? "sub-in"
-                        : selectedOnPitch
-                          ? "sub-in"
-                          : "sub-out";
-                  console.log("[live-callout:sub-button]", {
-                    targetKind: target?.kind,
-                    selectedOnPitch,
-                    nextKind,
-                  });
-                  handleAction("substitution");
-                }}
-                icon={<ArrowLeftRight className="size-6" />}
-              />
-              <LogButton
-                label="Penalty"
-                color="#20e6a6"
-                disabled={!pitchLogEnabled}
-                onClick={() => handleAction("penalty")}
-                icon={<Target className="size-7" />}
-              />
-              <LogButton
-                label="Injury"
-                color="#fb923c"
-                disabled={!pitchLogEnabled}
-                onClick={() => handleAction("injury")}
-                icon={<HeartPulse className="size-7" />}
-              />
-            </div>
-          </section>
         </div>
       </div>
+
+      {eventPickerOpen && target && (
+        <Overlay onClose={() => setEventPickerOpen(false)} wide>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                Log match event
+              </p>
+              <p className="mt-1 font-oswald text-2xl tracking-widest text-white">
+                {loggingForLabel(target, visibility).replace("LOGGING FOR ", "")}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close event menu"
+              className="rounded-lg border border-[#233747] px-3 py-1.5 text-sm text-[#8e9ba8] hover:text-white"
+              onClick={() => setEventPickerOpen(false)}
+            >
+              CLOSE
+            </button>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <LogButton
+              label="Goal"
+              color="#00d99a"
+              disabled={!pitchLogEnabled}
+              onClick={() => handleAction("goal")}
+              icon={<SoccerBallIcon className="size-7" />}
+            />
+            <LogButton
+              label="Yellow"
+              color="#f5c518"
+              disabled={!logEnabled}
+              onClick={() => handleAction("yellow_card")}
+              icon={<span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />}
+            />
+            <LogButton
+              label="Red"
+              color="#ff5b5f"
+              disabled={!logEnabled}
+              onClick={() => handleAction("red_card")}
+              icon={<span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />}
+            />
+            <LogButton
+              label="Substitution"
+              color="#f5c518"
+              disabled={!logEnabled}
+              onClick={() => handleAction("substitution")}
+              icon={<ArrowLeftRight className="size-6" />}
+            />
+            <LogButton
+              label="Penalty"
+              color="#20e6a6"
+              disabled={!pitchLogEnabled}
+              onClick={() => handleAction("penalty")}
+              icon={<Target className="size-7" />}
+            />
+            <LogButton
+              label="Injury"
+              color="#fb923c"
+              disabled={!pitchLogEnabled}
+              onClick={() => handleAction("injury")}
+              icon={<HeartPulse className="size-7" />}
+            />
+          </div>
+          {targetIsBench && (
+            <p className="mt-3 text-xs text-[#8e9ba8]">
+              Bench players can receive cards or be selected for a substitution.
+            </p>
+          )}
+        </Overlay>
+      )}
 
       {toast && (
         <div
@@ -1835,9 +1810,11 @@ function LogButton({
 function Overlay({
   children,
   onClose,
+  wide = false,
 }: {
   children: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 sm:items-center">
@@ -1847,7 +1824,14 @@ function Overlay({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[#1c2b36] bg-[#070d12] p-5">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          "relative z-10 w-full rounded-2xl border border-[#1c2b36] bg-[#070d12] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+          wide ? "max-w-2xl" : "max-w-md",
+        )}
+      >
         {children}
       </div>
     </div>
