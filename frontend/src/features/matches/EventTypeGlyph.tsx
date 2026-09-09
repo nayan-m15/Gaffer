@@ -1,5 +1,12 @@
+import {
+  ArrowLeftRight,
+  ChevronsRight,
+  HeartPulse,
+  Target,
+} from "lucide-react";
 import type { MatchEventType } from "./types";
 import { EVENT_COLOR } from "./event-visuals";
+import { BootIcon, SoccerBallIcon } from "./match-icons";
 
 function CardGlyph({ color }: { color: string }) {
   return (
@@ -42,28 +49,28 @@ export function EventTypeGlyph({
   }
 
   const color = EVENT_COLOR[eventType];
-  const symbol =
-    eventType === "goal"
-      ? "●"
-      : eventType === "key_pass"
-        ? "»"
-        : eventType === "substitution"
-          ? "⇄"
-          : eventType === "penalty"
-            ? "P"
-            : eventType === "injury"
-              ? "+"
-              : eventType === "assist"
-                ? "A"
-                : "•";
+  const icon =
+    eventType === "goal" ? (
+      <SoccerBallIcon className="size-4" />
+    ) : eventType === "assist" ? (
+      <BootIcon className="size-[18px]" />
+    ) : eventType === "key_pass" ? (
+      <ChevronsRight className="size-4" />
+    ) : eventType === "substitution" ? (
+      <ArrowLeftRight className="size-3.5" />
+    ) : eventType === "penalty" ? (
+      <Target className="size-3.5" />
+    ) : eventType === "injury" ? (
+      <HeartPulse className="size-3.5" />
+    ) : null;
 
   return (
     <span
-      className="inline-flex size-5 shrink-0 items-center justify-center font-oswald text-[11px] leading-none"
+      className="inline-flex size-5 shrink-0 items-center justify-center"
       style={{ color }}
       aria-hidden="true"
     >
-      {symbol}
+      {icon}
     </span>
   );
 }

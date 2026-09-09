@@ -12,8 +12,9 @@ export const createMatchLogEventSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(50, 'Opponent label must be 50 characters or fewer.')
+    .max(120, 'Opponent label must be 120 characters or fewer.')
     .optional(),
+  opponentPlayerId: z.uuid().optional(),
   minute: z
     .number()
     .int('Minute must be a whole number.')
@@ -34,9 +35,10 @@ export const updateMatchLogEventSchema = z
       .string()
       .trim()
       .min(1)
-      .max(50, 'Opponent label must be 50 characters or fewer.')
+      .max(120, 'Opponent label must be 120 characters or fewer.')
       .nullable()
       .optional(),
+    opponentPlayerId: z.uuid().nullable().optional(),
     minute: z
       .number()
       .int('Minute must be a whole number.')
@@ -55,6 +57,7 @@ export const updateMatchLogEventSchema = z
     (value) =>
       value.athleteId !== undefined ||
       value.opponentLabel !== undefined ||
+      value.opponentPlayerId !== undefined ||
       value.minute !== undefined ||
       value.eventType !== undefined ||
       value.detail !== undefined,

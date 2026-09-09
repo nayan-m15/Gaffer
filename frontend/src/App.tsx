@@ -15,6 +15,7 @@ import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import AthletesPage from '@/pages/AthletesPage'
 import EventsPage from '@/pages/EventsPage'
 import ConfirmSquadPage from '@/pages/ConfirmSquadPage'
+import OpponentSquadSetupPage from '@/pages/OpponentSquadSetupPage'
 import LiveLoggerPage from '@/pages/LiveLoggerPage'
 import LiveMatchPage from '@/pages/LiveMatchPage'
 import MatchReportPage from '@/pages/MatchReportPage'
@@ -127,7 +128,12 @@ function App() {
                 <ConfirmSquadPage />
               </RequireTeam>
             }
-          />
+          >
+            <Route
+              path="opponent"
+              element={<OpponentSquadSetupPage />}
+            />
+          </Route>
           <Route
             path="/live-logger"
             element={

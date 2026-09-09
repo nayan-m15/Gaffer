@@ -111,6 +111,9 @@ export const athleteStatus = pgEnum('athlete_status', [
 export const teams = pgTable('teams', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
+  // Club kit colour; used as the default for each match's own-team colour
+  // and overridable per fixture (away kits / clashes).
+  primaryColor: text('primary_color'),
   ...timestamps,
 });
 
@@ -331,6 +334,13 @@ export const competitionType = pgEnum('competition_type', [
   'friendly',
 ]);
 
+// How much opponent-player identity the coach records for a given match.
+export const opponentSquadVisibility = pgEnum('opponent_squad_visibility', [
+  'none',
+  'numbers',
+  'full',
+]);
+
 // A league or cup the team is competing in this season.
 export const competitions = pgTable(
   'competitions',
@@ -364,9 +374,76 @@ export const matches = pgTable(
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
     opponentScore: integer('opponent_score').default(0).notNull(),
+    // Saved game plan this match sheet was based on. Null when the coach
+    // locked a squad without picking a named plan (legacy flow).
+    gamePlanId: uuid('game_plan_id').references(() => gamePlans.id, {
+      onDelete: 'set null',
+    }),
+    opponentSquadVisibility: opponentSquadVisibility(
+      'opponent_squad_visibility',
+    )
+      .default('none')
+      .notNull(),
+    teamColor: text('team_color'),
+    opponentColor: text('opponent_color'),
     ...timestamps,
   },
-  (table) => [index('matches_competition_id_index').on(table.competitionId)],
+  (table) => [
+    index('matches_competition_id_index').on(table.competitionId),
+    index('matches_game_plan_id_index').on(table.gamePlanId),
+  ],
+);
+
+/**
+ * Shirt-position abbreviations stored on own athletes and opponent players.
+ * Matches the roster picker plus every label `POSITION_ROLE_MAP` understands
+ * for formation auto-fill (GK, CB, LB, RB, CM, LW, RW, ST, …).
+ */
+export const PLAYER_POSITIONS = [
+  'GK',
+  'CB',
+  'LB',
+  'RB',
+  'LWB',
+  'RWB',
+  'CDM',
+  'CM',
+  'CAM',
+  'DM',
+  'LM',
+  'RM',
+  'LAM',
+  'RAM',
+  'AM',
+  'ST',
+  'LW',
+  'RW',
+  'CF',
+] as const;
+export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
+
+// Per-match opponent players. Empty when visibility is `none`. `name` is
+// null in numbers-only mode and required in full mode. `position` is optional
+// so numbers-only / unknown-formation squads still persist without a XI.
+export const opponentMatchPlayers = pgTable(
+  'opponent_match_players',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    shirtNumber: integer('shirt_number').notNull(),
+    name: text('name'),
+    position: text('position'),
+    ...timestamps,
+  },
+  (table) => [
+    index('opponent_match_players_match_id_index').on(table.matchId),
+    uniqueIndex('opponent_match_players_match_number_unique').on(
+      table.matchId,
+      table.shirtNumber,
+    ),
+  ],
 );
 
 // One row per athlete per match. Populated by the (future) live match
@@ -446,6 +523,10 @@ export const matchEvents = pgTable(
     }),
     team: matchEventTeam('team').notNull(),
     opponentLabel: text('opponent_label'),
+    opponentPlayerId: uuid('opponent_player_id').references(
+      () => opponentMatchPlayers.id,
+      { onDelete: 'set null' },
+    ),
     eventType: matchEventType('event_type').notNull(),
     minute: integer('minute').notNull(),
     detail: text('detail'),
@@ -455,5 +536,8 @@ export const matchEvents = pgTable(
     manuallyAdjusted: boolean('manually_adjusted').default(false).notNull(),
     ...timestamps,
   },
-  (table) => [index('match_events_match_id_index').on(table.matchId)],
+  (table) => [
+    index('match_events_match_id_index').on(table.matchId),
+    index('match_events_opponent_player_id_index').on(table.opponentPlayerId),
+  ],
 );

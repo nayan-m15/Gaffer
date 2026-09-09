@@ -15,6 +15,9 @@
   font-family: "Inter Variable", Inter, system-ui, sans-serif;
   background: var(--lm-bg);
   color: var(--lm-white);
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .live-match .font-oswald {
@@ -23,6 +26,158 @@
 
 .live-match .font-display {
   font-family: var(--font-display);
+}
+
+.live-pitch-panel {
+  width: 100%;
+  height: 48vh;
+  min-height: 16rem;
+  background: #123528;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+}
+
+.live-pitch {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.live-pitch-grass {
+  background: repeating-linear-gradient(
+    to right,
+    #1b4d36 0,
+    #1b4d36 7.14%,
+    #164530 7.14%,
+    #164530 14.28%
+  );
+}
+
+.live-pitch-grass-vertical {
+  background: repeating-linear-gradient(
+    to bottom,
+    #1b4d36 0,
+    #1b4d36 7.14%,
+    #164530 7.14%,
+    #164530 14.28%
+  );
+}
+
+.live-match-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(16rem, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "score ."
+    "pitch activity"
+    "callout activity"
+    "bench activity";
+  min-height: 0;
+}
+
+.live-match-score { grid-area: score; }
+.live-match-pitch-area {
+  grid-area: pitch;
+  overflow: hidden;
+}
+.live-match-activity { grid-area: activity; min-height: 0; }
+.live-match-activity > section { height: 100%; }
+.live-match-bench-area {
+  grid-area: bench;
+  min-height: 0;
+  max-height: 9rem;
+  overflow: hidden;
+}
+.live-match-callout {
+  grid-area: callout;
+}
+
+.live-pitch-panel-landscape {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 105 / 58;
+}
+
+@media (max-width: 1024px) {
+  .live-match-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto minmax(20rem, 28rem);
+    grid-template-areas:
+      "score"
+      "pitch"
+      "callout"
+      "bench"
+      "activity";
+  }
+
+  .live-match {
+    height: auto;
+    overflow: auto;
+  }
+
+  .live-pitch-panel-landscape {
+    min-height: 0;
+  }
+
+  .live-match-bench-area {
+    grid-template-columns: 1fr;
+    max-height: 15rem;
+  }
+
+  .live-pitch-panel-landscape .live-squad-token {
+    width: 1.7rem;
+    height: 1.7rem;
+    font-size: 0.62rem;
+  }
+
+  .live-pitch-panel-landscape .live-player-name {
+    max-width: 2.8rem;
+    font-size: 0.38rem;
+    letter-spacing: 0;
+  }
+
+  .live-match-bench-area .live-bench-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2rem;
+  }
+
+  .live-match-bench-area .live-bench-label {
+    width: 100%;
+    text-align: left;
+    font-size: 0.5rem;
+  }
+
+  .live-match-bench-area .live-bench-list {
+    width: 100%;
+    flex-direction: row;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.1rem 0.35rem;
+  }
+
+  .live-match-bench-area .live-bench-player {
+    min-width: 2.2rem;
+  }
+
+  .live-match-bench-area .live-squad-token {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.65rem;
+  }
+
+  .live-match-bench-area .live-bench-name {
+    max-width: 2.2rem;
+    font-size: 0.38rem;
+    letter-spacing: 0;
+  }
+
+  .live-match-callout {
+    position: static;
+  }
+
+  .live-match-activity { min-height: 20rem; }
 }
 
 @keyframes live-timeline-in {
@@ -38,4 +193,213 @@
 
 .live-timeline-enter {
   animation: live-timeline-in 0.28s ease-out;
+}
+
+.live-log-btn {
+  --log-btn-color: #00d99a;
+  border-width: 1px;
+  border-style: solid;
+  box-shadow:
+    0 0 12px color-mix(in oklab, var(--log-btn-color) 48%, transparent),
+    0 0 26px color-mix(in oklab, var(--log-btn-color) 26%, transparent);
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.18s ease-out,
+    filter 0.18s ease-out;
+}
+
+.live-log-btn:hover:not(:disabled),
+.live-log-btn:focus-visible:not(:disabled) {
+  transform: scale(1.03);
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--log-btn-color) 55%, transparent),
+    0 0 18px color-mix(in oklab, var(--log-btn-color) 72%, transparent),
+    0 0 38px color-mix(in oklab, var(--log-btn-color) 42%, transparent);
+}
+
+.live-log-btn:active:not(:disabled) {
+  transform: scale(1.03);
+  filter: brightness(1.12);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--log-btn-color) 78%, transparent),
+    0 0 22px color-mix(in oklab, var(--log-btn-color) 82%, transparent),
+    0 0 44px color-mix(in oklab, var(--log-btn-color) 52%, transparent);
+}
+
+.live-log-btn:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.live-marker-hit {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.live-squad-token {
+  --token-color: #00d99a;
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.18s ease-out,
+    filter 0.18s ease-out;
+}
+
+.live-marker-hit:hover .live-squad-token,
+.live-marker-hit:focus-visible .live-squad-token,
+.live-marker-hit.is-selected .live-squad-token,
+.live-squad-token.live-token-selected {
+  transform: scale(1.03);
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--token-color) 55%, transparent),
+    0 0 18px color-mix(in oklab, var(--token-color) 72%, transparent),
+    0 0 38px color-mix(in oklab, var(--token-color) 42%, transparent);
+}
+
+.live-marker-hit:active .live-squad-token {
+  transform: scale(1.03);
+  filter: brightness(1.12);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--token-color) 78%, transparent),
+    0 0 22px color-mix(in oklab, var(--token-color) 82%, transparent),
+    0 0 44px color-mix(in oklab, var(--token-color) 52%, transparent);
+}
+
+@keyframes live-token-press {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  100% {
+    transform: scale(1.03);
+    filter: brightness(1.12);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--token-color) 78%, transparent),
+      0 0 22px color-mix(in oklab, var(--token-color) 82%, transparent),
+      0 0 44px color-mix(in oklab, var(--token-color) 52%, transparent);
+  }
+}
+
+.live-squad-token.live-token-press {
+  animation: live-token-press 0.18s ease-out;
+}
+
+@keyframes live-marker-badge-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.45);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.16);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.live-marker-badge-enter {
+  animation: live-marker-badge-in 0.26s ease-out;
+}
+
+@keyframes live-callout-banner-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--callout-color) 45%, transparent),
+      0 0 14px color-mix(in oklab, var(--callout-color) 22%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--callout-color) 80%, transparent),
+      0 0 26px color-mix(in oklab, var(--callout-color) 42%, transparent);
+  }
+}
+
+@keyframes live-callout-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+@keyframes live-token-call-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklab, var(--call-color) 72%, transparent),
+      0 0 10px color-mix(in oklab, var(--call-color) 32%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in oklab, var(--call-color) 95%, transparent),
+      0 0 18px color-mix(in oklab, var(--call-color) 55%, transparent);
+  }
+}
+
+.live-callout-banner {
+  --callout-color: var(--lm-amber);
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--callout-color) 16%, #0c1218);
+  animation: live-callout-banner-glow 2.4s ease-in-out infinite;
+}
+
+.live-callout-banner-positive {
+  --callout-color: var(--lm-green);
+}
+
+.live-callout-banner-assist {
+  --callout-color: #3b82f6;
+}
+
+.live-callout-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 10px,
+    color-mix(in oklab, var(--callout-color) 10%, transparent) 10px,
+    color-mix(in oklab, var(--callout-color) 10%, transparent) 20px
+  );
+  background-size: 28px 28px;
+  animation: live-callout-stripes 7.5s linear infinite;
+  pointer-events: none;
+}
+
+.live-token-call {
+  --call-color: var(--lm-amber);
+  animation: live-token-call-ring 2.2s ease-in-out infinite;
+}
+
+.live-token-call-positive {
+  --call-color: var(--lm-green);
+}
+
+.live-token-call-assist {
+  --call-color: #3b82f6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-callout-banner,
+  .live-callout-banner::before,
+  .live-token-call,
+  .live-squad-token.live-token-press {
+    animation: none;
+  }
+
+  .live-marker-hit:hover .live-squad-token,
+  .live-marker-hit:focus-visible .live-squad-token,
+  .live-marker-hit:active .live-squad-token,
+  .live-marker-hit.is-selected .live-squad-token,
+  .live-squad-token.live-token-selected {
+    transform: none;
+  }
 }
