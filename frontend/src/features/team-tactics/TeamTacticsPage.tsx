@@ -20,9 +20,17 @@ import type { GamePlanEditor } from "./useGamePlanEditor";
 
 interface TeamTacticsPanelProps {
   editor: GamePlanEditor;
+  /**
+   * Assistant mode: disables every tactic/role input — assistants may view
+   * the settings but not modify them (backend also rejects their saves).
+   */
+  readOnly?: boolean;
 }
 
-export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
+export default function TeamTacticsPanel({
+  editor,
+  readOnly = false,
+}: TeamTacticsPanelProps) {
   const {
     athletes,
     isPlansLoading,
@@ -108,7 +116,11 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
         ) : (
           <>
             {activeTab === "Tactics" && (
-              <TacticsTab content={content} onChange={patch} disabled={saving} />
+              <TacticsTab
+                content={content}
+                onChange={patch}
+                disabled={saving || readOnly}
+              />
             )}
 
             {activeTab === "Roles" && (
@@ -116,7 +128,7 @@ export default function TeamTacticsPanel({ editor }: TeamTacticsPanelProps) {
                 content={content}
                 athletes={athletes}
                 onChange={patch}
-                disabled={saving}
+                disabled={saving || readOnly}
               />
             )}
 

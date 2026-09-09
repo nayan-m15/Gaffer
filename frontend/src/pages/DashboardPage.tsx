@@ -1,11 +1,12 @@
 import { type ReactNode } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
 import { useState } from "react";
 import {
@@ -13,6 +14,7 @@ import {
   AlertCircle,
   Calendar,
   CalendarCheck,
+  Mail,
   MapPin,
   Plus,
   RefreshCw,
@@ -206,12 +208,16 @@ function DashboardHeader({
   teamName,
   isLive,
   hasTeam,
+  pendingInvite,
   onAddTeam,
 }: {
   userName: string | null;
   teamName: string | null;
   isLive?: boolean;
   hasTeam: boolean;
+  /** A team invitation is still awaiting acceptance — hide Add Team so the
+   * user doesn't accidentally bootstrap their own coach team mid-invite. */
+  pendingInvite: boolean;
   onAddTeam: () => void;
 }) {
   return (
@@ -225,7 +231,7 @@ function DashboardHeader({
       }
       actions={
         <>
-          {!hasTeam && (
+          {!hasTeam && !pendingInvite && (
             <Button variant="outline" size="sm" onClick={onAddTeam}>
               <Plus className="size-4" aria-hidden="true" />
               Add Team
@@ -669,6 +675,19 @@ export default function DashboardPage() {
   const { user, team, accountKind } = useAuth();
   const navigate = useNavigate();
   const [addTeamOpen, setAddTeamOpen] = useState(false);
+  const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
+
+  // Read per render instead of snapshotting on mount so the invite resumer's
+  // post-accept cleanup is reflected without a remount. localStorage reads
+  // are synchronous and cheap, and dismissing is tracked separately so it
+  // never destroys the stored invitation context.
+  const pendingInviteToken = inviteNoticeDismissed
+    ? null
+    : getPendingTeamInviteToken();
+  const hasPendingInvite = !team && pendingInviteToken !== null;
+  const pendingInviteUrl = pendingInviteToken
+    ? `/join-team/${pendingInviteToken}`
+    : null;
 
   const {
     data,
@@ -695,6 +714,7 @@ export default function DashboardPage() {
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
           hasTeam={!!team}
+          pendingInvite={hasPendingInvite}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="flex flex-col items-center justify-center gap-4 p-16">
@@ -726,6 +746,7 @@ export default function DashboardPage() {
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
           hasTeam={!!team}
+          pendingInvite={hasPendingInvite}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="space-y-6 p-6 sm:p-8">
@@ -773,10 +794,49 @@ export default function DashboardPage() {
         teamName={team?.name ?? null}
         isLive={liveMatch != null}
         hasTeam={!!team}
+        pendingInvite={hasPendingInvite}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
       <div className="space-y-6 p-6 sm:p-8">
+        {/* ── Pending team invitation ─────────────────────────────────── */}
+        {hasPendingInvite && pendingInviteUrl && (
+          <Card aria-label="Pending team invitation" className="border-primary/30">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Mail className="size-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    You have a pending team invitation
+                  </p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                    Open your invite to join your coach&apos;s team as an
+                    assistant. Creating your own team is paused while the
+                    invitation is pending.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  to={pendingInviteUrl}
+                  className={cn(buttonVariants({ size: "sm" }))}
+                >
+                  Open your invite
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setInviteNoticeDismissed(true)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* ── Sprint 2: Live Match (deferred — shows empty state) ─────────── */}
         <LiveMatchCard
           match={liveMatch ?? null}

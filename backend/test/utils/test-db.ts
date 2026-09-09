@@ -26,16 +26,17 @@ export function uniqueTestIdentity(prefix = 's1-07'): TestIdentity {
 /**
  * Deletes a test-created user and (if it created one) their team.
  *
- * Deleting the `user` row cascades to `session`, `account` and
- * `team_members` — all declared `onDelete: cascade` against `user.id` in
- * `backend/src/database/schema/index.ts`. `teams` isn't linked back to
- * `user`, so it's cleaned up separately by the name this test used, which is
- * unique per call to `uniqueTestIdentity`.
+ * The team goes first: deleting it cascades `team_members`, `athletes`,
+ * `events` and `team_invites`. That last one matters because
+ * `team_invites.created_by_user_id` and `used_by_user_id` reference `user`
+ * with no cascade of their own — deleting the user first would trip those
+ * FKs as soon as an account has issued or accepted an invite. Deleting the
+ * `user` row itself still cascades `session` and `account`.
  */
 export async function cleanupUser({
   email,
   teamName,
 }: TestIdentity): Promise<void> {
-  await testDb.delete(user).where(eq(user.email, email));
   await testDb.delete(teams).where(eq(teams.name, teamName));
+  await testDb.delete(user).where(eq(user.email, email));
 }

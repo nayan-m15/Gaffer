@@ -20,6 +20,8 @@ interface PitchPlayerProps {
   dragItem: DragItem | null;
   /** When true, transform vertical formation coords to horizontal layout. */
   horizontal?: boolean;
+  /** Coach-only: when true the player card cannot be dragged (assistant view). */
+  readOnly?: boolean;
   /** Called when a drag starts on this player. */
   onDragStart: (item: DragItem) => void;
   /** Called when a drag ends. */
@@ -42,6 +44,7 @@ export function PitchPlayer({
   athlete,
   dragItem,
   horizontal = false,
+  readOnly = false,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -195,6 +198,7 @@ export function PitchPlayer({
         isDragging={isDragging}
         isDropTarget={isDragOver && isValidDrop}
         isInvalid={isDragOver && isInvalid}
+        readOnly={readOnly}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       />

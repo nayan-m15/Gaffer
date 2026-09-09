@@ -9,6 +9,7 @@ import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
 
 /**
  * LoginPage — Pitchside authentication page.
@@ -109,7 +110,10 @@ export default function LoginPage() {
   const handleResendVerification = async () => {
     setResendStatus("sending");
     try {
-      await resendVerificationEmail(email);
+      // When the user is mid-team-invite (their pending token is still in
+      // localStorage), the fresh email must route back to the invitation,
+      // not the plain login page.
+      await resendVerificationEmail(email, getPendingTeamInviteToken() ?? undefined);
       setResendStatus("sent");
     } catch (err) {
       console.error("Failed to resend the verification email:", err);

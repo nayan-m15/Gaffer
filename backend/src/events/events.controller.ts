@@ -13,6 +13,7 @@ import { ApiBody } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
+import { TeamsService } from '../teams/teams.service';
 import {
   createEventSchema,
   StartMatchBodyDto,
@@ -25,7 +26,21 @@ import { EventsService } from './events.service';
 @Controller('events')
 @UseGuards(AuthGuard)
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly teamsService: TeamsService,
+  ) {}
+
+  /**
+   * Event mutations are coach-only: assistants can view the team calendar
+   * but may not schedule, edit or cancel events. `requireCoachTeam`
+   * resolves the caller's own team and throws 403 for any non-coach member
+   * (and for users without a team). Reads, RSVPs and starting a match (the
+   * live-logging entry) intentionally stay open to all team members.
+   */
+  private async assertCoach(userId: string): Promise<void> {
+    await this.teamsService.requireCoachTeam(userId);
+  }
 
   @Post()
   async create(
@@ -33,6 +48,7 @@ export class EventsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(createEventSchema, body);
+    await this.assertCoach(user.id);
     return this.eventsService.create(user.id, dto);
   }
 
@@ -87,6 +103,7 @@ export class EventsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(updateEventSchema, body);
+    await this.assertCoach(user.id);
     return this.eventsService.update(user.id, id, dto);
   }
 
@@ -95,6 +112,7 @@ export class EventsController {
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Param('id', ParseUUIDPipe) id: string,
   ) {
+    await this.assertCoach(user.id);
     return this.eventsService.cancel(user.id, id);
   }
 }

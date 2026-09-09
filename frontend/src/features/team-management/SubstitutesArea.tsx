@@ -17,6 +17,8 @@ interface SubstitutesAreaProps {
   athletes: BackendAthlete[];
   /** The current drag item, if any. */
   dragItem: DragItem | null;
+  /** Coach-only: when true bench cards cannot be dragged (assistant view). */
+  readOnly?: boolean;
   /** Called when a drag starts on a substitute player. */
   onDragStart: (item: DragItem) => void;
   /** Called when a drag ends. */
@@ -37,6 +39,7 @@ function parseDragPayload(data: string): DragPayload | null {
 export function SubstitutesArea({
   athletes,
   dragItem,
+  readOnly = false,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -130,7 +133,7 @@ export function SubstitutesArea({
       >
         {athletes.length === 0 && !isDragOver && (
           <p className="text-xs text-muted-foreground/60">
-            Drag players here from the pitch
+            {readOnly ? "No substitutes selected" : "Drag players here from the pitch"}
           </p>
         )}
 
@@ -158,6 +161,7 @@ export function SubstitutesArea({
               status={athlete.status}
               variant="sub"
               isDragging={isDragging}
+              readOnly={readOnly}
               onDragStart={handleDragStart(athlete)}
               onDragEnd={handleDragEnd}
             />

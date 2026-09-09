@@ -12,6 +12,13 @@ import {
 
 const PASSWORD = 'password123';
 
+// Same shape team-invites issues: base64url of 32 random bytes (43 chars).
+// Only the shape matters here — the callback routing is per-request and the
+// token never needs to resolve against the invites table.
+const INVITE_TOKEN = 'A'.repeat(43);
+
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+
 interface SessionUserBody {
   id: string;
   name: string;
@@ -24,6 +31,11 @@ interface SessionTeamBody {
   role: string;
 }
 
+interface SignUpResponseBody {
+  user: SessionUserBody;
+  emailVerificationRequired: boolean;
+}
+
 interface AuthResponseBody {
   user: SessionUserBody;
   team: SessionTeamBody | null;
@@ -34,8 +46,7 @@ interface ErrorResponseBody {
 }
 
 // Unlike `app.e2e-spec.ts`, this suite does NOT mock `DatabaseService` — it
-// needs the real DB behind it to exercise Better Auth and `TeamsService` end
-// to end.
+// needs the real DB behind it to exercise Better Auth end to end.
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
@@ -68,36 +79,76 @@ describe('Auth (e2e)', () => {
    * Better Auth 1.6's verification token is a self-contained HS256 JWT over
    * `{ email }` signed with the auth secret — minted here the same way its
    * `createEmailVerificationToken` does, then redeemed through the real
-   * GET /auth/verify-email endpoint.
+   * GET /auth/verify-email endpoint. `callbackURL` is what the controller
+   * embeds in the emailed link, so redeeming it mirrors clicking that link.
    */
-  async function verifyEmail(email: string): Promise<void> {
+  async function verifyEmail(email: string, callbackURL: string) {
     const token = await signJWT(
       { email: email.toLowerCase() },
       process.env.BETTER_AUTH_SECRET!,
       60 * 60,
     );
-    const callbackURL = encodeURIComponent(
-      'http://localhost:5173/login?verified=1',
-    );
 
-    await request(app.getHttpServer())
-      .get(`/auth/verify-email?token=${token}&callbackURL=${callbackURL}`)
+    return request(app.getHttpServer())
+      .get(
+        `/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent(callbackURL)}`,
+      )
       .expect(302);
   }
 
   describe('POST /auth/sign-up', () => {
-    it('creates a user and their team, and sets a session cookie', async () => {
-      const { email, teamName } = newIdentity();
+    it('creates the user but withholds the session and team until the email is verified', async () => {
+      const { email } = newIdentity();
 
       const response = await request(app.getHttpServer())
         .post('/auth/sign-up')
-        .send({ name: 'Ada Lovelace', email, password: PASSWORD, teamName })
+        .send({ name: 'Ada Lovelace', email, password: PASSWORD })
         .expect(201);
-      const body = response.body as AuthResponseBody;
+      const body = response.body as SignUpResponseBody;
 
       expect(body.user).toMatchObject({ email, name: 'Ada Lovelace' });
-      expect(body.team).toMatchObject({ name: teamName, role: 'coach' });
-      expect(response.headers['set-cookie']).toBeDefined();
+      expect(body.emailVerificationRequired).toBe(true);
+      // Sign-up never creates or returns a team (that moved to the dashboard's
+      // Add Team flow) and never issues a session until the address is
+      // verified.
+      expect(body).not.toHaveProperty('team');
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('accepts a pending team-invite token without creating a session', async () => {
+      const { email } = newIdentity();
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({
+          name: 'Ada Lovelace',
+          email,
+          password: PASSWORD,
+          inviteToken: INVITE_TOKEN,
+        })
+        .expect(201);
+      const body = response.body as SignUpResponseBody;
+
+      expect(body.user).toMatchObject({ email });
+      expect(body.emailVerificationRequired).toBe(true);
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('rejects a malformed invite token', async () => {
+      const { email } = newIdentity();
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({
+          name: 'Ada Lovelace',
+          email,
+          password: PASSWORD,
+          inviteToken: 'not-a-token',
+        })
+        .expect(400);
+      const body = response.body as ErrorResponseBody;
+
+      expect(body.message).toBe('This invite link is no longer valid.');
     });
 
     it('rejects a payload that fails validation', async () => {
@@ -107,7 +158,6 @@ describe('Auth (e2e)', () => {
           name: '',
           email: 'not-an-email',
           password: 'short',
-          teamName: '',
         })
         .expect(400);
       const body = response.body as ErrorResponseBody;
@@ -115,13 +165,12 @@ describe('Auth (e2e)', () => {
       expect(body.message).toEqual(expect.any(String));
     });
 
-    it('rejects a duplicate email', async () => {
-      const { email, teamName } = newIdentity();
+    it('answers a duplicate email exactly like a fresh sign-up (no enumeration leak)', async () => {
+      const { email } = newIdentity();
       const body = {
         name: 'Ada Lovelace',
         email,
         password: PASSWORD,
-        teamName,
       };
 
       await request(app.getHttpServer())
@@ -129,24 +178,67 @@ describe('Auth (e2e)', () => {
         .send(body)
         .expect(201);
 
+      // With requireEmailVerification Better Auth deliberately mirrors the
+      // first sign-up's response instead of returning 4xx, so a caller can't
+      // probe which addresses already have accounts.
       const response = await request(app.getHttpServer())
         .post('/auth/sign-up')
-        .send({ ...body, teamName: `${teamName}-2` });
+        .send({ ...body, name: 'Someone Else' })
+        .expect(201);
+      const responseBody = response.body as SignUpResponseBody;
 
-      expect(response.status).toBeGreaterThanOrEqual(400);
-      expect(response.status).toBeLessThan(500);
+      expect(responseBody.user).toMatchObject({ email });
+      expect(responseBody.emailVerificationRequired).toBe(true);
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+  });
+
+  describe('GET /auth/verify-email', () => {
+    it('redirects back to the pending team invite with a fresh session cookie', async () => {
+      const { email } = newIdentity();
+
+      await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({
+          name: 'Ada Lovelace',
+          email,
+          password: PASSWORD,
+          inviteToken: INVITE_TOKEN,
+        })
+        .expect(201);
+
+      const callbackURL = `${FRONTEND_URL}/join-team/${INVITE_TOKEN}`;
+      const response = await verifyEmail(email, callbackURL);
+
+      expect(response.headers.location).toBe(callbackURL);
+      expect(response.headers['set-cookie']).toBeDefined();
+    });
+
+    it('redirects to the verified-login page by default with a fresh session cookie', async () => {
+      const { email } = newIdentity();
+
+      await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({ name: 'Grace Hopper', email, password: PASSWORD })
+        .expect(201);
+
+      const callbackURL = `${FRONTEND_URL}/login?verified=1`;
+      const response = await verifyEmail(email, callbackURL);
+
+      expect(response.headers.location).toBe(callbackURL);
+      expect(response.headers['set-cookie']).toBeDefined();
     });
   });
 
   describe('POST /auth/sign-in', () => {
     it('signs an existing verified user in and sets a session cookie', async () => {
-      const { email, teamName } = newIdentity();
+      const { email } = newIdentity();
 
       await request(app.getHttpServer())
         .post('/auth/sign-up')
-        .send({ name: 'Grace Hopper', email, password: PASSWORD, teamName })
+        .send({ name: 'Grace Hopper', email, password: PASSWORD })
         .expect(201);
-      await verifyEmail(email);
+      await verifyEmail(email, `${FRONTEND_URL}/login?verified=1`);
 
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')
@@ -169,11 +261,11 @@ describe('Auth (e2e)', () => {
     });
 
     it('rejects the wrong password with the generic credentials message', async () => {
-      const { email, teamName } = newIdentity();
+      const { email } = newIdentity();
 
       await request(app.getHttpServer())
         .post('/auth/sign-up')
-        .send({ name: 'Grace Hopper', email, password: PASSWORD, teamName })
+        .send({ name: 'Grace Hopper', email, password: PASSWORD })
         .expect(201);
 
       const response = await request(app.getHttpServer())
@@ -191,25 +283,25 @@ describe('Auth (e2e)', () => {
       await request(app.getHttpServer()).get('/auth/session').expect(401);
     });
 
-    it('returns the current user and team when signed in', async () => {
-      const { email, teamName } = newIdentity();
+    it('returns the current user and a null team until they create or join one', async () => {
+      const { email } = newIdentity();
       const agent = request.agent(app.getHttpServer());
 
       await agent
         .post('/auth/sign-up')
-        .send({
-          name: 'Katherine Johnson',
-          email,
-          password: PASSWORD,
-          teamName,
-        })
+        .send({ name: 'Katherine Johnson', email, password: PASSWORD })
+        .expect(201);
+      await verifyEmail(email, `${FRONTEND_URL}/login?verified=1`);
+      await agent
+        .post('/auth/sign-in')
+        .send({ email, password: PASSWORD })
         .expect(201);
 
       const response = await agent.get('/auth/session').expect(200);
       const body = response.body as AuthResponseBody;
 
       expect(body.user).toMatchObject({ email });
-      expect(body.team).toMatchObject({ name: teamName });
+      expect(body.team).toBeNull();
     });
   });
 
@@ -219,17 +311,17 @@ describe('Auth (e2e)', () => {
     });
 
     it('clears the session so a later /auth/session call is unauthenticated', async () => {
-      const { email, teamName } = newIdentity();
+      const { email } = newIdentity();
       const agent = request.agent(app.getHttpServer());
 
       await agent
         .post('/auth/sign-up')
-        .send({
-          name: 'Margaret Hamilton',
-          email,
-          password: PASSWORD,
-          teamName,
-        })
+        .send({ name: 'Margaret Hamilton', email, password: PASSWORD })
+        .expect(201);
+      await verifyEmail(email, `${FRONTEND_URL}/login?verified=1`);
+      await agent
+        .post('/auth/sign-in')
+        .send({ email, password: PASSWORD })
         .expect(201);
 
       await agent.get('/auth/session').expect(200);

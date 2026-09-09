@@ -43,10 +43,22 @@ export type AccountKind = "coach" | "player" | "new";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
+/** Payload of `GET /auth/session` — what `refreshSession` resolves to. */
+export interface SessionPayload {
+  user: SessionUser;
+  team: SessionTeam | null;
+  claimedAthletes: ClaimedAthleteSummary[];
+}
+
 export interface SignUpInput {
   name: string;
   email: string;
   password: string;
+  /**
+   * Team-invite token when the sign-up originates from /join-team/:token —
+   * makes the verification email land the user back on the invite.
+   */
+  inviteToken?: string;
 }
 
 export interface SignInInput {
@@ -74,8 +86,11 @@ interface AuthContextValue {
   signIn: (input: SignInInput) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-  resendVerificationEmail: (email: string) => Promise<void>;
+  refreshSession: () => Promise<SessionPayload | null>;
+  resendVerificationEmail: (
+    email: string,
+    inviteToken?: string,
+  ) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -93,17 +108,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<SessionPayload | null> => {
     try {
-      const data = await apiFetch<{
-        user: SessionUser;
-        team: SessionTeam | null;
-        claimedAthletes: ClaimedAthleteSummary[];
-      }>("/auth/session");
+      const data = await apiFetch<SessionPayload>("/auth/session");
       setUser(data.user);
       setTeam(data.team);
       setClaimedAthletes(data.claimedAthletes ?? []);
       setStatus("authenticated");
+      return data;
     } catch (error) {
       // Treat "no session" (401) and "couldn't reach the API at all" (e.g.
       // the backend isn't running — a plain network error, not an ApiError)
@@ -116,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTeam(null);
       setClaimedAthletes([]);
       setStatus("unauthenticated");
+      return null;
     }
   }, []);
 
@@ -176,12 +189,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // returns success here regardless of whether the address has an account,
   // so there's nothing meaningful to branch on beyond network/validation
   // errors, which `apiFetch` still throws as an `ApiError`.
-  const resendVerificationEmail = useCallback(async (email: string) => {
-    await apiFetch("/auth/send-verification-email", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-  }, []);
+  //
+  // `inviteToken`, when the resend happens mid-team-invite flow, makes the
+  // fresh verification email route back to /join-team/:token as well.
+  const resendVerificationEmail = useCallback(
+    async (email: string, inviteToken?: string) => {
+      await apiFetch("/auth/send-verification-email", {
+        method: "POST",
+        body: JSON.stringify({ email, inviteToken }),
+      });
+    },
+    [],
+  );
 
     // Derived: coach (has team) > player (has claimed athletes) > new (neither).
     const accountKind: AccountKind = team

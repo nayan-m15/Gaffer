@@ -28,10 +28,16 @@ interface EventDetailDialogProps {
    */
   readOnly?: boolean;
   rsvpQueryKey?: readonly string[];
+  /**
+   * Assistant mode: hides the coach-only Edit/Cancel actions while keeping
+   * the RSVP breakdown and the "Confirm squad" live-logging entry. The
+   * backend independently enforces 403 on event mutations.
+   */
+  canManage?: boolean;
 }
 
 export function EventDetailDialog({
-  event, now, open, onOpenChange, onEdit, readOnly = false, rsvpQueryKey,
+  event, now, open, onOpenChange, onEdit, readOnly = false, rsvpQueryKey, canManage = true,
 }: EventDetailDialogProps) {
   const navigate = useNavigate();
   const cancelEvent = useCancelEvent();
@@ -76,7 +82,11 @@ export function EventDetailDialog({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold uppercase tracking-wide text-foreground">Event</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            {readOnly ? "Event details and your RSVP." : "Review this event, edit it, or cancel it on the calendar."}
+            {readOnly
+              ? "Event details and your RSVP."
+              : canManage
+                ? "Review this event, edit it, or cancel it on the calendar."
+                : "View this event's details and RSVP responses."}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,7 +145,7 @@ export function EventDetailDialog({
 
         {!readOnly && (
           <DialogFooter className="gap-2 sm:justify-between">
-            {event && event.status !== "cancelled" && (
+            {canManage && event && event.status !== "cancelled" && (
               <Button variant="destructive" onClick={() => void handleCancel()} disabled={cancelEvent.isPending}>
                 {cancelEvent.isPending ? "Cancelling…" : "Cancel Event"}
               </Button>
@@ -143,7 +153,7 @@ export function EventDetailDialog({
             {event && event.type === "match" && event.status !== "cancelled" && (
               <Button onClick={() => navigate(`/events/${event.id}/confirm-squad`)}>Confirm squad</Button>
             )}
-            {event && (
+            {canManage && event && (
               <Button variant="outline" className="sm:ml-auto" onClick={() => onEdit(event as TeamEvent)}>Edit</Button>
             )}
           </DialogFooter>

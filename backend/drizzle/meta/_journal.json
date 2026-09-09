@@ -92,6 +92,13 @@
       "when": 1788774094617,
       "tag": "0012_player_claims_rsvps",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788790692701,
+      "tag": "0011_add_team_invites",
+      "breakpoints": true
     }
   ]
 }

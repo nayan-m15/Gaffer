@@ -37,10 +37,24 @@ export class AthletesController {
     return team.id;
   }
 
+  /**
+   * Roster mutations are coach-only: assistants belong to the team and can
+   * read the roster, but only coaches may add, edit, archive or restore
+   * athletes. `requireCoachTeam` resolves the caller's own team and throws
+   * 403 for any non-coach member (and for users without a team), so team
+   * scoping is preserved — mutations still only ever touch the caller's
+   * team, exactly like the reads above.
+   */
+  private async getCoachTeamId(userId: string): Promise<string> {
+    const team = await this.teamsService.requireCoachTeam(userId);
+
+    return team.id;
+  }
+
   @Post()
   async create(@CurrentUser() user: SessionUser, @Body() body: unknown) {
     const input = zodValidate(createAthleteSchema, body);
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.athletesService.create(teamId, input);
   }
@@ -74,7 +88,7 @@ export class AthletesController {
     @Body() body: unknown,
   ) {
     const input = zodValidate(updateAthleteSchema, body);
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.athletesService.update(teamId, id, input);
   }
@@ -84,7 +98,7 @@ export class AthletesController {
     @CurrentUser() user: SessionUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.athletesService.archive(teamId, id);
   }
@@ -93,7 +107,7 @@ export class AthletesController {
     @CurrentUser() user: SessionUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const teamId = await this.getTeamId(user.id);
+    const teamId = await this.getCoachTeamId(user.id);
 
     return this.athletesService.restore(teamId, id);
   }
