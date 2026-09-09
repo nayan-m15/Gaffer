@@ -3,13 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
   athleteMatchStats,
   competitions,
   events,
+  matchEvents,
   matches,
   standings,
 } from '../database/schema';
@@ -25,6 +26,17 @@ import type {
 const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 const LOSS_POINTS = 0;
+
+function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card') {
+  return sql<number>`coalesce((
+    select count(*)::int
+    from ${matchEvents}
+    where ${matchEvents.matchId} = ${athleteMatchStats.matchId}
+      and ${matchEvents.athleteId} = ${athleteMatchStats.athleteId}
+      and ${matchEvents.team} = 'own'
+      and ${matchEvents.eventType} = ${eventType}
+  ), 0)`;
+}
 
 /**
  * Read-only match analytics plus manual standings CRUD for a coach's team.
@@ -50,15 +62,21 @@ export class StatisticsService {
   async getOverview(userId: string, competitionId?: string) {
     const team = await this.requireTeam(userId);
 
-    const matchConditions = [eq(events.teamId, team.id)];
+    const matchConditions = [
+      eq(events.teamId, team.id),
+      eq(events.status, 'completed'),
+    ];
     if (competitionId) {
       matchConditions.push(eq(matches.competitionId, competitionId));
     }
 
     const teamMatches = await this.databaseService.database
       .select({
+        matchId: matches.id,
         eventId: matches.eventId,
         date: events.scheduledAt,
+        opponent: matches.opponentName,
+        isHome: matches.isHome,
         teamScore: matches.teamScore,
         opponentScore: matches.opponentScore,
       })
@@ -101,8 +119,11 @@ export class StatisticsService {
       points += matchPoints;
 
       return {
+        matchId: m.matchId,
         eventId: m.eventId,
         date: m.date.toISOString(),
+        opponent: m.opponent,
+        isHome: m.isHome,
         result,
         goalsFor: gf,
         goalsAgainst: ga,
@@ -113,7 +134,10 @@ export class StatisticsService {
     const matchesPlayed = teamMatches.length;
 
     // Player-level aggregation across the same set of matches
-    const playerConditions = [eq(athletes.teamId, team.id)];
+    const playerConditions = [
+      eq(athletes.teamId, team.id),
+      eq(events.status, 'completed'),
+    ];
     if (competitionId) {
       playerConditions.push(eq(matches.competitionId, competitionId));
     }
@@ -123,13 +147,14 @@ export class StatisticsService {
         athleteId: athletes.id,
         firstName: athletes.firstName,
         lastName: athletes.lastName,
-        goals: athleteMatchStats.goals,
-        assists: athleteMatchStats.assists,
-        yellowCards: athleteMatchStats.yellowCards,
-        redCards: athleteMatchStats.redCards,
+        goals: loggedEventCount('goal'),
+        assists: loggedEventCount('assist'),
+        yellowCards: loggedEventCount('yellow_card'),
+        redCards: loggedEventCount('red_card'),
       })
       .from(athleteMatchStats)
       .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
+      .innerJoin(events, eq(matches.eventId, events.id))
       .innerJoin(athletes, eq(athleteMatchStats.athleteId, athletes.id))
       .where(and(...playerConditions));
 
@@ -245,15 +270,20 @@ export class StatisticsService {
         date: events.scheduledAt,
         started: athleteMatchStats.started,
         minutesPlayed: athleteMatchStats.minutesPlayed,
-        goals: athleteMatchStats.goals,
-        assists: athleteMatchStats.assists,
-        yellowCards: athleteMatchStats.yellowCards,
-        redCards: athleteMatchStats.redCards,
+        goals: loggedEventCount('goal'),
+        assists: loggedEventCount('assist'),
+        yellowCards: loggedEventCount('yellow_card'),
+        redCards: loggedEventCount('red_card'),
       })
       .from(athleteMatchStats)
       .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
       .innerJoin(events, eq(matches.eventId, events.id))
-      .where(eq(athleteMatchStats.athleteId, athleteId))
+      .where(
+        and(
+          eq(athleteMatchStats.athleteId, athleteId),
+          eq(events.status, 'completed'),
+        ),
+      )
       .orderBy(asc(events.scheduledAt));
 
     let appearances = 0;

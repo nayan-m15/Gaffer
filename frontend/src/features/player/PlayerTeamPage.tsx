@@ -106,10 +106,12 @@ export default function PlayerTeamPage() {
                     ? ` · #${selectedAthlete.jerseyNumber}`
                     : ""}
                 </p>
-                <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-5">
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
                   <MiniStat label="Apps" value={selectedAthlete.appearances} />
                   <MiniStat label="Goals" value={selectedAthlete.goals} />
                   <MiniStat label="Assists" value={selectedAthlete.assists} />
+                  <MiniStat label="Yellow" value={selectedAthlete.yellowCards} />
+                  <MiniStat label="Red" value={selectedAthlete.redCards} />
                   <MiniStat label="Age" value={selectedAthlete.age} />
                   <MiniStat label="Status" value={selectedAthlete.status} />
                 </div>

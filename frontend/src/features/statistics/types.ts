@@ -3,8 +3,11 @@ export type MatchResult = "W" | "D" | "L";
 
 /** One entry in the chronological season-trend array. */
 export interface TrendEntry {
+  matchId: string;
   eventId: string;
   date: string;
+  opponent: string;
+  isHome: boolean;
   result: MatchResult;
   goalsFor: number;
   goalsAgainst: number;

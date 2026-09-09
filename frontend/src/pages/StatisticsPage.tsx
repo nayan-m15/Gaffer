@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useAuth } from "@/hooks/useAuth";
 import { CompetitionFormDialog } from "@/features/statistics/CompetitionFormDialog";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { StandingFormDialog } from "@/features/statistics/StandingFormDialog";
@@ -58,6 +59,13 @@ function formatDate(iso: string): string {
   return DATE_FMT.format(new Date(iso));
 }
 
+function formatMatchDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatRate(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -83,6 +91,7 @@ function formatDiff(value: number): string {
  * the app doesn't track other teams' results.
  */
 export default function StatisticsPage() {
+  const { team } = useAuth();
   const [competitionId, setCompetitionId] = useState<string | undefined>();
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(
     null,
@@ -254,7 +263,10 @@ export default function StatisticsPage() {
             <StatCardsGrid overview={overview} />
 
             {/* Trends charts */}
-            <TrendsSection trends={overview.trends} />
+            <TrendsSection
+              trends={overview.trends}
+              teamName={team?.name ?? "Our Team"}
+            />
 
             {/* Player stats + detail panel */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
@@ -454,8 +466,20 @@ function StatCard({
  *  TRENDS SECTION
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function TrendsSection({ trends }: { trends: TrendEntry[] }) {
+function TrendsSection({
+  trends,
+  teamName,
+}: {
+  trends: TrendEntry[];
+  teamName: string;
+}) {
+  const recentMatches = trends.slice(-10).reverse();
+  const [selectedId, setSelectedId] = useState(recentMatches[0]?.matchId);
   if (trends.length === 0) return null;
+
+  const selected =
+    recentMatches.find((match) => match.matchId === selectedId) ??
+    recentMatches[0]!;
 
   const maxGoals = Math.max(
     1,
@@ -472,10 +496,30 @@ function TrendsSection({ trends }: { trends: TrendEntry[] }) {
             Recent Form
           </h2>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {trends.slice(-8).map((t, i) => (
-            <ResultBadge key={i} result={t.result} />
+        <div className="flex flex-wrap gap-2" aria-label="Recent results">
+          {recentMatches.map((match) => (
+            <ResultBadge
+              key={match.matchId}
+              result={match.result}
+              selected={match.matchId === selected.matchId}
+              onSelect={() => setSelectedId(match.matchId)}
+            />
           ))}
+        </div>
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="text-sm font-medium text-foreground">
+            {selected.isHome
+              ? `${teamName} vs ${selected.opponent}`
+              : `${selected.opponent} vs ${teamName}`}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span className="font-semibold tabular-nums text-foreground">
+              {selected.isHome
+                ? `${selected.goalsFor}-${selected.goalsAgainst}`
+                : `${selected.goalsAgainst}-${selected.goalsFor}`}
+            </span>
+            <span>{formatMatchDateTime(selected.date)}</span>
+          </p>
         </div>
       </div>
 
@@ -566,23 +610,50 @@ function TrendsSection({ trends }: { trends: TrendEntry[] }) {
   );
 }
 
-function ResultBadge({ result }: { result: "W" | "D" | "L" }) {
+function ResultBadge({
+  result,
+  selected,
+  onSelect,
+}: {
+  result: "W" | "D" | "L";
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   const config = {
     W: { className: "bg-primary text-primary-foreground", label: "Win" },
     D: { className: "bg-muted text-foreground", label: "Draw" },
     L: { className: "bg-destructive text-primary-foreground", label: "Loss" },
   } as const;
 
+  const badgeClassName = cn(
+    "inline-flex size-8 items-center justify-center rounded-full text-xs font-bold",
+    config[result].className,
+    onSelect &&
+      "transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+    selected
+      ? "scale-110 ring-2 ring-foreground/70 ring-offset-2 ring-offset-card"
+      : onSelect && "hover:scale-105",
+  );
+
+  if (!onSelect) {
+    return (
+      <span className={badgeClassName} title={config[result].label}>
+        {result}
+      </span>
+    );
+  }
+
   return (
-    <span
-      className={cn(
-        "inline-flex size-7 items-center justify-center rounded-full text-xs font-bold",
-        config[result].className,
-      )}
+    <button
+      type="button"
+      className={badgeClassName}
       title={config[result].label}
+      aria-label={`Show ${config[result].label.toLowerCase()} match details`}
+      aria-pressed={selected}
+      onClick={onSelect}
     >
       {result}
-    </span>
+    </button>
   );
 }
 

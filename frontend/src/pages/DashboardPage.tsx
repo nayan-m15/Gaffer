@@ -465,8 +465,11 @@ function RecentFormCard({ results }: { results: RecentResult[] }) {
       </SectionTitle>
       {results.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2" aria-label="Recent results">
-            {results.slice(0, 5).map((r) => (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            aria-label="Recent results"
+          >
+            {results.slice(0, 10).map((r) => (
               <ResultBadge key={r.id} result={r.result} />
             ))}
           </div>

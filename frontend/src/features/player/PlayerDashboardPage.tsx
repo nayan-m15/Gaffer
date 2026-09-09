@@ -2,12 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   Calendar,
-  CalendarCheck,
   Loader2,
   MapPin,
   RefreshCw,
-  Target,
-  Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,7 +13,6 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { fetchPlayerMe, fetchPlayerEvents } from "@/services/player";
 import type { PlayerEvent } from "@/services/player";
-import { formatEventDateTime } from "@/features/events/event-utils";
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  FORMATTING HELPERS
@@ -120,7 +116,7 @@ export default function PlayerDashboardPage() {
                   </h2>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {stats.matches.slice(-8).map((m, i) => (
+                  {stats.matches.slice(-10).map((m, i) => (
                     <ResultBadge key={i} result={m.result} />
                   ))}
                 </div>
