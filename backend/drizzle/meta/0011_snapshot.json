@@ -1,6 +1,6 @@
 {
-  "id": "967ba25e-e50e-4c3b-865f-b27e4df83ce8",
-  "prevId": "5c945ec9-034d-41b6-bbb4-5290abf1e321",
+  "id": "babb4419-82e2-4526-92cf-a935fe22a711",
+  "prevId": "967ba25e-e50e-4c3b-865f-b27e4df83ce8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1038,19 +1038,6 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "match_events_logged_by_user_id_user_id_fk": {
-          "name": "match_events_logged_by_user_id_user_id_fk",
-          "tableFrom": "match_events",
-          "tableTo": "user",
-          "columnsFrom": [
-            "logged_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "match_events_opponent_player_id_opponent_match_players_id_fk": {
           "name": "match_events_opponent_player_id_opponent_match_players_id_fk",
           "tableFrom": "match_events",
@@ -1062,6 +1049,19 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "match_events_logged_by_user_id_user_id_fk": {
+          "name": "match_events_logged_by_user_id_user_id_fk",
+          "tableFrom": "match_events",
+          "tableTo": "user",
+          "columnsFrom": [
+            "logged_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -1245,6 +1245,115 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.opponent_match_players": {
+      "name": "opponent_match_players",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "match_id": {
+          "name": "match_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shirt_number": {
+          "name": "shirt_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "opponent_match_players_match_id_index": {
+          "name": "opponent_match_players_match_id_index",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "opponent_match_players_match_number_unique": {
+          "name": "opponent_match_players_match_number_unique",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "shirt_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "opponent_match_players_match_id_matches_id_fk": {
+          "name": "opponent_match_players_match_id_matches_id_fk",
+          "tableFrom": "opponent_match_players",
+          "tableTo": "matches",
+          "columnsFrom": [
+            "match_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1818,109 +1927,6 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.opponent_match_players": {
-      "name": "opponent_match_players",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "match_id": {
-          "name": "match_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shirt_number": {
-          "name": "shirt_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "opponent_match_players_match_id_index": {
-          "name": "opponent_match_players_match_id_index",
-          "columns": [
-            {
-              "expression": "match_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "opponent_match_players_match_number_unique": {
-          "name": "opponent_match_players_match_number_unique",
-          "columns": [
-            {
-              "expression": "match_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "shirt_number",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "opponent_match_players_match_id_matches_id_fk": {
-          "name": "opponent_match_players_match_id_matches_id_fk",
-          "tableFrom": "opponent_match_players",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -2003,6 +2009,15 @@
         "long_ball"
       ]
     },
+    "public.opponent_squad_visibility": {
+      "name": "opponent_squad_visibility",
+      "schema": "public",
+      "values": [
+        "none",
+        "numbers",
+        "full"
+      ]
+    },
     "public.sex": {
       "name": "sex",
       "schema": "public",
@@ -2018,15 +2033,6 @@
       "values": [
         "coach",
         "assistant"
-      ]
-    },
-    "public.opponent_squad_visibility": {
-      "name": "opponent_squad_visibility",
-      "schema": "public",
-      "values": [
-        "none",
-        "numbers",
-        "full"
       ]
     }
   },

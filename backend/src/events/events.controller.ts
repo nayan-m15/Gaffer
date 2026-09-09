@@ -9,11 +9,13 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBody } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import {
   createEventSchema,
+  StartMatchBodyDto,
   createRsvpSchema,
   startMatchSchema,
   updateEventSchema,
@@ -40,10 +42,11 @@ export class EventsController {
   }
 
   @Post(':eventId/start-match')
+  @ApiBody({ type: StartMatchBodyDto })
   async startMatch(
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Param('eventId', ParseUUIDPipe) eventId: string,
-    @Body() body: unknown,
+    @Body() body: StartMatchBodyDto,
   ) {
     const dto = zodValidate(startMatchSchema, body);
     return this.eventsService.startMatch(user.id, eventId, dto);

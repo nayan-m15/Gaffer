@@ -31,6 +31,14 @@ export class MatchesController {
     return this.matchesService.getSquad(user.id, matchId);
   }
 
+  @Get(':matchId/opponent-squad')
+  async getOpponentSquad(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.getOpponentSquad(user.id, matchId);
+  }
+
   @Get(':matchId/events')
   async listEvents(
     @CurrentUser() user: AuthenticatedRequest['user'],

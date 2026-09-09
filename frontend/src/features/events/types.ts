@@ -33,10 +33,25 @@ export interface UpdateEventInput {
   notes?: string | null;
 }
 
+export type OpponentSquadVisibility = "none" | "numbers" | "full";
+
+export interface OpponentMatchPlayer {
+  id?: string;
+  shirtNumber: number;
+  name?: string | null;
+  position?: string | null;
+}
+
 export interface StartMatchInput {
   opponentName: string;
   isHome: boolean;
   startingAthleteIds: string[];
+  benchAthleteIds?: string[];
+  gamePlanId?: string;
+  opponentSquadVisibility?: OpponentSquadVisibility;
+  opponentSquad?: OpponentMatchPlayer[];
+  teamColor?: string;
+  opponentColor?: string;
 }
 
 /** A match row returned by POST /events/:eventId/start-match. */
@@ -48,6 +63,10 @@ export interface MatchRecord {
   isHome: boolean;
   teamScore: number;
   opponentScore: number;
+  gamePlanId: string | null;
+  opponentSquadVisibility: OpponentSquadVisibility;
+  teamColor: string | null;
+  opponentColor: string | null;
   createdAt: string;
   updatedAt: string;
 }

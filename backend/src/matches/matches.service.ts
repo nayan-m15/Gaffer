@@ -13,6 +13,7 @@ import {
   events,
   matchEvents,
   matches,
+  opponentMatchPlayers,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import type {
@@ -46,6 +47,8 @@ export class MatchesService {
       competitionName = competition?.name ?? null;
     }
 
+    const opponentSquad = await this.listOpponentPlayers(match.id);
+
     return {
       ...match,
       eventTitle: event.title,
@@ -53,6 +56,7 @@ export class MatchesService {
       eventScheduledAt: event.scheduledAt,
       eventLocation: event.location,
       competitionName,
+      opponentSquad,
     };
   }
 
@@ -75,6 +79,12 @@ export class MatchesService {
       .orderBy(asc(athletes.squadNumber), asc(athletes.lastName));
   }
 
+  async getOpponentSquad(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    return this.listOpponentPlayers(matchId);
+  }
+
   async listEvents(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     await this.requireMatch(team.id, matchId);
@@ -86,6 +96,7 @@ export class MatchesService {
         athleteId: matchEvents.athleteId,
         team: matchEvents.team,
         opponentLabel: matchEvents.opponentLabel,
+        opponentPlayerId: matchEvents.opponentPlayerId,
         eventType: matchEvents.eventType,
         minute: matchEvents.minute,
         detail: matchEvents.detail,
@@ -97,9 +108,15 @@ export class MatchesService {
         athleteLastName: athletes.lastName,
         athleteSquadNumber: athletes.squadNumber,
         athletePosition: athletes.position,
+        opponentPlayerShirtNumber: opponentMatchPlayers.shirtNumber,
+        opponentPlayerName: opponentMatchPlayers.name,
       })
       .from(matchEvents)
       .leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
+      .leftJoin(
+        opponentMatchPlayers,
+        eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
+      )
       .where(eq(matchEvents.matchId, matchId))
       .orderBy(desc(matchEvents.minute), desc(matchEvents.createdAt));
 
@@ -109,6 +126,7 @@ export class MatchesService {
       athleteId: row.athleteId,
       team: row.team,
       opponentLabel: row.opponentLabel,
+      opponentPlayerId: row.opponentPlayerId,
       eventType: row.eventType,
       minute: row.minute,
       detail: row.detail,
@@ -126,6 +144,14 @@ export class MatchesService {
               position: row.athletePosition,
             }
           : null,
+      opponentPlayer:
+        row.opponentPlayerId && row.opponentPlayerShirtNumber != null
+          ? {
+              id: row.opponentPlayerId,
+              shirtNumber: row.opponentPlayerShirtNumber,
+              name: row.opponentPlayerName,
+            }
+          : null,
     }));
   }
 
@@ -137,13 +163,20 @@ export class MatchesService {
       await this.requireTeamAthlete(team.id, dto.athleteId);
     }
 
+    const attribution = await this.resolveOpponentAttribution(match, {
+      team: dto.team,
+      opponentPlayerId: dto.opponentPlayerId,
+      opponentLabel: dto.opponentLabel,
+    });
+
     const [created] = await this.databaseService.database
       .insert(matchEvents)
       .values({
         matchId: match.id,
         athleteId: dto.athleteId,
         team: dto.team,
-        opponentLabel: dto.opponentLabel,
+        opponentLabel: attribution.opponentLabel ?? dto.opponentLabel,
+        opponentPlayerId: attribution.opponentPlayerId,
         eventType: dto.eventType,
         minute: dto.minute,
         detail: dto.detail,
@@ -165,19 +198,30 @@ export class MatchesService {
     dto: UpdateMatchLogEventDto,
   ) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    const { match } = await this.requireMatch(team.id, matchId);
     const logged = await this.requireMatchEvent(matchId, eventId);
 
     if (dto.athleteId) {
       await this.requireTeamAthlete(team.id, dto.athleteId);
     }
 
+    const attribution = await this.resolveOpponentAttribution(match, {
+      team: logged.team,
+      opponentPlayerId: dto.opponentPlayerId,
+      opponentLabel: dto.opponentLabel,
+    });
+
     const [updated] = await this.databaseService.database
       .update(matchEvents)
       .set({
         ...(dto.athleteId !== undefined ? { athleteId: dto.athleteId } : {}),
-        ...(dto.opponentLabel !== undefined
-          ? { opponentLabel: dto.opponentLabel }
+        ...(attribution.opponentLabel !== undefined
+          ? { opponentLabel: attribution.opponentLabel }
+          : dto.opponentLabel !== undefined
+            ? { opponentLabel: dto.opponentLabel }
+            : {}),
+        ...(attribution.opponentPlayerId !== undefined
+          ? { opponentPlayerId: attribution.opponentPlayerId }
           : {}),
         ...(dto.minute !== undefined ? { minute: dto.minute } : {}),
         ...(dto.eventType !== undefined ? { eventType: dto.eventType } : {}),
@@ -243,6 +287,100 @@ export class MatchesService {
     }
 
     return { ...match, eventTitle: updated.title, eventStatus: updated.status };
+  }
+
+  private async listOpponentPlayers(matchId: string) {
+    return this.databaseService.database
+      .select({
+        id: opponentMatchPlayers.id,
+        shirtNumber: opponentMatchPlayers.shirtNumber,
+        name: opponentMatchPlayers.name,
+        position: opponentMatchPlayers.position,
+      })
+      .from(opponentMatchPlayers)
+      .where(eq(opponentMatchPlayers.matchId, matchId))
+      .orderBy(asc(opponentMatchPlayers.shirtNumber));
+  }
+
+  private async resolveOpponentAttribution(
+    match: typeof matches.$inferSelect,
+    dto: {
+      team: 'own' | 'opponent';
+      opponentPlayerId?: string | null;
+      opponentLabel?: string | null;
+    },
+  ): Promise<{
+    opponentPlayerId?: string | null;
+    opponentLabel?: string | null;
+  }> {
+    if (dto.opponentPlayerId === undefined) {
+      return { opponentLabel: dto.opponentLabel };
+    }
+
+    if (dto.opponentPlayerId === null) {
+      return {
+        opponentPlayerId: null,
+        opponentLabel: dto.opponentLabel,
+      };
+    }
+
+    if (dto.team !== 'opponent') {
+      throw new BadRequestException(
+        'Opponent players can only be set on opponent events.',
+      );
+    }
+
+    if (match.opponentSquadVisibility === 'none') {
+      throw new BadRequestException('This match has no opponent squad.');
+    }
+
+    const player = await this.requireOpponentPlayer(
+      match.id,
+      dto.opponentPlayerId,
+    );
+
+    return {
+      opponentPlayerId: player.id,
+      opponentLabel:
+        dto.opponentLabel !== undefined && dto.opponentLabel !== null
+          ? dto.opponentLabel
+          : this.opponentPlayerLabel(player),
+    };
+  }
+
+  private opponentPlayerLabel(player: {
+    shirtNumber: number;
+    name: string | null;
+  }) {
+    if (player.name) {
+      return `Opponent #${player.shirtNumber} ${player.name}`;
+    }
+    return `Opponent #${player.shirtNumber}`;
+  }
+
+  private async requireOpponentPlayer(matchId: string, playerId: string) {
+    const [player] = await this.databaseService.database
+      .select({
+        id: opponentMatchPlayers.id,
+        shirtNumber: opponentMatchPlayers.shirtNumber,
+        name: opponentMatchPlayers.name,
+      })
+      .from(opponentMatchPlayers)
+      .where(
+        and(
+          eq(opponentMatchPlayers.id, playerId),
+          eq(opponentMatchPlayers.matchId, matchId),
+        ),
+      )
+      .limit(1);
+
+    if (!player) {
+      throw new BadRequestException(
+        'Opponent player is not on this match squad.',
+      );
+    }
+
+    return player;
   }
 
   private async requireTeam(userId: string) {

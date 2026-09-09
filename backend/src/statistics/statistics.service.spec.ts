@@ -94,6 +94,7 @@ describe('StatisticsService', () => {
       id: 'team-1',
       name: 'Test Team',
       role: 'coach',
+      primaryColor: null,
     });
 
     const result = await service.getOverview('user-1');
