@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
@@ -14,20 +14,33 @@ import {
   matches,
   standings,
 } from '../database/schema';
+import { SeasonsService } from '../seasons/seasons.service';
+import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
 import type {
+  CompareAthletesDto,
   CreateCompetitionDto,
   CreateStandingDto,
   UpdateCompetitionDto,
   UpdateStandingDto,
 } from './statistics.schemas';
+import {
+  buildTrends,
+  matchResult,
+  per90,
+  perAppearance,
+  summariseMatches,
+} from './statistics.trends';
 
-/** Points awarded per match result. Centralised so the scoring system is easy to change. */
-const WIN_POINTS = 3;
-const DRAW_POINTS = 1;
-const LOSS_POINTS = 0;
+/** Filters accepted by the team overview. */
+export interface OverviewFilters {
+  seasonId?: string;
+  competitionId?: string;
+}
 
-function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card') {
+function loggedEventCount(
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+) {
   return sql<number>`coalesce((
     select count(*)::int
     from ${matchEvents}
@@ -36,6 +49,51 @@ function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_ca
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = ${eventType}
   ), 0)`;
+}
+
+/**
+ * Grouped counterpart to `loggedEventCount`, for queries that already left-join
+ * `match_events` and can count with a FILTER clause instead of a correlated
+ * subquery per row.
+ */
+function countEvents(
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+  onlyWithMinutes = false,
+) {
+  const minutesClause = onlyWithMinutes
+    ? sql` and ${athleteMatchStats.minutesPlayed} is not null`
+    : sql``;
+
+  return sql<number>`count(*) filter (
+    where ${matchEvents.eventType} = ${eventType}${minutesClause}
+  )::int`;
+}
+
+/**
+ * Season date-range predicates on the match's event. Bound as Date values so
+ * the window is explicit and independent of the database session timezone.
+ */
+function windowConditions(window: SeasonWindow) {
+  return [
+    gte(events.scheduledAt, window.start),
+    lte(events.scheduledAt, window.end),
+  ];
+}
+
+function toSeasonSummary(season: {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}) {
+  return {
+    id: season.id,
+    name: season.name,
+    startDate: season.startDate,
+    endDate: season.endDate,
+    isCurrent: season.isCurrent,
+  };
 }
 
 /**
@@ -51,16 +109,29 @@ export class StatisticsService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly seasonsService: SeasonsService,
   ) {}
 
   /* ── Read endpoints ─────────────────────────────────────────────────────── */
 
   /**
-   * Team-wide season overview. When `competitionId` is provided every
-   * aggregate is scoped to that single competition instead of the whole season.
+   * Team-wide overview plus season trends.
+   *
+   * `seasonId` narrows every aggregate to matches played inside that season's
+   * date range; `competitionId` narrows to a single competition. Both are
+   * optional and combine. With neither, the overview covers the team's whole
+   * history — the default is deliberately unchanged so the player module and
+   * existing clients keep their current behaviour.
    */
-  async getOverview(userId: string, competitionId?: string) {
+  async getOverview(userId: string, filters: OverviewFilters = {}) {
+    const { seasonId, competitionId } = filters;
     const team = await this.requireTeam(userId);
+
+    // Resolved only when asked for, so the unfiltered path issues exactly the
+    // same queries in the same order as before.
+    const resolved = seasonId
+      ? await this.seasonsService.resolveSeasonWindow(team.id, seasonId)
+      : null;
 
     const matchConditions = [
       eq(events.teamId, team.id),
@@ -68,6 +139,9 @@ export class StatisticsService {
     ];
     if (competitionId) {
       matchConditions.push(eq(matches.competitionId, competitionId));
+    }
+    if (resolved) {
+      matchConditions.push(...windowConditions(resolved.window));
     }
 
     const teamMatches = await this.databaseService.database
@@ -85,53 +159,8 @@ export class StatisticsService {
       .where(and(...matchConditions))
       .orderBy(asc(events.scheduledAt));
 
-    let wins = 0;
-    let draws = 0;
-    let losses = 0;
-    let goalsFor = 0;
-    let goalsAgainst = 0;
-    let cleanSheets = 0;
-    let points = 0;
-
-    const trends = teamMatches.map((m) => {
-      const gf = m.teamScore;
-      const ga = m.opponentScore;
-      let result: 'W' | 'D' | 'L';
-      let matchPoints: number;
-
-      if (gf > ga) {
-        result = 'W';
-        wins += 1;
-        matchPoints = WIN_POINTS;
-      } else if (gf === ga) {
-        result = 'D';
-        draws += 1;
-        matchPoints = DRAW_POINTS;
-      } else {
-        result = 'L';
-        losses += 1;
-        matchPoints = LOSS_POINTS;
-      }
-
-      goalsFor += gf;
-      goalsAgainst += ga;
-      if (ga === 0) cleanSheets += 1;
-      points += matchPoints;
-
-      return {
-        matchId: m.matchId,
-        eventId: m.eventId,
-        date: m.date.toISOString(),
-        opponent: m.opponent,
-        isHome: m.isHome,
-        result,
-        goalsFor: gf,
-        goalsAgainst: ga,
-        points: matchPoints,
-      };
-    });
-
-    const matchesPlayed = teamMatches.length;
+    const { totals, entries: trends } = summariseMatches(teamMatches);
+    const trendAnalysis = buildTrends(trends);
 
     // Player-level aggregation across the same set of matches
     const playerConditions = [
@@ -140,6 +169,9 @@ export class StatisticsService {
     ];
     if (competitionId) {
       playerConditions.push(eq(matches.competitionId, competitionId));
+    }
+    if (resolved) {
+      playerConditions.push(...windowConditions(resolved.window));
     }
 
     const statsRows = await this.databaseService.database
@@ -200,20 +232,163 @@ export class StatisticsService {
     );
 
     return {
-      matchesPlayed,
-      wins,
-      draws,
-      losses,
-      winRate: matchesPlayed > 0 ? wins / matchesPlayed : 0,
-      goalsFor,
-      goalsAgainst,
-      goalDifference: goalsFor - goalsAgainst,
-      cleanSheets,
-      points,
-      avgGoalsFor: matchesPlayed > 0 ? goalsFor / matchesPlayed : 0,
-      avgGoalsAgainst: matchesPlayed > 0 ? goalsAgainst / matchesPlayed : 0,
+      ...totals,
       trends,
       players,
+      // Additive fields — everything above keeps the shape existing clients read.
+      season: resolved ? toSeasonSummary(resolved.season) : null,
+      rollingWindow: trendAnalysis.rollingWindow,
+      form: trendAnalysis.form,
+      periods: trendAnalysis.periods,
+    };
+  }
+
+  /**
+   * Side-by-side season stat lines for two or three athletes on the coach's team.
+   *
+   * Uses two grouped queries rather than the per-row `loggedEventCount`
+   * subqueries: the appearance/minutes aggregate has to run over
+   * `athlete_match_stats` alone, because joining `match_events` fans each match
+   * out into one row per logged event and would multiply any minutes total.
+   */
+  async compareAthletes(userId: string, dto: CompareAthletesDto) {
+    const team = await this.requireTeam(userId);
+
+    const resolved = dto.seasonId
+      ? await this.seasonsService.resolveSeasonWindow(team.id, dto.seasonId)
+      : null;
+
+    const athleteRows = await this.databaseService.database
+      .select({
+        id: athletes.id,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        position: athletes.position,
+        squadNumber: athletes.squadNumber,
+      })
+      .from(athletes)
+      .where(
+        and(
+          inArray(athletes.id, dto.athleteIds),
+          eq(athletes.teamId, team.id),
+          isNull(athletes.archivedAt),
+        ),
+      );
+
+    // Doubles as the cross-team gate: an athlete on another team simply
+    // does not come back.
+    if (athleteRows.length !== dto.athleteIds.length) {
+      throw new NotFoundException('One or more athletes were not found.');
+    }
+
+    const conditions = [
+      inArray(athleteMatchStats.athleteId, dto.athleteIds),
+      eq(events.status, 'completed'),
+    ];
+    if (resolved) {
+      conditions.push(...windowConditions(resolved.window));
+    }
+
+    const appearanceRows = await this.databaseService.database
+      .select({
+        athleteId: athleteMatchStats.athleteId,
+        appearances: sql<number>`count(*)::int`,
+        starts: sql<number>`count(*) filter (where ${athleteMatchStats.started})::int`,
+        minutesPlayed: sql<number>`coalesce(sum(${athleteMatchStats.minutesPlayed}), 0)::int`,
+        matchesWithMinutes: sql<number>`count(*) filter (where ${athleteMatchStats.minutesPlayed} is not null)::int`,
+      })
+      .from(athleteMatchStats)
+      .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .where(and(...conditions))
+      .groupBy(athleteMatchStats.athleteId);
+
+    const eventRows = await this.databaseService.database
+      .select({
+        athleteId: athleteMatchStats.athleteId,
+        goals: countEvents('goal'),
+        assists: countEvents('assist'),
+        yellowCards: countEvents('yellow_card'),
+        redCards: countEvents('red_card'),
+        // Restricted to matches with recorded minutes so the per-90 numerator
+        // and denominator cover the same matches.
+        goalsInTimed: countEvents('goal', true),
+        assistsInTimed: countEvents('assist', true),
+      })
+      .from(athleteMatchStats)
+      .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .leftJoin(
+        matchEvents,
+        and(
+          eq(matchEvents.matchId, athleteMatchStats.matchId),
+          eq(matchEvents.athleteId, athleteMatchStats.athleteId),
+          eq(matchEvents.team, 'own'),
+        ),
+      )
+      .where(and(...conditions))
+      .groupBy(athleteMatchStats.athleteId);
+
+    const appearancesById = new Map(
+      appearanceRows.map((r) => [r.athleteId, r]),
+    );
+    const eventsById = new Map(eventRows.map((r) => [r.athleteId, r]));
+
+    // Preserve the order the coach selected the athletes in.
+    const lines = dto.athleteIds.map((athleteId) => {
+      const athlete = athleteRows.find((a) => a.id === athleteId)!;
+      const played = appearancesById.get(athleteId);
+      const logged = eventsById.get(athleteId);
+
+      const appearances = played?.appearances ?? 0;
+      const minutesPlayed = played?.minutesPlayed ?? 0;
+      const goals = logged?.goals ?? 0;
+      const assists = logged?.assists ?? 0;
+      const goalContributions = goals + assists;
+      const goalsInTimed = logged?.goalsInTimed ?? 0;
+      const assistsInTimed = logged?.assistsInTimed ?? 0;
+
+      const goalsPer90 = per90(goalsInTimed, minutesPlayed);
+
+      return {
+        athleteId,
+        name: `${athlete.firstName} ${athlete.lastName}`,
+        position: athlete.position,
+        squadNumber: athlete.squadNumber,
+        appearances,
+        starts: played?.starts ?? 0,
+        minutesPlayed,
+        matchesWithMinutes: played?.matchesWithMinutes ?? 0,
+        goals,
+        assists,
+        yellowCards: logged?.yellowCards ?? 0,
+        redCards: logged?.redCards ?? 0,
+        goalContributions,
+        perAppearance: {
+          goals: perAppearance(goals, appearances),
+          assists: perAppearance(assists, appearances),
+          goalContributions: perAppearance(goalContributions, appearances),
+        },
+        // Null unless enough minutes were recorded to make the rate meaningful.
+        // The live match logger does not record minutes yet, so this is
+        // normally null and the UI leads with `perAppearance` instead.
+        per90:
+          goalsPer90 === null
+            ? null
+            : {
+                goals: goalsPer90,
+                assists: per90(assistsInTimed, minutesPlayed)!,
+                goalContributions: per90(
+                  goalsInTimed + assistsInTimed,
+                  minutesPlayed,
+                )!,
+              },
+      };
+    });
+
+    return {
+      season: resolved ? toSeasonSummary(resolved.season) : null,
+      athletes: lines,
     };
   }
 
@@ -303,10 +478,7 @@ export class StatisticsService {
 
       const gf = row.teamScore;
       const ga = row.opponentScore;
-      let result: 'W' | 'D' | 'L';
-      if (gf > ga) result = 'W';
-      else if (gf === ga) result = 'D';
-      else result = 'L';
+      const result = matchResult(gf, ga);
 
       return {
         matchId: row.matchId,

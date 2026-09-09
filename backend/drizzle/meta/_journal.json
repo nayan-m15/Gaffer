@@ -99,6 +99,13 @@
       "when": 1788790692701,
       "tag": "0011_add_team_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788975346421,
+      "tag": "0013_season_statistics",
+      "breakpoints": true
     }
   ]
 }

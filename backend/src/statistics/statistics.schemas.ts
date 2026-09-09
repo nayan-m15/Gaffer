@@ -20,9 +20,12 @@ export type CreateCompetitionDto = z.infer<typeof createCompetitionSchema>;
 
 export const updateCompetitionSchema = createCompetitionSchema
   .partial()
-  .refine((value) => Object.values(value).some((field) => field !== undefined), {
-    message: 'At least one field is required.',
-  });
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    {
+      message: 'At least one field is required.',
+    },
+  );
 export type UpdateCompetitionDto = z.infer<typeof updateCompetitionSchema>;
 
 const standingFields = {
@@ -83,19 +86,40 @@ const standingFields = {
 
 export const createStandingSchema = z
   .object(standingFields)
-  .refine(
-    (data) => data.played === data.won + data.drawn + data.lost,
-    {
-      message: 'Played matches must equal Won + Drawn + Lost.',
-    },
-  )
-  .refine(
-    (data) => data.points === data.won * 3 + data.drawn,
-    {
-      message: 'Points must equal (Won × 3) + Drawn.',
-    },
-  );
+  .refine((data) => data.played === data.won + data.drawn + data.lost, {
+    message: 'Played matches must equal Won + Drawn + Lost.',
+  })
+  .refine((data) => data.points === data.won * 3 + data.drawn, {
+    message: 'Points must equal (Won × 3) + Drawn.',
+  });
 export type CreateStandingDto = z.infer<typeof createStandingSchema>;
+
+/**
+ * Query params for the athlete comparison endpoint. `athleteIds` arrives as a
+ * comma-joined string rather than a repeated param, so Express never has to
+ * decide between a string and an array depending on how many were sent.
+ */
+export const compareAthletesSchema = z.object({
+  athleteIds: z
+    .string('Select at least two athletes to compare.')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    )
+    .pipe(
+      z
+        .array(z.uuid('Invalid athlete id.'))
+        .min(2, 'Select at least two athletes to compare.')
+        .max(3, 'You can compare up to three athletes.')
+        .refine((ids) => new Set(ids).size === ids.length, {
+          message: 'Select different athletes to compare.',
+        }),
+    ),
+  seasonId: z.uuid('Invalid season id.').optional(),
+});
+export type CompareAthletesDto = z.infer<typeof compareAthletesSchema>;
 
 export const updateStandingSchema = z
   .object({
@@ -110,7 +134,10 @@ export const updateStandingSchema = z
     points: standingFields.points.optional(),
     isOwnTeam: standingFields.isOwnTeam.optional(),
   })
-  .refine((value) => Object.values(value).some((field) => field !== undefined), {
-    message: 'At least one field is required.',
-  });
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    {
+      message: 'At least one field is required.',
+    },
+  );
 export type UpdateStandingDto = z.infer<typeof updateStandingSchema>;

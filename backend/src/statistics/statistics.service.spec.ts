@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
 
@@ -9,6 +10,10 @@ describe('StatisticsService', () => {
 
   const mockTeamsService = {
     findTeamForUser: jest.fn(),
+  };
+
+  const mockSeasonsService = {
+    resolveSeasonWindow: jest.fn(),
   };
 
   /**
@@ -52,13 +57,18 @@ describe('StatisticsService', () => {
       select: jest.fn(() => thenable([])),
       insert: jest.fn(() => ({
         ...thenable([]),
-        values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
+        values: jest.fn(() => ({
+          returning: jest.fn(() => Promise.resolve([])),
+        })),
       })),
       update: jest.fn(() => ({
         ...thenable([]),
         set: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
       })),
-      delete: jest.fn(() => ({ ...thenable([]), where: jest.fn(() => thenable([])) })),
+      delete: jest.fn(() => ({
+        ...thenable([]),
+        where: jest.fn(() => thenable([])),
+      })),
     },
   };
 
@@ -67,6 +77,7 @@ describe('StatisticsService', () => {
       providers: [
         StatisticsService,
         { provide: TeamsService, useValue: mockTeamsService },
+        { provide: SeasonsService, useValue: mockSeasonsService },
         { provide: DatabaseService, useValue: mockDatabaseService },
       ],
     }).compile();
@@ -113,6 +124,113 @@ describe('StatisticsService', () => {
     expect(result.avgGoalsAgainst).toBe(0);
     expect(result.trends).toEqual([]);
     expect(result.players).toEqual([]);
+  });
+
+  /**
+   * Self-contained block: each test sets up its own complete query chain rather
+   * than adding to the chains above, which are matched positionally.
+   */
+  /** `.where(condition)` spy — typed so the captured condition is `unknown`, not `any`. */
+  type WhereSpy = jest.Mock<unknown, [unknown]>;
+
+  describe('season scoping', () => {
+    const season = {
+      id: 'season-1',
+      teamId: 'team-1',
+      name: '2025/26',
+      startDate: '2025-08-01',
+      endDate: '2026-05-31',
+      isCurrent: true,
+    };
+    const window = {
+      start: new Date('2025-08-01T00:00:00.000Z'),
+      end: new Date('2026-05-31T23:59:59.999Z'),
+    };
+
+    beforeEach(() => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+      mockSeasonsService.resolveSeasonWindow.mockResolvedValue({
+        season,
+        window,
+      });
+    });
+
+    it('does not resolve a season when none is requested', async () => {
+      await service.getOverview('user-1');
+
+      expect(mockSeasonsService.resolveSeasonWindow).not.toHaveBeenCalled();
+    });
+
+    it("resolves the season against the caller's own team", async () => {
+      await service.getOverview('user-1', { seasonId: 'season-1' });
+
+      expect(mockSeasonsService.resolveSeasonWindow).toHaveBeenCalledWith(
+        'team-1',
+        'season-1',
+      );
+    });
+
+    it('binds the season window into both the match and player queries', async () => {
+      const whereSpies: WhereSpy[] = [];
+      mockDatabaseService.database.select.mockImplementation(() => {
+        const chain = thenable([]);
+        whereSpies.push(chain.where as WhereSpy);
+        return chain;
+      });
+
+      await service.getOverview('user-1', { seasonId: 'season-1' });
+
+      expect(whereSpies).toHaveLength(2);
+      for (const where of whereSpies) {
+        const bound = collectBoundValues(where.mock.calls[0][0]);
+        expect(bound).toContainEqual(window.start);
+        expect(bound).toContainEqual(window.end);
+      }
+    });
+
+    it('omits the window from the query when no season is requested', async () => {
+      const whereSpies: WhereSpy[] = [];
+      mockDatabaseService.database.select.mockImplementation(() => {
+        const chain = thenable([]);
+        whereSpies.push(chain.where as WhereSpy);
+        return chain;
+      });
+
+      await service.getOverview('user-1');
+
+      const bound = collectBoundValues(whereSpies[0].mock.calls[0][0]);
+      expect(bound.some((v) => v instanceof Date)).toBe(false);
+    });
+
+    it('echoes the resolved season back to the client', async () => {
+      const result = await service.getOverview('user-1', {
+        seasonId: 'season-1',
+      });
+
+      expect(result.season).toEqual({
+        id: 'season-1',
+        name: '2025/26',
+        startDate: '2025-08-01',
+        endDate: '2026-05-31',
+        isCurrent: true,
+      });
+    });
+
+    it('reports a null season when unfiltered', async () => {
+      const result = await service.getOverview('user-1');
+
+      expect(result.season).toBeNull();
+    });
+
+    it('includes the trend payload alongside the existing fields', async () => {
+      const result = await service.getOverview('user-1');
+
+      expect(result.rollingWindow).toBe(5);
+      expect(result.form.rolling).toEqual([]);
+      expect(result.form.cumulative).toEqual([]);
+      expect(result.periods.splits).toEqual([]);
+      expect(result.periods.deltas).toEqual([]);
+    });
   });
 
   it('throws ForbiddenException from getAthleteStatistics when no team', async () => {

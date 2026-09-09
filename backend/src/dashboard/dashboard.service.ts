@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { athletes, events, matches } from '../database/schema';
+import { matchResult } from '../statistics/statistics.trends';
 import { TeamsService } from '../teams/teams.service';
 
 /**
@@ -41,12 +42,7 @@ export class DashboardService {
       this.databaseService.database
         .select({ value: count() })
         .from(athletes)
-        .where(
-          and(
-            eq(athletes.teamId, team.id),
-            isNull(athletes.archivedAt),
-          ),
-        ),
+        .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt))),
 
       // Total events
       this.databaseService.database
@@ -80,23 +76,15 @@ export class DashboardService {
         })
         .from(matches)
         .innerJoin(events, eq(matches.eventId, events.id))
-        .where(
-          and(
-            eq(events.teamId, team.id),
-            eq(events.status, 'completed'),
-          ),
-        )
+        .where(and(eq(events.teamId, team.id), eq(events.status, 'completed')))
         .orderBy(desc(events.scheduledAt))
         .limit(5),
     ]);
 
     const recentForm = recentMatches.map((match) => {
-      const result =
-        match.teamScore > match.opponentScore
-          ? ('W' as const)
-          : match.teamScore < match.opponentScore
-            ? ('L' as const)
-            : ('D' as const);
+      // Shared with the statistics module so the two never disagree on what
+      // counts as a win.
+      const result = matchResult(match.teamScore, match.opponentScore);
 
       return {
         id: match.id,

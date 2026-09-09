@@ -40,3 +40,17 @@ export async function cleanupUser({
   await testDb.delete(teams).where(eq(teams.name, teamName));
   await testDb.delete(user).where(eq(user.email, email));
 }
+
+/**
+ * Marks a test account's email as verified directly in the database.
+ *
+ * Sign-up now withholds the session until the address is confirmed, and the
+ * real confirmation goes through a Brevo-delivered link. Tests flip the flag
+ * themselves rather than sending live email on every sign-up.
+ */
+export async function verifyUserEmail(email: string): Promise<void> {
+  await testDb
+    .update(user)
+    .set({ emailVerified: true })
+    .where(eq(user.email, email));
+}
