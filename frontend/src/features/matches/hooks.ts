@@ -9,6 +9,7 @@ import {
   deleteMatchLogEvent,
   fetchMatch,
   fetchMatchEvents,
+  fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
   updateMatchLogEvent,
@@ -29,6 +30,8 @@ export const matchSquadQueryKey = (matchId: string) =>
   ["matches", matchId, "squad"] as const;
 export const matchEventsQueryKey = (matchId: string) =>
   ["matches", matchId, "events"] as const;
+export const matchOpponentSquadQueryKey = (matchId: string) =>
+  ["matches", matchId, "opponent-squad"] as const;
 
 const MATCH_QUERY_STALE_MS = 5_000;
 
@@ -54,6 +57,15 @@ export function useMatchEvents(matchId: string | undefined) {
   return useQuery({
     queryKey: matchEventsQueryKey(matchId ?? ""),
     queryFn: () => fetchMatchEvents(matchId!),
+    enabled: Boolean(matchId),
+    staleTime: MATCH_QUERY_STALE_MS,
+  });
+}
+
+export function useMatchOpponentSquad(matchId: string | undefined) {
+  return useQuery({
+    queryKey: matchOpponentSquadQueryKey(matchId ?? ""),
+    queryFn: () => fetchMatchOpponentSquad(matchId!),
     enabled: Boolean(matchId),
     staleTime: MATCH_QUERY_STALE_MS,
   });
@@ -208,6 +220,7 @@ export function useLogMatchEvent(matchId: string) {
         athleteId: input.athleteId ?? null,
         team: input.team,
         opponentLabel: input.opponentLabel ?? null,
+        opponentPlayerId: input.opponentPlayerId ?? null,
         eventType: input.eventType,
         minute: input.minute,
         detail: input.detail ?? null,
@@ -216,6 +229,14 @@ export function useLogMatchEvent(matchId: string) {
         createdAt: now,
         updatedAt: now,
         athlete: resolveAthlete(input.athleteId ?? null, squad),
+        opponentPlayer:
+          input.opponentPlayerId
+            ? queryClient
+                .getQueryData<MatchRecord>(matchKey(matchId))
+                ?.opponentSquad.find(
+                  (player) => player.id === input.opponentPlayerId,
+                ) ?? null
+            : null,
         pending: true,
         optimisticKey: tempId,
       };
@@ -306,6 +327,14 @@ export function useUpdateMatchEvent(matchId: string) {
             input.opponentLabel !== undefined
               ? input.opponentLabel
               : previousEvent.opponentLabel,
+          opponentPlayerId:
+            input.opponentPlayerId !== undefined
+              ? input.opponentPlayerId
+              : previousEvent.opponentPlayerId,
+          opponentPlayer:
+            input.opponentPlayerId === null
+              ? null
+              : previousEvent.opponentPlayer,
           minute: input.minute ?? previousEvent.minute,
           eventType: input.eventType ?? previousEvent.eventType,
           detail:

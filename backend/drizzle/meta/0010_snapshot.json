@@ -1,5 +1,5 @@
 {
-  "id": "daf34144-dc7d-41fd-8803-3303801b6032",
+  "id": "967ba25e-e50e-4c3b-865f-b27e4df83ce8",
   "prevId": "5c945ec9-034d-41b6-bbb4-5290abf1e321",
   "version": "7",
   "dialect": "postgresql",
@@ -339,12 +339,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -402,21 +396,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "athletes_user_id_index": {
-          "name": "athletes_user_id_index",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -431,19 +410,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "athletes_user_id_user_id_fk": {
-          "name": "athletes_user_id_user_id_fk",
-          "tableFrom": "athletes",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -528,136 +494,6 @@
           "tableTo": "teams",
           "columnsFrom": [
             "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.event_rsvps": {
-      "name": "event_rsvps",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "athlete_id": {
-          "name": "athlete_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "rsvp_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "responded_at": {
-          "name": "responded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "event_rsvps_event_id_index": {
-          "name": "event_rsvps_event_id_index",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "event_rsvps_event_athlete_unique": {
-          "name": "event_rsvps_event_athlete_unique",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "athlete_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "event_rsvps_event_id_events_id_fk": {
-          "name": "event_rsvps_event_id_events_id_fk",
-          "tableFrom": "event_rsvps",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "event_rsvps_athlete_id_athletes_id_fk": {
-          "name": "event_rsvps_athlete_id_athletes_id_fk",
-          "tableFrom": "event_rsvps",
-          "tableTo": "athletes",
-          "columnsFrom": [
-            "athlete_id"
           ],
           "columnsTo": [
             "id"
@@ -1090,6 +926,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "opponent_player_id": {
+          "name": "opponent_player_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "event_type": {
           "name": "event_type",
           "type": "match_event_type",
@@ -1152,6 +994,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "match_events_opponent_player_id_index": {
+          "name": "match_events_opponent_player_id_index",
+          "columns": [
+            {
+              "expression": "opponent_player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1192,6 +1049,19 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "match_events_opponent_player_id_opponent_match_players_id_fk": {
+          "name": "match_events_opponent_player_id_opponent_match_players_id_fk",
+          "tableFrom": "match_events",
+          "tableTo": "opponent_match_players",
+          "columnsFrom": [
+            "opponent_player_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1251,6 +1121,32 @@
           "notNull": true,
           "default": 0
         },
+        "game_plan_id": {
+          "name": "game_plan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_squad_visibility": {
+          "name": "opponent_squad_visibility",
+          "type": "opponent_squad_visibility",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'none'"
+        },
+        "team_color": {
+          "name": "team_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opponent_color": {
+          "name": "opponent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1272,6 +1168,21 @@
           "columns": [
             {
               "expression": "competition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "matches_game_plan_id_index": {
+          "name": "matches_game_plan_id_index",
+          "columns": [
+            {
+              "expression": "game_plan_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1309,6 +1220,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "matches_game_plan_id_game_plans_id_fk": {
+          "name": "matches_game_plan_id_game_plans_id_fk",
+          "tableFrom": "matches",
+          "tableTo": "game_plans",
+          "columnsFrom": [
+            "game_plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1318,163 +1242,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "event_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.player_claim_invites": {
-      "name": "player_claim_invites",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "athlete_id": {
-          "name": "athlete_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "claim_invite_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "used_at": {
-          "name": "used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "used_by_user_id": {
-          "name": "used_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "player_claim_invites_athlete_id_index": {
-          "name": "player_claim_invites_athlete_id_index",
-          "columns": [
-            {
-              "expression": "athlete_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "player_claim_invites_token_hash_index": {
-          "name": "player_claim_invites_token_hash_index",
-          "columns": [
-            {
-              "expression": "token_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "player_claim_invites_athlete_id_athletes_id_fk": {
-          "name": "player_claim_invites_athlete_id_athletes_id_fk",
-          "tableFrom": "player_claim_invites",
-          "tableTo": "athletes",
-          "columnsFrom": [
-            "athlete_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "player_claim_invites_created_by_user_id_user_id_fk": {
-          "name": "player_claim_invites_created_by_user_id_user_id_fk",
-          "tableFrom": "player_claim_invites",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "player_claim_invites_used_by_user_id_user_id_fk": {
-          "name": "player_claim_invites_used_by_user_id_user_id_fk",
-          "tableFrom": "player_claim_invites",
-          "tableTo": "user",
-          "columnsFrom": [
-            "used_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "player_claim_invites_token_hash_unique": {
-          "name": "player_claim_invites_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
           ]
         }
       },
@@ -1871,6 +1638,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "primary_color": {
+          "name": "primary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2045,6 +1818,109 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.opponent_match_players": {
+      "name": "opponent_match_players",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "match_id": {
+          "name": "match_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shirt_number": {
+          "name": "shirt_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "opponent_match_players_match_id_index": {
+          "name": "opponent_match_players_match_id_index",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "opponent_match_players_match_number_unique": {
+          "name": "opponent_match_players_match_number_unique",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "shirt_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "opponent_match_players_match_id_matches_id_fk": {
+          "name": "opponent_match_players_match_id_matches_id_fk",
+          "tableFrom": "opponent_match_players",
+          "tableTo": "matches",
+          "columnsFrom": [
+            "match_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -2055,15 +1931,6 @@
         "available",
         "injured",
         "suspended"
-      ]
-    },
-    "public.claim_invite_status": {
-      "name": "claim_invite_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "used",
-        "revoked"
       ]
     },
     "public.competition_type": {
@@ -2136,15 +2003,6 @@
         "long_ball"
       ]
     },
-    "public.rsvp_status": {
-      "name": "rsvp_status",
-      "schema": "public",
-      "values": [
-        "going",
-        "not_going",
-        "maybe"
-      ]
-    },
     "public.sex": {
       "name": "sex",
       "schema": "public",
@@ -2160,6 +2018,15 @@
       "values": [
         "coach",
         "assistant"
+      ]
+    },
+    "public.opponent_squad_visibility": {
+      "name": "opponent_squad_visibility",
+      "schema": "public",
+      "values": [
+        "none",
+        "numbers",
+        "full"
       ]
     }
   },

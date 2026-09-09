@@ -1,0 +1,1 @@
+ALTER TABLE "opponent_match_players" ADD COLUMN IF NOT EXISTS "position" text;

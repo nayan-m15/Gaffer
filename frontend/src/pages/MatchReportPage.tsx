@@ -1,10 +1,20 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronLeft, Loader2, ShieldAlert } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ChevronLeft,
+  Loader2,
+  Share2,
+  ShieldAlert,
+  Square,
+  Timer,
+  Zap,
+} from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useMatch,
   useMatchEvents,
@@ -20,9 +30,33 @@ import {
   EVENT_COLOR,
   EVENT_LABEL,
   eventDisplayLabel,
+  isPairedAssistEvent,
   isSecondYellow,
+  pairAssistsToGoals,
+  uniqueTimelineEvents,
 } from "@/features/matches/event-visuals";
 import { EventTypeGlyph } from "@/features/matches/EventTypeGlyph";
+import {
+  EventBreakdownChart,
+  ScoreProgressionChart,
+  TeamComparisonChart,
+} from "@/features/matches/match-report-charts";
+import { matchFacts, matchStory } from "@/features/matches/match-report-model";
+import {
+  LiveBenchRow,
+  LivePitch,
+  LivePitchPlayers,
+} from "@/features/matches/live-tactical-view";
+import {
+  opponentPitchState,
+  ownPitchState,
+  placeOppPlayers,
+  placeOwnPlayers,
+  resolveOppColor,
+  resolveOwnColor,
+  teamAbbrev,
+} from "@/features/matches/live-match-model";
+import "./LiveMatchPage.css";
 import "./MatchReportPage.css";
 
 type Tab = "summary" | "timeline" | "players";
@@ -36,6 +70,12 @@ const EVENT_TYPES: { value: MatchEventType; label: string }[] = [
   { value: "substitution", label: EVENT_LABEL.substitution },
   { value: "penalty", label: EVENT_LABEL.penalty },
   { value: "injury", label: EVENT_LABEL.injury },
+];
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "summary", label: "Summary" },
+  { id: "timeline", label: "Timeline" },
+  { id: "players", label: "Player Stats" },
 ];
 
 function lastName(athlete: MatchSquadAthlete) {
@@ -80,11 +120,17 @@ function formatMatchDate(iso: string) {
   if (Number.isNaN(date.getTime())) {
     return iso;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(date);
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+function minuteOrDash(value: number | null) {
+  return value == null ? "—" : `${value}'`;
 }
 
 function AdjustedBadge() {
@@ -107,15 +153,17 @@ export default function MatchReportPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
+  const gamePlanQuery = useGamePlan(matchQuery.data?.gamePlanId ?? undefined);
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
 
   const [tab, setTab] = useState<Tab>("summary");
   const [editing, setEditing] = useState<MatchLogEvent | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [shareNote, setShareNote] = useState<string | null>(null);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
-    const rows = eventsQuery.data ?? [];
+    const rows = uniqueTimelineEvents(eventsQuery.data ?? []);
     return [...rows].sort((a, b) => {
       const byMinute = a.minute - b.minute;
       if (byMinute !== 0) {
@@ -129,14 +177,71 @@ export default function MatchReportPage() {
   const match = matchQuery.data;
   const oppName = match?.opponentName ?? "OPP";
   const isHome = match?.isHome ?? true;
+  const visibility = match?.opponentSquadVisibility ?? "none";
+  const ownColor = resolveOwnColor(match?.teamColor, team?.primaryColor);
+  const oppColor = resolveOppColor(match?.opponentColor);
+  const ownHalf = isHome ? "left" : "right";
+  const oppHalf = isHome ? "right" : "left";
   const teamScore = match?.teamScore ?? 0;
   const oppScore = match?.opponentScore ?? 0;
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
   const awayScore = isHome ? oppScore : teamScore;
-  const result =
-    teamScore > oppScore ? "W" : teamScore < oppScore ? "L" : "D";
+  const homeColor = isHome ? ownColor : oppColor;
+  const awayColor = isHome ? oppColor : ownColor;
+  const ownAbbrev = teamAbbrev(ownName);
+  const oppAbbrev = teamAbbrev(oppName);
+
+  const ownState = useMemo(
+    () => ownPitchState(squad, timeline),
+    [squad, timeline],
+  );
+  const oppState = useMemo(
+    () => opponentPitchState(match?.opponentSquad ?? [], timeline),
+    [match?.opponentSquad, timeline],
+  );
+  const ownPlaced = useMemo(
+    () =>
+      placeOwnPlayers(
+        ownState.onPitch,
+        gamePlanQuery.data,
+        ownHalf,
+        timeline,
+        visibility === "none" ? "own" : "full",
+      ),
+    [ownState.onPitch, gamePlanQuery.data, ownHalf, timeline, visibility],
+  );
+  const oppPlaced = useMemo(
+    () => placeOppPlayers(oppState.onPitch, oppHalf, timeline),
+    [oppState.onPitch, oppHalf, timeline],
+  );
+  const ownPitchIds = useMemo(
+    () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
+    [ownPlaced],
+  );
+  const oppPitchIds = useMemo(
+    () => new Set(oppPlaced.map((placed) => placed.player.id)),
+    [oppPlaced],
+  );
+  const ownBench = useMemo(() => {
+    const overflow = ownState.onPitch.filter(
+      (athlete) => !ownPitchIds.has(athlete.id),
+    );
+    return [
+      ...ownState.bench.filter((athlete) => !ownPitchIds.has(athlete.id)),
+      ...overflow,
+    ];
+  }, [ownState.bench, ownState.onPitch, ownPitchIds]);
+  const oppBench = useMemo(() => {
+    const overflow = oppState.onPitch.filter(
+      (player) => !oppPitchIds.has(player.id),
+    );
+    return [
+      ...oppState.bench.filter((player) => !oppPitchIds.has(player.id)),
+      ...overflow,
+    ];
+  }, [oppState.bench, oppState.onPitch, oppPitchIds]);
 
   const playerStats = useMemo(() => {
     return squad.map((athlete) => {
@@ -146,6 +251,8 @@ export default function MatchReportPage() {
       return {
         athlete,
         goals: ownEvents.filter((event) => event.eventType === "goal").length,
+        assists: ownEvents.filter((event) => event.eventType === "assist")
+          .length,
         yellow: ownEvents.filter((event) => event.eventType === "yellow_card")
           .length,
         red: ownEvents.filter((event) => event.eventType === "red_card")
@@ -154,12 +261,46 @@ export default function MatchReportPage() {
     });
   }, [squad, timeline]);
 
-  const goals = timeline.filter((event) => event.eventType === "goal");
-  const cards = timeline.filter(
-    (event) =>
-      event.eventType === "yellow_card" || event.eventType === "red_card",
+  const topPerformers = useMemo(
+    () =>
+      [...playerStats]
+        .filter((row) => row.goals > 0 || row.assists > 0)
+        .sort(
+          (left, right) =>
+            right.goals - left.goals || right.assists - left.assists,
+        )
+        .slice(0, 3),
+    [playerStats],
   );
-  const subs = timeline.filter((event) => event.eventType === "substitution");
+
+  const assistsByGoal = pairAssistsToGoals(timeline);
+  const goals = timeline.filter((event) => event.eventType === "goal");
+  const facts = matchFacts(timeline);
+  const story = matchStory({
+    ownName,
+    oppName,
+    teamScore,
+    oppScore,
+    goals,
+    squad,
+  });
+
+  const shareReport = async () => {
+    const url = window.location.href;
+    const title = `${ownName} ${teamScore}-${oppScore} ${oppName}`;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title, text: story, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${title}\n${story}\n${url}`);
+      setShareNote("Link copied");
+      window.setTimeout(() => setShareNote(null), 2500);
+    } catch {
+      setShareNote("Could not share");
+      window.setTimeout(() => setShareNote(null), 2500);
+    }
+  };
 
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
@@ -207,115 +348,163 @@ export default function MatchReportPage() {
     match.competitionName ?? "Friendly",
     formatMatchDate(match.eventScheduledAt),
     match.eventLocation,
-  ].join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ")
+    .toUpperCase();
 
   return (
     <div className="match-report min-h-screen overflow-x-hidden">
-      <header className="flex items-center justify-between border-b border-[#1c2b36] px-4 py-3">
+      <header className="relative flex items-center justify-between border-b border-[#1c2b36] px-4 py-3">
         <button
           type="button"
-          className="flex items-center gap-1 text-sm text-[#8e9ba8]"
+          className="relative z-10 flex items-center gap-1 text-sm text-[#e8ecef]"
           onClick={() => navigate("/live-logger")}
         >
           <ChevronLeft className="size-4" />
           Back
         </button>
-        <div className="flex min-w-0 items-center gap-3">
-          <SportLogo size={36} className="shrink-0 rounded-lg" />
-          <div className="min-w-0">
-            <h1 className="font-display text-base font-bold tracking-wide text-[#e8ecef]">
+        <div className="pointer-events-none absolute inset-x-0 flex flex-col items-center">
+          <span className="flex items-center gap-2">
+            <SportLogo size={22} className="rounded-md" />
+            <span className="font-display text-base font-bold tracking-wide text-[#e8ecef]">
               GAFFER
-            </h1>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[#8e9ba8]">
-              Match Report
-            </p>
-          </div>
+            </span>
+          </span>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#00d99a]">
+            Match Report
+          </p>
         </div>
         <span
-          className={cn(
-            "rounded-full px-3 py-1 font-oswald text-sm tracking-widest",
-            result === "W" && "bg-[#00d99a]/15 text-[#00d99a]",
-            result === "D" && "bg-[#1a2530] text-[#8e9ba8]",
-            result === "L" && "bg-[#ff5b5f]/15 text-[#ff5b5f]",
-          )}
-        >
-          {result}
-        </span>
+          className="size-8 shrink-0 rounded-full"
+          style={{ backgroundColor: ownColor }}
+          aria-hidden="true"
+        />
       </header>
 
-      <div className="px-4 pb-16 pt-6">
-        <div className="text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e9ba8]">
-            {match.eventTitle}
-          </p>
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-            <p className="truncate text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8] sm:text-[11px]">
-              {homeName}
-            </p>
-            <p className="font-oswald text-5xl leading-none tabular-nums text-white sm:text-7xl">
-              {homeScore}
-              <span className="mx-1 text-2xl text-[#8e9ba8] sm:mx-2 sm:text-3xl">–</span>
-              {awayScore}
-            </p>
-            <p className="truncate text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8] sm:text-[11px]">
-              {awayName}
-            </p>
-          </div>
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
-            {metaLine}
-          </p>
-        </div>
-
-        <div className="mt-8 grid grid-cols-3 gap-1 rounded-xl border border-[#1c2b36] bg-[#101920] p-1">
-          {(
-            [
-              ["summary", "Summary"],
-              ["timeline", "Timeline"],
-              ["players", "Player Stats"],
-            ] as const
-          ).map(([id, label]) => (
+      <div className="px-4 pb-16 pt-5">
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-[#101920] p-1">
+          {TABS.map((item) => (
             <button
-              key={id}
+              key={item.id}
               type="button"
               className={cn(
                 "rounded-lg py-2 font-oswald text-[10px] tracking-widest sm:text-xs",
-                tab === id
-                  ? "bg-[#00d99a]/15 text-[#00d99a]"
-                  : "text-[#8e9ba8]",
+                tab === item.id
+                  ? "bg-[#0f3d32] text-white"
+                  : "bg-transparent text-[#c5ced6]",
               )}
-              onClick={() => setTab(id)}
+              onClick={() => setTab(item.id)}
             >
-              {label}
+              {item.label}
             </button>
           ))}
         </div>
 
         {tab === "summary" && (
-          <div className="mt-6 space-y-6">
-            <Breakdown
-              title="Goals"
-              empty="No goals logged."
-              rows={goals}
-              squad={squad}
-              ownName={ownName}
-              oppName={oppName}
-            />
-            <Breakdown
-              title="Cards"
-              empty="No cards logged."
-              rows={cards}
-              squad={squad}
-              ownName={ownName}
-              oppName={oppName}
-            />
-            <Breakdown
-              title="Substitutions"
-              empty="No substitutions logged."
-              rows={subs}
-              squad={squad}
-              ownName={ownName}
-              oppName={oppName}
-            />
+          <div className="mt-5 space-y-5">
+            <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
+                  {metaLine}
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f]"
+                  onClick={() => void shareReport()}
+                  aria-label="Share match report"
+                >
+                  <Share2 className="size-4" />
+                </button>
+              </div>
+              {shareNote ? (
+                <p className="mt-2 text-right text-[11px] text-[#00d99a]">{shareNote}</p>
+              ) : null}
+              <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+                <div className="min-w-0 text-left">
+                  <p className="truncate font-oswald text-lg tracking-wide text-white sm:text-xl">
+                    {homeName}
+                  </p>
+                  <span
+                    className="mt-1 block h-1 w-12 rounded-full"
+                    style={{ backgroundColor: homeColor }}
+                  />
+                </div>
+                <div className="rounded-xl bg-[#0c1218] px-4 py-2">
+                  <p className="font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+                    <span style={{ color: homeColor }}>{homeScore}</span>
+                    <span className="mx-2 text-2xl text-white">-</span>
+                    <span style={{ color: awayColor }}>{awayScore}</span>
+                  </p>
+                </div>
+                <div className="min-w-0 text-right">
+                  <p className="truncate font-oswald text-lg tracking-wide text-white sm:text-xl">
+                    {awayName}
+                  </p>
+                  <span
+                    className="ml-auto mt-1 block h-1 w-12 rounded-full"
+                    style={{ backgroundColor: awayColor }}
+                  />
+                </div>
+              </div>
+              <p className="mt-5 border-l-2 border-[#00d99a] pl-3 text-sm leading-relaxed text-[#c5ced6]">
+                {story}
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                Match facts
+              </h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <FactCard
+                  label="First goal"
+                  value={minuteOrDash(facts.firstGoalMinute)}
+                  color="#00d99a"
+                  icon={<Zap className="size-4" />}
+                />
+                <FactCard
+                  label="First card"
+                  value={minuteOrDash(facts.firstCardMinute)}
+                  color="#f5c518"
+                  icon={<Square className="size-3.5 fill-current" />}
+                />
+                <FactCard
+                  label="Substitutions"
+                  value={String(facts.substitutionCount)}
+                  color="#c084fc"
+                  icon={<ArrowLeftRight className="size-4" />}
+                />
+                <FactCard
+                  label="Total events logged"
+                  value={String(facts.totalEvents)}
+                  color="#ff8fab"
+                  icon={<Timer className="size-4" />}
+                />
+              </div>
+            </section>
+
+            <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+              <TeamComparisonChart
+                events={timeline}
+                ownName={ownAbbrev}
+                oppName={oppAbbrev}
+                ownColor={ownColor}
+                oppColor={oppColor}
+              />
+            </div>
+            <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+              <ScoreProgressionChart
+                events={timeline}
+                ownName={ownAbbrev}
+                oppName={oppAbbrev}
+                ownColor={ownColor}
+                oppColor={oppColor}
+              />
+            </div>
+            <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+              <EventBreakdownChart events={timeline} />
+            </div>
           </div>
         )}
 
@@ -331,115 +520,222 @@ export default function MatchReportPage() {
                   aria-hidden="true"
                   className="absolute bottom-3 left-[9px] top-3 w-px bg-[#1c2b36]"
                 />
-                {timeline.map((event) => (
-                  <li
-                    key={event.optimisticKey ?? event.id}
-                    className={cn(
-                      "relative flex gap-3 pb-4 last:pb-0",
-                      event.pending && "opacity-55",
-                    )}
-                  >
-                    <span
-                      className="relative z-10 mt-3 size-[19px] shrink-0 rounded-full border-2 bg-[#070d12]"
-                      style={{ borderColor: EVENT_COLOR[event.eventType] }}
+                {timeline
+                  .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
+                  .map((event) => (
+                    <li
+                      key={event.optimisticKey ?? event.id}
+                      className={cn(
+                        "relative flex gap-3 pb-4 last:pb-0",
+                        event.pending && "opacity-55",
+                      )}
                     >
                       <span
-                        className="absolute inset-[3px] rounded-full"
-                        style={{ background: EVENT_COLOR[event.eventType] }}
-                      />
-                    </span>
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 rounded-xl border border-[#1c2b36] bg-[#101920] px-3 py-3 text-left"
-                      onClick={() => {
-                        if (event.pending) {
-                          return;
-                        }
-                        setSaveError(null);
-                        setEditing(event);
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex min-w-0 items-start gap-2">
-                          <EventTypeGlyph
-                            eventType={event.eventType}
-                            secondYellow={isSecondYellow(event)}
-                          />
-                          <div className="min-w-0">
-                            <p className="font-oswald text-sm tracking-wide">
-                              {event.minute}&apos; {eventDisplayLabel(event)}
-                            </p>
-                            <p className="truncate text-xs text-[#8e9ba8]">
-                              {event.team === "own" ? ownName : oppName} ·{" "}
-                              {whoLabel(event, squad)}
-                              {substitutionIncoming(event, squad)}
-                            </p>
-                            {event.detail &&
-                              event.eventType !== "substitution" &&
-                              !isSecondYellow(event) && (
-                                <p className="mt-1 text-xs text-[#8e9ba8]">
-                                  {event.detail}
-                                </p>
-                              )}
+                        className="relative z-10 mt-3 size-[19px] shrink-0 rounded-full border-2 bg-[#070d12]"
+                        style={{ borderColor: EVENT_COLOR[event.eventType] }}
+                      >
+                        <span
+                          className="absolute inset-[3px] rounded-full"
+                          style={{ background: EVENT_COLOR[event.eventType] }}
+                        />
+                      </span>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 rounded-xl border border-[#1c2b36] bg-[#101920] px-3 py-3 text-left"
+                        onClick={() => {
+                          if (event.pending) {
+                            return;
+                          }
+                          setSaveError(null);
+                          setEditing(event);
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start gap-2">
+                            <EventTypeGlyph
+                              eventType={event.eventType}
+                              secondYellow={isSecondYellow(event)}
+                            />
+                            <div className="min-w-0">
+                              <p className="font-oswald text-sm tracking-wide">
+                                {event.minute}&apos; {eventDisplayLabel(event)}
+                              </p>
+                              <p className="truncate text-xs text-[#8e9ba8]">
+                                {event.team === "own" ? ownName : oppName} ·{" "}
+                                {whoLabel(event, squad)}
+                                {event.eventType === "goal" &&
+                                assistsByGoal.get(event.id)
+                                  ? `, Assist: ${whoLabel(assistsByGoal.get(event.id)!, squad)}`
+                                  : ""}
+                                {substitutionIncoming(event, squad)}
+                              </p>
+                              {event.detail &&
+                                event.eventType !== "substitution" &&
+                                event.eventType !== "assist" &&
+                                event.eventType !== "goal" &&
+                                !isSecondYellow(event) && (
+                                  <p className="mt-1 text-xs text-[#8e9ba8]">
+                                    {event.detail}
+                                  </p>
+                                )}
+                            </div>
                           </div>
+                          {event.manuallyAdjusted && <AdjustedBadge />}
                         </div>
-                        {event.manuallyAdjusted && <AdjustedBadge />}
-                      </div>
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  ))}
               </ul>
             )}
           </section>
         )}
 
         {tab === "players" && (
-          <section className="mt-6 overflow-x-auto">
-            {playerStats.length === 0 ? (
-              <p className="text-center text-sm text-[#8e9ba8]">
-                No squad recorded for this match.
-              </p>
-            ) : (
-              <table className="w-full min-w-[28rem] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#1c2b36] font-oswald text-[10px] uppercase tracking-widest text-[#8e9ba8]">
-                    <th className="px-2 py-2 font-medium">#</th>
-                    <th className="px-2 py-2 font-medium">Player</th>
-                    <th className="px-2 py-2 font-medium">Start</th>
-                    <th className="px-2 py-2 text-right font-medium">G</th>
-                    <th className="px-2 py-2 text-right font-medium">Y</th>
-                    <th className="px-2 py-2 text-right font-medium">R</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {playerStats.map((row) => (
-                    <tr
+          <section className="mt-6 space-y-4">
+            <LivePitch
+              layout={visibility === "none" ? "own" : "full"}
+              ownHalf={ownHalf}
+              ownColor={ownColor}
+              oppColor={oppColor}
+            >
+              <LivePitchPlayers
+                ownPlaced={ownPlaced}
+                oppPlaced={oppPlaced}
+                ownColor={ownColor}
+                oppColor={oppColor}
+                visibility={visibility}
+                timeline={timeline}
+                selectedKey={null}
+                onSelectOwn={() => undefined}
+                onSelectOpp={() => undefined}
+              />
+            </LivePitch>
+
+            <div className="grid grid-cols-2 gap-3 rounded-xl border border-[#1c2b36] bg-[#0c1218] px-3 py-1.5">
+              {ownHalf === "left" ? (
+                <>
+                  <LiveBenchRow
+                    label={`${ownAbbrev} bench`}
+                    color={ownColor}
+                    athletes={ownBench}
+                    timeline={timeline}
+                    selectedKey={null}
+                    onSelectOwn={() => undefined}
+                    align="left"
+                  />
+                  <LiveBenchRow
+                    label={`${oppAbbrev} bench`}
+                    color={oppColor}
+                    opponents={oppBench}
+                    visibility={visibility}
+                    timeline={timeline}
+                    selectedKey={null}
+                    onSelectOpp={() => undefined}
+                    align="right"
+                  />
+                </>
+              ) : (
+                <>
+                  <LiveBenchRow
+                    label={`${oppAbbrev} bench`}
+                    color={oppColor}
+                    opponents={oppBench}
+                    visibility={visibility}
+                    timeline={timeline}
+                    selectedKey={null}
+                    onSelectOpp={() => undefined}
+                    align="left"
+                  />
+                  <LiveBenchRow
+                    label={`${ownAbbrev} bench`}
+                    color={ownColor}
+                    athletes={ownBench}
+                    timeline={timeline}
+                    selectedKey={null}
+                    onSelectOwn={() => undefined}
+                    align="right"
+                  />
+                </>
+              )}
+            </div>
+
+            {topPerformers.length > 0 ? (
+              <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                  Top performers
+                </h2>
+                <ul className="mt-3 space-y-2">
+                  {topPerformers.map((row) => (
+                    <li
                       key={row.athlete.id}
-                      className="border-b border-[#1c2b36]/70"
+                      className="flex items-center justify-between rounded-xl bg-[#0c1218] px-3 py-2.5"
                     >
-                      <td className="px-2 py-3 font-oswald tabular-nums">
-                        {row.athlete.squadNumber ?? "—"}
-                      </td>
-                      <td className="px-2 py-3">
-                        {row.athlete.firstName} {row.athlete.lastName}
-                      </td>
-                      <td className="px-2 py-3 text-[#8e9ba8]">
-                        {row.athlete.started ? "XI" : "Bench"}
-                      </td>
-                      <td className="px-2 py-3 text-right font-oswald">
-                        {row.goals}
-                      </td>
-                      <td className="px-2 py-3 text-right font-oswald">
-                        {row.yellow}
-                      </td>
-                      <td className="px-2 py-3 text-right font-oswald">
-                        {row.red}
-                      </td>
-                    </tr>
+                      <p className="font-oswald tracking-wide">
+                        {shirtLabel(row.athlete)}
+                      </p>
+                      <p className="text-xs text-[#8e9ba8]">
+                        {row.goals} G · {row.assists} A
+                      </p>
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            )}
+                </ul>
+              </section>
+            ) : null}
+
+            <section className="overflow-x-auto rounded-2xl border border-[#1c2b36] bg-[#101920] p-3">
+              <h2 className="px-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                Squad stats
+              </h2>
+              {playerStats.length === 0 ? (
+                <p className="mt-3 text-center text-sm text-[#8e9ba8]">
+                  No squad recorded for this match.
+                </p>
+              ) : (
+                <table className="mt-2 w-full min-w-[28rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[#1c2b36] font-oswald text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+                      <th className="px-2 py-2 font-medium">#</th>
+                      <th className="px-2 py-2 font-medium">Player</th>
+                      <th className="px-2 py-2 font-medium">Start</th>
+                      <th className="px-2 py-2 text-right font-medium">G</th>
+                      <th className="px-2 py-2 text-right font-medium">A</th>
+                      <th className="px-2 py-2 text-right font-medium">Y</th>
+                      <th className="px-2 py-2 text-right font-medium">R</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerStats.map((row) => (
+                      <tr
+                        key={row.athlete.id}
+                        className="border-b border-[#1c2b36]/70"
+                      >
+                        <td className="px-2 py-3 font-oswald tabular-nums">
+                          {row.athlete.squadNumber ?? "—"}
+                        </td>
+                        <td className="px-2 py-3">
+                          {row.athlete.firstName} {row.athlete.lastName}
+                        </td>
+                        <td className="px-2 py-3 text-[#8e9ba8]">
+                          {row.athlete.started ? "XI" : "Bench"}
+                        </td>
+                        <td className="px-2 py-3 text-right font-oswald">
+                          {row.goals}
+                        </td>
+                        <td className="px-2 py-3 text-right font-oswald">
+                          {row.assists}
+                        </td>
+                        <td className="px-2 py-3 text-right font-oswald">
+                          {row.yellow}
+                        </td>
+                        <td className="px-2 py-3 text-right font-oswald">
+                          {row.red}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
           </section>
         )}
       </div>
@@ -475,57 +771,32 @@ export default function MatchReportPage() {
   );
 }
 
-function Breakdown({
-  title,
-  empty,
-  rows,
-  squad,
-  ownName,
-  oppName,
+function FactCard({
+  label,
+  value,
+  color,
+  icon,
 }: {
-  title: string;
-  empty: string;
-  rows: MatchLogEvent[];
-  squad: MatchSquadAthlete[];
-  ownName: string;
-  oppName: string;
+  label: string;
+  value: string;
+  color: string;
+  icon: ReactNode;
 }) {
   return (
-    <section>
-      <h2 className="font-oswald text-sm tracking-[0.22em] text-[#8e9ba8]">
-        {title.toUpperCase()}
-      </h2>
-      {rows.length === 0 ? (
-        <p className="mt-3 text-sm text-[#8e9ba8]">{empty}</p>
-      ) : (
-        <ul className="mt-3 flex flex-col gap-2">
-          {rows.map((event) => (
-            <li
-              key={event.id}
-              className="flex items-start justify-between gap-3 rounded-xl border border-[#1c2b36] bg-[#101920] px-3 py-3"
-            >
-              <div className="flex min-w-0 items-start gap-2">
-                <EventTypeGlyph
-                  eventType={event.eventType}
-                  secondYellow={isSecondYellow(event)}
-                />
-                <div className="min-w-0">
-                  <p className="font-oswald text-sm tracking-wide">
-                    {event.minute}&apos; {eventDisplayLabel(event)}
-                  </p>
-                  <p className="truncate text-xs text-[#8e9ba8]">
-                    {event.team === "own" ? ownName : oppName} ·{" "}
-                    {whoLabel(event, squad)}
-                    {substitutionIncoming(event, squad)}
-                  </p>
-                </div>
-              </div>
-              {event.manuallyAdjusted && <AdjustedBadge />}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <div
+      className="rounded-xl bg-[#101920] px-3 py-3"
+      style={{ boxShadow: `inset 0 0 0 1px ${color}55` }}
+    >
+      <span className="inline-flex text-[color:var(--fact-color)]" style={{ ["--fact-color" as string]: color }}>
+        {icon}
+      </span>
+      <p className="mt-2 font-oswald text-2xl leading-none tabular-nums text-white">
+        {value}
+      </p>
+      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]">
+        {label}
+      </p>
+    </div>
   );
 }
 

@@ -22,6 +22,7 @@ export interface SessionTeam {
   id: string;
   name: string;
   role: "coach" | "assistant";
+  primaryColor: string | null;
 }
 
 /**

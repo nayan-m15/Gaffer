@@ -1,9 +1,9 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import { TeamsService } from './teams.service';
-import { createTeamSchema } from './teams.schemas';
+import { createTeamSchema, updateTeamSchema } from './teams.schemas';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 
 @Controller('teams')
@@ -22,8 +22,23 @@ export class TeamsController {
     // has a team (Sprint 1 is one team per user) — that's a real Nest
     // HttpException already, so no error-mapping needed here, unlike the
     // Better Auth calls in AuthController.
-    const team = await this.teamsService.createTeamForUser(user.id, dto.name);
+    const team = await this.teamsService.createTeamForUser(
+      user.id,
+      dto.name,
+      dto.primaryColor,
+    );
 
+    return { team };
+  }
+
+  @UseGuards(AuthGuard)
+  @Patch()
+  async updateTeam(
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedRequest['user'],
+  ) {
+    const dto = zodValidate(updateTeamSchema, body);
+    const team = await this.teamsService.updateTeamForUser(user.id, dto);
     return { team };
   }
 }

@@ -4,6 +4,7 @@ import type {
   MatchLogEvent,
   MatchRecord,
   MatchSquadAthlete,
+  OpponentMatchPlayer,
   UpdateMatchLogEventInput,
 } from "./types";
 
@@ -13,6 +14,12 @@ export function fetchMatch(matchId: string) {
 
 export function fetchMatchSquad(matchId: string) {
   return apiFetch<MatchSquadAthlete[]>(`/matches/${matchId}/squad`);
+}
+
+export function fetchMatchOpponentSquad(matchId: string) {
+  return apiFetch<OpponentMatchPlayer[]>(
+    `/matches/${matchId}/opponent-squad`,
+  );
 }
 
 export function fetchMatchEvents(matchId: string) {

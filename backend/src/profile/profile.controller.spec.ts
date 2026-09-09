@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -38,7 +40,12 @@ describe('ProfileController', () => {
 
   describe('getProfile', () => {
     it('should call the service with the authenticated user ID', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       mockProfileService.getProfile.mockResolvedValue(mockUser);
 
       await controller.getProfile(mockUser);
@@ -56,7 +63,12 @@ describe('ProfileController', () => {
     };
 
     it('should call the service with the authenticated user ID and validated input', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       const updated = { ...mockUser, ...validInput };
       mockProfileService.updateProfile.mockResolvedValue(updated);
 
@@ -71,7 +83,12 @@ describe('ProfileController', () => {
     });
 
     it('should allow updating phone number, sex, and date of birth', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       mockProfileService.updateProfile.mockResolvedValue(mockUser);
 
       await controller.updateProfile(mockUser, validInput);
@@ -87,7 +104,12 @@ describe('ProfileController', () => {
     });
 
     it('should allow clearing optional fields with null', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       mockProfileService.updateProfile.mockResolvedValue(mockUser);
 
       await controller.updateProfile(mockUser, {
@@ -106,7 +128,12 @@ describe('ProfileController', () => {
     });
 
     it('should reject an invalid sex value', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
 
       await expect(
         controller.updateProfile(mockUser, {
@@ -119,7 +146,12 @@ describe('ProfileController', () => {
     });
 
     it('should reject a future date of birth', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
       const futureStr = futureDate.toISOString().slice(0, 10);
@@ -135,7 +167,12 @@ describe('ProfileController', () => {
     });
 
     it('should strip restricted fields (email, role, teamId) from the body', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
       mockProfileService.updateProfile.mockResolvedValue(mockUser);
 
       await controller.updateProfile(mockUser, {
@@ -160,7 +197,12 @@ describe('ProfileController', () => {
     });
 
     it('should reject when name is empty', async () => {
-      const mockUser = { id: 'user-1', name: 'Coach', email: 'c@test.com', emailVerified: true };
+      const mockUser = {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'c@test.com',
+        emailVerified: true,
+      };
 
       await expect(
         controller.updateProfile(mockUser, {

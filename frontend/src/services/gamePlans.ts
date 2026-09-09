@@ -75,6 +75,10 @@ export async function getGamePlans(): Promise<BackendGamePlan[]> {
   return apiFetch<BackendGamePlan[]>(GAME_PLANS_PATH);
 }
 
+export async function getGamePlan(id: string): Promise<BackendGamePlan> {
+  return apiFetch<BackendGamePlan>(`${GAME_PLANS_PATH}/${id}`);
+}
+
 export async function createGamePlan(
   input: CreateGamePlanInput,
 ): Promise<BackendGamePlan> {

@@ -10,6 +10,15 @@ export type MatchEventType =
   | "penalty"
   | "injury";
 
+export type OpponentSquadVisibility = "none" | "numbers" | "full";
+
+export interface OpponentMatchPlayer {
+  id: string;
+  shirtNumber: number;
+  name: string | null;
+  position?: string | null;
+}
+
 export interface MatchRecord {
   id: string;
   eventId: string;
@@ -18,6 +27,10 @@ export interface MatchRecord {
   isHome: boolean;
   teamScore: number;
   opponentScore: number;
+  gamePlanId: string | null;
+  opponentSquadVisibility: OpponentSquadVisibility;
+  teamColor: string | null;
+  opponentColor: string | null;
   createdAt: string;
   updatedAt: string;
   eventTitle: string;
@@ -25,6 +38,7 @@ export interface MatchRecord {
   eventScheduledAt: string;
   eventLocation: string;
   competitionName: string | null;
+  opponentSquad: OpponentMatchPlayer[];
 }
 
 export interface MatchSquadAthlete {
@@ -42,6 +56,7 @@ export interface MatchLogEvent {
   athleteId: string | null;
   team: MatchEventTeam;
   opponentLabel: string | null;
+  opponentPlayerId: string | null;
   eventType: MatchEventType;
   minute: number;
   detail: string | null;
@@ -50,6 +65,7 @@ export interface MatchLogEvent {
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;
+  opponentPlayer: OpponentMatchPlayer | null;
   /** Client-only: true while the POST/PATCH has not yet confirmed. */
   pending?: boolean;
   /** Client-only: stable list key so confirming a log does not remount the row. */
@@ -61,6 +77,7 @@ export interface CreateMatchLogEventInput {
   eventType: MatchEventType;
   athleteId?: string;
   opponentLabel?: string;
+  opponentPlayerId?: string;
   minute: number;
   detail?: string;
 }
@@ -68,6 +85,7 @@ export interface CreateMatchLogEventInput {
 export interface UpdateMatchLogEventInput {
   athleteId?: string | null;
   opponentLabel?: string | null;
+  opponentPlayerId?: string | null;
   minute?: number;
   eventType?: MatchEventType;
   detail?: string | null;
