@@ -1166,7 +1166,7 @@ export default function LiveMatchPage() {
         <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="flex flex-col items-end">
-              <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
                 {homeAbbrev}
               </p>
               <span
@@ -1174,13 +1174,13 @@ export default function LiveMatchPage() {
                 style={{ backgroundColor: homeColor }}
               />
             </div>
-            <p className="font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+            <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
               <span style={{ color: homeColor }}>{homeScore}</span>
               <span className="mx-1.5 text-2xl text-[#8e9ba8]">-</span>
               <span style={{ color: awayColor }}>{awayScore}</span>
             </p>
             <div className="flex flex-col items-start">
-              <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
                 {awayAbbrev}
               </p>
               <span
@@ -1238,7 +1238,7 @@ export default function LiveMatchPage() {
           <div className="relative min-h-0 flex-1">
             <LivePitch
               className="live-pitch-panel-landscape"
-              layout={visibility === "none" ? "own" : "full"}
+              layout="full"
               ownHalf={ownHalf}
               ownColor={ownColor}
               oppColor={oppColor}
