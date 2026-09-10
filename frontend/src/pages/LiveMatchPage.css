@@ -68,7 +68,7 @@
   grid-template-columns: minmax(0, 4fr) minmax(16rem, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-areas:
-    "score ."
+    "score score"
     "pitch activity"
     "callout activity"
     "bench activity";
