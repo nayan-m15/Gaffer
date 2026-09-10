@@ -51,6 +51,22 @@ export function eventDisplayLabel(event: {
   return EVENT_LABEL[event.eventType];
 }
 
+/** Assists persisted with `detail` set to the goal's id — same rule live undo uses. */
+export function linkedAssistsForGoal(
+  timeline: MatchLogEvent[],
+  goal: MatchLogEvent | undefined,
+) {
+  if (!goal || goal.eventType !== "goal") {
+    return [];
+  }
+  return timeline.filter(
+    (event) =>
+      event.eventType === "assist" &&
+      event.detail === goal.id &&
+      !event.pending,
+  );
+}
+
 export function pairAssistsToGoals(timeline: MatchLogEvent[]) {
   const chronological = [...timeline].sort((a, b) => {
     const byMinute = a.minute - b.minute;

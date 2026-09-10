@@ -284,6 +284,7 @@ export function useLogMatchEvent(matchId: string) {
       if (input.eventType === "goal") {
         void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
       }
+      void queryClient.invalidateQueries({ queryKey: ["statistics"] });
     },
   });
 }
@@ -406,6 +407,7 @@ export function useUpdateMatchEvent(matchId: string) {
           void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
         }
       }
+      void queryClient.invalidateQueries({ queryKey: ["statistics"] });
     },
   });
 }
@@ -466,6 +468,7 @@ export function useDeleteMatchEvent(matchId: string) {
       if (context?.scoreTeam) {
         void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
       }
+      void queryClient.invalidateQueries({ queryKey: ["statistics"] });
     },
   });
 }

@@ -4,10 +4,12 @@ import {
   ArrowLeftRight,
   ChevronLeft,
   Loader2,
+  Plus,
   Share2,
   ShieldAlert,
   Square,
   Timer,
+  Trash2,
   Zap,
 } from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
@@ -15,16 +17,33 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useGamePlan } from "@/features/team-tactics/api";
+import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
+  useDeleteMatchEvent,
+  useLogMatchEvent,
   useMatch,
   useMatchEvents,
   useMatchSquad,
   useUpdateMatchEvent,
 } from "@/features/matches/hooks";
+import {
+  emptyEventDraft,
+  linkedSubstitutionForInjury,
+  looksLikeId,
+  opponentPlayerLabel,
+  planAddEvent,
+  planEditEvent,
+  usesOpponentRoster,
+  type EventFormDraft,
+  type PlannedOp,
+} from "@/features/matches/match-report-event-form";
 import type {
+  MatchEventTeam,
   MatchEventType,
   MatchLogEvent,
   MatchSquadAthlete,
+  OpponentMatchPlayer,
+  OpponentSquadVisibility,
 } from "@/features/matches/types";
 import {
   EVENT_COLOR,
@@ -32,6 +51,7 @@ import {
   eventDisplayLabel,
   isPairedAssistEvent,
   isSecondYellow,
+  linkedAssistsForGoal,
   pairAssistsToGoals,
   uniqueTimelineEvents,
 } from "@/features/matches/event-visuals";
@@ -63,8 +83,6 @@ type Tab = "summary" | "timeline" | "players";
 
 const EVENT_TYPES: { value: MatchEventType; label: string }[] = [
   { value: "goal", label: EVENT_LABEL.goal },
-  { value: "assist", label: EVENT_LABEL.assist },
-  { value: "key_pass", label: EVENT_LABEL.key_pass },
   { value: "yellow_card", label: EVENT_LABEL.yellow_card },
   { value: "red_card", label: EVENT_LABEL.red_card },
   { value: "substitution", label: EVENT_LABEL.substitution },
@@ -91,6 +109,11 @@ function shirtLabel(athlete: MatchSquadAthlete) {
 function whoLabel(event: MatchLogEvent, squad: MatchSquadAthlete[]) {
   if (event.athlete) {
     return shirtLabel(event.athlete);
+  }
+  if (event.opponentPlayer) {
+    return event.opponentPlayer.name
+      ? `#${event.opponentPlayer.shirtNumber} ${event.opponentPlayer.name}`
+      : `#${event.opponentPlayer.shirtNumber}`;
   }
   if (event.opponentLabel) {
     return event.opponentLabel;
@@ -142,8 +165,8 @@ function AdjustedBadge() {
 }
 
 /**
- * Post-match report: result header, summary/timeline/player tabs, and
- * direct overwrite editing of logged events.
+ * Post-match report: result header, summary/timeline/player tabs,
+ * post-match add, overwrite editing, and confirmed delete of logged events.
  */
 export default function MatchReportPage() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -155,10 +178,16 @@ export default function MatchReportPage() {
   const eventsQuery = useMatchEvents(matchId);
   const gamePlanQuery = useGamePlan(matchQuery.data?.gamePlanId ?? undefined);
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
+  const deleteEvent = useDeleteMatchEvent(matchId ?? "");
+  const logEvent = useLogMatchEvent(matchId ?? "");
 
   const [tab, setTab] = useState<Tab>("summary");
   const [editing, setEditing] = useState<MatchLogEvent | null>(null);
+  const [deleting, setDeleting] = useState<MatchLogEvent | null>(null);
+  const [adding, setAdding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
@@ -302,6 +331,55 @@ export default function MatchReportPage() {
     }
   };
 
+  const confirmDeleteEvent = async () => {
+    if (!deleting || deleting.pending) {
+      return;
+    }
+    setDeleteError(null);
+    const linkedAssists = linkedAssistsForGoal(timeline, deleting);
+    try {
+      await deleteEvent.mutateAsync(deleting.id);
+      for (const assist of linkedAssists) {
+        await deleteEvent.mutateAsync(assist.id);
+      }
+      setDeleting(null);
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not delete this event.",
+      );
+    }
+  };
+
+  const persistPlannedOps = async (ops: PlannedOp[]) => {
+    let primaryId: string | undefined;
+    for (const op of ops) {
+      if (op.kind === "create") {
+        if (op.detailFromPrimary && !primaryId) {
+          throw new Error("Could not link the assist to the goal.");
+        }
+        const input = op.detailFromPrimary
+          ? { ...op.input, detail: primaryId }
+          : op.input;
+        const created = await logEvent.mutateAsync(input);
+        if (op.captureId) {
+          primaryId = created.id;
+        }
+      } else if (op.kind === "update") {
+        await updateEvent.mutateAsync({
+          eventId: op.eventId,
+          input: op.input,
+        });
+      } else {
+        await deleteEvent.mutateAsync(op.eventId);
+      }
+    }
+  };
+
+  const formPending =
+    logEvent.isPending || updateEvent.isPending || deleteEvent.isPending;
+
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
       <div className="match-report flex min-h-screen items-center justify-center">
@@ -355,16 +433,16 @@ export default function MatchReportPage() {
 
   return (
     <div className="match-report min-h-screen overflow-x-hidden">
-      <header className="relative flex items-center justify-between border-b border-[#1c2b36] px-4 py-3">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center border-b border-[#1c2b36] px-4 py-3">
         <button
           type="button"
-          className="relative z-10 flex items-center gap-1 text-sm text-[#e8ecef]"
+          className="relative z-10 flex items-center gap-1 justify-self-start text-sm text-[#e8ecef]"
           onClick={() => navigate("/live-logger")}
         >
           <ChevronLeft className="size-4" />
           Back
         </button>
-        <div className="pointer-events-none absolute inset-x-0 flex flex-col items-center">
+        <div className="flex flex-col items-center">
           <span className="flex items-center gap-2">
             <SportLogo size={22} className="rounded-md" />
             <span className="font-display text-base font-bold tracking-wide text-[#e8ecef]">
@@ -375,11 +453,7 @@ export default function MatchReportPage() {
             Match Report
           </p>
         </div>
-        <span
-          className="size-8 shrink-0 rounded-full"
-          style={{ backgroundColor: ownColor }}
-          aria-hidden="true"
-        />
+        <span aria-hidden="true" />
       </header>
 
       <div className="px-4 pb-16 pt-5">
@@ -503,13 +577,32 @@ export default function MatchReportPage() {
               />
             </div>
             <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
-              <EventBreakdownChart events={timeline} />
+              <EventBreakdownChart
+                events={timeline}
+                ownName={ownAbbrev}
+                oppName={oppAbbrev}
+                ownColor={ownColor}
+                oppColor={oppColor}
+              />
             </div>
           </div>
         )}
 
         {tab === "timeline" && (
           <section className="mt-6 overflow-x-hidden">
+            <div className="mb-4 flex justify-end">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#00d99a]/40 bg-[#00d99a]/10 px-3 py-2 font-oswald text-xs tracking-widest text-[#00d99a]"
+                onClick={() => {
+                  setAddError(null);
+                  setAdding(true);
+                }}
+              >
+                <Plus className="size-4" />
+                Add Event
+              </button>
+            </div>
             {timeline.length === 0 ? (
               <p className="text-center text-sm text-[#8e9ba8]">
                 No events logged.
@@ -539,6 +632,7 @@ export default function MatchReportPage() {
                           style={{ background: EVENT_COLOR[event.eventType] }}
                         />
                       </span>
+                      <div className="flex min-w-0 flex-1 items-stretch gap-2">
                       <button
                         type="button"
                         className="min-w-0 flex-1 rounded-xl border border-[#1c2b36] bg-[#101920] px-3 py-3 text-left"
@@ -583,6 +677,22 @@ export default function MatchReportPage() {
                           {event.manuallyAdjusted && <AdjustedBadge />}
                         </div>
                       </button>
+                      <button
+                        type="button"
+                        aria-label="Delete event"
+                        className="shrink-0 self-center rounded-md p-2 text-[#8e9ba8] hover:bg-white/5 hover:text-[#ff5b5f] disabled:opacity-40"
+                        disabled={event.pending || deleteEvent.isPending}
+                        onClick={() => {
+                          if (event.pending) {
+                            return;
+                          }
+                          setDeleteError(null);
+                          setDeleting(event);
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                      </div>
                     </li>
                   ))}
               </ul>
@@ -740,22 +850,79 @@ export default function MatchReportPage() {
         )}
       </div>
 
+      {adding && (
+        <AddEventOverlay
+          squad={squad}
+          opponentSquad={match.opponentSquad}
+          visibility={visibility}
+          ownName={ownName}
+          oppName={oppName}
+          pending={formPending}
+          error={addError}
+          onClose={() => {
+            if (!formPending) {
+              setAdding(false);
+              setAddError(null);
+            }
+          }}
+          onSave={async (draft) => {
+            setAddError(null);
+            try {
+              await persistPlannedOps(planAddEvent(draft));
+              setAdding(false);
+            } catch (err) {
+              setAddError(
+                err instanceof ApiError
+                  ? err.message
+                  : "Could not add this event.",
+              );
+            }
+          }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteEventOverlay
+          event={deleting}
+          linkedAssistCount={linkedAssistsForGoal(timeline, deleting).length}
+          pending={deleteEvent.isPending}
+          error={deleteError}
+          onClose={() => {
+            if (!deleteEvent.isPending) {
+              setDeleting(null);
+              setDeleteError(null);
+            }
+          }}
+          onConfirm={() => void confirmDeleteEvent()}
+        />
+      )}
+
       {editing && (
         <EditEventOverlay
           event={editing}
           squad={squad}
+          opponentSquad={match.opponentSquad}
+          visibility={visibility}
+          linkedAssist={linkedAssistsForGoal(timeline, editing)[0] ?? null}
+          linkedSub={linkedSubstitutionForInjury(timeline, editing) ?? null}
           ownName={ownName}
           oppName={oppName}
-          pending={updateEvent.isPending}
+          pending={formPending}
           error={saveError}
           onClose={() => setEditing(null)}
-          onSave={async (input) => {
+          onSave={async (draft) => {
             setSaveError(null);
             try {
-              await updateEvent.mutateAsync({
-                eventId: editing.id,
-                input,
-              });
+              await persistPlannedOps(
+                planEditEvent({
+                  event: editing,
+                  draft,
+                  linkedAssist:
+                    linkedAssistsForGoal(timeline, editing)[0] ?? null,
+                  linkedSub:
+                    linkedSubstitutionForInjury(timeline, editing) ?? null,
+                }),
+              );
               setEditing(null);
             } catch (err) {
               setSaveError(
@@ -800,9 +967,63 @@ function FactCard({
   );
 }
 
+function DeleteEventOverlay({
+  event,
+  linkedAssistCount,
+  pending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  event: MatchLogEvent;
+  linkedAssistCount: number;
+  pending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Overlay onClose={onClose}>
+      <p className="font-oswald text-2xl tracking-widest">DELETE EVENT?</p>
+      <p className="mt-2 text-sm text-[#8e9ba8]">
+        {event.minute}&apos; {eventDisplayLabel(event)} will be removed from
+        this match.
+        {linkedAssistCount > 0
+          ? " The linked assist will be removed too."
+          : ""}
+      </p>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        className="mt-6 w-full rounded-xl bg-[#e23d3d] py-3 font-oswald tracking-widest text-white disabled:opacity-40"
+        disabled={pending}
+        onClick={onConfirm}
+      >
+        {pending ? "DELETING…" : "DELETE"}
+      </button>
+      <button
+        type="button"
+        className="mt-2 w-full rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
+        disabled={pending}
+        onClick={onClose}
+      >
+        NO, GO BACK
+      </button>
+    </Overlay>
+  );
+}
+
 function EditEventOverlay({
   event,
   squad,
+  opponentSquad,
+  visibility,
+  linkedAssist,
+  linkedSub,
   ownName,
   oppName,
   pending,
@@ -812,24 +1033,236 @@ function EditEventOverlay({
 }: {
   event: MatchLogEvent;
   squad: MatchSquadAthlete[];
+  opponentSquad: OpponentMatchPlayer[];
+  visibility: OpponentSquadVisibility;
+  linkedAssist: MatchLogEvent | null;
+  linkedSub: MatchLogEvent | null;
   ownName: string;
   oppName: string;
   pending: boolean;
   error: string | null;
   onClose: () => void;
-  onSave: (input: {
-    minute: number;
-    eventType: MatchEventType;
-    athleteId: string | null;
-    opponentLabel: string | null;
-    detail: string | null;
-  }) => Promise<void>;
+  onSave: (draft: EventFormDraft) => Promise<void>;
 }) {
-  const [minute, setMinute] = useState(String(event.minute));
-  const [eventType, setEventType] = useState<MatchEventType>(event.eventType);
-  const [athleteId, setAthleteId] = useState(event.athleteId ?? "");
-  const [opponentLabel, setOpponentLabel] = useState(event.opponentLabel ?? "");
-  const [detail, setDetail] = useState(event.detail ?? "");
+  const roster = usesOpponentRoster(visibility, opponentSquad);
+  const incomingRaw =
+    event.eventType === "substitution"
+      ? event.detail
+      : linkedSub?.detail;
+  return (
+    <EventComposerOverlay
+      title="EDIT EVENT"
+      subtitle={event.team === "own" ? ownName : oppName}
+      submitLabel="SAVE CHANGES"
+      pendingLabel="SAVING…"
+      squad={squad}
+      opponentSquad={opponentSquad}
+      visibility={visibility}
+      ownName={ownName}
+      oppName={oppName}
+      teamLocked
+      initial={emptyEventDraft({
+        team: event.team,
+        minute: event.minute,
+        eventType: event.eventType === "assist" ? "goal" : event.eventType,
+        athleteId: event.athleteId ?? "",
+        opponentPlayerId: event.opponentPlayerId ?? "",
+        opponentLabel: event.opponentLabel ?? "",
+        note:
+          event.eventType === "substitution" || looksLikeId(event.detail)
+            ? ""
+            : (event.detail ?? ""),
+        assistAthleteId: linkedAssist?.athleteId ?? "",
+        assistOpponentPlayerId: linkedAssist?.opponentPlayerId ?? "",
+        assistOpponentLabel: linkedAssist?.opponentLabel ?? "",
+        incomingAthleteId:
+          event.team === "own" && looksLikeId(incomingRaw)
+            ? incomingRaw ?? ""
+            : "",
+        incomingOpponentPlayerId:
+          event.team === "opponent" && roster && looksLikeId(incomingRaw)
+            ? incomingRaw ?? ""
+            : "",
+        incomingOpponentLabel:
+          event.team === "opponent" && !roster ? (incomingRaw ?? "") : "",
+        injuryLedToSub: Boolean(linkedSub),
+      })}
+      pending={pending}
+      error={error}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  );
+}
+
+function AddEventOverlay({
+  squad,
+  opponentSquad,
+  visibility,
+  ownName,
+  oppName,
+  pending,
+  error,
+  onClose,
+  onSave,
+}: {
+  squad: MatchSquadAthlete[];
+  opponentSquad: OpponentMatchPlayer[];
+  visibility: OpponentSquadVisibility;
+  ownName: string;
+  oppName: string;
+  pending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: (draft: EventFormDraft) => Promise<void>;
+}) {
+  return (
+    <EventComposerOverlay
+      title="ADD EVENT"
+      subtitle="Log a missed event from this match"
+      submitLabel="ADD EVENT"
+      pendingLabel="ADDING…"
+      squad={squad}
+      opponentSquad={opponentSquad}
+      visibility={visibility}
+      ownName={ownName}
+      oppName={oppName}
+      teamLocked={false}
+      initial={emptyEventDraft()}
+      pending={pending}
+      error={error}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  );
+}
+
+const fieldClassName =
+  "mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white";
+
+function subjectLabel(eventType: MatchEventType) {
+  if (eventType === "goal") {
+    return "Scorer";
+  }
+  if (eventType === "substitution") {
+    return "Player coming off";
+  }
+  if (eventType === "injury") {
+    return "Injured player";
+  }
+  return "Player";
+}
+
+function EventComposerOverlay({
+  title,
+  subtitle,
+  submitLabel,
+  pendingLabel,
+  squad,
+  opponentSquad,
+  visibility,
+  ownName,
+  oppName,
+  teamLocked,
+  initial,
+  pending,
+  error,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  subtitle: string;
+  submitLabel: string;
+  pendingLabel: string;
+  squad: MatchSquadAthlete[];
+  opponentSquad: OpponentMatchPlayer[];
+  visibility: OpponentSquadVisibility;
+  ownName: string;
+  oppName: string;
+  teamLocked: boolean;
+  initial: EventFormDraft;
+  pending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: (draft: EventFormDraft) => Promise<void>;
+}) {
+  const [team, setTeam] = useState<MatchEventTeam>(initial.team);
+  const [minute, setMinute] = useState(
+    teamLocked ? String(initial.minute) : "",
+  );
+  const [eventType, setEventType] = useState<MatchEventType>(initial.eventType);
+  const [athleteId, setAthleteId] = useState(initial.athleteId);
+  const [opponentPlayerId, setOpponentPlayerId] = useState(
+    initial.opponentPlayerId,
+  );
+  const [opponentLabel, setOpponentLabel] = useState(initial.opponentLabel);
+  const [note, setNote] = useState(initial.note);
+  const [assistAthleteId, setAssistAthleteId] = useState(
+    initial.assistAthleteId,
+  );
+  const [assistOpponentPlayerId, setAssistOpponentPlayerId] = useState(
+    initial.assistOpponentPlayerId,
+  );
+  const [assistOpponentLabel, setAssistOpponentLabel] = useState(
+    initial.assistOpponentLabel,
+  );
+  const [incomingAthleteId, setIncomingAthleteId] = useState(
+    initial.incomingAthleteId,
+  );
+  const [incomingOpponentPlayerId, setIncomingOpponentPlayerId] = useState(
+    initial.incomingOpponentPlayerId,
+  );
+  const [incomingOpponentLabel, setIncomingOpponentLabel] = useState(
+    initial.incomingOpponentLabel,
+  );
+  const [injuryLedToSub, setInjuryLedToSub] = useState(initial.injuryLedToSub);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const roster = usesOpponentRoster(visibility, opponentSquad);
+  const isSub = eventType === "substitution";
+  const isGoal = eventType === "goal";
+  const isInjury = eventType === "injury";
+  const showNote = !isSub;
+  const showIncoming = isSub || (isInjury && injuryLedToSub);
+  const compactPickers = isGoal || showIncoming;
+
+  const selectedOpponent = opponentSquad.find(
+    (player) => player.id === opponentPlayerId,
+  );
+  const selectedAssistOpponent = opponentSquad.find(
+    (player) => player.id === assistOpponentPlayerId,
+  );
+
+  const buildDraft = (parsedMinute: number): EventFormDraft =>
+    emptyEventDraft({
+      team,
+      minute: parsedMinute,
+      eventType,
+      athleteId,
+      opponentPlayerId: team === "opponent" && roster ? opponentPlayerId : "",
+      opponentLabel:
+        team === "opponent"
+          ? roster && selectedOpponent
+            ? opponentPlayerLabel(selectedOpponent, visibility)
+            : opponentLabel
+          : "",
+      note,
+      assistAthleteId: team === "own" ? assistAthleteId : "",
+      assistOpponentPlayerId:
+        team === "opponent" && roster ? assistOpponentPlayerId : "",
+      assistOpponentLabel:
+        team === "opponent"
+          ? roster && selectedAssistOpponent
+            ? opponentPlayerLabel(selectedAssistOpponent, visibility)
+            : assistOpponentLabel
+          : "",
+      incomingAthleteId: team === "own" ? incomingAthleteId : "",
+      incomingOpponentPlayerId:
+        team === "opponent" && roster ? incomingOpponentPlayerId : "",
+      incomingOpponentLabel:
+        team === "opponent" && !roster ? incomingOpponentLabel : "",
+      injuryLedToSub,
+    });
 
   const handleSubmit = (formEvent: FormEvent) => {
     formEvent.preventDefault();
@@ -837,23 +1270,76 @@ function EditEventOverlay({
     if (!Number.isInteger(parsedMinute) || parsedMinute < 0) {
       return;
     }
-    const trimmedOpponent = opponentLabel.trim();
-    void onSave({
-      minute: parsedMinute,
-      eventType,
-      athleteId: athleteId || null,
-      opponentLabel: trimmedOpponent || null,
-      detail: detail.trim() || null,
-    });
+    const draft = buildDraft(parsedMinute);
+    if (isSub || (isInjury && injuryLedToSub)) {
+      const offOk =
+        team === "own"
+          ? Boolean(draft.athleteId)
+          : Boolean(draft.opponentPlayerId || draft.opponentLabel.trim());
+      const onOk = Boolean(
+        draft.incomingAthleteId ||
+          draft.incomingOpponentPlayerId ||
+          draft.incomingOpponentLabel.trim(),
+      );
+      if (!offOk || !onOk) {
+        setFormError("Pick the player coming off and the player coming on.");
+        return;
+      }
+    }
+    setFormError(null);
+    void onSave(draft);
   };
 
   return (
     <Overlay onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <p className="font-oswald text-2xl tracking-widest">EDIT EVENT</p>
-        <p className="text-sm text-[#8e9ba8]">
-          {event.team === "own" ? ownName : oppName}
-        </p>
+        <p className="font-oswald text-2xl tracking-widest">{title}</p>
+        <p className="text-sm text-[#8e9ba8]">{subtitle}</p>
+
+        {!teamLocked && (
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+              Team
+            </legend>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {(
+                [
+                  { id: "own" as const, label: ownName },
+                  { id: "opponent" as const, label: oppName },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={cn(
+                    "rounded-lg border px-3 py-2 font-oswald text-xs tracking-widest",
+                    team === option.id
+                      ? "border-[#00d99a]/70 bg-[#00d99a]/10 text-[#00d99a]"
+                      : "border-[#1c2b36] text-[#c5ced6]",
+                  )}
+                  onClick={() => {
+                    setTeam(option.id);
+                    setFormError(null);
+                    if (option.id === "own") {
+                      setOpponentPlayerId("");
+                      setOpponentLabel("");
+                      setAssistOpponentPlayerId("");
+                      setAssistOpponentLabel("");
+                      setIncomingOpponentPlayerId("");
+                      setIncomingOpponentLabel("");
+                    } else {
+                      setAthleteId("");
+                      setAssistAthleteId("");
+                      setIncomingAthleteId("");
+                    }
+                  }}
+                >
+                  {option.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
           Minute
@@ -864,7 +1350,7 @@ function EditEventOverlay({
             step={1}
             value={minute}
             onChange={(change) => setMinute(change.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 font-oswald text-lg text-white"
+            className={cn(fieldClassName, "font-oswald text-lg")}
             required
           />
         </label>
@@ -873,62 +1359,200 @@ function EditEventOverlay({
           Event type
           <select
             value={eventType}
-            onChange={(change) =>
-              setEventType(change.target.value as MatchEventType)
-            }
-            className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
+            onChange={(change) => {
+              const next = change.target.value as MatchEventType;
+              setEventType(next);
+              setFormError(null);
+              if (next !== "goal") {
+                setAssistAthleteId("");
+                setAssistOpponentPlayerId("");
+                setAssistOpponentLabel("");
+              }
+              if (next !== "substitution" && next !== "injury") {
+                setIncomingAthleteId("");
+                setIncomingOpponentPlayerId("");
+                setIncomingOpponentLabel("");
+                setInjuryLedToSub(false);
+              }
+            }}
+            className={fieldClassName}
           >
             {EVENT_TYPES.map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>
             ))}
+            {eventType === "key_pass" ? (
+              <option value="key_pass">{EVENT_LABEL.key_pass}</option>
+            ) : null}
           </select>
         </label>
 
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-          Athlete
-          <select
-            value={athleteId}
-            onChange={(change) => setAthleteId(change.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
-          >
-            <option value="">Unassigned</option>
-            {squad.map((athlete) => (
-              <option key={athlete.id} value={athlete.id}>
-                {shirtLabel(athlete)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {team === "own" ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+              {subjectLabel(eventType)}
+            </p>
+            <AthletePicker
+              squad={squad}
+              value={athleteId}
+              onChange={setAthleteId}
+              compact={compactPickers}
+              aria-label={subjectLabel(eventType)}
+            />
+          </div>
+        ) : roster ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+              {subjectLabel(eventType)}
+            </p>
+            <OpponentPlayerPicker
+              players={opponentSquad}
+              value={opponentPlayerId}
+              onChange={setOpponentPlayerId}
+              visibility={visibility}
+              compact={compactPickers}
+              aria-label={subjectLabel(eventType)}
+            />
+          </div>
+        ) : (
+          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+            {subjectLabel(eventType)}
+            <input
+              type="text"
+              value={opponentLabel}
+              onChange={(change) => setOpponentLabel(change.target.value)}
+              placeholder="e.g. Opponent #9"
+              maxLength={50}
+              className={fieldClassName}
+            />
+          </label>
+        )}
 
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-          Opponent label
-          <input
-            type="text"
-            value={opponentLabel}
-            onChange={(change) => setOpponentLabel(change.target.value)}
-            placeholder="e.g. Opponent #9"
-            maxLength={50}
-            className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
-          />
-        </label>
+        {isGoal ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+              Who assisted?
+            </p>
+            {team === "own" ? (
+              <AthletePicker
+                squad={squad}
+                value={assistAthleteId}
+                onChange={setAssistAthleteId}
+                emptyLabel="No assist"
+                excludeIds={athleteId ? [athleteId] : []}
+                compact
+                aria-label="Who assisted?"
+              />
+            ) : roster ? (
+              <OpponentPlayerPicker
+                players={opponentSquad}
+                value={assistOpponentPlayerId}
+                onChange={setAssistOpponentPlayerId}
+                visibility={visibility}
+                emptyLabel="No assist"
+                excludeIds={opponentPlayerId ? [opponentPlayerId] : []}
+                compact
+                aria-label="Who assisted?"
+              />
+            ) : (
+              <input
+                type="text"
+                value={assistOpponentLabel}
+                onChange={(change) => setAssistOpponentLabel(change.target.value)}
+                placeholder="Leave blank for no assist"
+                maxLength={50}
+                className={fieldClassName}
+              />
+            )}
+          </div>
+        ) : null}
 
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-          Detail
-          <input
-            type="text"
-            value={detail}
-            onChange={(change) => setDetail(change.target.value)}
-            placeholder="Incoming player or note"
-            maxLength={500}
-            className="mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white"
-          />
-        </label>
+        {isInjury ? (
+          <label className="flex items-center gap-2 text-sm text-[#e8ecef]">
+            <input
+              type="checkbox"
+              checked={injuryLedToSub}
+              onChange={(change) => {
+                setInjuryLedToSub(change.target.checked);
+                if (!change.target.checked) {
+                  setIncomingAthleteId("");
+                  setIncomingOpponentPlayerId("");
+                  setIncomingOpponentLabel("");
+                }
+              }}
+              className="size-4 accent-[#00d99a]"
+            />
+            This injury led to a substitution
+          </label>
+        ) : null}
 
-        {error && (
+        {showIncoming ? (
+          team === "own" ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+                Player coming on
+              </p>
+              <AthletePicker
+                squad={squad}
+                value={incomingAthleteId}
+                onChange={setIncomingAthleteId}
+                allowEmpty={false}
+                excludeIds={athleteId ? [athleteId] : []}
+                compact
+                aria-label="Player coming on"
+              />
+            </div>
+          ) : roster ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+                Player coming on
+              </p>
+              <OpponentPlayerPicker
+                players={opponentSquad}
+                value={incomingOpponentPlayerId}
+                onChange={setIncomingOpponentPlayerId}
+                visibility={visibility}
+                allowEmpty={false}
+                excludeIds={opponentPlayerId ? [opponentPlayerId] : []}
+                compact
+                aria-label="Player coming on"
+              />
+            </div>
+          ) : (
+            <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+              Player coming on
+              <input
+                type="text"
+                value={incomingOpponentLabel}
+                onChange={(change) =>
+                  setIncomingOpponentLabel(change.target.value)
+                }
+                placeholder="Incoming player"
+                maxLength={50}
+                className={fieldClassName}
+              />
+            </label>
+          )
+        ) : null}
+
+        {showNote ? (
+          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+            Note
+            <input
+              type="text"
+              value={note}
+              onChange={(change) => setNote(change.target.value)}
+              placeholder="Optional"
+              maxLength={500}
+              className={fieldClassName}
+            />
+          </label>
+        ) : null}
+
+        {(error || formError) && (
           <p role="alert" className="text-sm text-[#ff5b5f]">
-            {error}
+            {error ?? formError}
           </p>
         )}
 
@@ -937,7 +1561,7 @@ function EditEventOverlay({
           className="w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f] disabled:opacity-40"
           disabled={pending}
         >
-          {pending ? "SAVING…" : "SAVE CHANGES"}
+          {pending ? pendingLabel : submitLabel}
         </button>
         <button
           type="button"

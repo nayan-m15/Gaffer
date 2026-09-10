@@ -137,7 +137,20 @@ export function remapOpponentAssignments(
   newFormationId: string,
   assignments: PitchAssignments,
 ) {
-  return remapPlayers(oldFormationId, newFormationId, assignments).assignments;
+  const { assignments: next } = remapPlayers(
+    oldFormationId,
+    newFormationId,
+    assignments,
+  );
+  return next;
+}
+
+export function unassignedPlayers(
+  players: DraftOpponentPlayer[],
+  assignments: PitchAssignments,
+) {
+  const taken = assignedShirtNumbers(assignments);
+  return players.filter((player) => !taken.has(player.shirtNumber));
 }
 
 export function assignedShirtNumbers(assignments: PitchAssignments) {
