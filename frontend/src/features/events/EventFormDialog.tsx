@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { CalendarIcon, Check, ClockIcon, Search } from "lucide-react";
+import { CalendarIcon, Check, ClockIcon, MapPinned, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -93,6 +93,12 @@ export function EventFormDialog({
   const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [locationSearchCompleted, setLocationSearchCompleted] = useState(false);
+  const [manualLatitude, setManualLatitude] = useState("");
+  const [manualLongitude, setManualLongitude] = useState("");
+  const [manualTimezone, setManualTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +126,9 @@ export function EventFormDialog({
         longitude: event.weatherLongitude,
         timezone: event.weatherTimezone,
       } : null);
+      setManualLatitude(event.weatherLatitude?.toString() ?? "");
+      setManualLongitude(event.weatherLongitude?.toString() ?? "");
+      setManualTimezone(event.weatherTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
     } else {
@@ -131,12 +140,54 @@ export function EventFormDialog({
       setVenueAddress("");
       setWeatherLocationQuery("");
       setSelectedLocation(null);
+      setManualLatitude("");
+      setManualLongitude("");
+      setManualTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes("");
       setCompetitionId("none");
     }
     setError(null);
     setLocationResults([]);
+    setLocationSearchCompleted(false);
   }, [open, event, initialDate, initialType]);
+
+  const useExactCoordinates = () => {
+    const latitude = Number(manualLatitude);
+    const longitude = Number(manualLongitude);
+    const timezone = manualTimezone.trim();
+    if (
+      manualLatitude.trim() === "" ||
+      manualLongitude.trim() === "" ||
+      !Number.isFinite(latitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      !Number.isFinite(longitude) ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      setError("Enter valid latitude (-90 to 90) and longitude (-180 to 180).");
+      return;
+    }
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: timezone }).format();
+    } catch {
+      setError("Enter a valid IANA timezone, such as Africa/Johannesburg.");
+      return;
+    }
+    const displayName = weatherLocationQuery.trim() || `${latitude}, ${longitude}`;
+    setSelectedLocation({
+      id: `coordinates:${latitude}:${longitude}`,
+      name: displayName,
+      displayName,
+      latitude,
+      longitude,
+      timezone,
+    });
+    setWeatherLocationQuery(displayName);
+    setLocationResults([]);
+    setLocationSearchCompleted(false);
+    setError(null);
+  };
 
   const isPending = createEvent.isPending || updateEvent.isPending;
 
@@ -329,6 +380,7 @@ export function EventFormDialog({
                   setIsSearchingLocation(false);
                   setSelectedLocation(null);
                   setLocationResults([]);
+                  setLocationSearchCompleted(false);
                 }}
                 placeholder="Town, suburb, or postcode"
                 className={inputClassName}
@@ -342,10 +394,14 @@ export function EventFormDialog({
                   const query = weatherLocationQuery.trim();
                   const searchId = ++locationSearchIdRef.current;
                   setIsSearchingLocation(true);
+                  setLocationSearchCompleted(false);
                   setError(null);
                   void searchLocations(query)
                     .then((results) => {
-                      if (locationSearchIdRef.current === searchId) setLocationResults(results);
+                      if (locationSearchIdRef.current === searchId) {
+                        setLocationResults(results);
+                        setLocationSearchCompleted(true);
+                      }
                     })
                     .catch((err) => {
                       if (locationSearchIdRef.current === searchId) {
@@ -362,7 +418,16 @@ export function EventFormDialog({
               </Button>
             </div>
             {selectedLocation && (
-              <p className="flex items-center gap-1 text-xs text-emerald-500"><Check className="size-3" />Forecast location confirmed</p>
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
+                <p className="flex items-center gap-1 font-medium text-emerald-500">
+                  <Check className="size-3" />Selected forecast location
+                </p>
+                <p className="mt-1">{selectedLocation.displayName}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
+                  {selectedLocation.timezone ? ` · ${selectedLocation.timezone}` : ""}
+                </p>
+              </div>
             )}
             {locationResults.length > 0 && !selectedLocation && (
               <div className="rounded-md border border-border bg-background p-1">
@@ -374,13 +439,63 @@ export function EventFormDialog({
                     onClick={() => {
                       setSelectedLocation(result);
                       setWeatherLocationQuery(result.displayName);
+                      setManualLatitude(String(result.latitude));
+                      setManualLongitude(String(result.longitude));
+                      setManualTimezone(result.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
                       setLocationResults([]);
+                      setLocationSearchCompleted(false);
                     }}
                   >{result.displayName}</button>
                 ))}
               </div>
             )}
+            {locationSearchCompleted && locationResults.length === 0 && !selectedLocation && (
+              <p className="text-xs text-muted-foreground">No locations found.</p>
+            )}
             <p className="text-xs text-muted-foreground">Choose a nearby town or suburb so the forecast uses the correct coordinates.</p>
+            <details className="rounded-md border border-border bg-background p-3 text-sm">
+              <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
+                <MapPinned className="size-4" />Use exact coordinates
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <label className="text-xs text-muted-foreground">
+                  Latitude
+                  <input
+                    type="number"
+                    min="-90"
+                    max="90"
+                    step="any"
+                    value={manualLatitude}
+                    onChange={(e) => setManualLatitude(e.target.value)}
+                    className={cn(inputClassName, "mt-1")}
+                  />
+                </label>
+                <label className="text-xs text-muted-foreground">
+                  Longitude
+                  <input
+                    type="number"
+                    min="-180"
+                    max="180"
+                    step="any"
+                    value={manualLongitude}
+                    onChange={(e) => setManualLongitude(e.target.value)}
+                    className={cn(inputClassName, "mt-1")}
+                  />
+                </label>
+                <label className="col-span-2 text-xs text-muted-foreground">
+                  Venue timezone
+                  <input
+                    value={manualTimezone}
+                    onChange={(e) => setManualTimezone(e.target.value)}
+                    placeholder="Africa/Johannesburg"
+                    className={cn(inputClassName, "mt-1")}
+                  />
+                </label>
+                <Button type="button" variant="outline" className="col-span-2" onClick={useExactCoordinates}>
+                  Use these coordinates
+                </Button>
+              </div>
+            </details>
           </Field>
 
           {type === "match" && (

@@ -84,6 +84,17 @@ describe('event venue coordinates', () => {
     });
   });
 
+  it('rejects an invalid venue timezone', () => {
+    expect(() =>
+      createEventSchema.parse({
+        ...event,
+        weatherLatitude: -33.9321,
+        weatherLongitude: 18.8602,
+        weatherTimezone: 'South Africa time',
+      }),
+    ).toThrow();
+  });
+
   it('rejects an unpaired coordinate on create or update', () => {
     expect(() =>
       createEventSchema.parse({ ...event, weatherLatitude: -33.9321 }),

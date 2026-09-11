@@ -65,6 +65,36 @@ describe('WeatherService', () => {
     });
   });
 
+  it('selects the correct UTC hour across a venue timezone boundary', async () => {
+    const scheduledAt = new Date('2026-09-12T00:30:00+02:00');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          hourly: {
+            time: ['2026-09-11T22:00'],
+            temperature_2m: [17],
+            precipitation_probability: [5],
+            wind_speed_10m: [8],
+            weather_code: [0],
+          },
+        }),
+    });
+
+    const result = await new WeatherService().getEventWeather({
+      scheduledAt,
+      status: 'scheduled',
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
+    });
+
+    expect(result).toMatchObject({
+      status: 'available',
+      forecastAt: '2026-09-11T22:00:00.000Z',
+      temperatureC: 17,
+    });
+  });
+
   it('classifies events beyond 16 forecast days without calling the provider', async () => {
     global.fetch = jest.fn();
     const scheduledAt = new Date();
@@ -187,6 +217,21 @@ describe('WeatherService', () => {
       ok: true,
       json: () => Promise.resolve({ hourly: { time: [] } }),
     });
+
+    await expect(
+      new WeatherService().getEventWeather({
+        scheduledAt,
+        status: 'scheduled',
+        weatherLatitude: -26.2,
+        weatherLongitude: 28.04,
+      }),
+    ).resolves.toEqual({ status: 'unavailable' });
+  });
+
+  it('returns unavailable when a network failure has no cached response', async () => {
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
 
     await expect(
       new WeatherService().getEventWeather({

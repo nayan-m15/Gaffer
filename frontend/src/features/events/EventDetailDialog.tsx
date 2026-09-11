@@ -100,7 +100,7 @@ export function EventDetailDialog({
               <StatusBadge status={displayEventStatus(event, now)} />
             </div>
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
-            <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt)} />
+            <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
             <DetailRow label="Location" value={event.location} />
             {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
             <LocationLinks event={event} />

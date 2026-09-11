@@ -207,6 +207,17 @@ describe('EventsController', () => {
       );
     });
 
+    it('does not reveal weather for an event outside the caller team', async () => {
+      mockEventsService.findOne.mockRejectedValue(
+        new ForbiddenException('Event is not available to this account.'),
+      );
+
+      await expect(controller.weather(user, 'event-id')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(mockWeatherService.getEventWeather).not.toHaveBeenCalled();
+    });
+
     it('lets an assistant start a match (live-logging entry)', async () => {
       mockEventsService.startMatch.mockResolvedValue({ id: 'match-id' });
       const body = {

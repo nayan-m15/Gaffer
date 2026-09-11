@@ -7,6 +7,7 @@ interface WeatherEvent {
   weatherLocation: string | null;
   weatherLatitude: number | null;
   weatherLongitude: number | null;
+  weatherTimezone: string | null;
 }
 
 export function EventWeatherCard({
@@ -46,24 +47,36 @@ export function EventWeatherCard({
     );
   }
   if (weather.status === "outside_forecast_range") {
-    if (compact) return null;
     return (
       <p className="text-xs text-muted-foreground">
         {weather.rangeReason === "too_old"
           ? "Weather history is available for events in the past 5 days."
-          : "Forecast will appear closer to the event."}
+          : "Forecast available closer to the event"}
       </p>
     );
   }
+
+  const isArchived = Boolean(
+    weather.forecastAt && new Date(weather.forecastAt).getTime() < Date.now(),
+  );
+  const formatVenueTime = (iso: string) =>
+    new Date(iso).toLocaleString([], {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      ...(event.weatherTimezone
+        ? { timeZone: event.weatherTimezone, timeZoneName: "short" }
+        : {}),
+    });
 
   const details = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       <span className="flex items-center gap-1 font-medium text-foreground">
         <CloudSun className="size-3.5" aria-hidden="true" />
-        {weather.condition}
         {weather.temperatureC != null
-          ? ` · ${Math.round(weather.temperatureC)}°C`
-          : ""}
+          ? `${Math.round(weather.temperatureC)}°C`
+          : weather.condition}
       </span>
       {weather.precipitationProbability != null && (
         <span className="flex items-center gap-1">
@@ -71,7 +84,7 @@ export function EventWeatherCard({
           Rain chance {Math.round(weather.precipitationProbability)}%
         </span>
       )}
-      {!compact && weather.windSpeedKmh != null && (
+      {weather.windSpeedKmh != null && (
         <span className="flex items-center gap-1">
           <Wind className="size-3" aria-hidden="true" />
           {Math.round(weather.windSpeedKmh)} km/h
@@ -85,7 +98,7 @@ export function EventWeatherCard({
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-        Weather at event time
+        {isArchived ? "Archived forecast" : "Weather at event time"}
       </p>
       {event.weatherLocation && (
         <p className="mb-2 text-xs text-muted-foreground">
@@ -93,15 +106,15 @@ export function EventWeatherCard({
         </p>
       )}
       {details}
+      {weather.forecastAt && (
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Forecast time: {formatVenueTime(weather.forecastAt)}
+        </p>
+      )}
       <p className="mt-2 text-[10px] text-muted-foreground">
-        {weather.stale ? "Using cached weather" : "Forecast"}
+        {weather.stale ? "Stale cached forecast" : isArchived ? "Archived forecast" : "Forecast"}
         {weather.fetchedAt
-          ? ` · Last updated ${new Date(weather.fetchedAt).toLocaleString([], {
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`
+          ? ` · Last updated ${formatVenueTime(weather.fetchedAt)}`
           : ""}
         {" · "}
         <a

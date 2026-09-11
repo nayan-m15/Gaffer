@@ -21,12 +21,28 @@ const hexColorSchema = z
     'Colour must be a 6-digit hex value such as #1A2B3C.',
   );
 
+const timezoneSchema = z
+  .string()
+  .trim()
+  .max(100)
+  .refine(
+    (value) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: value }).format();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Enter a valid IANA timezone such as Africa/Johannesburg.' },
+  );
+
 const venueFieldsSchema = z.object({
   venueAddress: z.string().trim().max(300).nullable().optional(),
   weatherLocation: z.string().trim().max(300).nullable().optional(),
   weatherLatitude: z.number().min(-90).max(90).nullable().optional(),
   weatherLongitude: z.number().min(-180).max(180).nullable().optional(),
-  weatherTimezone: z.string().trim().max(100).nullable().optional(),
+  weatherTimezone: timezoneSchema.nullable().optional(),
 });
 
 function coordinatesArePaired(value: {

@@ -17,7 +17,7 @@ function pad(value: number) {
 }
 
 /** Formats an ISO timestamp for the events list and detail views. */
-export function formatEventDateTime(iso: string) {
+export function formatEventDateTime(iso: string, timeZone?: string | null) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
     return iso;
@@ -30,6 +30,7 @@ export function formatEventDateTime(iso: string) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    ...(timeZone ? { timeZone, timeZoneName: "short" } : {}),
   }).format(date);
 }
 
