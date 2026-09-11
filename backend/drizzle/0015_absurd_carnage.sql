@@ -1,0 +1,1 @@
+ALTER TABLE "matches" ADD COLUMN "game_plan_snapshot" jsonb;

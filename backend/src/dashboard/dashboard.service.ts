@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes, events, matches } from '../database/schema';
+import { athletes, events, matchEvents, matches } from '../database/schema';
 import { matchResult } from '../statistics/statistics.trends';
 import { TeamsService } from '../teams/teams.service';
 
@@ -70,8 +70,8 @@ export class DashboardService {
           id: matches.id,
           opponent: matches.opponentName,
           isHome: matches.isHome,
-          teamScore: matches.teamScore,
-          opponentScore: matches.opponentScore,
+          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal'), 0)`,
+          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal'), 0)`,
           date: events.scheduledAt,
         })
         .from(matches)

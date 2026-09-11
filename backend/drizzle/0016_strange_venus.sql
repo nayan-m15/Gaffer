@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "standings_competition_position_unique" ON "standings" USING btree ("competition_id","position");--> statement-breakpoint
+CREATE UNIQUE INDEX "standings_competition_team_name_unique" ON "standings" USING btree ("competition_id","team_name");

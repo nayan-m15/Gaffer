@@ -134,6 +134,7 @@ export const teamMembers = pgTable(
   (table) => [
     index('team_members_team_id_index').on(table.teamId),
     index('team_members_user_id_index').on(table.userId),
+    uniqueIndex('team_members_user_unique').on(table.userId),
     uniqueIndex('team_members_team_user_unique').on(table.teamId, table.userId),
   ],
 );
@@ -166,6 +167,9 @@ export const athletes = pgTable(
       table.firstName,
     ),
     index('athletes_user_id_index').on(table.userId),
+    uniqueIndex('athletes_team_user_unique')
+      .on(table.teamId, table.userId)
+      .where(sql`${table.userId} is not null`),
   ],
 );
 
@@ -313,6 +317,25 @@ export const gamePlans = pgTable(
   ],
 );
 
+export interface GamePlanSnapshot {
+  name: string;
+  formationId: string;
+  assignments: Record<string, string | null>;
+  substituteIds: string[];
+  defensiveStyle: (typeof defensiveStyle.enumValues)[number];
+  defensiveWidth: number;
+  defensiveDepth: number;
+  offensiveStyle: (typeof offensiveStyle.enumValues)[number];
+  offensiveWidth: number;
+  playersInBox: number;
+  cornersCommitment: number;
+  freeKicksCommitment: number;
+  captainId: string | null;
+  freeKickTakerId: string | null;
+  penaltyTakerId: string | null;
+  cornerTakerId: string | null;
+}
+
 export const events = pgTable(
   'events',
   {
@@ -326,11 +349,15 @@ export const events = pgTable(
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
     notes: text('notes'),
+    competitionId: uuid('competition_id').references(() => competitions.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [
     index('events_team_id_index').on(table.teamId),
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
+    index('events_competition_id_index').on(table.competitionId),
   ],
 );
 
@@ -456,6 +483,7 @@ export const matches = pgTable(
     gamePlanId: uuid('game_plan_id').references(() => gamePlans.id, {
       onDelete: 'set null',
     }),
+    gamePlanSnapshot: jsonb('game_plan_snapshot').$type<GamePlanSnapshot>(),
     opponentSquadVisibility: opponentSquadVisibility(
       'opponent_squad_visibility',
     )
@@ -463,6 +491,9 @@ export const matches = pgTable(
       .notNull(),
     teamColor: text('team_color'),
     opponentColor: text('opponent_color'),
+    clockPeriod: text('clock_period').default('not_started').notNull(),
+    clockElapsedMs: integer('clock_elapsed_ms').default(0).notNull(),
+    clockStartedAt: timestamp('clock_started_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -573,7 +604,17 @@ export const standings = pgTable(
     isOwnTeam: boolean('is_own_team').default(false).notNull(),
     ...timestamps,
   },
-  (table) => [index('standings_competition_id_index').on(table.competitionId)],
+  (table) => [
+    index('standings_competition_id_index').on(table.competitionId),
+    uniqueIndex('standings_competition_position_unique').on(
+      table.competitionId,
+      table.position,
+    ),
+    uniqueIndex('standings_competition_team_name_unique').on(
+      table.competitionId,
+      table.teamName,
+    ),
+  ],
 );
 
 export const matchEventTeam = pgEnum('match_event_team', ['own', 'opponent']);
@@ -611,6 +652,7 @@ export const matchEvents = pgTable(
       .notNull()
       .references(() => user.id),
     manuallyAdjusted: boolean('manually_adjusted').default(false).notNull(),
+    clientRequestId: uuid('client_request_id'),
     ...timestamps,
   },
   (table) => [
@@ -623,5 +665,8 @@ export const matchEvents = pgTable(
       table.athleteId,
       table.eventType,
     ),
+    uniqueIndex('match_events_match_request_unique')
+      .on(table.matchId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} is not null`),
   ],
 );

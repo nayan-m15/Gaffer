@@ -4,7 +4,7 @@ import {
   inferFormationIdFromPositions,
   previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
-import type { BackendGamePlan } from "@/services/gamePlans";
+import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
 import type {
   MatchLogEvent,
@@ -303,7 +303,7 @@ export function opponentPitchState(
 
 export function placeOwnPlayers(
   onPitch: MatchSquadAthlete[],
-  gamePlan: BackendGamePlan | undefined,
+  gamePlan: BackendGamePlan | GamePlanSnapshot | undefined,
   half: PitchHalf,
   timeline: MatchLogEvent[],
   layout: "full" | "own" = "full",

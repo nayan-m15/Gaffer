@@ -243,7 +243,15 @@ export default function AthletesPage() {
     };
 
     if (editingBackendAthlete) {
-      updateMutation.mutate({ id: editingBackendAthlete.id, input });
+      updateMutation.mutate({
+        id: editingBackendAthlete.id,
+        input: {
+          ...input,
+          dateOfBirth: values.dateOfBirth || null,
+          position: values.position || null,
+          squadNumber: values.squadNumber || null,
+        },
+      });
     } else {
       createMutation.mutate(input);
     }

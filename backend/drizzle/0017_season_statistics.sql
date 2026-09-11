@@ -1,12 +1,3 @@
--- Hand-edited after `drizzle-kit generate`.
---
--- The generator re-emitted `CREATE TYPE team_invite_status` and
--- `CREATE TABLE team_invites` because meta/0011_snapshot.json and
--- meta/0012_snapshot.json predate 0011_add_team_invites (that migration was
--- appended to the journal after 0012 without a snapshot of its own). Those
--- statements are removed here; meta/0013_snapshot.json does record the table,
--- so future `db:generate` runs are clean.
-
 CREATE TABLE "seasons" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"team_id" uuid NOT NULL,

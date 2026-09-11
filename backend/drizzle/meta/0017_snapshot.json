@@ -1,6 +1,6 @@
 {
-  "id": "37d3c149-d7fa-4acc-bdc8-d95237274952",
-  "prevId": "021a352b-6139-4115-bb02-de40eff6e34d",
+  "id": "1230e154-248f-48be-a1ca-63a2be08f776",
+  "prevId": "654cb275-6c2c-4a41-9553-ac3d3c09a05e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -417,6 +417,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "athletes_team_user_unique": {
+          "name": "athletes_team_user_unique",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"athletes\".\"user_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -762,6 +784,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "competition_id": {
+          "name": "competition_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -813,6 +841,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "events_competition_id_index": {
+          "name": "events_competition_id_index",
+          "columns": [
+            {
+              "expression": "competition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -827,6 +870,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "events_competition_id_competitions_id_fk": {
+          "name": "events_competition_id_competitions_id_fk",
+          "tableFrom": "events",
+          "tableTo": "competitions",
+          "columnsFrom": [
+            "competition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1162,6 +1218,12 @@
           "notNull": true,
           "default": false
         },
+        "client_request_id": {
+          "name": "client_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1231,6 +1293,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "match_events_match_request_unique": {
+          "name": "match_events_match_request_unique",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"match_events\".\"client_request_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1352,6 +1436,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "game_plan_snapshot": {
+          "name": "game_plan_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "opponent_squad_visibility": {
           "name": "opponent_squad_visibility",
           "type": "opponent_squad_visibility",
@@ -1369,6 +1459,26 @@
         "opponent_color": {
           "name": "opponent_color",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "clock_period": {
+          "name": "clock_period",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'not_started'"
+        },
+        "clock_elapsed_ms": {
+          "name": "clock_elapsed_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "clock_started_at": {
+          "name": "clock_started_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2109,6 +2219,48 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "standings_competition_position_unique": {
+          "name": "standings_competition_position_unique",
+          "columns": [
+            {
+              "expression": "competition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "standings_competition_team_name_unique": {
+          "name": "standings_competition_team_name_unique",
+          "columns": [
+            {
+              "expression": "competition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "team_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2368,6 +2520,21 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "team_members_user_unique": {
+          "name": "team_members_user_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

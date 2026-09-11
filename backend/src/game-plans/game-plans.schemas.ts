@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+export const FORMATION_IDS = [
+  '4-3-3',
+  '4-4-2',
+  '4-2-3-1',
+  '4-1-4-1',
+  '3-5-2',
+  '3-4-3',
+  '5-3-2',
+  '5-4-1',
+] as const;
+
 /** FIFA-style defensive approaches, most passive → most aggressive. */
 export const DEFENSIVE_STYLES = [
   'drop_back',
@@ -30,9 +41,17 @@ const nameSchema = z
   .max(100, 'Game plan name must be 100 characters or fewer.');
 
 const gamePlanContentSchema = z.object({
-  formationId: z.string().trim().min(1, 'Formation is required.'),
+  formationId: z.enum(FORMATION_IDS, { error: 'Formation is not supported.' }),
   // Squad selection — position ID -> athlete ID (or null for an empty slot).
-  assignments: z.record(z.string(), z.string().uuid().nullable()),
+  assignments: z.record(z.string(), z.string().uuid().nullable()).refine(
+    (assignments) => {
+      const ids = Object.values(assignments).filter(
+        (id): id is string => id !== null,
+      );
+      return ids.length <= 11 && new Set(ids).size === ids.length;
+    },
+    { message: 'A starting lineup must contain unique athletes.' },
+  ),
   substituteIds: z
     .array(z.string().uuid())
     .max(15, 'Maximum 15 substitutes allowed.')

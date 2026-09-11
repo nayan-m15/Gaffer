@@ -11,6 +11,12 @@ export type MatchEventType =
   | "injury";
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
+export type MatchClockPeriod =
+  | "not_started"
+  | "first_half"
+  | "half_time"
+  | "second_half"
+  | "full_time";
 
 export interface OpponentMatchPlayer {
   id: string;
@@ -28,9 +34,13 @@ export interface MatchRecord {
   teamScore: number;
   opponentScore: number;
   gamePlanId: string | null;
+  gamePlanSnapshot: GamePlanSnapshot | null;
   opponentSquadVisibility: OpponentSquadVisibility;
   teamColor: string | null;
   opponentColor: string | null;
+  clockPeriod: MatchClockPeriod;
+  clockElapsedMs: number;
+  clockStartedAt: string | null;
   createdAt: string;
   updatedAt: string;
   eventTitle: string;
@@ -62,6 +72,7 @@ export interface MatchLogEvent {
   detail: string | null;
   loggedByUserId: string;
   manuallyAdjusted: boolean;
+  clientRequestId?: string | null;
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;
@@ -73,6 +84,7 @@ export interface MatchLogEvent {
 }
 
 export interface CreateMatchLogEventInput {
+  clientRequestId: string;
   team: MatchEventTeam;
   eventType: MatchEventType;
   athleteId?: string;
@@ -90,3 +102,10 @@ export interface UpdateMatchLogEventInput {
   eventType?: MatchEventType;
   detail?: string | null;
 }
+
+export interface UpdateMatchClockInput {
+  period: MatchClockPeriod;
+  running: boolean;
+  elapsedMs: number;
+}
+import type { GamePlanSnapshot } from "@/services/gamePlans";

@@ -41,6 +41,22 @@ export const createAthleteSchema = z.object({
 
 export type CreateAthleteDto = z.infer<typeof createAthleteSchema>;
 
-export const updateAthleteSchema = createAthleteSchema.partial();
+export const updateAthleteSchema = createAthleteSchema
+  .partial()
+  .extend({
+    dateOfBirth: createAthleteSchema.shape.dateOfBirth
+      .unwrap()
+      .nullable()
+      .optional(),
+    position: createAthleteSchema.shape.position.unwrap().nullable().optional(),
+    squadNumber: createAthleteSchema.shape.squadNumber
+      .unwrap()
+      .nullable()
+      .optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    { message: 'At least one field is required.' },
+  );
 
 export type UpdateAthleteDto = z.infer<typeof updateAthleteSchema>;

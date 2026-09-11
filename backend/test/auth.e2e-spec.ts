@@ -250,14 +250,14 @@ describe('Auth (e2e)', () => {
       expect(response.headers['set-cookie']).toBeDefined();
     });
 
-    it('rejects an unknown email with a "no account" message', async () => {
+    it('rejects an unknown email with the generic credentials message', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')
         .send({ email: uniqueTestIdentity().email, password: PASSWORD })
         .expect(401);
       const body = response.body as ErrorResponseBody;
 
-      expect(body.message).toBe('No account found with this email address.');
+      expect(body.message).toBe('Invalid email or password');
     });
 
     it('rejects the wrong password with the generic credentials message', async () => {

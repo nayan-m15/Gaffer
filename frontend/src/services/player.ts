@@ -16,6 +16,7 @@ export interface PlayerEvent {
   scheduledAt: string;
   location: string;
   notes: string | null;
+  competitionId: string | null;
   matchId: string | null;
   createdAt: string;
   updatedAt: string;

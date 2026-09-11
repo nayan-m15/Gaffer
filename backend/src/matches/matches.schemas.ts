@@ -4,28 +4,57 @@ import { matchEventTeam, matchEventType } from '../database/schema';
 export const matchEventTeamSchema = z.enum(matchEventTeam.enumValues);
 export const matchEventTypeSchema = z.enum(matchEventType.enumValues);
 
-export const createMatchLogEventSchema = z.object({
-  team: matchEventTeamSchema,
-  eventType: matchEventTypeSchema,
-  athleteId: z.uuid().optional(),
-  opponentLabel: z
-    .string()
-    .trim()
-    .min(1)
-    .max(120, 'Opponent label must be 120 characters or fewer.')
-    .optional(),
-  opponentPlayerId: z.uuid().optional(),
-  minute: z
-    .number()
-    .int('Minute must be a whole number.')
-    .min(0, 'Minute cannot be negative.')
-    .max(150, 'Minute must be 150 or fewer.'),
-  detail: z
-    .string()
-    .trim()
-    .max(500, 'Detail must be 500 characters or fewer.')
-    .optional(),
-});
+export const createMatchLogEventSchema = z
+  .object({
+    clientRequestId: z.uuid(),
+    team: matchEventTeamSchema,
+    eventType: matchEventTypeSchema,
+    athleteId: z.uuid().optional(),
+    opponentLabel: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120, 'Opponent label must be 120 characters or fewer.')
+      .optional(),
+    opponentPlayerId: z.uuid().optional(),
+    minute: z
+      .number()
+      .int('Minute must be a whole number.')
+      .min(0, 'Minute cannot be negative.')
+      .max(150, 'Minute must be 150 or fewer.'),
+    detail: z
+      .string()
+      .trim()
+      .max(500, 'Detail must be 500 characters or fewer.')
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.team === 'own' &&
+      (value.opponentPlayerId || value.opponentLabel)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Own-team events cannot reference an opponent.',
+      });
+    }
+    if (value.team === 'opponent' && value.athleteId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Opponent events cannot reference a team athlete.',
+      });
+    }
+    if (
+      value.eventType === 'substitution' &&
+      !z.uuid().safeParse(value.detail).success
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['detail'],
+        message: 'An incoming squad player is required.',
+      });
+    }
+  });
 export type CreateMatchLogEventDto = z.infer<typeof createMatchLogEventSchema>;
 
 export const updateMatchLogEventSchema = z
@@ -66,3 +95,22 @@ export const updateMatchLogEventSchema = z
     },
   );
 export type UpdateMatchLogEventDto = z.infer<typeof updateMatchLogEventSchema>;
+
+export const matchClockPeriodSchema = z.enum([
+  'not_started',
+  'first_half',
+  'half_time',
+  'second_half',
+  'full_time',
+]);
+
+export const updateMatchClockSchema = z.object({
+  period: matchClockPeriodSchema,
+  running: z.boolean(),
+  elapsedMs: z
+    .number()
+    .int()
+    .min(0)
+    .max(3 * 60 * 60 * 1000),
+});
+export type UpdateMatchClockDto = z.infer<typeof updateMatchClockSchema>;

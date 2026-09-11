@@ -15,23 +15,29 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    'http://localhost:5173',
-    'http://localhost:3000',
-  ].filter(Boolean) as string[];
+  const allowedOrigins = new Set(
+    [
+      process.env.FRONTEND_URL,
+      'https://gaffer-virid.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ]
+      .filter((origin): origin is string => Boolean(origin))
+      .map((origin) => origin.replace(/\/$/, '')),
+  );
 
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
       // Allow requests with no origin (e.g. server-to-server, mobile, curl)
-      if (!origin) return callback(null, true);
-      if (
-        allowedOrigins.includes(origin) ||
-        origin.endsWith('.vercel.app')
-      ) {
-        return callback(null, true);
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
       }
-      return callback(null, true); // Fallback to allow if origin matches standard patterns
+
+      callback(new Error('Origin is not allowed by CORS.'), false);
     },
     credentials: true,
   });

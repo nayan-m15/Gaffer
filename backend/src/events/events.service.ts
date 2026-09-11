@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
+  competitions,
   eventRsvps,
   events,
   gamePlans,
@@ -39,6 +41,10 @@ export class EventsService {
 
   async create(userId: string, dto: CreateEventDto) {
     const team = await this.requireTeam(userId);
+    const competitionId = dto.type === 'match' ? dto.competitionId : null;
+    if (competitionId) {
+      await this.requireTeamCompetition(team.id, competitionId);
+    }
 
     const [event] = await this.databaseService.database
       .insert(events)
@@ -49,6 +55,7 @@ export class EventsService {
         scheduledAt: new Date(dto.scheduledAt),
         location: dto.location,
         notes: dto.notes,
+        competitionId,
       })
       .returning();
 
@@ -180,7 +187,17 @@ export class EventsService {
 
   async update(userId: string, eventId: string, dto: UpdateEventDto) {
     const team = await this.requireTeam(userId);
-    await this.requireEvent(team.id, eventId);
+    const existingEvent = await this.requireEvent(team.id, eventId);
+    const type = dto.type ?? existingEvent.type;
+    const competitionId =
+      type === 'match'
+        ? dto.competitionId !== undefined
+          ? dto.competitionId
+          : existingEvent.competitionId
+        : null;
+    if (competitionId) {
+      await this.requireTeamCompetition(team.id, competitionId);
+    }
 
     const [event] = await this.databaseService.database
       .update(events)
@@ -193,10 +210,18 @@ export class EventsService {
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        ...(dto.competitionId !== undefined || type !== 'match'
+          ? { competitionId }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(events.id, eventId), eq(events.teamId, team.id)))
       .returning();
+
+    await this.databaseService.database
+      .update(matches)
+      .set({ competitionId, updatedAt: new Date() })
+      .where(eq(matches.eventId, eventId));
 
     return event;
   }
@@ -225,15 +250,19 @@ export class EventsService {
       throw new NotFoundException('Event not found.');
     }
 
+    if (event.status !== 'scheduled') {
+      throw new BadRequestException('Only scheduled matches can be started.');
+    }
+
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
         'Matches cannot be started before match day.',
       );
     }
 
-    if (dto.gamePlanId) {
-      await this.requireTeamGamePlan(team.id, dto.gamePlanId);
-    }
+    const gamePlan = dto.gamePlanId
+      ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
+      : null;
 
     const teamAthletes = await this.databaseService.database
       .select()
@@ -261,6 +290,26 @@ export class EventsService {
       opponentName: dto.opponentName,
       isHome: dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
+      gamePlanSnapshot: gamePlan
+        ? {
+            name: gamePlan.name,
+            formationId: gamePlan.formationId,
+            assignments: gamePlan.assignments,
+            substituteIds: gamePlan.substituteIds,
+            defensiveStyle: gamePlan.defensiveStyle,
+            defensiveWidth: gamePlan.defensiveWidth,
+            defensiveDepth: gamePlan.defensiveDepth,
+            offensiveStyle: gamePlan.offensiveStyle,
+            offensiveWidth: gamePlan.offensiveWidth,
+            playersInBox: gamePlan.playersInBox,
+            cornersCommitment: gamePlan.cornersCommitment,
+            freeKicksCommitment: gamePlan.freeKicksCommitment,
+            captainId: gamePlan.captainId,
+            freeKickTakerId: gamePlan.freeKickTakerId,
+            penaltyTakerId: gamePlan.penaltyTakerId,
+            cornerTakerId: gamePlan.cornerTakerId,
+          }
+        : null,
       opponentSquadVisibility: dto.opponentSquadVisibility,
       teamColor,
       opponentColor: dto.opponentColor ?? null,
@@ -273,69 +322,80 @@ export class EventsService {
       .where(eq(matches.eventId, event.id))
       .limit(1);
 
-    let match = existingMatch;
-    if (match) {
-      const [updated] = await this.databaseService.database
-        .update(matches)
-        .set(matchValues)
-        .where(eq(matches.id, match.id))
-        .returning();
-      match = updated;
-    } else {
-      const [created] = await this.databaseService.database
-        .insert(matches)
-        .values({
-          eventId: event.id,
-          opponentName: matchValues.opponentName,
-          isHome: matchValues.isHome,
-          gamePlanId: matchValues.gamePlanId,
-          opponentSquadVisibility: matchValues.opponentSquadVisibility,
-          teamColor: matchValues.teamColor,
-          opponentColor: matchValues.opponentColor,
-        })
-        .returning();
-      match = created;
+    if (existingMatch) {
+      return existingMatch;
     }
+
+    const [match] = await this.databaseService.database
+      .insert(matches)
+      .values({
+        eventId: event.id,
+        competitionId: event.competitionId,
+        opponentName: matchValues.opponentName,
+        isHome: matchValues.isHome,
+        gamePlanId: matchValues.gamePlanId,
+        gamePlanSnapshot: matchValues.gamePlanSnapshot,
+        opponentSquadVisibility: matchValues.opponentSquadVisibility,
+        teamColor: matchValues.teamColor,
+        opponentColor: matchValues.opponentColor,
+      })
+      .onConflictDoNothing({ target: matches.eventId })
+      .returning();
 
     if (!match) {
-      throw new NotFoundException('Event not found.');
+      const [concurrentMatch] = await this.databaseService.database
+        .select()
+        .from(matches)
+        .where(eq(matches.eventId, event.id))
+        .limit(1);
+      if (concurrentMatch) return concurrentMatch;
+      throw new ConflictException('This match could not be started safely.');
     }
 
-    const squadAthletes = dto.benchAthleteIds
-      ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
-      : teamAthletes;
+    try {
+      const squadAthletes = dto.benchAthleteIds
+        ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
+        : teamAthletes;
 
-    if (dto.benchAthleteIds && requestedIds.length > 0) {
+      if (dto.benchAthleteIds && requestedIds.length > 0) {
+        await this.databaseService.database
+          .delete(athleteMatchStats)
+          .where(
+            and(
+              eq(athleteMatchStats.matchId, match.id),
+              notInArray(athleteMatchStats.athleteId, requestedIds),
+            ),
+          );
+      }
+
+      if (squadAthletes.length > 0) {
+        await this.databaseService.database
+          .insert(athleteMatchStats)
+          .values(
+            squadAthletes.map((athlete) => ({
+              matchId: match.id,
+              athleteId: athlete.id,
+              started: startingIds.has(athlete.id),
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [athleteMatchStats.matchId, athleteMatchStats.athleteId],
+            set: {
+              started: sql`excluded.started`,
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      await this.replaceOpponentSquad(match.id, dto);
+    } catch (error) {
+      // Compensate for Neon HTTP's lack of interactive transactions so a
+      // partially-created match can be retried from the confirmation screen.
       await this.databaseService.database
-        .delete(athleteMatchStats)
-        .where(
-          and(
-            eq(athleteMatchStats.matchId, match.id),
-            notInArray(athleteMatchStats.athleteId, requestedIds),
-          ),
-        );
+        .delete(matches)
+        .where(eq(matches.id, match.id));
+      throw error;
     }
-
-    if (squadAthletes.length > 0) {
-      await this.databaseService.database
-        .insert(athleteMatchStats)
-        .values(
-          squadAthletes.map((athlete) => ({
-            matchId: match.id,
-            athleteId: athlete.id,
-            started: startingIds.has(athlete.id),
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [athleteMatchStats.matchId, athleteMatchStats.athleteId],
-          set: {
-            started: sql`excluded.started`,
-            updatedAt: new Date(),
-          },
-        });
-    }
-
-    await this.replaceOpponentSquad(match.id, dto);
 
     return match;
   }
@@ -363,13 +423,32 @@ export class EventsService {
 
   private async requireTeamGamePlan(teamId: string, gamePlanId: string) {
     const [plan] = await this.databaseService.database
-      .select({ id: gamePlans.id })
+      .select()
       .from(gamePlans)
       .where(and(eq(gamePlans.id, gamePlanId), eq(gamePlans.teamId, teamId)))
       .limit(1);
 
     if (!plan) {
       throw new BadRequestException('Game plan not found.');
+    }
+
+    return plan;
+  }
+
+  private async requireTeamCompetition(teamId: string, competitionId: string) {
+    const [competition] = await this.databaseService.database
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(
+        and(
+          eq(competitions.id, competitionId),
+          eq(competitions.teamId, teamId),
+        ),
+      )
+      .limit(1);
+
+    if (!competition) {
+      throw new BadRequestException('Competition not found.');
     }
   }
 

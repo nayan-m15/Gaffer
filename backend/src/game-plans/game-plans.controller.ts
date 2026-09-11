@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -12,6 +11,7 @@ import {
 import { AuthGuard, type SessionUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
+import { requireCoachTeamId, requireTeamId } from '../common/team-access';
 import { TeamsService } from '../teams/teams.service';
 import {
   createGamePlanSchema,
@@ -28,13 +28,7 @@ export class GamePlansController {
   ) {}
 
   private async getTeamId(userId: string): Promise<string> {
-    const team = await this.teamsService.findTeamForUser(userId);
-
-    if (!team) {
-      throw new NotFoundException('Team not found.');
-    }
-
-    return team.id;
+    return requireTeamId(this.teamsService, userId);
   }
 
   /**
@@ -44,9 +38,7 @@ export class GamePlansController {
    * any non-coach member (and for users without a team).
    */
   private async getCoachTeamId(userId: string): Promise<string> {
-    const team = await this.teamsService.requireCoachTeam(userId);
-
-    return team.id;
+    return requireCoachTeamId(this.teamsService, userId);
   }
 
   @Get()
