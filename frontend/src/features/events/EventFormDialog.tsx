@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { CalendarIcon, ClockIcon } from "lucide-react";
+import { CalendarIcon, Check, ClockIcon, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -39,7 +39,8 @@ import {
   startOfLocalDay,
 } from "./event-utils";
 import { useCreateEvent, useUpdateEvent } from "./hooks";
-import type { EventType, TeamEvent } from "./types";
+import { searchLocations } from "./api";
+import type { EventType, LocationSearchResult, TeamEvent } from "./types";
 
 const inputClassName =
   "h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30";
@@ -87,6 +88,10 @@ export function EventFormDialog({
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
+  const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +108,15 @@ export function EventFormDialog({
       setDate(parseLocalDate(parts.date));
       setTime(parts.time);
       setLocation(event.location);
+      setVenueAddress(event.venueAddress ?? "");
+      setSelectedLocation(event.latitude != null && event.longitude != null ? {
+        id: event.id,
+        name: event.location,
+        displayName: event.venueAddress ?? event.location,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        timezone: event.timezone,
+      } : null);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
     } else {
@@ -111,10 +125,13 @@ export function EventFormDialog({
       setDate(initialDate ? startOfLocalDay(initialDate) : undefined);
       setTime("");
       setLocation("");
+      setVenueAddress("");
+      setSelectedLocation(null);
       setNotes("");
       setCompetitionId("none");
     }
     setError(null);
+    setLocationResults([]);
   }, [open, event, initialDate, initialType]);
 
   const isPending = createEvent.isPending || updateEvent.isPending;
@@ -155,6 +172,10 @@ export function EventFormDialog({
             type,
             scheduledAt,
             location: location.trim(),
+            venueAddress: venueAddress.trim() || null,
+            latitude: selectedLocation?.latitude ?? null,
+            longitude: selectedLocation?.longitude ?? null,
+            timezone: selectedLocation?.timezone ?? null,
             notes: notesValue.length > 0 ? notesValue : null,
             competitionId:
               type === "match" && competitionId !== "none" ? competitionId : null,
@@ -166,6 +187,10 @@ export function EventFormDialog({
           type,
           scheduledAt,
           location: location.trim(),
+          venueAddress: venueAddress.trim() || null,
+          latitude: selectedLocation?.latitude ?? null,
+          longitude: selectedLocation?.longitude ?? null,
+          timezone: selectedLocation?.timezone ?? null,
           ...(notesValue.length > 0 ? { notes: notesValue } : {}),
           competitionId:
             type === "match" && competitionId !== "none" ? competitionId : null,
@@ -268,12 +293,69 @@ export function EventFormDialog({
             <input
               id={`${baseId}-location`}
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g. Main field"
+              onChange={(e) => {
+                setLocation(e.target.value);
+                setSelectedLocation(null);
+              }}
+              placeholder="e.g. Riverside Sports Ground"
               className={inputClassName}
               required
               maxLength={200}
             />
+          </Field>
+
+          <Field htmlFor={`${baseId}-address`} label="Weather location">
+            <div className="flex gap-2">
+              <input
+                id={`${baseId}-address`}
+                value={venueAddress}
+                onChange={(e) => {
+                  setVenueAddress(e.target.value);
+                  setSelectedLocation(null);
+                  setLocationResults([]);
+                }}
+                placeholder="Town, suburb, or postcode"
+                className={inputClassName}
+                maxLength={300}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSearchingLocation || (venueAddress.trim() || location.trim()).length < 3}
+                onClick={() => {
+                  const query = venueAddress.trim() || location.trim();
+                  setIsSearchingLocation(true);
+                  setError(null);
+                  void searchLocations(query)
+                    .then(setLocationResults)
+                    .catch((err) => setError(err instanceof ApiError ? err.message : "Could not search locations."))
+                    .finally(() => setIsSearchingLocation(false));
+                }}
+              >
+                <Search className="size-4" />
+                {isSearchingLocation ? "Searching…" : "Find"}
+              </Button>
+            </div>
+            {selectedLocation && (
+              <p className="flex items-center gap-1 text-xs text-emerald-500"><Check className="size-3" />Forecast location confirmed</p>
+            )}
+            {locationResults.length > 0 && !selectedLocation && (
+              <div className="rounded-md border border-border bg-background p-1">
+                {locationResults.map((result) => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                    onClick={() => {
+                      setSelectedLocation(result);
+                      setVenueAddress(result.displayName);
+                      setLocationResults([]);
+                    }}
+                  >{result.displayName}</button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Choose a nearby town or suburb so the forecast uses the correct coordinates.</p>
           </Field>
 
           {type === "match" && (

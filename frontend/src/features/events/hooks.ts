@@ -4,6 +4,7 @@ import {
   cancelEvent,
   createEvent,
   fetchEvent,
+  fetchEventWeather,
   fetchEvents,
   startMatch,
   updateEvent,
@@ -36,6 +37,16 @@ export function useEvent(eventId: string | undefined) {
     queryKey: [...eventsQueryKey, eventId],
     queryFn: () => fetchEvent(eventId!),
     enabled: Boolean(eventId),
+  });
+}
+
+export function useEventWeather(eventId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [...eventsQueryKey, eventId, "weather"],
+    queryFn: () => fetchEventWeather(eventId!),
+    enabled: enabled && Boolean(eventId),
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
   });
 }
 

@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api";
 import type {
   CreateEventInput,
+  EventWeather,
+  LocationSearchResult,
   MatchRecord,
   StartMatchInput,
   TeamEvent,
@@ -13,6 +15,16 @@ export function fetchEvents() {
 
 export function fetchEvent(id: string) {
   return apiFetch<TeamEvent>(`/events/${id}`);
+}
+
+export function fetchEventWeather(id: string) {
+  return apiFetch<EventWeather>(`/events/${id}/weather`);
+}
+
+export function searchLocations(query: string) {
+  return apiFetch<LocationSearchResult[]>(
+    `/locations/search?q=${encodeURIComponent(query)}`,
+  );
 }
 
 export function createEvent(input: CreateEventInput) {

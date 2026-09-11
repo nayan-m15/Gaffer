@@ -1,4 +1,8 @@
-import { startMatchSchema } from './events.schemas';
+import {
+  createEventSchema,
+  startMatchSchema,
+  updateEventSchema,
+} from './events.schemas';
 
 const starterIds = Array.from(
   { length: 11 },
@@ -52,5 +56,33 @@ describe('startMatchSchema opponent positions', () => {
         }),
       ),
     ).toThrow();
+  });
+});
+
+describe('event venue coordinates', () => {
+  const event = {
+    title: 'Evening training',
+    type: 'training',
+    scheduledAt: '2026-09-20T18:00:00+02:00',
+    location: 'Main pitch',
+  };
+
+  it('accepts a confirmed location with paired coordinates', () => {
+    expect(
+      createEventSchema.parse({
+        ...event,
+        venueAddress: 'Stellenbosch, Western Cape, South Africa',
+        latitude: -33.9321,
+        longitude: 18.8602,
+        timezone: 'Africa/Johannesburg',
+      }),
+    ).toMatchObject({ latitude: -33.9321, longitude: 18.8602 });
+  });
+
+  it('rejects an unpaired coordinate on create or update', () => {
+    expect(() =>
+      createEventSchema.parse({ ...event, latitude: -33.9321 }),
+    ).toThrow();
+    expect(() => updateEventSchema.parse({ longitude: 18.8602 })).toThrow();
   });
 });

@@ -54,6 +54,10 @@ export class EventsService {
         type: dto.type,
         scheduledAt: new Date(dto.scheduledAt),
         location: dto.location,
+        venueAddress: dto.venueAddress,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        timezone: dto.timezone,
         notes: dto.notes,
         competitionId,
       })
@@ -199,6 +203,9 @@ export class EventsService {
       await this.requireTeamCompetition(team.id, competitionId);
     }
 
+    const locationChanged =
+      dto.location !== undefined && dto.location !== existingEvent.location;
+
     const [event] = await this.databaseService.database
       .update(events)
       .set({
@@ -209,6 +216,26 @@ export class EventsService {
           ? { scheduledAt: new Date(dto.scheduledAt) }
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
+        ...(dto.venueAddress !== undefined
+          ? { venueAddress: dto.venueAddress }
+          : locationChanged
+            ? { venueAddress: null }
+            : {}),
+        ...(dto.latitude !== undefined
+          ? { latitude: dto.latitude }
+          : locationChanged
+            ? { latitude: null }
+            : {}),
+        ...(dto.longitude !== undefined
+          ? { longitude: dto.longitude }
+          : locationChanged
+            ? { longitude: null }
+            : {}),
+        ...(dto.timezone !== undefined
+          ? { timezone: dto.timezone }
+          : locationChanged
+            ? { timezone: null }
+            : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         ...(dto.competitionId !== undefined || type !== 'match'
           ? { competitionId }

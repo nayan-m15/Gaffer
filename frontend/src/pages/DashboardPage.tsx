@@ -8,6 +8,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
+import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { useState } from "react";
 import {
   Activity,
@@ -67,6 +68,10 @@ interface UpcomingEvent {
   type: "match" | "training" | "meeting";
   scheduledAt: string;
   location: string;
+  venueAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
 }
 
 interface MatchStat {
@@ -561,6 +566,9 @@ const EVENT_TYPE_STYLES: Record<
 
 function EventItem({ event }: { event: UpcomingEvent }) {
   const typeStyle = EVENT_TYPE_STYLES[event.type];
+  const destination = [event.location, event.venueAddress]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <li className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0 last:pb-0">
@@ -578,10 +586,18 @@ function EventItem({ event }: { event: UpcomingEvent }) {
           >
             {typeStyle.label}
           </span>
-          <span className="flex items-center gap-1">
+          <a
+            className="flex items-center gap-1 hover:text-primary hover:underline"
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             <MapPin className="size-3" aria-hidden="true" />
             {event.location}
-          </span>
+          </a>
+        </div>
+        <div className="mt-1.5">
+          <EventWeatherCard eventId={event.id} compact />
         </div>
       </div>
       <div className="shrink-0 text-right">

@@ -9,6 +9,7 @@ import { TeamsService } from '../teams/teams.service';
 import type { SessionUser } from '../auth/auth.guard';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
+import { WeatherService } from '../weather/weather.service';
 
 const user = {
   id: 'user-id',
@@ -49,6 +50,10 @@ describe('EventsController', () => {
     requireCoachTeam: jest.fn(),
   };
 
+  const mockWeatherService = {
+    getEventWeather: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -68,6 +73,10 @@ describe('EventsController', () => {
         {
           provide: TeamsService,
           useValue: mockTeamsService,
+        },
+        {
+          provide: WeatherService,
+          useValue: mockWeatherService,
         },
       ],
     }).compile();

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -348,6 +349,10 @@ export const events = pgTable(
     status: eventStatus('status').default('scheduled').notNull(),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
+    venueAddress: text('venue_address'),
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
+    timezone: text('timezone'),
     notes: text('notes'),
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',

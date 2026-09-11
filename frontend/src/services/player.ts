@@ -15,6 +15,10 @@ export interface PlayerEvent {
   status: "scheduled" | "cancelled" | "completed";
   scheduledAt: string;
   location: string;
+  venueAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
   notes: string | null;
   competitionId: string | null;
   matchId: string | null;

@@ -10,6 +10,10 @@ export interface TeamEvent {
   status: EventStatus;
   scheduledAt: string;
   location: string;
+  venueAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
   notes: string | null;
   competitionId: string | null;
   matchId?: string | null;
@@ -22,6 +26,10 @@ export interface CreateEventInput {
   type: EventType;
   scheduledAt: string;
   location: string;
+  venueAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
   notes?: string;
   competitionId?: string | null;
 }
@@ -32,8 +40,42 @@ export interface UpdateEventInput {
   status?: EventStatus;
   scheduledAt?: string;
   location?: string;
+  venueAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
   notes?: string | null;
   competitionId?: string | null;
+}
+
+export interface LocationSearchResult {
+  id: string;
+  name: string;
+  displayName: string;
+  latitude: number;
+  longitude: number;
+  timezone: string | null;
+}
+
+export type WeatherStatus =
+  | "available"
+  | "missing_location"
+  | "outside_forecast_range"
+  | "unavailable"
+  | "not_applicable";
+
+export interface EventWeather {
+  status: WeatherStatus;
+  rangeReason?: "too_old" | "too_far";
+  forecastAt?: string;
+  fetchedAt?: string;
+  temperatureC?: number;
+  precipitationProbability?: number;
+  windSpeedKmh?: number;
+  weatherCode?: number;
+  condition?: string;
+  stale?: boolean;
+  attribution?: string;
 }
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
