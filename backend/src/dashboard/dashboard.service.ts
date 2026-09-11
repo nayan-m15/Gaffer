@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { and, asc, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { athletes, events, matchEvents, matches } from '../database/schema';
+import {
+  athletes,
+  events,
+  matchEvents,
+  matches,
+  seasons,
+} from '../database/schema';
+import { StatisticsService } from '../statistics/statistics.service';
 import { matchResult } from '../statistics/statistics.trends';
 import { TeamsService } from '../teams/teams.service';
 
@@ -9,15 +16,18 @@ import { TeamsService } from '../teams/teams.service';
  * Aggregates dashboard summary data for a coach's team.
  *
  * Returns active athlete count, total event count, the next five
- * upcoming events, and the five most recent completed match results
- * scoped to the team. When the user has no team, all values return
- * as empty/zero so the frontend can render a clean empty state.
+ * upcoming events, the five most recent completed match results, the
+ * current season's win/draw/loss record, and a handful of rate stats
+ * over those same recent matches — all scoped to the team. When the
+ * user has no team, all values return as empty/zero so the frontend
+ * can render a clean empty state.
  */
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly statisticsService: StatisticsService,
   ) {}
 
   async getSummary(userId: string) {
@@ -29,6 +39,8 @@ export class DashboardService {
         totalEventsCount: 0,
         upcomingEvents: [],
         recentForm: [],
+        seasonSummary: null,
+        recentStats: [],
       };
     }
 
@@ -37,6 +49,7 @@ export class DashboardService {
       [{ value: totalEventsCount }],
       upcomingEvents,
       recentMatches,
+      currentSeason,
     ] = await Promise.all([
       // Active athletes
       this.databaseService.database
@@ -79,6 +92,14 @@ export class DashboardService {
         .where(and(eq(events.teamId, team.id), eq(events.status, 'completed')))
         .orderBy(desc(events.scheduledAt))
         .limit(5),
+
+      // The team's current season, if one is flagged. Falls back to the
+      // team's whole history below when there isn't one yet.
+      this.databaseService.database
+        .select({ id: seasons.id })
+        .from(seasons)
+        .where(and(eq(seasons.teamId, team.id), eq(seasons.isCurrent, true)))
+        .limit(1),
     ]);
 
     const recentForm = recentMatches.map((match) => {
@@ -98,11 +119,65 @@ export class DashboardService {
       };
     });
 
+    // Shared with the statistics module so the dashboard's record never
+    // drifts from the full statistics page's — this recomputes the same
+    // totals `StatisticsService.getOverview` derives from the season's
+    // matches rather than keeping a second aggregation in sync by hand.
+    const overview = await this.statisticsService.getOverview(userId, {
+      seasonId: currentSeason[0]?.id,
+    });
+    const seasonSummary =
+      overview.matchesPlayed > 0
+        ? {
+            played: overview.matchesPlayed,
+            won: overview.wins,
+            drawn: overview.draws,
+            lost: overview.losses,
+            goalsFor: overview.goalsFor,
+            goalsAgainst: overview.goalsAgainst,
+          }
+        : null;
+
+    // Rate stats over the same recent matches shown in "Recent Form" — kept
+    // as 0-100 percentages so they read sensibly on the dashboard's bar chart.
+    const recentStats =
+      recentMatches.length > 0
+        ? [
+            {
+              label: 'Win Rate',
+              value: Math.round(
+                (recentForm.filter((match) => match.result === 'W').length /
+                  recentMatches.length) *
+                  100,
+              ),
+            },
+            {
+              label: 'Clean Sheets',
+              value: Math.round(
+                (recentMatches.filter((match) => match.opponentScore === 0)
+                  .length /
+                  recentMatches.length) *
+                  100,
+              ),
+            },
+            {
+              label: 'Scoring Rate',
+              value: Math.round(
+                (recentMatches.filter((match) => match.teamScore > 0).length /
+                  recentMatches.length) *
+                  100,
+              ),
+            },
+          ]
+        : [];
+
     return {
       activeAthletesCount,
       totalEventsCount,
       upcomingEvents,
       recentForm,
+      seasonSummary,
+      recentStats,
     };
   }
 }
