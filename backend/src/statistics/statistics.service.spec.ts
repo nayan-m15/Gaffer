@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
@@ -306,5 +310,57 @@ describe('StatisticsService', () => {
     await expect(service.getCompetitions('user-1')).rejects.toThrow(
       ForbiddenException,
     );
+  });
+
+  describe('createStanding uniqueness', () => {
+    it('throws ConflictException when a standing with the same position exists', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ id: 'comp-1' }]),
+      );
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ position: 1, teamName: 'Other FC' }]),
+      );
+
+      await expect(
+        service.createStanding('user-1', 'comp-1', {
+          teamName: 'My Team',
+          position: 1,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('throws ConflictException when a standing with the same team name exists', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ id: 'comp-1' }]),
+      );
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ position: 2, teamName: 'My Team' }]),
+      );
+
+      await expect(
+        service.createStanding('user-1', 'comp-1', {
+          teamName: 'My Team',
+          position: 1,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
   });
 });

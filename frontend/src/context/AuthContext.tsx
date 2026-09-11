@@ -43,7 +43,11 @@ export interface ClaimedAthleteSummary {
 
 export type AccountKind = "coach" | "player" | "new";
 
-export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+export type AuthStatus =
+  | "loading"
+  | "authenticated"
+  | "unauthenticated"
+  | "unavailable";
 
 /** Payload of `GET /auth/session` — what `refreshSession` resolves to. */
 export interface SessionPayload {
@@ -84,6 +88,8 @@ interface AuthContextValue {
   claimedAthletes: ClaimedAthleteSummary[];
   /** Derived account type: coach (has team), player (has claimed athletes), new (neither). */
   accountKind: AccountKind;
+  sessionError: string | null;
+  retrySession: () => Promise<void>;
   signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -107,6 +113,7 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
@@ -122,24 +129,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       setTeam(data.team);
       setClaimedAthletes(data.claimedAthletes ?? []);
+      setSessionError(null);
       setStatus("authenticated");
       return data;
     } catch (error) {
-      // Treat "no session" (401) and "couldn't reach the API at all" (e.g.
-      // the backend isn't running — a plain network error, not an ApiError)
-      // the same way: fall back to signed-out rather than leaving `status`
-      // stuck on "loading" forever, which would hang every protected page.
-      if (!(error instanceof ApiError && error.status === 401)) {
-        console.error("Failed to load the current session:", error);
-      }
-      setUser(null);
-      setTeam(null);
-      setClaimedAthletes([]);
       if (error instanceof ApiError && error.status === 401) {
+        setUser(null);
+        setTeam(null);
+        setClaimedAthletes([]);
         queryClient.clear();
         activeUserIdRef.current = null;
+        setSessionError(null);
+        setStatus("unauthenticated");
+        return null;
       }
-      setStatus("unauthenticated");
+
+      // Distinguish service transport/connectivity failure (network drop,
+      // timeout, 503) from invalid credentials so users can retry without
+      // falsely treating active sessions as signed out.
+      console.error("Failed to load the current session:", error);
+      setSessionError(
+        error instanceof Error
+          ? error.message
+          : "Authentication service is currently unavailable.",
+      );
+      setStatus("unavailable");
       return null;
     }
   }, [queryClient]);
@@ -169,13 +183,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const retrySession = useCallback(async () => {
+    setStatus("loading");
+    await refresh();
+  }, [refresh]);
+
   const signIn = useCallback(
     async (input: SignInInput) => {
       await apiFetch("/auth/sign-in", {
         method: "POST",
         body: JSON.stringify(input),
       });
-      await refresh();
+      const session = await refresh();
+      if (!session) {
+        throw new Error(
+          "Session verification failed. Please check your network connection and try again.",
+        );
+      }
     },
     [refresh],
   );
@@ -189,7 +213,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await apiFetch("/auth/sign-out", { method: "POST" });
+    try {
+      await apiFetch("/auth/sign-out", { method: "POST" });
+    } catch {
+      // Clear client state even if server logout request fails.
+    }
     await queryClient.cancelQueries();
     queryClient.clear();
     activeUserIdRef.current = null;
@@ -197,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setTeam(null);
     setClaimedAthletes([]);
+    setSessionError(null);
     setStatus("unauthenticated");
   }, [queryClient]);
 
@@ -217,41 +246,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-    // Derived: coach (has team) > player (has claimed athletes) > new (neither).
-    const accountKind: AccountKind = team
-      ? "coach"
-      : claimedAthletes.length > 0
-        ? "player"
-        : "new";
+  // Derived: coach (has team) > player (has claimed athletes) > new (neither).
+  const accountKind: AccountKind = team
+    ? "coach"
+    : claimedAthletes.length > 0
+      ? "player"
+      : "new";
 
-    const value = useMemo(
-      () => ({
-        status,
-        user,
-        team,
-        claimedAthletes,
-        accountKind,
-        signUp,
-        signIn,
-        signInWithGoogle,
-        signOut,
-        refreshSession: refresh,
-        resendVerificationEmail,
-      }),
-      [
-        status,
-        user,
-        team,
-        claimedAthletes,
-        accountKind,
-        signUp,
-        signIn,
-        signInWithGoogle,
-        signOut,
-        refresh,
-        resendVerificationEmail,
-      ],
-    );
+  const value = useMemo(
+    () => ({
+      status,
+      user,
+      team,
+      claimedAthletes,
+      accountKind,
+      sessionError,
+      retrySession,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      refreshSession: refresh,
+      resendVerificationEmail,
+    }),
+    [
+      status,
+      user,
+      team,
+      claimedAthletes,
+      accountKind,
+      sessionError,
+      retrySession,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      refresh,
+      resendVerificationEmail,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

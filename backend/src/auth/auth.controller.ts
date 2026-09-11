@@ -83,6 +83,24 @@ function toHttpException(error: unknown): HttpException {
   );
 }
 
+function isNonDisclosingVerificationError(error: unknown): boolean {
+  if (error instanceof APIError) {
+    const status = error.statusCode;
+    const msg = (error.body?.message ?? error.message ?? '').toLowerCase();
+    if (status === 404) return true;
+    if (
+      status === 400 &&
+      (msg.includes('not found') ||
+        msg.includes('already verified') ||
+        msg.includes('user_not_found') ||
+        msg.includes('email_already_verified'))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -137,13 +155,13 @@ export class AuthController {
         },
       });
     } catch (error) {
-      // Better Auth's own errors here (rate limiting, etc.) still map through
-      // normally, but an already-verified or unknown email should not be
-      // distinguishable from a successful send — that would let a caller
-      // probe which addresses have accounts.
-      if (!(error instanceof APIError)) {
-        throw toHttpException(error);
+      // Suppress only non-disclosing errors (unknown email, already verified)
+      // to avoid account enumeration, while surfacing actionable failures
+      // like rate limiting or server errors.
+      if (isNonDisclosingVerificationError(error)) {
+        return { status: true };
       }
+      throw toHttpException(error);
     }
 
     return { status: true };
@@ -173,25 +191,9 @@ export class AuthController {
 
       return { user: response.user };
     } catch (error) {
-      // Better Auth deliberately returns the same "Invalid email or
-      // password" 401 whether the address is unknown, the account has no
-      // password (e.g. Google-only), or the password is wrong — a standard
-      // defence against account enumeration. The product backlog asks for
-      // the unknown-address case to be explicit, so on a credentials
-      // rejection we re-check the address: no user row at all means the
-      // account genuinely doesn't exist, while an existing row (wrong
-      // password, unverified, Google-only) keeps Better Auth's own message.
-      if (
-        error instanceof APIError &&
-        error.statusCode === 401 &&
-        !(await this.authService.userEmailExists(dto.email))
-      ) {
-        throw new HttpException(
-          'No account found with this email address.',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
+      // Better Auth deliberately returns the uniform "Invalid email or
+      // password" 401 whether the address is unknown, Google-only, or the
+      // password is wrong — preventing account enumeration.
       throw toHttpException(error);
     }
   }

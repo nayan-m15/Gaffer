@@ -567,7 +567,17 @@ export const standings = pgTable(
     isOwnTeam: boolean('is_own_team').default(false).notNull(),
     ...timestamps,
   },
-  (table) => [index('standings_competition_id_index').on(table.competitionId)],
+  (table) => [
+    index('standings_competition_id_index').on(table.competitionId),
+    uniqueIndex('standings_competition_position_unique').on(
+      table.competitionId,
+      table.position,
+    ),
+    uniqueIndex('standings_competition_team_name_unique').on(
+      table.competitionId,
+      table.teamName,
+    ),
+  ],
 );
 
 export const matchEventTeam = pgEnum('match_event_team', ['own', 'opponent']);

@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -28,6 +29,15 @@ import { createStandingSchema } from './statistics.schemas';
 const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 const LOSS_POINTS = 0;
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
+}
 
 function loggedEventCount(
   eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
@@ -460,12 +470,46 @@ export class StatisticsService {
     const team = await this.requireTeam(userId);
     await this.requireCompetition(team.id, competitionId);
 
-    const [standing] = await this.databaseService.database
-      .insert(standings)
-      .values({ competitionId, ...dto })
-      .returning();
+    const existingConflict = await this.databaseService.database
+      .select({
+        position: standings.position,
+        teamName: standings.teamName,
+      })
+      .from(standings)
+      .where(
+        and(
+          eq(standings.competitionId, competitionId),
+          sql`(${standings.position} = ${dto.position} or ${standings.teamName} = ${dto.teamName})`,
+        ),
+      )
+      .limit(1);
 
-    return standing;
+    if (existingConflict.length > 0) {
+      if (existingConflict[0].position === dto.position) {
+        throw new ConflictException(
+          `A standing entry for position ${dto.position} already exists in this competition.`,
+        );
+      }
+      throw new ConflictException(
+        `A standing entry for team "${dto.teamName}" already exists in this competition.`,
+      );
+    }
+
+    try {
+      const [standing] = await this.databaseService.database
+        .insert(standings)
+        .values({ competitionId, ...dto })
+        .returning();
+
+      return standing;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A standing entry with this position or team name already exists in this competition.',
+        );
+      }
+      throw error;
+    }
   }
 
   async updateStanding(
@@ -489,13 +533,56 @@ export class StatisticsService {
       isOwnTeam: dto.isOwnTeam ?? existing.isOwnTeam,
     });
 
-    const [standing] = await this.databaseService.database
-      .update(standings)
-      .set({ ...dto, updatedAt: new Date() })
-      .where(eq(standings.id, standingId))
-      .returning();
+    const newPosition = dto.position ?? existing.position;
+    const newTeamName = dto.teamName ?? existing.teamName;
 
-    return standing;
+    if (
+      newPosition !== existing.position ||
+      newTeamName !== existing.teamName
+    ) {
+      const [conflict] = await this.databaseService.database
+        .select({
+          position: standings.position,
+          teamName: standings.teamName,
+        })
+        .from(standings)
+        .where(
+          and(
+            eq(standings.competitionId, existing.competitionId),
+            sql`${standings.id} != ${standingId}`,
+            sql`(${standings.position} = ${newPosition} or ${standings.teamName} = ${newTeamName})`,
+          ),
+        )
+        .limit(1);
+
+      if (conflict) {
+        if (conflict.position === newPosition) {
+          throw new ConflictException(
+            `A standing entry for position ${newPosition} already exists in this competition.`,
+          );
+        }
+        throw new ConflictException(
+          `A standing entry for team "${newTeamName}" already exists in this competition.`,
+        );
+      }
+    }
+
+    try {
+      const [standing] = await this.databaseService.database
+        .update(standings)
+        .set({ ...dto, updatedAt: new Date() })
+        .where(eq(standings.id, standingId))
+        .returning();
+
+      return standing;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A standing entry with this position or team name already exists in this competition.',
+        );
+      }
+      throw error;
+    }
   }
 
   async deleteStanding(userId: string, standingId: string) {
@@ -547,6 +634,7 @@ export class StatisticsService {
     const [row] = await this.databaseService.database
       .select({
         id: standings.id,
+        competitionId: standings.competitionId,
         teamName: standings.teamName,
         position: standings.position,
         played: standings.played,
