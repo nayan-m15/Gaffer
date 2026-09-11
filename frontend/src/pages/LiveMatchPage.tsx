@@ -356,6 +356,34 @@ export default function LiveMatchPage() {
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
   );
+  const dismissedOwnIds = useMemo(
+    () =>
+      new Set(
+        timeline
+          .filter(
+            (event) =>
+              event.team === "own" &&
+              event.eventType === "red_card" &&
+              event.athleteId,
+          )
+          .map((event) => event.athleteId!),
+      ),
+    [timeline],
+  );
+  const dismissedOppIds = useMemo(
+    () =>
+      new Set(
+        timeline
+          .filter(
+            (event) =>
+              event.team === "opponent" &&
+              event.eventType === "red_card" &&
+              event.opponentPlayerId,
+          )
+          .map((event) => event.opponentPlayerId!),
+      ),
+    [timeline],
+  );
   const assistsByGoal = useMemo(
     () => pairAssistsToGoals(timeline),
     [timeline],
@@ -544,6 +572,22 @@ export default function LiveMatchPage() {
       if (!matchId || persistLockRef.current) {
         return;
       }
+      const dismissed =
+        (input.team === "own" &&
+          Boolean(input.athleteId && dismissedOwnIds.has(input.athleteId))) ||
+        (input.team === "opponent" &&
+          Boolean(
+            input.opponentPlayerId &&
+              dismissedOppIds.has(input.opponentPlayerId),
+          ));
+      if (dismissed) {
+        closeComposer();
+        setEventPickerOpen(false);
+        setActionError(
+          "That player has been sent off. Undo the red card before logging another action.",
+        );
+        return;
+      }
       persistLockRef.current = true;
       setActionError(null);
 
@@ -664,6 +708,8 @@ export default function LiveMatchPage() {
       matchId,
       currentMinute,
       timeline,
+      dismissedOwnIds,
+      dismissedOppIds,
       squad,
       opponentSquad,
       logEvent,
@@ -906,6 +952,15 @@ export default function LiveMatchPage() {
   };
 
   const selectOwn = (athlete: MatchSquadAthlete) => {
+    if (dismissedOwnIds.has(athlete.id)) {
+      setComposer({ kind: "closed" });
+      setTarget(null);
+      setEventPickerOpen(false);
+      setActionError(
+        "That player has been sent off. Undo the red card before logging another action.",
+      );
+      return;
+    }
     if (composer.kind === "assist-pick" && composer.team === "own") {
       completeAssist(athlete);
       return;
@@ -935,6 +990,15 @@ export default function LiveMatchPage() {
   };
 
   const selectOpp = (player: OpponentMatchPlayer) => {
+    if (dismissedOppIds.has(player.id)) {
+      setComposer({ kind: "closed" });
+      setTarget(null);
+      setEventPickerOpen(false);
+      setActionError(
+        "That player has been sent off. Undo the red card before logging another action.",
+      );
+      return;
+    }
     if (composer.kind === "assist-pick" && composer.team === "opponent") {
       completeAssist(player);
       return;

@@ -210,7 +210,10 @@ export function ownPitchState(
     unique.filter((athlete) => !athlete.started).map((athlete) => athlete.id),
   );
   for (const event of chronological(timeline)) {
-    if (event.eventType !== "substitution" || event.team !== "own") {
+    if (event.team !== "own") {
+      continue;
+    }
+    if (event.eventType !== "substitution") {
       continue;
     }
     const outgoingId = event.athleteId;
@@ -276,7 +279,10 @@ export function opponentPitchState(
   const bench = new Set(extras.map((player) => player.id));
 
   for (const event of chronological(timeline)) {
-    if (event.eventType !== "substitution" || event.team !== "opponent") {
+    if (event.team !== "opponent") {
+      continue;
+    }
+    if (event.eventType !== "substitution") {
       continue;
     }
     const outgoingId = event.opponentPlayerId;
