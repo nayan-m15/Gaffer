@@ -3,9 +3,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearPendingClaimToken } from "@/services/claims";
@@ -103,14 +105,20 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
  * sign-up/sign-in/sign-out so the UI has something to render against.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<SessionUser | null>(null);
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
+  const activeUserIdRef = useRef<string | null>(null);
 
   const refresh = useCallback(async (): Promise<SessionPayload | null> => {
     try {
       const data = await apiFetch<SessionPayload>("/auth/session");
+      if (activeUserIdRef.current && activeUserIdRef.current !== data.user.id) {
+        queryClient.clear();
+      }
+      activeUserIdRef.current = data.user.id;
       setUser(data.user);
       setTeam(data.team);
       setClaimedAthletes(data.claimedAthletes ?? []);
@@ -127,10 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setTeam(null);
       setClaimedAthletes([]);
+      if (error instanceof ApiError && error.status === 401) {
+        queryClient.clear();
+        activeUserIdRef.current = null;
+      }
       setStatus("unauthenticated");
       return null;
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     void refresh();
@@ -178,12 +190,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await apiFetch("/auth/sign-out", { method: "POST" });
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    activeUserIdRef.current = null;
     clearPendingClaimToken();
     setUser(null);
     setTeam(null);
     setClaimedAthletes([]);
     setStatus("unauthenticated");
-  }, []);
+  }, [queryClient]);
 
   // Fire-and-forget from the caller's point of view: the backend always
   // returns success here regardless of whether the address has an account,

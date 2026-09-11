@@ -27,7 +27,9 @@ const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 const LOSS_POINTS = 0;
 
-function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card') {
+function loggedEventCount(
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+) {
   return sql<number>`coalesce((
     select count(*)::int
     from ${matchEvents}
@@ -36,6 +38,25 @@ function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_ca
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = ${eventType}
   ), 0)`;
+}
+
+function matchGoalCount(team: 'own' | 'opponent') {
+  return sql<number>`coalesce((
+    select count(*)::int from ${matchEvents}
+    where ${matchEvents.matchId} = ${matches.id}
+      and ${matchEvents.team} = ${team}
+      and ${matchEvents.eventType} = 'goal'
+  ), 0)`;
+}
+
+function appearedInMatch() {
+  return sql<boolean>`${athleteMatchStats.started} or exists (
+    select 1 from ${matchEvents}
+    where ${matchEvents.matchId} = ${athleteMatchStats.matchId}
+      and ${matchEvents.team} = 'own'
+      and ${matchEvents.eventType} = 'substitution'
+      and ${matchEvents.detail} = ${athleteMatchStats.athleteId}::text
+  )`;
 }
 
 /**
@@ -77,8 +98,8 @@ export class StatisticsService {
         date: events.scheduledAt,
         opponent: matches.opponentName,
         isHome: matches.isHome,
-        teamScore: matches.teamScore,
-        opponentScore: matches.opponentScore,
+        teamScore: matchGoalCount('own'),
+        opponentScore: matchGoalCount('opponent'),
       })
       .from(matches)
       .innerJoin(events, eq(matches.eventId, events.id))
@@ -151,6 +172,7 @@ export class StatisticsService {
         assists: loggedEventCount('assist'),
         yellowCards: loggedEventCount('yellow_card'),
         redCards: loggedEventCount('red_card'),
+        appeared: appearedInMatch(),
       })
       .from(athleteMatchStats)
       .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
@@ -185,7 +207,7 @@ export class StatisticsService {
         };
         playerMap.set(row.athleteId, entry);
       }
-      entry.appearances += 1;
+      if (row.appeared) entry.appearances += 1;
       entry.goals += row.goals;
       entry.assists += row.assists;
       entry.yellowCards += row.yellowCards;
@@ -265,10 +287,11 @@ export class StatisticsService {
         matchId: matches.id,
         eventId: matches.eventId,
         opponentName: matches.opponentName,
-        teamScore: matches.teamScore,
-        opponentScore: matches.opponentScore,
+        teamScore: matchGoalCount('own'),
+        opponentScore: matchGoalCount('opponent'),
         date: events.scheduledAt,
         started: athleteMatchStats.started,
+        appeared: appearedInMatch(),
         minutesPlayed: athleteMatchStats.minutesPlayed,
         goals: loggedEventCount('goal'),
         assists: loggedEventCount('assist'),
@@ -294,7 +317,7 @@ export class StatisticsService {
     let redCards = 0;
 
     const matchesBreakdown = statsRows.map((row) => {
-      appearances += 1;
+      if (row.appeared) appearances += 1;
       if (row.started) starts += 1;
       goals += row.goals;
       assists += row.assists;

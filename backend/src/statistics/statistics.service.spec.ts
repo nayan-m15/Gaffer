@@ -52,13 +52,18 @@ describe('StatisticsService', () => {
       select: jest.fn(() => thenable([])),
       insert: jest.fn(() => ({
         ...thenable([]),
-        values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
+        values: jest.fn(() => ({
+          returning: jest.fn(() => Promise.resolve([])),
+        })),
       })),
       update: jest.fn(() => ({
         ...thenable([]),
         set: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
       })),
-      delete: jest.fn(() => ({ ...thenable([]), where: jest.fn(() => thenable([])) })),
+      delete: jest.fn(() => ({
+        ...thenable([]),
+        where: jest.fn(() => thenable([])),
+      })),
     },
   };
 
@@ -148,6 +153,7 @@ describe('StatisticsService', () => {
             opponentScore: 1,
             date: new Date('2026-08-01T15:00:00Z'),
             started: true,
+            appeared: true,
             minutesPlayed: 90,
             goals: 2,
             assists: 1,
@@ -162,6 +168,7 @@ describe('StatisticsService', () => {
             opponentScore: 0,
             date: new Date('2026-08-08T15:00:00Z'),
             started: false,
+            appeared: true,
             minutesPlayed: 45,
             goals: 0,
             assists: 0,
@@ -176,6 +183,7 @@ describe('StatisticsService', () => {
             opponentScore: 2,
             date: new Date('2026-08-15T15:00:00Z'),
             started: true,
+            appeared: true,
             minutesPlayed: null,
             goals: 1,
             assists: 0,

@@ -212,7 +212,7 @@ describe('EventsController', () => {
       expect(mockEventsService.startMatch).toHaveBeenCalledWith(
         'user-id',
         'event-id',
-        body,
+        { ...body, opponentSquadVisibility: 'none' },
       );
     });
 

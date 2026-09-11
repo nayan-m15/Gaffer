@@ -13,7 +13,9 @@ async function resilientFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  const maxRetries = 3;
+  // Retrying Neon's POST-based SQL requests after an ambiguous network failure
+  // can replay writes. Let callers retry idempotent operations explicitly.
+  const maxRetries = 1;
   const timeoutMs = 15000;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

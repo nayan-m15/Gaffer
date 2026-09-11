@@ -110,11 +110,21 @@ export class TeamsService {
       .values({ name: teamName, primaryColor })
       .returning();
 
-    await this.databaseService.database.insert(teamMembers).values({
-      teamId: team.id,
-      userId,
-      role: 'coach',
-    });
+    try {
+      await this.databaseService.database.insert(teamMembers).values({
+        teamId: team.id,
+        userId,
+        role: 'coach',
+      });
+    } catch (error) {
+      await this.databaseService.database
+        .delete(teams)
+        .where(eq(teams.id, team.id));
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('This account already has a team.');
+      }
+      throw error;
+    }
 
     return {
       id: team.id,

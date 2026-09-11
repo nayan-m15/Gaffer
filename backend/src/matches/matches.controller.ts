@@ -15,6 +15,7 @@ import { zodValidate } from '../common/zod-validate';
 import {
   createMatchLogEventSchema,
   updateMatchLogEventSchema,
+  updateMatchClockSchema,
 } from './matches.schemas';
 import { MatchesService } from './matches.service';
 
@@ -83,6 +84,16 @@ export class MatchesController {
     @Param('matchId', ParseUUIDPipe) matchId: string,
   ) {
     return this.matchesService.finish(user.id, matchId);
+  }
+
+  @Patch(':matchId/clock')
+  async updateClock(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(updateMatchClockSchema, body);
+    return this.matchesService.updateClock(user.id, matchId, dto);
   }
 
   @Get(':matchId')

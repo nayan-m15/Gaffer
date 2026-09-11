@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -133,6 +134,7 @@ export const teamMembers = pgTable(
   (table) => [
     index('team_members_team_id_index').on(table.teamId),
     index('team_members_user_id_index').on(table.userId),
+    uniqueIndex('team_members_user_unique').on(table.userId),
     uniqueIndex('team_members_team_user_unique').on(table.teamId, table.userId),
   ],
 );
@@ -165,6 +167,9 @@ export const athletes = pgTable(
       table.firstName,
     ),
     index('athletes_user_id_index').on(table.userId),
+    uniqueIndex('athletes_team_user_unique')
+      .on(table.teamId, table.userId)
+      .where(sql`${table.userId} is not null`),
   ],
 );
 
@@ -335,7 +340,11 @@ export const events = pgTable(
 
 // A claimed player's RSVP for a team event. One row per (event, athlete) —
 // a fresh response updates the existing row rather than adding a new one.
-export const rsvpStatus = pgEnum('rsvp_status', ['going', 'not_going', 'maybe']);
+export const rsvpStatus = pgEnum('rsvp_status', [
+  'going',
+  'not_going',
+  'maybe',
+]);
 
 export const eventRsvps = pgTable(
   'event_rsvps',
@@ -421,6 +430,9 @@ export const matches = pgTable(
       .notNull(),
     teamColor: text('team_color'),
     opponentColor: text('opponent_color'),
+    clockPeriod: text('clock_period').default('not_started').notNull(),
+    clockElapsedMs: integer('clock_elapsed_ms').default(0).notNull(),
+    clockStartedAt: timestamp('clock_started_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -569,10 +581,14 @@ export const matchEvents = pgTable(
       .notNull()
       .references(() => user.id),
     manuallyAdjusted: boolean('manually_adjusted').default(false).notNull(),
+    clientRequestId: uuid('client_request_id'),
     ...timestamps,
   },
   (table) => [
     index('match_events_match_id_index').on(table.matchId),
     index('match_events_opponent_player_id_index').on(table.opponentPlayerId),
+    uniqueIndex('match_events_match_request_unique')
+      .on(table.matchId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} is not null`),
   ],
 );

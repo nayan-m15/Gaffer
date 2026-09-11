@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -225,6 +226,10 @@ export class EventsService {
       throw new NotFoundException('Event not found.');
     }
 
+    if (event.status !== 'scheduled') {
+      throw new BadRequestException('Only scheduled matches can be started.');
+    }
+
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
         'Matches cannot be started before match day.',
@@ -273,69 +278,78 @@ export class EventsService {
       .where(eq(matches.eventId, event.id))
       .limit(1);
 
-    let match = existingMatch;
-    if (match) {
-      const [updated] = await this.databaseService.database
-        .update(matches)
-        .set(matchValues)
-        .where(eq(matches.id, match.id))
-        .returning();
-      match = updated;
-    } else {
-      const [created] = await this.databaseService.database
-        .insert(matches)
-        .values({
-          eventId: event.id,
-          opponentName: matchValues.opponentName,
-          isHome: matchValues.isHome,
-          gamePlanId: matchValues.gamePlanId,
-          opponentSquadVisibility: matchValues.opponentSquadVisibility,
-          teamColor: matchValues.teamColor,
-          opponentColor: matchValues.opponentColor,
-        })
-        .returning();
-      match = created;
+    if (existingMatch) {
+      return existingMatch;
     }
+
+    const [match] = await this.databaseService.database
+      .insert(matches)
+      .values({
+        eventId: event.id,
+        opponentName: matchValues.opponentName,
+        isHome: matchValues.isHome,
+        gamePlanId: matchValues.gamePlanId,
+        opponentSquadVisibility: matchValues.opponentSquadVisibility,
+        teamColor: matchValues.teamColor,
+        opponentColor: matchValues.opponentColor,
+      })
+      .onConflictDoNothing({ target: matches.eventId })
+      .returning();
 
     if (!match) {
-      throw new NotFoundException('Event not found.');
+      const [concurrentMatch] = await this.databaseService.database
+        .select()
+        .from(matches)
+        .where(eq(matches.eventId, event.id))
+        .limit(1);
+      if (concurrentMatch) return concurrentMatch;
+      throw new ConflictException('This match could not be started safely.');
     }
 
-    const squadAthletes = dto.benchAthleteIds
-      ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
-      : teamAthletes;
+    try {
+      const squadAthletes = dto.benchAthleteIds
+        ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
+        : teamAthletes;
 
-    if (dto.benchAthleteIds && requestedIds.length > 0) {
+      if (dto.benchAthleteIds && requestedIds.length > 0) {
+        await this.databaseService.database
+          .delete(athleteMatchStats)
+          .where(
+            and(
+              eq(athleteMatchStats.matchId, match.id),
+              notInArray(athleteMatchStats.athleteId, requestedIds),
+            ),
+          );
+      }
+
+      if (squadAthletes.length > 0) {
+        await this.databaseService.database
+          .insert(athleteMatchStats)
+          .values(
+            squadAthletes.map((athlete) => ({
+              matchId: match.id,
+              athleteId: athlete.id,
+              started: startingIds.has(athlete.id),
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [athleteMatchStats.matchId, athleteMatchStats.athleteId],
+            set: {
+              started: sql`excluded.started`,
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      await this.replaceOpponentSquad(match.id, dto);
+    } catch (error) {
+      // Compensate for Neon HTTP's lack of interactive transactions so a
+      // partially-created match can be retried from the confirmation screen.
       await this.databaseService.database
-        .delete(athleteMatchStats)
-        .where(
-          and(
-            eq(athleteMatchStats.matchId, match.id),
-            notInArray(athleteMatchStats.athleteId, requestedIds),
-          ),
-        );
+        .delete(matches)
+        .where(eq(matches.id, match.id));
+      throw error;
     }
-
-    if (squadAthletes.length > 0) {
-      await this.databaseService.database
-        .insert(athleteMatchStats)
-        .values(
-          squadAthletes.map((athlete) => ({
-            matchId: match.id,
-            athleteId: athlete.id,
-            started: startingIds.has(athlete.id),
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [athleteMatchStats.matchId, athleteMatchStats.athleteId],
-          set: {
-            started: sql`excluded.started`,
-            updatedAt: new Date(),
-          },
-        });
-    }
-
-    await this.replaceOpponentSquad(match.id, dto);
 
     return match;
   }

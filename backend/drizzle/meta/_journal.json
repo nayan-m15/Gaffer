@@ -99,6 +99,13 @@
       "when": 1788790692701,
       "tag": "0011_add_team_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789120000000,
+      "tag": "0013_harden_match_integrity",
+      "breakpoints": true
     }
   ]
 }

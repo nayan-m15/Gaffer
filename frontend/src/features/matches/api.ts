@@ -6,6 +6,7 @@ import type {
   MatchSquadAthlete,
   OpponentMatchPlayer,
   UpdateMatchLogEventInput,
+  UpdateMatchClockInput,
 } from "./types";
 
 export function fetchMatch(matchId: string) {
@@ -56,5 +57,12 @@ export function deleteMatchLogEvent(matchId: string, eventId: string) {
 export function finishMatch(matchId: string) {
   return apiFetch<MatchRecord>(`/matches/${matchId}/finish`, {
     method: "POST",
+  });
+}
+
+export function updateMatchClock(matchId: string, input: UpdateMatchClockInput) {
+  return apiFetch<MatchRecord>(`/matches/${matchId}/clock`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { athletes, playerClaimInvites, teams } from '../database/schema';
 import { claimTokenSchema } from './claims.schemas';
@@ -29,6 +29,15 @@ export interface ClaimInvitePreview {
 // constant-time comparison is needed.
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
 }
 
 // Pending and unexpired. Expired, used, and revoked invites are all equally
@@ -146,14 +155,30 @@ export class ClaimsService {
       );
     }
 
-    // neon-http does not support interactive transactions, so — like
-    // TeamsService.createTeamForUser — the two writes run sequentially and
-    // accept the same small risk window between them.
-    const [claimed] = await this.databaseService.database
-      .update(athletes)
-      .set({ userId, updatedAt: new Date() })
-      .where(eq(athletes.id, athlete.id))
-      .returning();
+    // The conditional update makes athlete ownership a single-winner write;
+    // the database's partial unique index also prevents one account claiming
+    // two athlete rows on this team under concurrent requests.
+    let claimed: typeof athletes.$inferSelect | undefined;
+    try {
+      [claimed] = await this.databaseService.database
+        .update(athletes)
+        .set({ userId, updatedAt: new Date() })
+        .where(and(eq(athletes.id, athlete.id), isNull(athletes.userId)))
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'This account has already claimed a player profile on this team.',
+        );
+      }
+      throw error;
+    }
+
+    if (!claimed) {
+      throw new ConflictException(
+        'This player profile has already been claimed.',
+      );
+    }
 
     await this.databaseService.database
       .update(playerClaimInvites)
@@ -163,7 +188,12 @@ export class ClaimsService {
         usedByUserId: userId,
         updatedAt: new Date(),
       })
-      .where(eq(playerClaimInvites.id, invite.id));
+      .where(
+        and(
+          eq(playerClaimInvites.id, invite.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      );
 
     return claimed;
   }

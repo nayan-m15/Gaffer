@@ -29,6 +29,7 @@ import {
   useMatchEvents,
   useMatchSquad,
   useUpdateMatchEvent,
+  useUpdateMatchClock,
 } from "@/features/matches/hooks";
 import type {
   MatchEventTeam,
@@ -271,6 +272,7 @@ export default function LiveMatchPage() {
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");
+  const updateClock = useUpdateMatchClock(matchId ?? "");
 
   const [period, setPeriod] = useState<Period>("not_started");
   const [running, setRunning] = useState(false);
@@ -302,6 +304,7 @@ export default function LiveMatchPage() {
   const persistLockRef = useRef(false);
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
+  const clockHydratedRef = useRef(false);
   const enteringIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -309,11 +312,27 @@ export default function LiveMatchPage() {
   }, [elapsedMs]);
 
   useEffect(() => {
-    if (matchQuery.data?.eventStatus === "completed") {
+    const match = matchQuery.data;
+    if (!match || clockHydratedRef.current) return;
+    clockHydratedRef.current = true;
+    if (match.eventStatus === "completed") {
       setPeriod("full_time");
       setRunning(false);
+      return;
     }
-  }, [matchQuery.data?.eventStatus]);
+    const elapsed = Math.max(
+      0,
+      match.clockElapsedMs +
+        (match.clockStartedAt
+          ? Date.now() - new Date(match.clockStartedAt).getTime()
+          : 0),
+    );
+    baseRef.current = elapsed;
+    elapsedRef.current = elapsed;
+    setElapsedMs(elapsed);
+    setPeriod(match.clockPeriod);
+    setRunning(Boolean(match.clockStartedAt));
+  }, [matchQuery.data]);
 
   useEffect(() => {
     if (!running) {
@@ -445,13 +464,27 @@ export default function LiveMatchPage() {
     (event) => event.eventType === "goal" && event.team === "opponent",
   ).length;
 
+  const persistClock = (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
+    updateClock.mutate(
+      { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
+      {
+        onError: (error) =>
+          setActionError(
+            error instanceof Error ? error.message : "Could not save the match clock.",
+          ),
+      },
+    );
+  };
+
   const startClock = () => {
     setRunning(true);
+    persistClock(period, true, elapsedRef.current);
   };
 
   const pauseClock = () => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    persistClock(period, false, elapsedRef.current);
   };
 
   const startFirstHalf = () => {
@@ -460,11 +493,14 @@ export default function LiveMatchPage() {
     setElapsedMs(0);
     setPeriod("first_half");
     setRunning(true);
+    persistClock("first_half", true, 0);
   };
 
   const goHalfTime = () => {
-    pauseClock();
+    setRunning(false);
+    baseRef.current = elapsedRef.current;
     setPeriod("half_time");
+    persistClock("half_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
   };
@@ -477,11 +513,14 @@ export default function LiveMatchPage() {
     }
     setPeriod("second_half");
     setRunning(true);
+    persistClock("second_half", true, elapsedRef.current);
   };
 
   const goFullTime = () => {
-    pauseClock();
+    setRunning(false);
+    baseRef.current = elapsedRef.current;
     setPeriod("full_time");
+    persistClock("full_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
   };
@@ -489,6 +528,7 @@ export default function LiveMatchPage() {
   const backToFirstHalf = () => {
     setPeriod("first_half");
     setRunning(true);
+    persistClock("first_half", true, elapsedRef.current);
   };
 
   const closeComposer = useCallback(() => {
@@ -538,6 +578,7 @@ export default function LiveMatchPage() {
           });
         } else {
           const created = await logEvent.mutateAsync({
+            clientRequestId: crypto.randomUUID(),
             team: input.team,
             eventType,
             minute: input.minute ?? currentMinute,
