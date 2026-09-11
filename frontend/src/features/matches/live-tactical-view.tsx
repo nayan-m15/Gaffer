@@ -332,8 +332,14 @@ function PositionedMarker({
       className="absolute"
       style={
         orientation === "vertical"
-          ? { left: `${y}%`, top: `${100 - x}%` }
-          : { left: `${x}%`, top: `${y}%` }
+          ? {
+              left: `clamp(var(--live-marker-inset, 0px), ${y}%, calc(100% - var(--live-marker-inset, 0px)))`,
+              top: `clamp(var(--live-marker-inset, 0px), ${100 - x}%, calc(100% - var(--live-marker-inset, 0px)))`,
+            }
+          : {
+              left: `clamp(var(--live-marker-inset, 0px), ${x}%, calc(100% - var(--live-marker-inset, 0px)))`,
+              top: `clamp(var(--live-marker-inset, 0px), ${y}%, calc(100% - var(--live-marker-inset, 0px)))`,
+            }
       }
     >
       <PlayerMarker {...markerProps} />
