@@ -42,6 +42,7 @@ export const createEventSchema = z.object({
     .trim()
     .max(2000, 'Notes must be 2000 characters or fewer.')
     .optional(),
+  competitionId: z.uuid().nullable().optional(),
 });
 export type CreateEventDto = z.infer<typeof createEventSchema>;
 

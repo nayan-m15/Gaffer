@@ -11,6 +11,7 @@ import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
+  competitions,
   eventRsvps,
   events,
   gamePlans,
@@ -40,6 +41,10 @@ export class EventsService {
 
   async create(userId: string, dto: CreateEventDto) {
     const team = await this.requireTeam(userId);
+    const competitionId = dto.type === 'match' ? dto.competitionId : null;
+    if (competitionId) {
+      await this.requireTeamCompetition(team.id, competitionId);
+    }
 
     const [event] = await this.databaseService.database
       .insert(events)
@@ -50,6 +55,7 @@ export class EventsService {
         scheduledAt: new Date(dto.scheduledAt),
         location: dto.location,
         notes: dto.notes,
+        competitionId,
       })
       .returning();
 
@@ -181,7 +187,17 @@ export class EventsService {
 
   async update(userId: string, eventId: string, dto: UpdateEventDto) {
     const team = await this.requireTeam(userId);
-    await this.requireEvent(team.id, eventId);
+    const existingEvent = await this.requireEvent(team.id, eventId);
+    const type = dto.type ?? existingEvent.type;
+    const competitionId =
+      type === 'match'
+        ? dto.competitionId !== undefined
+          ? dto.competitionId
+          : existingEvent.competitionId
+        : null;
+    if (competitionId) {
+      await this.requireTeamCompetition(team.id, competitionId);
+    }
 
     const [event] = await this.databaseService.database
       .update(events)
@@ -194,10 +210,18 @@ export class EventsService {
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        ...(dto.competitionId !== undefined || type !== 'match'
+          ? { competitionId }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(events.id, eventId), eq(events.teamId, team.id)))
       .returning();
+
+    await this.databaseService.database
+      .update(matches)
+      .set({ competitionId, updatedAt: new Date() })
+      .where(eq(matches.eventId, eventId));
 
     return event;
   }
@@ -286,6 +310,7 @@ export class EventsService {
       .insert(matches)
       .values({
         eventId: event.id,
+        competitionId: event.competitionId,
         opponentName: matchValues.opponentName,
         isHome: matchValues.isHome,
         gamePlanId: matchValues.gamePlanId,
@@ -384,6 +409,23 @@ export class EventsService {
 
     if (!plan) {
       throw new BadRequestException('Game plan not found.');
+    }
+  }
+
+  private async requireTeamCompetition(teamId: string, competitionId: string) {
+    const [competition] = await this.databaseService.database
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(
+        and(
+          eq(competitions.id, competitionId),
+          eq(competitions.teamId, teamId),
+        ),
+      )
+      .limit(1);
+
+    if (!competition) {
+      throw new BadRequestException('Competition not found.');
     }
   }
 

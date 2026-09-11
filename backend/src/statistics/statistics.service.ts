@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { zodValidate } from '../common/zod-validate';
 import {
   athletes,
   athleteMatchStats,
@@ -21,6 +22,7 @@ import type {
   UpdateCompetitionDto,
   UpdateStandingDto,
 } from './statistics.schemas';
+import { createStandingSchema } from './statistics.schemas';
 
 /** Points awarded per match result. Centralised so the scoring system is easy to change. */
 const WIN_POINTS = 3;
@@ -472,7 +474,20 @@ export class StatisticsService {
     dto: UpdateStandingDto,
   ) {
     const team = await this.requireTeam(userId);
-    await this.requireStanding(team.id, standingId);
+    const existing = await this.requireStanding(team.id, standingId);
+
+    zodValidate(createStandingSchema, {
+      teamName: dto.teamName ?? existing.teamName,
+      position: dto.position ?? existing.position,
+      played: dto.played ?? existing.played,
+      won: dto.won ?? existing.won,
+      drawn: dto.drawn ?? existing.drawn,
+      lost: dto.lost ?? existing.lost,
+      goalsFor: dto.goalsFor ?? existing.goalsFor,
+      goalsAgainst: dto.goalsAgainst ?? existing.goalsAgainst,
+      points: dto.points ?? existing.points,
+      isOwnTeam: dto.isOwnTeam ?? existing.isOwnTeam,
+    });
 
     const [standing] = await this.databaseService.database
       .update(standings)
@@ -530,7 +545,19 @@ export class StatisticsService {
    */
   private async requireStanding(teamId: string, standingId: string) {
     const [row] = await this.databaseService.database
-      .select({ id: standings.id })
+      .select({
+        id: standings.id,
+        teamName: standings.teamName,
+        position: standings.position,
+        played: standings.played,
+        won: standings.won,
+        drawn: standings.drawn,
+        lost: standings.lost,
+        goalsFor: standings.goalsFor,
+        goalsAgainst: standings.goalsAgainst,
+        points: standings.points,
+        isOwnTeam: standings.isOwnTeam,
+      })
       .from(standings)
       .innerJoin(competitions, eq(standings.competitionId, competitions.id))
       .where(and(eq(standings.id, standingId), eq(competitions.teamId, teamId)))

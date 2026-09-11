@@ -20,10 +20,20 @@ interface EventBody {
   scheduledAt: string;
   location: string;
   notes: string | null;
+  competitionId: string | null;
 }
 
 interface ErrorResponseBody {
   message: string;
+}
+
+interface IdBody {
+  id: string;
+}
+
+interface MatchBody {
+  id: string;
+  competitionId: string | null;
 }
 
 /** An ISO 8601 datetime with a UTC offset, `hoursFromNow` in the future. */
@@ -200,6 +210,72 @@ describe('Events (e2e)', () => {
       title: 'Saturday training',
       location: 'Away field',
     });
+  });
+
+  it('carries match competition assignment through creation and editing', async () => {
+    const { agent } = await newCoach();
+    const league = await agent
+      .post('/statistics/competitions')
+      .send({ name: 'Premier League', type: 'league', season: '2026/27' })
+      .expect(201);
+    const cup = await agent
+      .post('/statistics/competitions')
+      .send({ name: 'County Cup', type: 'cup', season: '2026/27' })
+      .expect(201);
+    const leagueId = (league.body as IdBody).id;
+    const cupId = (cup.body as IdBody).id;
+
+    const created = await agent
+      .post('/events')
+      .send({
+        title: 'League match',
+        type: 'match',
+        scheduledAt: new Date().toISOString(),
+        location: 'Main field',
+        competitionId: leagueId,
+      })
+      .expect(201);
+    const event = created.body as EventBody;
+    expect(event.competitionId).toBe(leagueId);
+
+    const athleteIds = await Promise.all(
+      Array.from({ length: 11 }, async (_, index) => {
+        const athlete = await agent
+          .post('/athletes')
+          .send({
+            firstName: `Player${index + 1}`,
+            lastName: 'Integration',
+          })
+          .expect(201);
+        return (athlete.body as IdBody).id;
+      }),
+    );
+    const started = await agent
+      .post(`/events/${event.id}/start-match`)
+      .send({
+        opponentName: 'Rivals FC',
+        isHome: true,
+        startingAthleteIds: athleteIds,
+      })
+      .expect(201);
+    const match = started.body as MatchBody;
+    expect(match.competitionId).toBe(leagueId);
+
+    const updated = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: cupId })
+      .expect(200);
+    expect((updated.body as EventBody).competitionId).toBe(cupId);
+    const reassignedMatch = await agent.get(`/matches/${match.id}`).expect(200);
+    expect((reassignedMatch.body as MatchBody).competitionId).toBe(cupId);
+
+    const cleared = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: null })
+      .expect(200);
+    expect((cleared.body as EventBody).competitionId).toBeNull();
+    const clearedMatch = await agent.get(`/matches/${match.id}`).expect(200);
+    expect((clearedMatch.body as MatchBody).competitionId).toBeNull();
   });
 
   it('cancels an event by setting its status, rather than deleting it', async () => {

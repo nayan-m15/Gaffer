@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useCompetitions } from "@/features/statistics/hooks";
 import {
   EVENT_TYPE_ITEMS,
   EVENT_TYPE_OPTIONS,
@@ -79,6 +80,7 @@ export function EventFormDialog({
   const baseId = useId();
   const createEvent = useCreateEvent();
   const updateEvent = useUpdateEvent();
+  const competitionsQuery = useCompetitions();
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("training");
@@ -86,6 +88,7 @@ export function EventFormDialog({
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [competitionId, setCompetitionId] = useState("none");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -101,6 +104,7 @@ export function EventFormDialog({
       setTime(parts.time);
       setLocation(event.location);
       setNotes(event.notes ?? "");
+      setCompetitionId(event.competitionId ?? "none");
     } else {
       setTitle("");
       setType(initialType ?? "training");
@@ -108,6 +112,7 @@ export function EventFormDialog({
       setTime("");
       setLocation("");
       setNotes("");
+      setCompetitionId("none");
     }
     setError(null);
   }, [open, event, initialDate, initialType]);
@@ -151,6 +156,8 @@ export function EventFormDialog({
             scheduledAt,
             location: location.trim(),
             notes: notesValue.length > 0 ? notesValue : null,
+            competitionId:
+              type === "match" && competitionId !== "none" ? competitionId : null,
           },
         });
       } else {
@@ -160,6 +167,8 @@ export function EventFormDialog({
           scheduledAt,
           location: location.trim(),
           ...(notesValue.length > 0 ? { notes: notesValue } : {}),
+          competitionId:
+            type === "match" && competitionId !== "none" ? competitionId : null,
         });
       }
       onOpenChange(false);
@@ -266,6 +275,29 @@ export function EventFormDialog({
               maxLength={200}
             />
           </Field>
+
+          {type === "match" && (
+            <Field label="Competition">
+              <Select
+                value={competitionId}
+                onValueChange={(value) => value && setCompetitionId(value)}
+                modal={false}
+              >
+                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
+                  <SelectValue placeholder="No competition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No competition</SelectItem>
+                  {(competitionsQuery.data ?? []).map((competition) => (
+                    <SelectItem key={competition.id} value={competition.id}>
+                      {competition.name}
+                      {competition.season ? ` (${competition.season})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
 
           <Field htmlFor={`${baseId}-notes`} label="Notes">
             <Textarea

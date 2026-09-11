@@ -67,7 +67,14 @@ export interface CreateAthleteInput {
 }
 
 /** Fields accepted by PATCH /athletes/:id. */
-export type UpdateAthleteInput = Partial<CreateAthleteInput>;
+export type UpdateAthleteInput = Omit<
+  Partial<CreateAthleteInput>,
+  "dateOfBirth" | "position" | "squadNumber"
+> & {
+  dateOfBirth?: string | null;
+  position?: string | null;
+  squadNumber?: number | null;
+};
 
 /** Values managed by the add / edit athlete form. */
 export interface AthleteFormValues {

@@ -3,10 +3,8 @@ import { eq } from 'drizzle-orm';
 import { createDatabaseClient } from '../../src/database/drizzle';
 import { teams, user } from '../../src/database/schema';
 
-// Integration tests run against the real dev database (there's no separate
-// test DB yet — see S1-07 plan notes). Every identity these tests create is
-// unique and gets torn down explicitly, since `teams` has no FK back to
-// `user` and won't cascade-delete on its own.
+// Jest maps the separately configured TEST_DATABASE_URL to DATABASE_URL
+// before application or database modules are imported.
 const testDb = createDatabaseClient();
 
 export interface TestIdentity {

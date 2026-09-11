@@ -317,6 +317,28 @@ export const gamePlans = pgTable(
   ],
 );
 
+export const competitionType = pgEnum('competition_type', [
+  'league',
+  'cup',
+  'friendly',
+]);
+
+// A league or cup the team is competing in this season.
+export const competitions = pgTable(
+  'competitions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: competitionType('type').notNull(),
+    season: text('season'), // e.g. "2025/26" — optional
+    ...timestamps,
+  },
+  (table) => [index('competitions_team_id_index').on(table.teamId)],
+);
+
 export const events = pgTable(
   'events',
   {
@@ -330,11 +352,15 @@ export const events = pgTable(
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
     notes: text('notes'),
+    competitionId: uuid('competition_id').references(() => competitions.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [
     index('events_team_id_index').on(table.teamId),
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
+    index('events_competition_id_index').on(table.competitionId),
   ],
 );
 
@@ -372,34 +398,12 @@ export const eventRsvps = pgTable(
   ],
 );
 
-export const competitionType = pgEnum('competition_type', [
-  'league',
-  'cup',
-  'friendly',
-]);
-
 // How much opponent-player identity the coach records for a given match.
 export const opponentSquadVisibility = pgEnum('opponent_squad_visibility', [
   'none',
   'numbers',
   'full',
 ]);
-
-// A league or cup the team is competing in this season.
-export const competitions = pgTable(
-  'competitions',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    teamId: uuid('team_id')
-      .notNull()
-      .references(() => teams.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    type: competitionType('type').notNull(),
-    season: text('season'), // e.g. "2025/26" — optional
-    ...timestamps,
-  },
-  (table) => [index('competitions_team_id_index').on(table.teamId)],
-);
 
 // One row per event of type 'match'. Populated by the (future) live match
 // logger; this feature only reads from it.
