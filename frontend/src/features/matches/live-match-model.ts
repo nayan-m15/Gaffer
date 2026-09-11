@@ -213,13 +213,6 @@ export function ownPitchState(
     if (event.team !== "own") {
       continue;
     }
-    if (event.eventType === "red_card") {
-      // Sent off: leave the pitch with one fewer player; do not move to bench.
-      if (event.athleteId) {
-        onPitch.delete(event.athleteId);
-      }
-      continue;
-    }
     if (event.eventType !== "substitution") {
       continue;
     }
@@ -287,13 +280,6 @@ export function opponentPitchState(
 
   for (const event of chronological(timeline)) {
     if (event.team !== "opponent") {
-      continue;
-    }
-    if (event.eventType === "red_card") {
-      // Sent off: leave the pitch with one fewer player; do not move to bench.
-      if (event.opponentPlayerId) {
-        onPitch.delete(event.opponentPlayerId);
-      }
       continue;
     }
     if (event.eventType !== "substitution") {
