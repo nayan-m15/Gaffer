@@ -2,9 +2,15 @@ import { WeatherService } from './weather.service';
 
 describe('WeatherService', () => {
   const originalFetch = global.fetch;
+  const originalCacheMinutes = process.env.WEATHER_CACHE_MINUTES;
 
   afterEach(() => {
     global.fetch = originalFetch;
+    if (originalCacheMinutes === undefined) {
+      delete process.env.WEATHER_CACHE_MINUTES;
+    } else {
+      process.env.WEATHER_CACHE_MINUTES = originalCacheMinutes;
+    }
     jest.restoreAllMocks();
   });
 
@@ -16,8 +22,8 @@ describe('WeatherService', () => {
       service.getEventWeather({
         scheduledAt: new Date(Date.now() + 86_400_000),
         status: 'scheduled',
-        latitude: null,
-        longitude: null,
+        weatherLatitude: null,
+        weatherLongitude: null,
       }),
     ).resolves.toEqual({ status: 'missing_location' });
     expect(global.fetch).not.toHaveBeenCalled();
@@ -45,8 +51,8 @@ describe('WeatherService', () => {
     const result = await new WeatherService().getEventWeather({
       scheduledAt,
       status: 'completed',
-      latitude: -26.2,
-      longitude: 28.04,
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
     });
 
     expect(result).toMatchObject({
@@ -69,8 +75,8 @@ describe('WeatherService', () => {
       new WeatherService().getEventWeather({
         scheduledAt,
         status: 'scheduled',
-        latitude: -26.2,
-        longitude: 28.04,
+        weatherLatitude: -26.2,
+        weatherLongitude: 28.04,
       }),
     ).resolves.toEqual({
       status: 'outside_forecast_range',
@@ -89,13 +95,106 @@ describe('WeatherService', () => {
       new WeatherService().getEventWeather({
         scheduledAt,
         status: 'completed',
-        latitude: -26.2,
-        longitude: 28.04,
+        weatherLatitude: -26.2,
+        weatherLongitude: 28.04,
       }),
     ).resolves.toEqual({
       status: 'outside_forecast_range',
       rangeReason: 'too_old',
     });
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('shares one location-day request across concurrent event hours', async () => {
+    const morning = new Date();
+    morning.setUTCDate(morning.getUTCDate() + 1);
+    morning.setUTCHours(10, 0, 0, 0);
+    const afternoon = new Date(morning);
+    afternoon.setUTCHours(15);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          hourly: {
+            time: [
+              morning.toISOString().slice(0, 16),
+              afternoon.toISOString().slice(0, 16),
+            ],
+            temperature_2m: [18, 23],
+            precipitation_probability: [20, 10],
+            wind_speed_10m: [9, 14],
+            weather_code: [2, 1],
+          },
+        }),
+    });
+    const service = new WeatherService();
+    const baseEvent = {
+      status: 'scheduled',
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
+    };
+
+    const [morningWeather, afternoonWeather] = await Promise.all([
+      service.getEventWeather({ ...baseEvent, scheduledAt: morning }),
+      service.getEventWeather({ ...baseEvent, scheduledAt: afternoon }),
+    ]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(morningWeather).toMatchObject({ temperatureC: 18 });
+    expect(afternoonWeather).toMatchObject({ temperatureC: 23 });
+  });
+
+  it('uses a recent cached day after an HTTP provider failure', async () => {
+    process.env.WEATHER_CACHE_MINUTES = '0';
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    scheduledAt.setUTCHours(12, 0, 0, 0);
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            hourly: {
+              time: [scheduledAt.toISOString().slice(0, 16)],
+              temperature_2m: [20],
+              precipitation_probability: [15],
+              wind_speed_10m: [11],
+              weather_code: [1],
+            },
+          }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 503 });
+    const service = new WeatherService();
+    const event = {
+      scheduledAt,
+      status: 'scheduled',
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
+    };
+
+    await service.getEventWeather(event);
+    const cached = await service.getEventWeather(event);
+
+    expect(cached).toMatchObject({ status: 'available', stale: true });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects incomplete provider payloads as unavailable', async () => {
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ hourly: { time: [] } }),
+    });
+
+    await expect(
+      new WeatherService().getEventWeather({
+        scheduledAt,
+        status: 'scheduled',
+        weatherLatitude: -26.2,
+        weatherLongitude: 28.04,
+      }),
+    ).resolves.toEqual({ status: 'unavailable' });
   });
 });

@@ -23,16 +23,17 @@ const hexColorSchema = z
 
 const venueFieldsSchema = z.object({
   venueAddress: z.string().trim().max(300).nullable().optional(),
-  latitude: z.number().min(-90).max(90).nullable().optional(),
-  longitude: z.number().min(-180).max(180).nullable().optional(),
-  timezone: z.string().trim().max(100).nullable().optional(),
+  weatherLocation: z.string().trim().max(300).nullable().optional(),
+  weatherLatitude: z.number().min(-90).max(90).nullable().optional(),
+  weatherLongitude: z.number().min(-180).max(180).nullable().optional(),
+  weatherTimezone: z.string().trim().max(100).nullable().optional(),
 });
 
 function coordinatesArePaired(value: {
-  latitude?: number | null;
-  longitude?: number | null;
+  weatherLatitude?: number | null;
+  weatherLongitude?: number | null;
 }) {
-  return (value.latitude == null) === (value.longitude == null);
+  return (value.weatherLatitude == null) === (value.weatherLongitude == null);
 }
 
 const createEventBaseSchema = z.object({
@@ -64,7 +65,7 @@ export const createEventSchema = createEventBaseSchema.refine(
   coordinatesArePaired,
   {
     message: 'Latitude and longitude must be provided together.',
-    path: ['latitude'],
+    path: ['weatherLatitude'],
   },
 );
 export type CreateEventDto = z.infer<typeof createEventSchema>;
@@ -82,7 +83,7 @@ export const updateEventSchema = createEventBaseSchema
   })
   .refine(coordinatesArePaired, {
     message: 'Latitude and longitude must be provided together.',
-    path: ['latitude'],
+    path: ['weatherLatitude'],
   })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),

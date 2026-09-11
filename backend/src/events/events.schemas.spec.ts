@@ -71,18 +71,25 @@ describe('event venue coordinates', () => {
     expect(
       createEventSchema.parse({
         ...event,
-        venueAddress: 'Stellenbosch, Western Cape, South Africa',
-        latitude: -33.9321,
-        longitude: 18.8602,
-        timezone: 'Africa/Johannesburg',
+        venueAddress: '1 Sport Street',
+        weatherLocation: 'Stellenbosch, Western Cape, South Africa',
+        weatherLatitude: -33.9321,
+        weatherLongitude: 18.8602,
+        weatherTimezone: 'Africa/Johannesburg',
       }),
-    ).toMatchObject({ latitude: -33.9321, longitude: 18.8602 });
+    ).toMatchObject({
+      venueAddress: '1 Sport Street',
+      weatherLatitude: -33.9321,
+      weatherLongitude: 18.8602,
+    });
   });
 
   it('rejects an unpaired coordinate on create or update', () => {
     expect(() =>
-      createEventSchema.parse({ ...event, latitude: -33.9321 }),
+      createEventSchema.parse({ ...event, weatherLatitude: -33.9321 }),
     ).toThrow();
-    expect(() => updateEventSchema.parse({ longitude: 18.8602 })).toThrow();
+    expect(() =>
+      updateEventSchema.parse({ weatherLongitude: 18.8602 }),
+    ).toThrow();
   });
 });

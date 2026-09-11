@@ -89,12 +89,14 @@ export function EventFormDialog({
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
   const [venueAddress, setVenueAddress] = useState("");
+  const [weatherLocationQuery, setWeatherLocationQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [error, setError] = useState<string | null>(null);
+  const locationSearchIdRef = useRef(0);
 
   useEffect(() => {
     if (!open) {
@@ -109,13 +111,14 @@ export function EventFormDialog({
       setTime(parts.time);
       setLocation(event.location);
       setVenueAddress(event.venueAddress ?? "");
-      setSelectedLocation(event.latitude != null && event.longitude != null ? {
+      setWeatherLocationQuery(event.weatherLocation ?? "");
+      setSelectedLocation(event.weatherLatitude != null && event.weatherLongitude != null ? {
         id: event.id,
-        name: event.location,
-        displayName: event.venueAddress ?? event.location,
-        latitude: event.latitude,
-        longitude: event.longitude,
-        timezone: event.timezone,
+        name: event.weatherLocation ?? event.location,
+        displayName: event.weatherLocation ?? event.location,
+        latitude: event.weatherLatitude,
+        longitude: event.weatherLongitude,
+        timezone: event.weatherTimezone,
       } : null);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
@@ -126,6 +129,7 @@ export function EventFormDialog({
       setTime("");
       setLocation("");
       setVenueAddress("");
+      setWeatherLocationQuery("");
       setSelectedLocation(null);
       setNotes("");
       setCompetitionId("none");
@@ -141,7 +145,7 @@ export function EventFormDialog({
     setError(null);
 
     if (!title.trim() || !date || !time || !location.trim()) {
-      setError("Title, type, date, time, and location are required.");
+      setError("Title, type, date, time, and venue name are required.");
       return;
     }
 
@@ -173,9 +177,10 @@ export function EventFormDialog({
             scheduledAt,
             location: location.trim(),
             venueAddress: venueAddress.trim() || null,
-            latitude: selectedLocation?.latitude ?? null,
-            longitude: selectedLocation?.longitude ?? null,
-            timezone: selectedLocation?.timezone ?? null,
+            weatherLocation: selectedLocation?.displayName ?? null,
+            weatherLatitude: selectedLocation?.latitude ?? null,
+            weatherLongitude: selectedLocation?.longitude ?? null,
+            weatherTimezone: selectedLocation?.timezone ?? null,
             notes: notesValue.length > 0 ? notesValue : null,
             competitionId:
               type === "match" && competitionId !== "none" ? competitionId : null,
@@ -188,9 +193,10 @@ export function EventFormDialog({
           scheduledAt,
           location: location.trim(),
           venueAddress: venueAddress.trim() || null,
-          latitude: selectedLocation?.latitude ?? null,
-          longitude: selectedLocation?.longitude ?? null,
-          timezone: selectedLocation?.timezone ?? null,
+          weatherLocation: selectedLocation?.displayName ?? null,
+          weatherLatitude: selectedLocation?.latitude ?? null,
+          weatherLongitude: selectedLocation?.longitude ?? null,
+          weatherTimezone: selectedLocation?.timezone ?? null,
           ...(notesValue.length > 0 ? { notes: notesValue } : {}),
           competitionId:
             type === "match" && competitionId !== "none" ? competitionId : null,
@@ -289,14 +295,11 @@ export function EventFormDialog({
             </Field>
           </div>
 
-          <Field htmlFor={`${baseId}-location`} label="Location">
+          <Field htmlFor={`${baseId}-location`} label="Venue name">
             <input
               id={`${baseId}-location`}
               value={location}
-              onChange={(e) => {
-                setLocation(e.target.value);
-                setSelectedLocation(null);
-              }}
+              onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Riverside Sports Ground"
               className={inputClassName}
               required
@@ -304,13 +307,26 @@ export function EventFormDialog({
             />
           </Field>
 
-          <Field htmlFor={`${baseId}-address`} label="Weather location">
+          <Field htmlFor={`${baseId}-address`} label="Street address">
+            <input
+              id={`${baseId}-address`}
+              value={venueAddress}
+              onChange={(e) => setVenueAddress(e.target.value)}
+              placeholder="e.g. 1 Sport Street, Stellenbosch"
+              className={inputClassName}
+              maxLength={300}
+            />
+          </Field>
+
+          <Field htmlFor={`${baseId}-weather-location`} label="Weather location">
             <div className="flex gap-2">
               <input
-                id={`${baseId}-address`}
-                value={venueAddress}
+                id={`${baseId}-weather-location`}
+                value={weatherLocationQuery}
                 onChange={(e) => {
-                  setVenueAddress(e.target.value);
+                  locationSearchIdRef.current += 1;
+                  setWeatherLocationQuery(e.target.value);
+                  setIsSearchingLocation(false);
                   setSelectedLocation(null);
                   setLocationResults([]);
                 }}
@@ -321,15 +337,24 @@ export function EventFormDialog({
               <Button
                 type="button"
                 variant="outline"
-                disabled={isSearchingLocation || (venueAddress.trim() || location.trim()).length < 3}
+                disabled={isSearchingLocation || weatherLocationQuery.trim().length < 3}
                 onClick={() => {
-                  const query = venueAddress.trim() || location.trim();
+                  const query = weatherLocationQuery.trim();
+                  const searchId = ++locationSearchIdRef.current;
                   setIsSearchingLocation(true);
                   setError(null);
                   void searchLocations(query)
-                    .then(setLocationResults)
-                    .catch((err) => setError(err instanceof ApiError ? err.message : "Could not search locations."))
-                    .finally(() => setIsSearchingLocation(false));
+                    .then((results) => {
+                      if (locationSearchIdRef.current === searchId) setLocationResults(results);
+                    })
+                    .catch((err) => {
+                      if (locationSearchIdRef.current === searchId) {
+                        setError(err instanceof ApiError ? err.message : "Could not search locations.");
+                      }
+                    })
+                    .finally(() => {
+                      if (locationSearchIdRef.current === searchId) setIsSearchingLocation(false);
+                    });
                 }}
               >
                 <Search className="size-4" />
@@ -348,7 +373,7 @@ export function EventFormDialog({
                     className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                     onClick={() => {
                       setSelectedLocation(result);
-                      setVenueAddress(result.displayName);
+                      setWeatherLocationQuery(result.displayName);
                       setLocationResults([]);
                     }}
                   >{result.displayName}</button>

@@ -106,7 +106,7 @@ export function EventDetailDialog({
             <LocationLinks event={event} />
             <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
             {event.status !== "cancelled" && !readOnly && (
-              <EventWeatherCard eventId={event.id} enabled={open} />
+              <EventWeatherCard event={event} enabled={open} />
             )}
           </div>
         )}

@@ -69,9 +69,10 @@ interface UpcomingEvent {
   scheduledAt: string;
   location: string;
   venueAddress: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  timezone: string | null;
+  weatherLocation: string | null;
+  weatherLatitude: number | null;
+  weatherLongitude: number | null;
+  weatherTimezone: string | null;
 }
 
 interface MatchStat {
@@ -597,7 +598,7 @@ function EventItem({ event }: { event: UpcomingEvent }) {
           </a>
         </div>
         <div className="mt-1.5">
-          <EventWeatherCard eventId={event.id} compact />
+          <EventWeatherCard event={event} compact />
         </div>
       </div>
       <div className="shrink-0 text-right">

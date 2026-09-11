@@ -350,9 +350,12 @@ export const events = pgTable(
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
     venueAddress: text('venue_address'),
-    latitude: doublePrecision('latitude'),
-    longitude: doublePrecision('longitude'),
-    timezone: text('timezone'),
+    weatherLocation: text('weather_location'),
+    // Keep the original column names from migration 0018 while exposing their
+    // purpose clearly in application code.
+    weatherLatitude: doublePrecision('latitude'),
+    weatherLongitude: doublePrecision('longitude'),
+    weatherTimezone: text('timezone'),
     notes: text('notes'),
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
