@@ -13,6 +13,7 @@ import {
   fetchMatchSquad,
   finishMatch,
   updateMatchLogEvent,
+  updateMatchClock,
 } from "./api";
 import type {
   CreateMatchLogEventInput,
@@ -482,5 +483,13 @@ export function useFinishMatch(matchId: string) {
       void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
     },
+  });
+}
+
+export function useUpdateMatchClock(matchId: string) {
+  return useMutation({
+    scope: { id: `match-clock-${matchId}` },
+    mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
+      updateMatchClock(matchId, input),
   });
 }

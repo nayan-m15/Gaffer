@@ -1,11 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { gamePlans } from '../database/schema';
+import { athletes, gamePlans } from '../database/schema';
 import type {
   CreateGamePlanDto,
   UpdateGamePlanDto,
@@ -49,6 +50,14 @@ export class GamePlansService {
   }
 
   async create(teamId: string, input: CreateGamePlanDto) {
+    await this.validatePlan(teamId, {
+      assignments: input.assignments ?? {},
+      substituteIds: input.substituteIds ?? [],
+      captainId: input.captainId ?? null,
+      freeKickTakerId: input.freeKickTakerId ?? null,
+      penaltyTakerId: input.penaltyTakerId ?? null,
+      cornerTakerId: input.cornerTakerId ?? null,
+    });
     try {
       const [plan] = await this.databaseService.database
         .insert(gamePlans)
@@ -67,6 +76,8 @@ export class GamePlansService {
   }
 
   async update(teamId: string, gamePlanId: string, input: UpdateGamePlanDto) {
+    const existing = await this.findOne(teamId, gamePlanId);
+    await this.validatePlan(teamId, { ...existing, ...input });
     let updated: typeof gamePlans.$inferSelect | undefined;
     try {
       [updated] = await this.databaseService.database
@@ -101,5 +112,50 @@ export class GamePlansService {
     }
 
     return plan;
+  }
+
+  private async validatePlan(
+    teamId: string,
+    plan: {
+      assignments: Record<string, string | null>;
+      substituteIds: string[];
+      captainId: string | null;
+      freeKickTakerId: string | null;
+      penaltyTakerId: string | null;
+      cornerTakerId: string | null;
+    },
+  ) {
+    const starters = Object.values(plan.assignments).filter(
+      (id): id is string => id !== null,
+    );
+    if (new Set(starters).size !== starters.length) {
+      throw new BadRequestException('Starting athletes must be unique.');
+    }
+    if (plan.substituteIds.some((id) => starters.includes(id))) {
+      throw new BadRequestException(
+        'An athlete cannot be both a starter and a substitute.',
+      );
+    }
+
+    const referencedIds = [
+      ...starters,
+      ...plan.substituteIds,
+      plan.captainId,
+      plan.freeKickTakerId,
+      plan.penaltyTakerId,
+      plan.cornerTakerId,
+    ].filter((id): id is string => id !== null);
+    const uniqueIds = [...new Set(referencedIds)];
+    if (uniqueIds.length === 0) return;
+
+    const valid = await this.databaseService.database
+      .select({ id: athletes.id })
+      .from(athletes)
+      .where(and(eq(athletes.teamId, teamId), inArray(athletes.id, uniqueIds)));
+    if (valid.length !== uniqueIds.length) {
+      throw new BadRequestException(
+        'Every referenced athlete must belong to this team.',
+      );
+    }
   }
 }

@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
@@ -52,13 +56,18 @@ describe('StatisticsService', () => {
       select: jest.fn(() => thenable([])),
       insert: jest.fn(() => ({
         ...thenable([]),
-        values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
+        values: jest.fn(() => ({
+          returning: jest.fn(() => Promise.resolve([])),
+        })),
       })),
       update: jest.fn(() => ({
         ...thenable([]),
         set: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([])) })),
       })),
-      delete: jest.fn(() => ({ ...thenable([]), where: jest.fn(() => thenable([])) })),
+      delete: jest.fn(() => ({
+        ...thenable([]),
+        where: jest.fn(() => thenable([])),
+      })),
     },
   };
 
@@ -148,6 +157,7 @@ describe('StatisticsService', () => {
             opponentScore: 1,
             date: new Date('2026-08-01T15:00:00Z'),
             started: true,
+            appeared: true,
             minutesPlayed: 90,
             goals: 2,
             assists: 1,
@@ -162,6 +172,7 @@ describe('StatisticsService', () => {
             opponentScore: 0,
             date: new Date('2026-08-08T15:00:00Z'),
             started: false,
+            appeared: true,
             minutesPlayed: 45,
             goals: 0,
             assists: 0,
@@ -176,6 +187,7 @@ describe('StatisticsService', () => {
             opponentScore: 2,
             date: new Date('2026-08-15T15:00:00Z'),
             started: true,
+            appeared: true,
             minutesPlayed: null,
             goals: 1,
             assists: 0,
@@ -298,5 +310,57 @@ describe('StatisticsService', () => {
     await expect(service.getCompetitions('user-1')).rejects.toThrow(
       ForbiddenException,
     );
+  });
+
+  describe('createStanding uniqueness', () => {
+    it('throws ConflictException when a standing with the same position exists', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ id: 'comp-1' }]),
+      );
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ position: 1, teamName: 'Other FC' }]),
+      );
+
+      await expect(
+        service.createStanding('user-1', 'comp-1', {
+          teamName: 'My Team',
+          position: 1,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('throws ConflictException when a standing with the same team name exists', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ id: 'comp-1' }]),
+      );
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([{ position: 2, teamName: 'My Team' }]),
+      );
+
+      await expect(
+        service.createStanding('user-1', 'comp-1', {
+          teamName: 'My Team',
+          position: 1,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
   });
 });

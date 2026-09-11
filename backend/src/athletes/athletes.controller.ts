@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -14,6 +13,7 @@ import { AuthGuard, type SessionUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ClaimsService } from '../claims/claims.service';
 import { zodValidate } from '../common/zod-validate';
+import { requireCoachTeamId, requireTeamId } from '../common/team-access';
 import { TeamsService } from '../teams/teams.service';
 import { createAthleteSchema, updateAthleteSchema } from './athletes.schemas';
 import { AthletesService } from './athletes.service';
@@ -28,13 +28,7 @@ export class AthletesController {
   ) {}
 
   private async getTeamId(userId: string): Promise<string> {
-    const team = await this.teamsService.findTeamForUser(userId);
-
-    if (!team) {
-      throw new NotFoundException('Team not found.');
-    }
-
-    return team.id;
+    return requireTeamId(this.teamsService, userId);
   }
 
   /**
@@ -46,9 +40,7 @@ export class AthletesController {
    * team, exactly like the reads above.
    */
   private async getCoachTeamId(userId: string): Promise<string> {
-    const team = await this.teamsService.requireCoachTeam(userId);
-
-    return team.id;
+    return requireCoachTeamId(this.teamsService, userId);
   }
 
   @Post()

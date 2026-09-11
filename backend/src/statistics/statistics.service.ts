@@ -1,10 +1,12 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { zodValidate } from '../common/zod-validate';
 import {
   athletes,
   athleteMatchStats,
@@ -21,13 +23,25 @@ import type {
   UpdateCompetitionDto,
   UpdateStandingDto,
 } from './statistics.schemas';
+import { createStandingSchema } from './statistics.schemas';
 
 /** Points awarded per match result. Centralised so the scoring system is easy to change. */
 const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 const LOSS_POINTS = 0;
 
-function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card') {
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
+}
+
+function loggedEventCount(
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+) {
   return sql<number>`coalesce((
     select count(*)::int
     from ${matchEvents}
@@ -36,6 +50,25 @@ function loggedEventCount(eventType: 'goal' | 'assist' | 'yellow_card' | 'red_ca
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = ${eventType}
   ), 0)`;
+}
+
+function matchGoalCount(team: 'own' | 'opponent') {
+  return sql<number>`coalesce((
+    select count(*)::int from ${matchEvents}
+    where ${matchEvents.matchId} = ${matches.id}
+      and ${matchEvents.team} = ${team}
+      and ${matchEvents.eventType} = 'goal'
+  ), 0)`;
+}
+
+function appearedInMatch() {
+  return sql<boolean>`${athleteMatchStats.started} or exists (
+    select 1 from ${matchEvents}
+    where ${matchEvents.matchId} = ${athleteMatchStats.matchId}
+      and ${matchEvents.team} = 'own'
+      and ${matchEvents.eventType} = 'substitution'
+      and ${matchEvents.detail} = ${athleteMatchStats.athleteId}::text
+  )`;
 }
 
 /**
@@ -77,8 +110,8 @@ export class StatisticsService {
         date: events.scheduledAt,
         opponent: matches.opponentName,
         isHome: matches.isHome,
-        teamScore: matches.teamScore,
-        opponentScore: matches.opponentScore,
+        teamScore: matchGoalCount('own'),
+        opponentScore: matchGoalCount('opponent'),
       })
       .from(matches)
       .innerJoin(events, eq(matches.eventId, events.id))
@@ -151,6 +184,7 @@ export class StatisticsService {
         assists: loggedEventCount('assist'),
         yellowCards: loggedEventCount('yellow_card'),
         redCards: loggedEventCount('red_card'),
+        appeared: appearedInMatch(),
       })
       .from(athleteMatchStats)
       .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
@@ -185,7 +219,7 @@ export class StatisticsService {
         };
         playerMap.set(row.athleteId, entry);
       }
-      entry.appearances += 1;
+      if (row.appeared) entry.appearances += 1;
       entry.goals += row.goals;
       entry.assists += row.assists;
       entry.yellowCards += row.yellowCards;
@@ -265,10 +299,11 @@ export class StatisticsService {
         matchId: matches.id,
         eventId: matches.eventId,
         opponentName: matches.opponentName,
-        teamScore: matches.teamScore,
-        opponentScore: matches.opponentScore,
+        teamScore: matchGoalCount('own'),
+        opponentScore: matchGoalCount('opponent'),
         date: events.scheduledAt,
         started: athleteMatchStats.started,
+        appeared: appearedInMatch(),
         minutesPlayed: athleteMatchStats.minutesPlayed,
         goals: loggedEventCount('goal'),
         assists: loggedEventCount('assist'),
@@ -294,7 +329,7 @@ export class StatisticsService {
     let redCards = 0;
 
     const matchesBreakdown = statsRows.map((row) => {
-      appearances += 1;
+      if (row.appeared) appearances += 1;
       if (row.started) starts += 1;
       goals += row.goals;
       assists += row.assists;
@@ -435,12 +470,46 @@ export class StatisticsService {
     const team = await this.requireTeam(userId);
     await this.requireCompetition(team.id, competitionId);
 
-    const [standing] = await this.databaseService.database
-      .insert(standings)
-      .values({ competitionId, ...dto })
-      .returning();
+    const existingConflict = await this.databaseService.database
+      .select({
+        position: standings.position,
+        teamName: standings.teamName,
+      })
+      .from(standings)
+      .where(
+        and(
+          eq(standings.competitionId, competitionId),
+          sql`(${standings.position} = ${dto.position} or ${standings.teamName} = ${dto.teamName})`,
+        ),
+      )
+      .limit(1);
 
-    return standing;
+    if (existingConflict.length > 0) {
+      if (existingConflict[0].position === dto.position) {
+        throw new ConflictException(
+          `A standing entry for position ${dto.position} already exists in this competition.`,
+        );
+      }
+      throw new ConflictException(
+        `A standing entry for team "${dto.teamName}" already exists in this competition.`,
+      );
+    }
+
+    try {
+      const [standing] = await this.databaseService.database
+        .insert(standings)
+        .values({ competitionId, ...dto })
+        .returning();
+
+      return standing;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A standing entry with this position or team name already exists in this competition.',
+        );
+      }
+      throw error;
+    }
   }
 
   async updateStanding(
@@ -449,15 +518,71 @@ export class StatisticsService {
     dto: UpdateStandingDto,
   ) {
     const team = await this.requireTeam(userId);
-    await this.requireStanding(team.id, standingId);
+    const existing = await this.requireStanding(team.id, standingId);
 
-    const [standing] = await this.databaseService.database
-      .update(standings)
-      .set({ ...dto, updatedAt: new Date() })
-      .where(eq(standings.id, standingId))
-      .returning();
+    zodValidate(createStandingSchema, {
+      teamName: dto.teamName ?? existing.teamName,
+      position: dto.position ?? existing.position,
+      played: dto.played ?? existing.played,
+      won: dto.won ?? existing.won,
+      drawn: dto.drawn ?? existing.drawn,
+      lost: dto.lost ?? existing.lost,
+      goalsFor: dto.goalsFor ?? existing.goalsFor,
+      goalsAgainst: dto.goalsAgainst ?? existing.goalsAgainst,
+      points: dto.points ?? existing.points,
+      isOwnTeam: dto.isOwnTeam ?? existing.isOwnTeam,
+    });
 
-    return standing;
+    const newPosition = dto.position ?? existing.position;
+    const newTeamName = dto.teamName ?? existing.teamName;
+
+    if (
+      newPosition !== existing.position ||
+      newTeamName !== existing.teamName
+    ) {
+      const [conflict] = await this.databaseService.database
+        .select({
+          position: standings.position,
+          teamName: standings.teamName,
+        })
+        .from(standings)
+        .where(
+          and(
+            eq(standings.competitionId, existing.competitionId),
+            sql`${standings.id} != ${standingId}`,
+            sql`(${standings.position} = ${newPosition} or ${standings.teamName} = ${newTeamName})`,
+          ),
+        )
+        .limit(1);
+
+      if (conflict) {
+        if (conflict.position === newPosition) {
+          throw new ConflictException(
+            `A standing entry for position ${newPosition} already exists in this competition.`,
+          );
+        }
+        throw new ConflictException(
+          `A standing entry for team "${newTeamName}" already exists in this competition.`,
+        );
+      }
+    }
+
+    try {
+      const [standing] = await this.databaseService.database
+        .update(standings)
+        .set({ ...dto, updatedAt: new Date() })
+        .where(eq(standings.id, standingId))
+        .returning();
+
+      return standing;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A standing entry with this position or team name already exists in this competition.',
+        );
+      }
+      throw error;
+    }
   }
 
   async deleteStanding(userId: string, standingId: string) {
@@ -507,7 +632,20 @@ export class StatisticsService {
    */
   private async requireStanding(teamId: string, standingId: string) {
     const [row] = await this.databaseService.database
-      .select({ id: standings.id })
+      .select({
+        id: standings.id,
+        competitionId: standings.competitionId,
+        teamName: standings.teamName,
+        position: standings.position,
+        played: standings.played,
+        won: standings.won,
+        drawn: standings.drawn,
+        lost: standings.lost,
+        goalsFor: standings.goalsFor,
+        goalsAgainst: standings.goalsAgainst,
+        points: standings.points,
+        isOwnTeam: standings.isOwnTeam,
+      })
       .from(standings)
       .innerJoin(competitions, eq(standings.competitionId, competitions.id))
       .where(and(eq(standings.id, standingId), eq(competitions.teamId, teamId)))

@@ -2,6 +2,7 @@
   "moduleFileExtensions": ["js", "json", "ts", "mjs"],
   "rootDir": ".",
   "testEnvironment": "node",
+  "setupFiles": ["<rootDir>/test/setup-isolated-db.ts"],
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.ts$": "ts-jest",

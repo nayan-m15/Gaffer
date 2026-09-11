@@ -41,7 +41,12 @@ describe('StatisticsController', () => {
     mockStatisticsService.getOverview.mockResolvedValue({ matchesPlayed: 0 });
 
     await controller.getOverview(
-      { id: 'user-1', name: 'Coach', email: 'coach@test.com', emailVerified: true },
+      {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'coach@test.com',
+        emailVerified: true,
+      },
       'comp-1',
     );
 
@@ -55,7 +60,12 @@ describe('StatisticsController', () => {
     mockStatisticsService.getOverview.mockResolvedValue({ matchesPlayed: 0 });
 
     await controller.getOverview(
-      { id: 'user-1', name: 'Coach', email: 'coach@test.com', emailVerified: true },
+      {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'coach@test.com',
+        emailVerified: true,
+      },
       undefined,
     );
 
@@ -71,7 +81,12 @@ describe('StatisticsController', () => {
     });
 
     await controller.getAthleteStatistics(
-      { id: 'user-1', name: 'Coach', email: 'coach@test.com', emailVerified: true },
+      {
+        id: 'user-1',
+        name: 'Coach',
+        email: 'coach@test.com',
+        emailVerified: true,
+      },
       'athlete-1',
     );
 
@@ -91,6 +106,8 @@ describe('StatisticsController', () => {
       emailVerified: true,
     });
 
-    expect(mockStatisticsService.getCompetitions).toHaveBeenCalledWith('user-1');
+    expect(mockStatisticsService.getCompetitions).toHaveBeenCalledWith(
+      'user-1',
+    );
   });
 });

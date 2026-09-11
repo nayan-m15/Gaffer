@@ -183,6 +183,7 @@ function primaryCreateInput(draft: EventFormDraft): CreateMatchLogEventInput {
       ? incomingDetail(draft)
       : noteOrUndefined(draft);
   return {
+    clientRequestId: crypto.randomUUID(),
     team: draft.team,
     eventType: draft.eventType,
     minute: draft.minute,
@@ -222,6 +223,7 @@ export function planAddEvent(draft: EventFormDraft): PlannedOp[] {
       kind: "create",
       detailFromPrimary: true,
       input: {
+        clientRequestId: crypto.randomUUID(),
         team: draft.team,
         eventType: "assist",
         minute: draft.minute,
@@ -238,6 +240,7 @@ export function planAddEvent(draft: EventFormDraft): PlannedOp[] {
     ops.push({
       kind: "create",
       input: {
+        clientRequestId: crypto.randomUUID(),
         team: draft.team,
         eventType: "substitution",
         minute: draft.minute,
@@ -297,6 +300,7 @@ export function planEditEvent({
       ops.push({
         kind: "create",
         input: {
+          clientRequestId: crypto.randomUUID(),
           team: draft.team,
           eventType: "assist",
           minute: draft.minute,
@@ -334,6 +338,7 @@ export function planEditEvent({
       ops.push({
         kind: "create",
         input: {
+          clientRequestId: crypto.randomUUID(),
           team: draft.team,
           eventType: "substitution",
           minute: draft.minute,

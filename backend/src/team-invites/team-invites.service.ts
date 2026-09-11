@@ -207,7 +207,9 @@ export class TeamInvitesService {
         usedByUserId: userId,
         updatedAt: new Date(),
       })
-      .where(eq(teamInvites.id, invite.id));
+      .where(
+        and(eq(teamInvites.id, invite.id), eq(teamInvites.status, 'pending')),
+      );
 
     return { joined: true, teamId: invite.teamId };
   }

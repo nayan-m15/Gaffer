@@ -16,6 +16,7 @@ interface AthleteBody {
   teamId: string;
   firstName: string;
   lastName: string;
+  dateOfBirth: string | null;
   position: string | null;
   squadNumber: number | null;
   status: string;
@@ -189,6 +190,33 @@ describe('Athletes (e2e)', () => {
       firstName: 'Sam',
       lastName: 'Kerr',
       squadNumber: 20,
+    });
+  });
+
+  it('clears optional athlete fields with null', async () => {
+    const { agent } = await newCoach();
+
+    const created = await agent
+      .post('/athletes')
+      .send({
+        firstName: 'Sam',
+        lastName: 'Kerr',
+        dateOfBirth: '1993-09-10',
+        position: 'ST',
+        squadNumber: 9,
+      })
+      .expect(201);
+    const { id } = created.body as AthleteBody;
+
+    const response = await agent
+      .patch(`/athletes/${id}`)
+      .send({ dateOfBirth: null, position: null, squadNumber: null })
+      .expect(200);
+
+    expect(response.body as AthleteBody).toMatchObject({
+      dateOfBirth: null,
+      position: null,
+      squadNumber: null,
     });
   });
 

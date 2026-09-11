@@ -137,9 +137,8 @@ export function AthleteFormDialog({
                 type="number"
                 min={1}
                 max={99}
-                value={values.squadNumber}
+                value={values.squadNumber || ""}
                 onChange={(e) => handleChange("squadNumber", Number(e.target.value))}
-                required
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               />
             </FormField>
@@ -150,6 +149,7 @@ export function AthleteFormDialog({
                 onChange={(e) => handleChange("position", e.target.value)}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
               >
+                <option value="">Not set</option>
                 {POSITIONS.map((pos) => (
                   <option key={pos} value={pos}>
                     {pos}

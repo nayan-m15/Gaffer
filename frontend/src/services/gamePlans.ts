@@ -51,6 +51,11 @@ export type GamePlanContent = Omit<
   "id" | "teamId" | "name" | "createdAt" | "updatedAt"
 >;
 
+/** Immutable tactical state captured when a match is started. */
+export interface GamePlanSnapshot extends GamePlanContent {
+  name: string;
+}
+
 /** The squad half of a game plan — what the tactical board edits. */
 export type GamePlanSquad = Pick<
   GamePlanContent,

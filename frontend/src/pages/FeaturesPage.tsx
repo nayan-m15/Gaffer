@@ -4,7 +4,7 @@
  *
  * Designed around the core grassroots football coaching philosophy:
  *   1. Grassroots-First (Built for 1 coach, 1 phone, zero budget)
- *   2. Offline-First (Survives dead phone signal on the pitch)
+ *   2. Matchday-Focused (Fast connected logging on the pitch)
  *   3. Human-Confirmed (The system computes, the coach confirms)
  *
  * Sections:
@@ -16,8 +16,8 @@
  *   6. Team & Lineup Management (Starting XI, 1 GK rule, formation tactical pitch)
  *   7. Context-Aware Dashboard (Live match HUD vs general squad summary)
  *   8. Live Match Tracking (Single-tap events, match clock, undo/edit)
- *   9. Offline-First Sync Engine (Local queue, conflict-free background sync)
- *  10. Analytics, League Standings & Exports (Derived stats, tables, PDF/CSV)
+ *   9. Reliable Match Records (Persisted clock and corrections)
+ *  10. Analytics and League Standings (Derived stats and managed tables)
  *  11. Final CTA
  *
  * Accessible as a section of the Home page (`/#features`). Follows the same aesthetic language as
@@ -33,8 +33,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
-  Download,
-  Globe,
   LayoutGrid,
   MapPin,
   RefreshCw,
@@ -43,7 +41,6 @@ import {
   Trophy,
   UserCheck,
   Users,
-  WifiOff,
   Zap,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
@@ -95,7 +92,7 @@ const FEATURE_NAV_ITEMS = [
   { id: "feature-lineup", label: "Tactical Lineups", icon: Shield },
   { id: "feature-dashboard", label: "Command Dashboard", icon: LayoutGrid },
   { id: "feature-live", label: "Live Match Tracking", icon: Clock },
-  { id: "feature-offline", label: "Offline Sync", icon: WifiOff },
+  { id: "feature-reliability", label: "Match Reliability", icon: RefreshCw },
   { id: "feature-analytics", label: "Analytics & Reports", icon: BarChart3 },
 ] as const;
 
@@ -140,7 +137,7 @@ export function FeaturesSection() {
         <LineupFeatureSection />
         <DashboardFeatureSection />
         <LiveTrackingFeatureSection />
-        <OfflineFeatureSection />
+        <ReliableRecordsFeatureSection />
         <AnalyticsFeatureSection />
         <CtaSection />
       </div>
@@ -183,7 +180,7 @@ export default function FeaturesPage() {
         <LineupFeatureSection />
         <DashboardFeatureSection />
         <LiveTrackingFeatureSection />
-        <OfflineFeatureSection />
+        <ReliableRecordsFeatureSection />
         <AnalyticsFeatureSection />
         <CtaSection />
       </main>
@@ -220,7 +217,7 @@ function HeroSection() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/70 drop-shadow-md sm:text-lg animate-fade-in-up animation-delay-150">
-            From squad management and tactical formation planning to offline sideline match logging and automated season analytics — discover everything {brand.name} gives your team.
+            From squad management and tactical formation planning to live match logging and season analytics — discover everything {brand.name} gives your team.
           </p>
 
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center animate-fade-in-up animation-delay-300">
@@ -312,9 +309,9 @@ function CorePillarsSection() {
       desc: "Designed for one coach, one phone, and zero enterprise budget. No camera rigs or complex setups required.",
     },
     {
-      icon: WifiOff,
-      title: "Offline Sideline Resilience",
-      desc: "Event logging survives dead phone signal and remote pitches. Entries save locally and sync in the background.",
+      icon: RefreshCw,
+      title: "Reliable Match Records",
+      desc: "Server-backed match events and clock state support refresh recovery and corrections.",
     },
     {
       icon: UserCheck,
@@ -377,7 +374,7 @@ function RosterFeatureSection() {
       title="Complete Digital Squad & Athlete Profiles"
       description="Say goodbye to disorganized spreadsheets and fragmented chat groups. Build and maintain a single source of truth for your entire football squad."
       bullets={[
-        "Detailed athlete records: full name, DOB, squad number, primary position, preferred foot, and contact details.",
+        "Detailed athlete records: full name, date of birth, squad number, primary position, and availability.",
         "Active squad lifecycle: easily mark players as active, inactive, or archived as your team evolves over the season.",
         "Individual match stats: appearances, goals, assists, minutes, cards, and clean sheets build up automatically from match event logs.",
         "Quick search & position filters: instantly locate goalkeepers, defenders, midfielders, or forwards for training and matchday selection.",
@@ -425,8 +422,8 @@ function LineupFeatureSection() {
       description="Prepare your match tactics visually before setting foot on the pitch. Position players, test tactical formations, and manage your substitute bench with confidence."
       bullets={[
         "Interactive tactical pitch board: drag and position squad members into exact pitch coordinates with realistic turf markings.",
-        "Enforced matchday rules: starting XI builder strictly enforces standard rules (exactly 1 goalkeeper and 10 outfield athletes).",
-        "Popular formation presets: toggle instantly between 4-3-3, 4-4-2, 3-5-2, 4-2-3-1, 5-3-2, and custom configurations.",
+        "Enforced matchday rules: select 11 unique starters and keep bench athletes separate.",
+        "Formation presets: switch between supported shapes including 4-3-3, 4-4-2, 3-5-2, 4-2-3-1, and 5-3-2.",
         "Substitutes bench drawer: manage reserve players and plan tactical substitution rotations prior to kickoff.",
       ]}
       visual={<LineupTacticalMockup />}
@@ -482,24 +479,24 @@ function LiveTrackingFeatureSection() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 9 — OFFLINE-FIRST OPERATION & SYNC
+ *  SECTION 9 — RELIABLE MATCH RECORDS
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function OfflineFeatureSection() {
+function ReliableRecordsFeatureSection() {
   return (
     <FeatureSectionWrapper
-      id="feature-offline"
-      badge="Offline Reliability"
-      icon={<WifiOff className="size-5 text-brand" />}
-      title="Offline-First Capture with Automatic Background Sync"
-      description={`Amateur football pitches frequently have zero mobile signal or Wi-Fi. ${brand.name} guarantees that match logging never halts due to poor connectivity.`}
+      id="feature-reliability"
+      badge="Reliable Match Records"
+      icon={<RefreshCw className="size-5 text-brand" />}
+      title="Persisted Clock and Correctable Timeline"
+      description={`${brand.name} stores match events and clock state on the server so a connected session can resume after a refresh.`}
       bullets={[
-        "Local on-device database: all live match entries are saved instantly to device storage (IndexedDB) with zero lag.",
-        "Automatic background queue: once connectivity is detected, queued events automatically sync with the cloud database.",
-        "Conflict-free multi-user logging: if assistants on both teams log events, the system merges timelines and flags potential duplicates for coach review.",
-        "Clear sync status indicators: always know whether your device is online, offline, or actively syncing pending events.",
+        "Persisted clock state: restore the period, elapsed time, and running state after refresh.",
+        "Idempotent event logging: client request IDs prevent accidental duplicate match actions.",
+        "Correction workflow: edit or remove logged events and recalculate the score from the timeline.",
+        "Shared team access: coaches and assistants see the same server-backed match record.",
       ]}
-      visual={<OfflineSyncMockup />}
+      visual={<ReliableRecordsMockup />}
       reversed
     />
   );
@@ -515,13 +512,13 @@ function AnalyticsFeatureSection() {
       id="feature-analytics"
       badge="Analytics & Reports"
       icon={<BarChart3 className="size-5 text-brand" />}
-      title="Automated Season Analytics, Standings & Exports"
-      description="Zero manual re-typing. Because every action is logged during matches, your season totals, league standings, and exportable reports build themselves automatically."
+      title="Season Analytics, Standings & Match Reports"
+      description="Match logs drive team and player statistics, while coaches maintain validated competition standings."
       bullets={[
         "Zero-entry season statistics: goal charts, assist rankings, card tallies, and playing minutes compile from match logs.",
-        "League table & standings: automatic calculation of Matches Played, Wins, Draws, Losses, Goals For, Goals Against, Goal Difference, and Points.",
-        "Explainable selection recommendations: rule-based suggestions (e.g. form, minutes load, card accumulation) to assist coach decisions.",
-        "One-click PDF & CSV exports: export formal match sheets, player profiles, and season summaries for parents, scouts, and league officials.",
+        "League table & standings: maintain Matches Played, Wins, Draws, Losses, Goals For, Goals Against, Goal Difference, and Points.",
+        "Competition filters: review team results and player totals for one competition or across all matches.",
+        "Match reports: inspect the result, event timeline, player contributions, and manual corrections.",
       ]}
       visual={<AnalyticsMockup />}
     />
@@ -1011,29 +1008,29 @@ function LiveMatchMockup() {
   );
 }
 
-/* ─── Mockup 6: Offline-First Sync ─────────────────────────────────────── */
+/* ─── Mockup 6: Persisted Match Record ─────────────────────────────────── */
 
-function OfflineSyncMockup() {
+function ReliableRecordsMockup() {
   return (
     <MockupFrame>
       <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-white">Local Sync Engine</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-white">Match State</span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
           <RefreshCw className="size-3 animate-spin" />
-          Auto-Sync Armed
+          Saved
         </span>
       </div>
 
       <div className="space-y-3">
-        {/* Offline event log item */}
+        {/* Persisted event log item */}
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
           <div className="flex items-center gap-2.5">
             <div className="flex size-7 items-center justify-center rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400">
-              <WifiOff className="size-4" />
+              <RefreshCw className="size-4" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-white">Pitchside Offline Mode</p>
-              <p className="text-[10px] text-white/40">IndexedDB Local Cache &bull; 0ms latency</p>
+              <p className="text-xs font-semibold text-white">Persisted Clock</p>
+              <p className="text-[10px] text-white/40">Server-backed match record &bull; Saved clock</p>
             </div>
           </div>
           <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
@@ -1041,19 +1038,19 @@ function OfflineSyncMockup() {
           </span>
         </div>
 
-        {/* Sync queue representation */}
+        {/* Correction representation */}
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
           <div className="flex items-center gap-2.5">
             <div className="flex size-7 items-center justify-center rounded-md bg-brand/10 border border-brand/20 text-brand">
-              <Globe className="size-4" />
+              <CheckCircle2 className="size-4" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-white">Background Upload</p>
-              <p className="text-[10px] text-white/40">Syncs timeline once connection returns</p>
+              <p className="text-xs font-semibold text-white">Correctable Timeline</p>
+              <p className="text-[10px] text-white/40">Edit mistakes while preserving the match record</p>
             </div>
           </div>
           <span className="rounded bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">
-            Synced
+            Updated
           </span>
         </div>
       </div>
@@ -1075,11 +1072,11 @@ function AnalyticsMockup() {
       <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2.5">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-white">League Division Standings</span>
-          <p className="text-[10px] text-white/50">Derived dynamically from fixture logs</p>
+          <p className="text-[10px] text-white/50">Coach-maintained and validated</p>
         </div>
         <button className="inline-flex items-center gap-1 rounded bg-white/10 px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/20">
-          <Download className="size-3" />
-          Export PDF
+          <CheckCircle2 className="size-3" />
+          View report
         </button>
       </div>
 

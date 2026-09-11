@@ -19,6 +19,7 @@ import { TeamsService } from '../teams/teams.service';
 import type {
   CreateMatchLogEventDto,
   UpdateMatchLogEventDto,
+  UpdateMatchClockDto,
 } from './matches.schemas';
 
 /**
@@ -48,9 +49,18 @@ export class MatchesService {
     }
 
     const opponentSquad = await this.listOpponentPlayers(match.id);
+    const [score] = await this.databaseService.database
+      .select({
+        teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal')::int`,
+        opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal')::int`,
+      })
+      .from(matchEvents)
+      .where(eq(matchEvents.matchId, match.id));
 
     return {
       ...match,
+      teamScore: score?.teamScore ?? 0,
+      opponentScore: score?.opponentScore ?? 0,
       eventTitle: event.title,
       eventStatus: event.status,
       eventScheduledAt: event.scheduledAt,
@@ -102,6 +112,7 @@ export class MatchesService {
         detail: matchEvents.detail,
         loggedByUserId: matchEvents.loggedByUserId,
         manuallyAdjusted: matchEvents.manuallyAdjusted,
+        clientRequestId: matchEvents.clientRequestId,
         createdAt: matchEvents.createdAt,
         updatedAt: matchEvents.updatedAt,
         athleteFirstName: athletes.firstName,
@@ -132,6 +143,7 @@ export class MatchesService {
       detail: row.detail,
       loggedByUserId: row.loggedByUserId,
       manuallyAdjusted: row.manuallyAdjusted,
+      clientRequestId: row.clientRequestId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       athlete:
@@ -157,11 +169,25 @@ export class MatchesService {
 
   async logEvent(userId: string, matchId: string, dto: CreateMatchLogEventDto) {
     const team = await this.requireTeam(userId);
-    const { match } = await this.requireMatch(team.id, matchId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
+    this.assertLive(event.status);
 
     if (dto.athleteId) {
-      await this.requireTeamAthlete(team.id, dto.athleteId);
+      await this.requireMatchAthlete(match.id, dto.athleteId);
     }
+    this.validateEventAttribution(
+      dto.team,
+      dto.eventType,
+      dto.athleteId ?? null,
+      dto.opponentPlayerId ?? null,
+      dto.opponentLabel ?? null,
+    );
+    await this.validateSubstitution(
+      match.id,
+      dto.team,
+      dto.eventType,
+      dto.detail,
+    );
 
     const attribution = await this.resolveOpponentAttribution(match, {
       team: dto.team,
@@ -181,11 +207,26 @@ export class MatchesService {
         minute: dto.minute,
         detail: dto.detail,
         loggedByUserId: userId,
+        clientRequestId: dto.clientRequestId,
+      })
+      .onConflictDoNothing({
+        target: [matchEvents.matchId, matchEvents.clientRequestId],
+        where: sql`${matchEvents.clientRequestId} is not null`,
       })
       .returning();
 
-    if (dto.eventType === 'goal') {
-      await this.adjustScore(match.id, dto.team, 1);
+    if (!created) {
+      const [existing] = await this.databaseService.database
+        .select()
+        .from(matchEvents)
+        .where(
+          and(
+            eq(matchEvents.matchId, match.id),
+            eq(matchEvents.clientRequestId, dto.clientRequestId),
+          ),
+        )
+        .limit(1);
+      return existing;
     }
 
     return created;
@@ -198,12 +239,30 @@ export class MatchesService {
     dto: UpdateMatchLogEventDto,
   ) {
     const team = await this.requireTeam(userId);
-    const { match } = await this.requireMatch(team.id, matchId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
+    this.assertEditable(event.status);
     const logged = await this.requireMatchEvent(matchId, eventId);
 
     if (dto.athleteId) {
-      await this.requireTeamAthlete(team.id, dto.athleteId);
+      await this.requireMatchAthlete(match.id, dto.athleteId);
     }
+    this.validateEventAttribution(
+      logged.team,
+      dto.eventType ?? logged.eventType,
+      dto.athleteId === undefined ? logged.athleteId : dto.athleteId,
+      dto.opponentPlayerId === undefined
+        ? logged.opponentPlayerId
+        : dto.opponentPlayerId,
+      dto.opponentLabel === undefined
+        ? logged.opponentLabel
+        : dto.opponentLabel,
+    );
+    await this.validateSubstitution(
+      match.id,
+      logged.team,
+      dto.eventType ?? logged.eventType,
+      dto.detail === undefined ? logged.detail : dto.detail,
+    );
 
     const attribution = await this.resolveOpponentAttribution(match, {
       team: logged.team,
@@ -236,26 +295,13 @@ export class MatchesService {
       throw new NotFoundException('Match event not found.');
     }
 
-    if (dto.eventType !== undefined && dto.eventType !== logged.eventType) {
-      if (logged.eventType === 'goal') {
-        await this.adjustScore(matchId, logged.team, -1);
-      }
-      if (dto.eventType === 'goal') {
-        await this.adjustScore(matchId, logged.team, 1);
-      }
-    }
-
     return updated;
   }
 
   async deleteEvent(userId: string, matchId: string, eventId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
-    const logged = await this.requireMatchEvent(matchId, eventId);
-
-    if (logged.eventType === 'goal') {
-      await this.adjustScore(matchId, logged.team, -1);
-    }
+    const { event } = await this.requireMatch(team.id, matchId);
+    this.assertEditable(event.status);
 
     const [deleted] = await this.databaseService.database
       .delete(matchEvents)
@@ -272,6 +318,21 @@ export class MatchesService {
   async finish(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    this.assertLive(event.status);
+
+    const [finishedMatch] = await this.databaseService.database
+      .update(matches)
+      .set({
+        clockPeriod: 'full_time',
+        clockStartedAt: null,
+        clockElapsedMs: sql<number>`case
+          when ${matches.clockStartedAt} is null then ${matches.clockElapsedMs}
+          else ${matches.clockElapsedMs} + floor(extract(epoch from (now() - ${matches.clockStartedAt})) * 1000)::int
+        end`,
+        updatedAt: new Date(),
+      })
+      .where(eq(matches.id, match.id))
+      .returning();
 
     const [updated] = await this.databaseService.database
       .update(events)
@@ -286,7 +347,27 @@ export class MatchesService {
       throw new NotFoundException('Match not found.');
     }
 
-    return { ...match, eventTitle: updated.title, eventStatus: updated.status };
+    if (!finishedMatch) {
+      throw new NotFoundException('Match not found.');
+    }
+    return this.findOne(userId, matchId);
+  }
+
+  async updateClock(userId: string, matchId: string, dto: UpdateMatchClockDto) {
+    const team = await this.requireTeam(userId);
+    const { event } = await this.requireMatch(team.id, matchId);
+    this.assertLive(event.status);
+    const [updated] = await this.databaseService.database
+      .update(matches)
+      .set({
+        clockPeriod: dto.period,
+        clockElapsedMs: dto.elapsedMs,
+        clockStartedAt: dto.running ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(matches.id, matchId))
+      .returning();
+    return updated;
   }
 
   private async listOpponentPlayers(matchId: string) {
@@ -420,36 +501,79 @@ export class MatchesService {
     return logged;
   }
 
-  private async requireTeamAthlete(teamId: string, athleteId: string) {
+  private async requireMatchAthlete(matchId: string, athleteId: string) {
     const [athlete] = await this.databaseService.database
       .select({ id: athletes.id })
-      .from(athletes)
-      .where(and(eq(athletes.id, athleteId), eq(athletes.teamId, teamId)))
+      .from(athleteMatchStats)
+      .innerJoin(athletes, eq(athleteMatchStats.athleteId, athletes.id))
+      .where(
+        and(
+          eq(athleteMatchStats.matchId, matchId),
+          eq(athleteMatchStats.athleteId, athleteId),
+        ),
+      )
       .limit(1);
 
     if (!athlete) {
-      throw new BadRequestException('Athlete is not on this team.');
+      throw new BadRequestException('Athlete is not in this match squad.');
     }
   }
 
-  private async adjustScore(
+  private assertLive(status: string) {
+    if (status !== 'scheduled') {
+      throw new BadRequestException('This match is not live.');
+    }
+  }
+
+  private assertEditable(status: string) {
+    if (status === 'cancelled') {
+      throw new BadRequestException('Cancelled matches cannot be edited.');
+    }
+  }
+
+  private async validateSubstitution(
     matchId: string,
     team: 'own' | 'opponent',
-    delta: number,
+    eventType: string,
+    detail?: string | null,
   ) {
-    const scoreSql =
-      team === 'own'
-        ? sql`GREATEST(${matches.teamScore} + ${delta}, 0)`
-        : sql`GREATEST(${matches.opponentScore} + ${delta}, 0)`;
+    if (eventType !== 'substitution') return;
+    if (!detail) {
+      throw new BadRequestException('An incoming player is required.');
+    }
+    if (team === 'own') {
+      await this.requireMatchAthlete(matchId, detail);
+    } else {
+      await this.requireOpponentPlayer(matchId, detail);
+    }
+  }
 
-    await this.databaseService.database
-      .update(matches)
-      .set({
-        ...(team === 'own'
-          ? { teamScore: scoreSql }
-          : { opponentScore: scoreSql }),
-        updatedAt: new Date(),
-      })
-      .where(eq(matches.id, matchId));
+  private validateEventAttribution(
+    team: 'own' | 'opponent',
+    eventType: string,
+    athleteId: string | null,
+    opponentPlayerId: string | null,
+    opponentLabel: string | null,
+  ) {
+    if (team === 'own' && (opponentPlayerId || opponentLabel)) {
+      throw new BadRequestException(
+        'Own-team events cannot reference an opponent.',
+      );
+    }
+    if (team === 'opponent' && athleteId) {
+      throw new BadRequestException(
+        'Opponent events cannot reference a team athlete.',
+      );
+    }
+    if (eventType === 'substitution') {
+      if (team === 'own' && !athleteId) {
+        throw new BadRequestException('An outgoing squad athlete is required.');
+      }
+      if (team === 'opponent' && !opponentPlayerId) {
+        throw new BadRequestException(
+          'An outgoing opponent player is required.',
+        );
+      }
+    }
   }
 }

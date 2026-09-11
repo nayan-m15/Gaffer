@@ -27,7 +27,7 @@ jest.mock('better-auth/api', () => {
 
     constructor(status: string, body?: { message?: string }) {
       super(body?.message ?? 'Authentication request failed.');
-      this.statusCode = 400;
+      this.statusCode = status === 'TOO_MANY_REQUESTS' ? 429 : 400;
       this.body = body;
     }
   }
@@ -201,9 +201,9 @@ describe('AuthController', () => {
       expect(sendVerificationEmail).not.toHaveBeenCalled();
     });
 
-    it('swallows Better Auth APIErrors so sends stay indistinguishable', async () => {
+    it('swallows non-disclosing Better Auth APIErrors so sends stay indistinguishable', async () => {
       sendVerificationEmail.mockRejectedValueOnce(
-        new APIError('TOO_MANY_REQUESTS', { message: 'Too many requests.' }),
+        new APIError('USER_NOT_FOUND', { message: 'User not found.' }),
       );
 
       const result = await controller.sendVerificationEmail({
@@ -211,6 +211,18 @@ describe('AuthController', () => {
       });
 
       expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces actionable Better Auth APIErrors like rate limiting', async () => {
+      sendVerificationEmail.mockRejectedValueOnce(
+        new APIError('TOO_MANY_REQUESTS', { message: 'Too many requests.' }),
+      );
+
+      await expect(
+        controller.sendVerificationEmail({
+          email: 'ada@example.com',
+        }),
+      ).rejects.toThrow('Too many requests.');
     });
   });
 });

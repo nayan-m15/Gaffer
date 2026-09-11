@@ -11,6 +11,7 @@ export interface TeamEvent {
   scheduledAt: string;
   location: string;
   notes: string | null;
+  competitionId: string | null;
   matchId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -22,6 +23,7 @@ export interface CreateEventInput {
   scheduledAt: string;
   location: string;
   notes?: string;
+  competitionId?: string | null;
 }
 
 export interface UpdateEventInput {
@@ -31,6 +33,7 @@ export interface UpdateEventInput {
   scheduledAt?: string;
   location?: string;
   notes?: string | null;
+  competitionId?: string | null;
 }
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";

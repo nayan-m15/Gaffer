@@ -32,6 +32,8 @@ import {
   useMatch,
   useMatchEvents,
   useMatchSquad,
+  useUpdateMatchEvent,
+  useUpdateMatchClock,
 } from "@/features/matches/hooks";
 import type {
   MatchEventTeam,
@@ -161,6 +163,7 @@ type PersistInput = {
   opponentPlayerId?: string;
   detail?: string;
   minute?: number;
+  reassignId?: string;
 };
 
 function formatClock(elapsedMs: number) {
@@ -256,10 +259,16 @@ export default function LiveMatchPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
-  const gamePlanQuery = useGamePlan(matchQuery.data?.gamePlanId ?? undefined);
+  const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
+  const gamePlanQuery = useGamePlan(
+    gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
+  );
+  const gamePlan = gamePlanSnapshot ?? gamePlanQuery.data;
   const logEvent = useLogMatchEvent(matchId ?? "");
+  const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");
+  const updateClock = useUpdateMatchClock(matchId ?? "");
 
   const [period, setPeriod] = useState<Period>("not_started");
   const [running, setRunning] = useState(false);
@@ -291,6 +300,7 @@ export default function LiveMatchPage() {
   const persistLockRef = useRef(false);
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
+  const clockHydratedRef = useRef(false);
   const enteringIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -298,11 +308,27 @@ export default function LiveMatchPage() {
   }, [elapsedMs]);
 
   useEffect(() => {
-    if (matchQuery.data?.eventStatus === "completed") {
+    const match = matchQuery.data;
+    if (!match || clockHydratedRef.current) return;
+    clockHydratedRef.current = true;
+    if (match.eventStatus === "completed") {
       setPeriod("full_time");
       setRunning(false);
+      return;
     }
-  }, [matchQuery.data?.eventStatus]);
+    const elapsed = Math.max(
+      0,
+      match.clockElapsedMs +
+        (match.clockStartedAt
+          ? Date.now() - new Date(match.clockStartedAt).getTime()
+          : 0),
+    );
+    baseRef.current = elapsed;
+    elapsedRef.current = elapsed;
+    setElapsedMs(elapsed);
+    setPeriod(match.clockPeriod);
+    setRunning(Boolean(match.clockStartedAt));
+  }, [matchQuery.data]);
 
   useEffect(() => {
     if (!running) {
@@ -392,12 +418,12 @@ export default function LiveMatchPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        gamePlanQuery.data,
+        gamePlan,
         ownHalf,
         timeline,
         visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, gamePlanQuery.data, ownHalf, timeline, visibility],
+    [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
     () => placeOppPlayers(oppState.onPitch, oppHalf, timeline),
@@ -442,13 +468,27 @@ export default function LiveMatchPage() {
     (event) => event.eventType === "goal" && event.team === "opponent",
   ).length;
 
+  const persistClock = (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
+    updateClock.mutate(
+      { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
+      {
+        onError: (error) =>
+          setActionError(
+            error instanceof Error ? error.message : "Could not save the match clock.",
+          ),
+      },
+    );
+  };
+
   const startClock = () => {
     setRunning(true);
+    persistClock(period, true, elapsedRef.current);
   };
 
   const pauseClock = () => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    persistClock(period, false, elapsedRef.current);
   };
 
   const startFirstHalf = () => {
@@ -457,11 +497,14 @@ export default function LiveMatchPage() {
     setElapsedMs(0);
     setPeriod("first_half");
     setRunning(true);
+    persistClock("first_half", true, 0);
   };
 
   const goHalfTime = () => {
-    pauseClock();
+    setRunning(false);
+    baseRef.current = elapsedRef.current;
     setPeriod("half_time");
+    persistClock("half_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
   };
@@ -474,11 +517,14 @@ export default function LiveMatchPage() {
     }
     setPeriod("second_half");
     setRunning(true);
+    persistClock("second_half", true, elapsedRef.current);
   };
 
   const goFullTime = () => {
-    pauseClock();
+    setRunning(false);
+    baseRef.current = elapsedRef.current;
     setPeriod("full_time");
+    persistClock("full_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
   };
@@ -486,6 +532,7 @@ export default function LiveMatchPage() {
   const backToFirstHalf = () => {
     setPeriod("first_half");
     setRunning(true);
+    persistClock("first_half", true, elapsedRef.current);
   };
 
   const closeComposer = useCallback(() => {
@@ -524,67 +571,79 @@ export default function LiveMatchPage() {
       }
 
       try {
-        const created = await logEvent.mutateAsync({
-          team: input.team,
-          eventType,
-          minute: input.minute ?? currentMinute,
-          ...(input.athleteId ? { athleteId: input.athleteId } : {}),
-          ...(input.opponentLabel
-            ? { opponentLabel: input.opponentLabel }
-            : {}),
-          ...(input.opponentPlayerId
-            ? { opponentPlayerId: input.opponentPlayerId }
-            : {}),
-          ...(detail ? { detail } : {}),
-        });
-        setToast({
-          id: created.id,
-          label: `${eventDisplayLabel({ eventType, detail: detail ?? null })} logged`,
-        });
-        window.setTimeout(() => setToast(null), 5000);
-        if (eventType === "injury") {
-          console.log("[live-callout:persist]", {
-            eventType,
-            nextKind: "mandatory-sub-in",
+        if (input.reassignId) {
+          await updateEvent.mutateAsync({
+            eventId: input.reassignId,
+            input: {
+              athleteId: input.athleteId ?? null,
+              opponentLabel: input.opponentLabel ?? null,
+              opponentPlayerId: input.opponentPlayerId ?? null,
+            },
           });
-          if (input.team === "own" && input.athleteId) {
-            const outgoing = squad.find(
-              (athlete) => athlete.id === input.athleteId,
-            );
-            if (outgoing) {
+        } else {
+          const created = await logEvent.mutateAsync({
+            clientRequestId: crypto.randomUUID(),
+            team: input.team,
+            eventType,
+            minute: input.minute ?? currentMinute,
+            ...(input.athleteId ? { athleteId: input.athleteId } : {}),
+            ...(input.opponentLabel
+              ? { opponentLabel: input.opponentLabel }
+              : {}),
+            ...(input.opponentPlayerId
+              ? { opponentPlayerId: input.opponentPlayerId }
+              : {}),
+            ...(detail ? { detail } : {}),
+          });
+          setToast({
+            id: created.id,
+            label: `${eventDisplayLabel({ eventType, detail: detail ?? null })} logged`,
+          });
+          window.setTimeout(() => setToast(null), 5000);
+          if (eventType === "injury") {
+            console.log("[live-callout:persist]", {
+              eventType,
+              nextKind: "mandatory-sub-in",
+            });
+            if (input.team === "own" && input.athleteId) {
+              const outgoing = squad.find(
+                (athlete) => athlete.id === input.athleteId,
+              );
+              if (outgoing) {
+                setComposer({
+                  kind: "mandatory-sub-in",
+                  team: "own",
+                  outgoing,
+                });
+              }
+            } else if (input.team === "opponent") {
+              const outgoing =
+                opponentSquad.find(
+                  (player) => player.id === input.opponentPlayerId,
+                ) ?? "generic";
               setComposer({
                 kind: "mandatory-sub-in",
-                team: "own",
+                team: "opponent",
                 outgoing,
               });
             }
-          } else if (input.team === "opponent") {
-            const outgoing =
-              opponentSquad.find(
-                (player) => player.id === input.opponentPlayerId,
-              ) ?? "generic";
+          } else if (
+            eventType === "goal" &&
+            detail !== PENALTY_SCORED_DETAIL
+          ) {
+            console.log("[live-callout:persist]", {
+              eventType,
+              nextKind: "assist-pick",
+            });
             setComposer({
-              kind: "mandatory-sub-in",
-              team: "opponent",
-              outgoing,
+              kind: "assist-pick",
+              team: input.team,
+              goalEventId: created.id,
+              goalMinute: created.minute,
+              scorerAthleteId: input.athleteId,
+              scorerOpponentPlayerId: input.opponentPlayerId,
             });
           }
-        } else if (
-          eventType === "goal" &&
-          detail !== PENALTY_SCORED_DETAIL
-        ) {
-          console.log("[live-callout:persist]", {
-            eventType,
-            nextKind: "assist-pick",
-          });
-          setComposer({
-            kind: "assist-pick",
-            team: input.team,
-            goalEventId: created.id,
-            goalMinute: created.minute,
-            scorerAthleteId: input.athleteId,
-            scorerOpponentPlayerId: input.opponentPlayerId,
-          });
         }
       } catch (err) {
         const message =
@@ -608,6 +667,7 @@ export default function LiveMatchPage() {
       squad,
       opponentSquad,
       logEvent,
+      updateEvent,
       closeComposer,
     ],
   );
