@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import type {
+  AthleteComparison,
   AthleteStatistics,
   CompetitionFormValues,
   CompetitionWithStandings,
@@ -21,16 +22,45 @@ export interface BackendTeamOverview extends TeamOverview {}
 export interface BackendAthleteStatistics extends AthleteStatistics {}
 export interface BackendCompetitionWithStandings
   extends CompetitionWithStandings {}
+export interface BackendAthleteComparison extends AthleteComparison {}
+
+/** Optional narrowing applied to the team overview. */
+export interface StatisticsFilters {
+  seasonId?: string;
+  competitionId?: string;
+}
 
 const STATISTICS_PATH = "/statistics";
 
 /* ── Read calls ──────────────────────────────────────────────────────────── */
 
 export async function getStatistics(
-  competitionId?: string,
+  filters: StatisticsFilters = {},
 ): Promise<BackendTeamOverview> {
-  const query = competitionId ? `?competitionId=${competitionId}` : "";
-  return apiFetch<BackendTeamOverview>(`${STATISTICS_PATH}${query}`);
+  const params = new URLSearchParams();
+  if (filters.seasonId) params.set("seasonId", filters.seasonId);
+  if (filters.competitionId) params.set("competitionId", filters.competitionId);
+
+  const query = params.toString();
+  return apiFetch<BackendTeamOverview>(
+    query ? `${STATISTICS_PATH}?${query}` : STATISTICS_PATH,
+  );
+}
+
+/**
+ * Side-by-side season lines for 2-3 athletes. Ids go as one comma-joined
+ * param, matching the backend's `compareAthletesSchema`.
+ */
+export async function compareAthletes(
+  athleteIds: string[],
+  seasonId?: string,
+): Promise<BackendAthleteComparison> {
+  const params = new URLSearchParams({ athleteIds: athleteIds.join(",") });
+  if (seasonId) params.set("seasonId", seasonId);
+
+  return apiFetch<BackendAthleteComparison>(
+    `${STATISTICS_PATH}/compare?${params.toString()}`,
+  );
 }
 
 export async function getAthleteStatistics(
@@ -121,6 +151,12 @@ export function toUiOverview(backend: BackendTeamOverview): TeamOverview {
 export function toUiAthleteStatistics(
   backend: BackendAthleteStatistics,
 ): AthleteStatistics {
+  return backend;
+}
+
+export function toUiAthleteComparison(
+  backend: BackendAthleteComparison,
+): AthleteComparison {
   return backend;
 }
 

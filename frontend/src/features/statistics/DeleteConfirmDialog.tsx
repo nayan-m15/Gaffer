@@ -8,6 +8,8 @@ interface DeleteConfirmDialogProps {
   title: string;
   message: string;
   itemName: string;
+  /** Optional consequence spelled out below the question, e.g. cascading unlinks. */
+  note?: string;
 }
 
 /**
@@ -22,6 +24,7 @@ export function DeleteConfirmDialog({
   title,
   message,
   itemName,
+  note,
 }: DeleteConfirmDialogProps) {
   if (!isOpen) return null;
 
@@ -59,11 +62,19 @@ export function DeleteConfirmDialog({
 
         <p
           id="delete-desc"
-          className="mb-6 text-sm leading-relaxed text-muted-foreground"
+          className="text-sm leading-relaxed text-muted-foreground"
         >
           {message}{" "}
           <strong className="text-foreground">{itemName}</strong>?
         </p>
+
+        {note && (
+          <p className="mt-2 rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {note}
+          </p>
+        )}
+
+        <div className="mb-6" />
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>

@@ -1,25 +1,23 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { registerCoach } from './utils/auth-helpers';
 import {
   cleanupUser,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
 
-interface AuthResponseBody {
+interface SessionBody {
   user: { id: string; name: string; email: string };
   team: { id: string; name: string; role: string } | null;
 }
 
-// Sprint 1 has no athletes/events modules yet, so there's nothing scoped to
-// `teamId` to test isolation against directly. This suite instead proves the
-// boundary that does exist today: sign-up assigns each coach their own team,
-// `GET /auth/session` never leaks another user's team, and a user can't be
-// attached to a second team. Per-resource isolation (athletes/events scoped
-// by `teamId`) needs its own coverage once those modules land.
+// Proves the team boundary at the session level: registration gives each coach
+// their own team, and `GET /auth/session` never leaks another user's. Isolation
+// of individual resources (athletes, events, statistics, seasons) is covered by
+// those modules' own suites.
 describe('Team isolation (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
@@ -38,79 +36,48 @@ describe('Team isolation (e2e)', () => {
     await app.close();
   });
 
-  function newIdentity(): TestIdentity {
+  async function newCoach(name: string) {
     const identity = uniqueTestIdentity();
     identities.push(identity);
-    return identity;
+    const registered = await registerCoach(app.getHttpServer(), identity, name);
+    return { ...registered, identity };
   }
 
   it('gives each newly registered coach a distinct team', async () => {
-    const userA = newIdentity();
-    const userB = newIdentity();
+    // Sequential rather than parallel: registration now spans sign-up,
+    // verification and team creation, and two interleaved flows against the
+    // shared dev database make failures hard to read.
+    const coachA = await newCoach('Coach A');
+    const coachB = await newCoach('Coach B');
 
-    const [responseA, responseB] = await Promise.all([
-      request(app.getHttpServer())
-        .post('/auth/sign-up')
-        .send({
-          name: 'Coach A',
-          email: userA.email,
-          password: 'password123',
-          teamName: userA.teamName,
-        })
-        .expect(201),
-      request(app.getHttpServer())
-        .post('/auth/sign-up')
-        .send({
-          name: 'Coach B',
-          email: userB.email,
-          password: 'password123',
-          teamName: userB.teamName,
-        })
-        .expect(201),
-    ]);
-    const bodyA = responseA.body as AuthResponseBody;
-    const bodyB = responseB.body as AuthResponseBody;
+    expect(coachA.team.id).not.toEqual(coachB.team.id);
+    expect(coachA.team.name).toEqual(coachA.identity.teamName);
+    expect(coachB.team.name).toEqual(coachB.identity.teamName);
+  });
 
-    expect(bodyA.team?.id).not.toEqual(bodyB.team?.id);
-    expect(bodyA.team?.name).toEqual(userA.teamName);
-    expect(bodyB.team?.name).toEqual(userB.teamName);
+  it('rejects a second team for the same coach', async () => {
+    const coach = await newCoach('Coach A');
+
+    await coach.agent
+      .post('/teams')
+      .send({ name: `${coach.identity.teamName} Reserves` })
+      .expect(409);
   });
 
   it("never returns another user's team from /auth/session", async () => {
-    const userA = newIdentity();
-    const userB = newIdentity();
-    const agentA = request.agent(app.getHttpServer());
-    const agentB = request.agent(app.getHttpServer());
+    const coachA = await newCoach('Coach A');
+    const coachB = await newCoach('Coach B');
 
-    await agentA
-      .post('/auth/sign-up')
-      .send({
-        name: 'Coach A',
-        email: userA.email,
-        password: 'password123',
-        teamName: userA.teamName,
-      })
-      .expect(201);
-    await agentB
-      .post('/auth/sign-up')
-      .send({
-        name: 'Coach B',
-        email: userB.email,
-        password: 'password123',
-        teamName: userB.teamName,
-      })
-      .expect(201);
+    const sessionA = await coachA.agent.get('/auth/session').expect(200);
+    const sessionB = await coachB.agent.get('/auth/session').expect(200);
+    const bodyA = sessionA.body as SessionBody;
+    const bodyB = sessionB.body as SessionBody;
 
-    const sessionA = await agentA.get('/auth/session').expect(200);
-    const sessionB = await agentB.get('/auth/session').expect(200);
-    const bodyA = sessionA.body as AuthResponseBody;
-    const bodyB = sessionB.body as AuthResponseBody;
-
-    expect(bodyA.team?.name).toEqual(userA.teamName);
-    expect(bodyA.team?.name).not.toEqual(userB.teamName);
-    expect(bodyB.team?.name).toEqual(userB.teamName);
-    expect(bodyB.team?.name).not.toEqual(userA.teamName);
-    expect(bodyA.user.email).toEqual(userA.email);
-    expect(bodyB.user.email).toEqual(userB.email);
+    expect(bodyA.team?.name).toEqual(coachA.identity.teamName);
+    expect(bodyA.team?.name).not.toEqual(coachB.identity.teamName);
+    expect(bodyB.team?.name).toEqual(coachB.identity.teamName);
+    expect(bodyB.team?.name).not.toEqual(coachA.identity.teamName);
+    expect(bodyA.user.email).toEqual(coachA.identity.email);
+    expect(bodyB.user.email).toEqual(coachB.identity.email);
   });
 });
