@@ -92,16 +92,6 @@ function App() {
           }
         />
         <Route
-          path="/matches/:matchId/report"
-          element={
-            <ProtectedRoute>
-              <RequireTeam>
-                <MatchReportPage />
-              </RequireTeam>
-            </ProtectedRoute>
-          }
-        />
-        <Route
           element={
             <ProtectedRoute>
               <AppShell />
@@ -143,6 +133,14 @@ function App() {
             element={
               <RequireTeam>
                 <LiveLoggerPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/matches/:matchId/report"
+            element={
+              <RequireTeam>
+                <MatchReportPage />
               </RequireTeam>
             }
           />

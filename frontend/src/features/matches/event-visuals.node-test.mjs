@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { uniqueTimelineEvents } from "./event-visuals.ts";
+import {
+  linkedAssistsForGoal,
+  uniqueTimelineEvents,
+} from "./event-visuals.ts";
 
 function sub(overrides) {
   return {
@@ -62,9 +65,59 @@ const twoGoals = uniqueTimelineEvents([
 ]);
 assert.equal(twoGoals.filter((event) => event.eventType === "goal").length, 2);
 
+const goal = {
+  ...sub({ id: "goal-1", eventType: "goal", detail: null, minute: 20 }),
+  eventType: "goal",
+};
+const linked = {
+  ...sub({
+    id: "assist-1",
+    athleteId: "vidjak",
+    eventType: "assist",
+    detail: "goal-1",
+    minute: 20,
+  }),
+  eventType: "assist",
+};
+const other = {
+  ...sub({
+    id: "assist-2",
+    athleteId: "other",
+    eventType: "assist",
+    detail: "goal-other",
+    minute: 20,
+  }),
+  eventType: "assist",
+};
+const cascade = linkedAssistsForGoal([goal, linked, other], goal);
+assert.equal(cascade.length, 1);
+assert.equal(cascade[0].id, "assist-1");
+assert.equal(linkedAssistsForGoal([goal, linked], other).length, 0);
+
+const playerEvents = [
+  { athleteId: "isak", eventType: "goal" },
+  { athleteId: "isak", eventType: "assist" },
+  { athleteId: "isak", eventType: "goal" },
+  { athleteId: "vidjak", eventType: "goal" },
+];
+function goalsFor(athleteId, events) {
+  return events.filter(
+    (event) => event.athleteId === athleteId && event.eventType === "goal",
+  ).length;
+}
+assert.equal(goalsFor("isak", playerEvents), 2);
+assert.equal(
+  goalsFor(
+    "isak",
+    playerEvents.filter((event) => event !== playerEvents[0]),
+  ),
+  1,
+);
+
 console.log("[event-visuals:uniqueTimelineEvents] passed", {
   collapsedDuplicateSub: duplicatedSubs.length,
   keptDistinctSubs: distinct.length,
   collapsedSameId: sameId.length,
   keptTwoGoalsSameMinute: twoGoals.length,
+  linkedAssistCascade: cascade.length,
 });

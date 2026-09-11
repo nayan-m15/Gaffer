@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Compact formation pitch for Confirm Squad. Vertical (attack at the top),
  * own team only — not the live-match tactical view, which is landscape and
  * wired to events, opponent markers, and click-to-log.
@@ -11,6 +11,10 @@ import {
   FORMATIONS,
   getPositionRole,
 } from "./formations";
+import {
+  connectorSegments,
+  groupPositionsIntoRows,
+} from "./squad-formation-connectors";
 import type {
   FormationPosition,
   PitchAssignments,
@@ -28,7 +32,6 @@ const ROLE_MARKER: Record<
   FWD: { fill: "#f97316", glow: "rgba(249, 115, 22, 0.55)" },
 };
 
-const ROW_Y_GAP = 10;
 const LABEL_GAP_RATIO = 0.82;
 const LABEL_WIDTH_MIN = 11;
 const LABEL_WIDTH_MAX = 20;
@@ -38,13 +41,6 @@ interface SquadFormationPreviewProps {
   assignments: PitchAssignments;
   athletes: BackendAthlete[];
   className?: string;
-}
-
-interface ConnectorSegment {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
 }
 
 export function SquadFormationPreview({
@@ -86,7 +82,7 @@ export function SquadFormationPreview({
           G
         </span>
         <p className="pointer-events-none absolute left-1/2 top-2 z-[2] -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.22em] text-primary">
-          Attacking ↑
+          Attacking â†‘
         </p>
         <svg
           width="100%"
@@ -276,93 +272,4 @@ function labelWidthBySlot(
     }
   }
   return widths;
-}
-
-function groupPositionsIntoRows(
-  positions: FormationPosition[],
-): FormationPosition[][] {
-  const sorted = [...positions].sort((a, b) => b.y - a.y || a.x - b.x);
-  const rows: FormationPosition[][] = [];
-
-  for (const pos of sorted) {
-    const current = rows[rows.length - 1];
-    if (!current) {
-      rows.push([pos]);
-      continue;
-    }
-    const rowY =
-      current.reduce((sum, item) => sum + item.y, 0) / current.length;
-    if (Math.abs(pos.y - rowY) > ROW_Y_GAP) {
-      rows.push([pos]);
-    } else {
-      current.push(pos);
-    }
-  }
-
-  for (const row of rows) {
-    row.sort((a, b) => a.x - b.x);
-  }
-
-  return rows;
-}
-
-function nearestInRow(
-  point: FormationPosition,
-  row: FormationPosition[],
-): FormationPosition | undefined {
-  let nearest = row[0];
-  let best = Number.POSITIVE_INFINITY;
-  for (const other of row) {
-    const d = (point.x - other.x) ** 2 + (point.y - other.y) ** 2;
-    if (d < best) {
-      best = d;
-      nearest = other;
-    }
-  }
-  return nearest;
-}
-
-function segmentKey(a: FormationPosition, b: FormationPosition): string {
-  if (a.x < b.x || (a.x === b.x && a.y <= b.y)) {
-    return `${a.x},${a.y}|${b.x},${b.y}`;
-  }
-  return `${b.x},${b.y}|${a.x},${a.y}`;
-}
-
-function addSegment(
-  segments: ConnectorSegment[],
-  seen: Set<string>,
-  a: FormationPosition,
-  b: FormationPosition,
-) {
-  const key = segmentKey(a, b);
-  if (seen.has(key)) return;
-  seen.add(key);
-  segments.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
-}
-
-function connectorSegments(rows: FormationPosition[][]): ConnectorSegment[] {
-  const segments: ConnectorSegment[] = [];
-  const seen = new Set<string>();
-
-  for (const row of rows) {
-    for (let i = 0; i < row.length - 1; i += 1) {
-      addSegment(segments, seen, row[i], row[i + 1]);
-    }
-  }
-
-  for (let r = 0; r < rows.length - 1; r += 1) {
-    const back = rows[r];
-    const front = rows[r + 1];
-    for (const player of back) {
-      const target = nearestInRow(player, front);
-      if (target) addSegment(segments, seen, player, target);
-    }
-    for (const player of front) {
-      const target = nearestInRow(player, back);
-      if (target) addSegment(segments, seen, player, target);
-    }
-  }
-
-  return segments;
 }

@@ -21,3 +21,28 @@
 .match-report .font-display {
   font-family: var(--font-display);
 }
+
+.match-report .match-report-pitch {
+  aspect-ratio: 105 / 68;
+  height: auto;
+  min-height: 0;
+}
+
+@media (max-width: 639px) {
+  .match-report .match-report-pitch {
+    --live-marker-inset: 1.5rem;
+  }
+
+  .match-report .match-report-pitch .live-marker-hit {
+    transform: translate(-50%, -50%) scale(0.68);
+  }
+
+  .match-report .match-report-bench .live-bench-row {
+    flex-direction: row;
+  }
+
+  .match-report .match-report-bench .live-bench-label {
+    width: 6rem;
+    text-align: left;
+  }
+}

@@ -92,6 +92,18 @@
   grid-area: callout;
 }
 
+.live-match-pause-overlay {
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
+  z-index: 20;
+}
+
+.live-match-kickoff-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+
 .live-pitch-panel-landscape {
   width: 100%;
   height: auto;
