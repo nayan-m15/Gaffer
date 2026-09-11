@@ -153,7 +153,11 @@ export default function MatchReportPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
-  const gamePlanQuery = useGamePlan(matchQuery.data?.gamePlanId ?? undefined);
+  const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
+  const gamePlanQuery = useGamePlan(
+    gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
+  );
+  const gamePlan = gamePlanSnapshot ?? gamePlanQuery.data;
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
 
   const [tab, setTab] = useState<Tab>("summary");
@@ -205,12 +209,12 @@ export default function MatchReportPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        gamePlanQuery.data,
+        gamePlan,
         ownHalf,
         timeline,
         visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, gamePlanQuery.data, ownHalf, timeline, visibility],
+    [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
     () => placeOppPlayers(oppState.onPitch, oppHalf, timeline),

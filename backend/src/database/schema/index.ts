@@ -317,6 +317,25 @@ export const gamePlans = pgTable(
   ],
 );
 
+export interface GamePlanSnapshot {
+  name: string;
+  formationId: string;
+  assignments: Record<string, string | null>;
+  substituteIds: string[];
+  defensiveStyle: (typeof defensiveStyle.enumValues)[number];
+  defensiveWidth: number;
+  defensiveDepth: number;
+  offensiveStyle: (typeof offensiveStyle.enumValues)[number];
+  offensiveWidth: number;
+  playersInBox: number;
+  cornersCommitment: number;
+  freeKicksCommitment: number;
+  captainId: string | null;
+  freeKickTakerId: string | null;
+  penaltyTakerId: string | null;
+  cornerTakerId: string | null;
+}
+
 export const competitionType = pgEnum('competition_type', [
   'league',
   'cup',
@@ -427,6 +446,7 @@ export const matches = pgTable(
     gamePlanId: uuid('game_plan_id').references(() => gamePlans.id, {
       onDelete: 'set null',
     }),
+    gamePlanSnapshot: jsonb('game_plan_snapshot').$type<GamePlanSnapshot>(),
     opponentSquadVisibility: opponentSquadVisibility(
       'opponent_squad_visibility',
     )

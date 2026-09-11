@@ -20,9 +20,12 @@ export type CreateCompetitionDto = z.infer<typeof createCompetitionSchema>;
 
 export const updateCompetitionSchema = createCompetitionSchema
   .partial()
-  .refine((value) => Object.values(value).some((field) => field !== undefined), {
-    message: 'At least one field is required.',
-  });
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    {
+      message: 'At least one field is required.',
+    },
+  );
 export type UpdateCompetitionDto = z.infer<typeof updateCompetitionSchema>;
 
 const standingFields = {
@@ -83,18 +86,12 @@ const standingFields = {
 
 export const createStandingSchema = z
   .object(standingFields)
-  .refine(
-    (data) => data.played === data.won + data.drawn + data.lost,
-    {
-      message: 'Played matches must equal Won + Drawn + Lost.',
-    },
-  )
-  .refine(
-    (data) => data.points === data.won * 3 + data.drawn,
-    {
-      message: 'Points must equal (Won × 3) + Drawn.',
-    },
-  );
+  .refine((data) => data.played === data.won + data.drawn + data.lost, {
+    message: 'Played matches must equal Won + Drawn + Lost.',
+  })
+  .refine((data) => data.points === data.won * 3 + data.drawn, {
+    message: 'Points must equal (Won × 3) + Drawn.',
+  });
 export type CreateStandingDto = z.infer<typeof createStandingSchema>;
 
 export const updateStandingSchema = z
@@ -110,7 +107,10 @@ export const updateStandingSchema = z
     points: standingFields.points.optional(),
     isOwnTeam: standingFields.isOwnTeam.optional(),
   })
-  .refine((value) => Object.values(value).some((field) => field !== undefined), {
-    message: 'At least one field is required.',
-  });
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    {
+      message: 'At least one field is required.',
+    },
+  );
 export type UpdateStandingDto = z.infer<typeof updateStandingSchema>;

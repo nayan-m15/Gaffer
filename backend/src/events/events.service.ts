@@ -260,9 +260,9 @@ export class EventsService {
       );
     }
 
-    if (dto.gamePlanId) {
-      await this.requireTeamGamePlan(team.id, dto.gamePlanId);
-    }
+    const gamePlan = dto.gamePlanId
+      ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
+      : null;
 
     const teamAthletes = await this.databaseService.database
       .select()
@@ -290,6 +290,26 @@ export class EventsService {
       opponentName: dto.opponentName,
       isHome: dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
+      gamePlanSnapshot: gamePlan
+        ? {
+            name: gamePlan.name,
+            formationId: gamePlan.formationId,
+            assignments: gamePlan.assignments,
+            substituteIds: gamePlan.substituteIds,
+            defensiveStyle: gamePlan.defensiveStyle,
+            defensiveWidth: gamePlan.defensiveWidth,
+            defensiveDepth: gamePlan.defensiveDepth,
+            offensiveStyle: gamePlan.offensiveStyle,
+            offensiveWidth: gamePlan.offensiveWidth,
+            playersInBox: gamePlan.playersInBox,
+            cornersCommitment: gamePlan.cornersCommitment,
+            freeKicksCommitment: gamePlan.freeKicksCommitment,
+            captainId: gamePlan.captainId,
+            freeKickTakerId: gamePlan.freeKickTakerId,
+            penaltyTakerId: gamePlan.penaltyTakerId,
+            cornerTakerId: gamePlan.cornerTakerId,
+          }
+        : null,
       opponentSquadVisibility: dto.opponentSquadVisibility,
       teamColor,
       opponentColor: dto.opponentColor ?? null,
@@ -314,6 +334,7 @@ export class EventsService {
         opponentName: matchValues.opponentName,
         isHome: matchValues.isHome,
         gamePlanId: matchValues.gamePlanId,
+        gamePlanSnapshot: matchValues.gamePlanSnapshot,
         opponentSquadVisibility: matchValues.opponentSquadVisibility,
         teamColor: matchValues.teamColor,
         opponentColor: matchValues.opponentColor,
@@ -402,7 +423,7 @@ export class EventsService {
 
   private async requireTeamGamePlan(teamId: string, gamePlanId: string) {
     const [plan] = await this.databaseService.database
-      .select({ id: gamePlans.id })
+      .select()
       .from(gamePlans)
       .where(and(eq(gamePlans.id, gamePlanId), eq(gamePlans.teamId, teamId)))
       .limit(1);
@@ -410,6 +431,8 @@ export class EventsService {
     if (!plan) {
       throw new BadRequestException('Game plan not found.');
     }
+
+    return plan;
   }
 
   private async requireTeamCompetition(teamId: string, competitionId: string) {

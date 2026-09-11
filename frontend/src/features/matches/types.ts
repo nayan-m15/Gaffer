@@ -34,6 +34,7 @@ export interface MatchRecord {
   teamScore: number;
   opponentScore: number;
   gamePlanId: string | null;
+  gamePlanSnapshot: GamePlanSnapshot | null;
   opponentSquadVisibility: OpponentSquadVisibility;
   teamColor: string | null;
   opponentColor: string | null;
@@ -107,3 +108,4 @@ export interface UpdateMatchClockInput {
   running: boolean;
   elapsedMs: number;
 }
+import type { GamePlanSnapshot } from "@/services/gamePlans";

@@ -13,6 +13,7 @@ import { ApiBody } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
+import { requireCoachTeamId } from '../common/team-access';
 import { TeamsService } from '../teams/teams.service';
 import {
   createEventSchema,
@@ -39,7 +40,7 @@ export class EventsController {
    * live-logging entry) intentionally stay open to all team members.
    */
   private async assertCoach(userId: string): Promise<void> {
-    await this.teamsService.requireCoachTeam(userId);
+    await requireCoachTeamId(this.teamsService, userId);
   }
 
   @Post()

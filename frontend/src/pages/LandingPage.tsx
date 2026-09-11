@@ -4,13 +4,11 @@ import {
   BarChart3,
   CheckCircle2,
   Clock,
-  Download,
   LogIn,
   RefreshCw,
   Shield,
   Sparkles,
   Users,
-  WifiOff,
   UserCheck,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
@@ -126,9 +124,9 @@ function PhilosophySection() {
       desc: "Built for one coach, one phone, and zero budget. No expensive sensor vests, cameras, or complex setups required.",
     },
     {
-      icon: WifiOff,
-      title: "Offline Sideline Resilience",
-      desc: "Survives dead pitch signals. Match events are instantly cached in local storage with 0ms latency and auto-sync when online.",
+      icon: Clock,
+      title: "Practical Sideline Workflow",
+      desc: "A focused live logger keeps the clock, score, cards, and substitutions together during connected matchdays.",
     },
     {
       icon: UserCheck,
@@ -140,7 +138,7 @@ function PhilosophySection() {
   const STEPS = [
     { step: "01", label: "Create Team", desc: "Set squad details & division" },
     { step: "02", label: "Add Roster", desc: "Athletes, numbers & positions" },
-    { step: "03", label: "Set Lineup", desc: "Formations & 1-GK rule check" },
+    { step: "03", label: "Set Lineup", desc: "Formation, starting XI & bench" },
     { step: "04", label: "Log Sideline", desc: "Live score, cards & match report" },
   ];
 
@@ -159,7 +157,7 @@ function PhilosophySection() {
             Engineered for the Realities of Amateur Football
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Everything in {brand.name} is designed around simplicity, offline reliability, and practical matchday speed.
+            Everything in {brand.name} is designed around simplicity, clear records, and practical matchday speed.
           </p>
         </div>
 
@@ -217,9 +215,9 @@ function RosterSection() {
       badge="Squad Roster"
       icon={<Users className="size-4 text-brand" />}
       title="Complete Digital Squad & Athlete Profiles"
-      description="Say goodbye to chaotic spreadsheets and fragmented group chats. Keep athlete records, squad numbers, preferred foot, and appearance stats organized in one unified hub."
+      description="Keep athlete names, dates of birth, squad numbers, positions, availability, and appearance stats organized in one unified hub."
       bullets={[
-        "Full athlete cards: squad numbers, primary positions, contact info, and active/inactive roster status.",
+        "Athlete records: squad numbers, primary positions, availability, and archive status.",
         "Automatic season stats: appearances, goals, assists, minutes, and cards update directly from match logs.",
         "Quick position filters: instantly sort goalkeepers, defenders, midfielders, and attackers.",
       ]}
@@ -242,8 +240,8 @@ function TacticsSection() {
       description="Set your match tactics visually before walking onto the pitch. Position players, test tactical formations, and manage your substitute bench with confidence."
       bullets={[
         "Visual pitch coordinate board: realistic turf markings and draggable starting XI positions.",
-        "Rule enforcement: strictly enforces matchday rules (1 goalkeeper and 10 outfield athletes).",
-        "Instant formation toggling: switch between 4-3-3, 4-4-2, 3-5-2, and custom setups in one click.",
+        "Selection checks: requires 11 unique starters and keeps substitutes separate.",
+        "Formation presets: switch between supported shapes including 4-3-3, 4-4-2, and 3-5-2.",
         "Substitutes drawer: manage bench rotations and reserve players before kickoff.",
       ]}
       visual={<TacticalPitchMockup />}
@@ -262,11 +260,11 @@ function MatchdaySection() {
       id="matchday"
       badge="Matchday HUD"
       icon={<Clock className="size-4 text-brand" />}
-      title="Single-Tap Live Logging with Sideline Offline Sync"
+      title="Single-Tap Live Match Logging"
       description="Record pitchside action without friction. Tap to log goals, assists, yellow/red cards, and substitutions with a live match clock and instant undo support."
       bullets={[
         "Single-tap action buttons: rapid event entry tailored for fast-paced grassroots matches.",
-        "Zero-latency offline engine: IndexedDB caching ensures full functionality even with zero signal on remote pitches.",
+        "Persisted match clock: resume the recorded period and elapsed time after refreshing.",
         "Timeline feed: real-time chronological event stream with easy mistake correction and undo.",
         "Instant match report: automated full-time summary generated the moment the final whistle blows.",
       ]}
@@ -285,12 +283,12 @@ function AnalyticsSection() {
       id="analytics"
       badge="Performance Analytics"
       icon={<BarChart3 className="size-4 text-brand" />}
-      title="Automated League Standings & Season Insights"
-      description="No manual tallying needed. Points, goal differences, win streaks, and squad minutes calculate automatically from your confirmed match logs."
+      title="Season Insights & Competition Standings"
+      description="Review match-derived team and player statistics alongside standings maintained by the coach."
       bullets={[
-        "Automated division table: live points, goal difference, win/draw/loss counts derived dynamically.",
+        "Competition tables: record and validate played, won, drawn, lost, goals, and points.",
         "Player metrics: leaderboards for top goalscorers, playmakers, and disciplinary records.",
-        "Export reports: download matchday summaries and full league sheets as ready-to-share PDFs.",
+        "Match reports: review timelines, scores, player contributions, and corrected events.",
       ]}
       visual={<AnalyticsMockup />}
       reversed
@@ -641,7 +639,7 @@ function TacticalPitchMockup() {
   );
 }
 
-/* ─── Mockup: Live Match Tracking & Offline Status ─────────────────────── */
+/* ─── Mockup: Live Match Tracking & Saved Status ───────────────────────── */
 
 function LiveMatchMockup() {
   return (
@@ -698,11 +696,11 @@ function LiveMatchMockup() {
         </div>
       </div>
 
-      {/* Offline Status Badge */}
+      {/* Saved Status Badge */}
       <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
         <span className="inline-flex items-center gap-1.5 font-medium">
           <RefreshCw className="size-3 animate-spin" />
-          Offline Sync Ready (0ms latency)
+          Match record saved
         </span>
         <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">
           Cached
@@ -726,11 +724,11 @@ function AnalyticsMockup() {
       <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-foreground">League Division Standings</span>
-          <p className="text-[10px] text-muted-foreground">Derived dynamically from fixture logs</p>
+          <p className="text-[10px] text-muted-foreground">Coach-maintained and validated</p>
         </div>
         <span className="inline-flex items-center gap-1 rounded bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">
-          <Download className="size-3 text-brand" />
-          PDF Report
+          <CheckCircle2 className="size-3 text-brand" />
+          Match Report
         </span>
       </div>
 
