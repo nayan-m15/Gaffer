@@ -4,6 +4,15 @@ import { matchEventTeam, matchEventType } from '../database/schema';
 export const matchEventTeamSchema = z.enum(matchEventTeam.enumValues);
 export const matchEventTypeSchema = z.enum(matchEventType.enumValues);
 
+/**
+ * Penalty outcome is stored on the existing `event_type` + `detail` columns
+ * (same shape the live logger writes). A scored penalty is a `goal` with
+ * detail "Penalty" so it counts in score and stats; a miss stays `penalty`
+ * with detail "Penalty missed".
+ */
+export const PENALTY_SCORED_DETAIL = 'Penalty';
+export const PENALTY_MISSED_DETAIL = 'Penalty missed';
+
 export const createMatchLogEventSchema = z
   .object({
     clientRequestId: z.uuid(),
@@ -54,6 +63,23 @@ export const createMatchLogEventSchema = z
         message: 'An incoming squad player is required.',
       });
     }
+    if (
+      value.eventType === 'penalty' &&
+      value.detail === PENALTY_SCORED_DETAIL
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['eventType'],
+        message: 'A scored penalty must be saved as a goal.',
+      });
+    }
+    if (value.eventType === 'goal' && value.detail === PENALTY_MISSED_DETAIL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['eventType'],
+        message: 'A missed penalty cannot be saved as a goal.',
+      });
+    }
   });
 export type CreateMatchLogEventDto = z.infer<typeof createMatchLogEventSchema>;
 
@@ -93,7 +119,26 @@ export const updateMatchLogEventSchema = z
     {
       message: 'At least one field is required.',
     },
-  );
+  )
+  .superRefine((value, ctx) => {
+    if (
+      value.eventType === 'penalty' &&
+      value.detail === PENALTY_SCORED_DETAIL
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['eventType'],
+        message: 'A scored penalty must be saved as a goal.',
+      });
+    }
+    if (value.eventType === 'goal' && value.detail === PENALTY_MISSED_DETAIL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['eventType'],
+        message: 'A missed penalty cannot be saved as a goal.',
+      });
+    }
+  });
 export type UpdateMatchLogEventDto = z.infer<typeof updateMatchLogEventSchema>;
 
 export const matchClockPeriodSchema = z.enum([

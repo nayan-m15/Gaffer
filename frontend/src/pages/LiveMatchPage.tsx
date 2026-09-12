@@ -173,6 +173,24 @@ function formatClock(elapsedMs: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+const FIRST_HALF_MS = 45 * 60_000;
+const SECOND_HALF_MS = 90 * 60_000;
+
+/**
+ * How long the coach gets to respond at the 45:00 / 90:00 whistle before the
+ * period ends on its own. Fires once per half — continuing hands control back
+ * for the rest of that half.
+ */
+const CHECK_IN_MS = 90_000;
+
+type CheckInPeriod = Extract<Period, "first_half" | "second_half">;
+
+function regulationEndMs(period: Period) {
+  if (period === "first_half") return FIRST_HALF_MS;
+  if (period === "second_half") return SECOND_HALF_MS;
+  return null;
+}
+
 function lastName(athlete: MatchSquadAthlete) {
   return athlete.lastName || athlete.firstName;
 }
@@ -273,6 +291,13 @@ export default function LiveMatchPage() {
   const [period, setPeriod] = useState<Period>("not_started");
   const [running, setRunning] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [checkIn, setCheckIn] = useState<{
+    period: CheckInPeriod;
+    endsAt: number;
+  } | null>(null);
+  const [checkInLeftMs, setCheckInLeftMs] = useState(CHECK_IN_MS);
+  /** Periods whose end-of-regulation check-in has already been shown. */
+  const checkedMarksRef = useRef(new Set<Period>());
   const baseRef = useRef(0);
 
   const [target, setTarget] = useState<LogTarget | null>(null);
@@ -327,6 +352,17 @@ export default function LiveMatchPage() {
     elapsedRef.current = elapsed;
     setElapsedMs(elapsed);
     setPeriod(match.clockPeriod);
+    const livePeriod =
+      match.clockPeriod === "first_half" ||
+      match.clockPeriod === "second_half";
+    const regulation =
+      match.clockPeriod === "second_half" ? SECOND_HALF_MS : FIRST_HALF_MS;
+    // Resuming already past the mark means the check-in either happened or was
+    // missed on the previous session. Treat it as spent rather than risk
+    // auto-ending a half the coach is still managing.
+    if (livePeriod && elapsed >= regulation) {
+      checkedMarksRef.current.add(match.clockPeriod);
+    }
     setRunning(Boolean(match.clockStartedAt));
   }, [matchQuery.data]);
 
@@ -496,17 +532,20 @@ export default function LiveMatchPage() {
     (event) => event.eventType === "goal" && event.team === "opponent",
   ).length;
 
-  const persistClock = (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
-    updateClock.mutate(
-      { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
-      {
-        onError: (error) =>
-          setActionError(
-            error instanceof Error ? error.message : "Could not save the match clock.",
-          ),
-      },
-    );
-  };
+  const persistClock = useCallback(
+    (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
+      updateClock.mutate(
+        { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
+        {
+          onError: (error) =>
+            setActionError(
+              error instanceof Error ? error.message : "Could not save the match clock.",
+            ),
+        },
+      );
+    },
+    [updateClock],
+  );
 
   const startClock = () => {
     setRunning(true);
@@ -523,45 +562,111 @@ export default function LiveMatchPage() {
     baseRef.current = 0;
     elapsedRef.current = 0;
     setElapsedMs(0);
+    checkedMarksRef.current.clear();
+    setCheckIn(null);
     setPeriod("first_half");
     setRunning(true);
     persistClock("first_half", true, 0);
   };
 
-  const goHalfTime = () => {
+  const goHalfTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    setCheckIn(null);
     setPeriod("half_time");
     persistClock("half_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
-  };
+  }, [persistClock]);
 
   const startSecondHalf = () => {
-    if (baseRef.current < 45 * 60_000) {
-      baseRef.current = 45 * 60_000;
+    if (baseRef.current < FIRST_HALF_MS) {
+      baseRef.current = FIRST_HALF_MS;
       elapsedRef.current = baseRef.current;
       setElapsedMs(baseRef.current);
     }
+    setCheckIn(null);
     setPeriod("second_half");
     setRunning(true);
     persistClock("second_half", true, elapsedRef.current);
   };
 
-  const goFullTime = () => {
+  const goFullTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    setCheckIn(null);
     setPeriod("full_time");
     persistClock("full_time", false, elapsedRef.current);
     setConfirm(null);
     setSettingsOpen(false);
-  };
+  }, [persistClock]);
 
   const backToFirstHalf = () => {
+    // The 45:00 check-in is deliberately left spent: the clock is already past
+    // the mark, so re-arming it would fire again immediately.
+    setCheckIn(null);
     setPeriod("first_half");
     setRunning(true);
     persistClock("first_half", true, elapsedRef.current);
   };
+
+  const dismissCheckIn = useCallback(() => {
+    // The clock was never stopped, so play simply continues into added time.
+    setCheckIn(null);
+  }, []);
+
+  // Any key counts as the coach responding, same as tapping the screen.
+  useEffect(() => {
+    if (!checkIn) {
+      return;
+    }
+    window.addEventListener("keydown", dismissCheckIn);
+    return () => window.removeEventListener("keydown", dismissCheckIn);
+  }, [checkIn, dismissCheckIn]);
+
+  // Arm the one-time check-in the moment regulation time is reached.
+  useEffect(() => {
+    if (!running || checkIn) {
+      return;
+    }
+    if (period !== "first_half" && period !== "second_half") {
+      return;
+    }
+    const regulation = regulationEndMs(period);
+    if (regulation === null || elapsedMs < regulation) {
+      return;
+    }
+    if (checkedMarksRef.current.has(period)) {
+      return;
+    }
+    checkedMarksRef.current.add(period);
+    setCheckInLeftMs(CHECK_IN_MS);
+    setCheckIn({ period, endsAt: Date.now() + CHECK_IN_MS });
+  }, [elapsedMs, running, period, checkIn]);
+
+  useEffect(() => {
+    if (!checkIn) {
+      return;
+    }
+    const tick = () =>
+      setCheckInLeftMs(Math.max(0, checkIn.endsAt - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 200);
+    return () => window.clearInterval(id);
+  }, [checkIn]);
+
+  // No response in time: end the period exactly as the coach's own button would.
+  useEffect(() => {
+    if (!checkIn || checkInLeftMs > 0) {
+      return;
+    }
+    if (checkIn.period === "first_half") {
+      goHalfTime();
+    } else {
+      goFullTime();
+      setEndOpen(true);
+    }
+  }, [checkIn, checkInLeftMs, goHalfTime, goFullTime]);
 
   const closeComposer = useCallback(() => {
     setComposer({ kind: "closed" });
@@ -1080,6 +1185,12 @@ export default function LiveMatchPage() {
             : "FULL TIME";
 
   const liveLogging = period === "first_half" || period === "second_half";
+  const regulation = regulationEndMs(period);
+  // Broadcast style: 45:00 reads "+1", 46:00 reads "+2".
+  const addedStoppageMin =
+    regulation && elapsedMs >= regulation
+      ? Math.floor((elapsedMs - regulation) / 60_000) + 1
+      : 0;
   const selectedKey = targetKey(target);
   const logEnabled = liveLogging && Boolean(target);
   const targetIsBench =
@@ -1199,7 +1310,7 @@ export default function LiveMatchPage() {
                     Start game
                   </SettingsItem>
                 )}
-                {liveLogging && (
+                {liveLogging && !checkIn && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1242,7 +1353,7 @@ export default function LiveMatchPage() {
               </div>
             )}
           </div>
-          {liveLogging && (
+          {liveLogging && !checkIn && (
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#1c2b36] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1327,6 +1438,11 @@ export default function LiveMatchPage() {
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
                 {periodLabel}
               </span>
+              {addedStoppageMin > 0 ? (
+                  <span className="rounded-full bg-[#ffbe2e]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#ffbe2e]">
+                    +{addedStoppageMin}
+                  </span>
+                ) : null}
             </span>
           </div>
 
@@ -1667,7 +1783,58 @@ export default function LiveMatchPage() {
             </div>
           </div>
         )}
-        {liveLogging && !running && (
+        {checkIn && (
+          <div
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#070d12]/70 p-4 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              checkIn.period === "first_half"
+                ? "End of first half check-in"
+                : "End of match check-in"
+            }
+            onClick={dismissCheckIn}
+          >
+            <div className="w-full max-w-md rounded-2xl border border-[#ffbe2e]/50 bg-[#101920]/95 p-6 text-center shadow-[0_0_40px_rgba(255,190,46,0.18)]">
+              <p className="font-oswald text-2xl tracking-[0.28em] text-[#ffbe2e] sm:text-3xl">
+                {checkIn.period === "first_half"
+                  ? "END OF 1ST HALF"
+                  : "END OF MATCH"}
+              </p>
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#8e9ba8]">
+                {formatClock(
+                  checkIn.period === "first_half"
+                    ? FIRST_HALF_MS
+                    : SECOND_HALF_MS,
+                )}{" "}
+                reached
+              </p>
+              <p
+                className="mt-6 font-oswald text-6xl leading-none tabular-nums text-white sm:text-7xl"
+                aria-live="off"
+              >
+                {formatClock(checkInLeftMs)}
+              </p>
+              <p className="mt-4 text-sm text-[#c5ced6]">
+                {checkIn.period === "first_half"
+                  ? "Half time starts automatically when this reaches zero."
+                  : "The match ends automatically when this reaches zero."}
+              </p>
+              <button
+                type="button"
+                className="mt-6 w-full rounded-xl bg-[#ffbe2e] py-3 font-oswald tracking-widest text-[#07110f]"
+                onClick={dismissCheckIn}
+              >
+                CONTINUE — PLAYING ADDED TIME
+              </button>
+              <p className="mt-3 text-[11px] text-[#8e9ba8]">
+                Tap anywhere to keep the clock running. You then end the{" "}
+                {checkIn.period === "first_half" ? "half" : "match"} yourself.
+              </p>
+            </div>
+          </div>
+        )}
+        {liveLogging && !running && !checkIn && (
           <div
             className="live-match-pause-overlay flex min-h-0 items-center justify-center bg-[#070d12]/70 backdrop-blur-md"
             role="dialog"

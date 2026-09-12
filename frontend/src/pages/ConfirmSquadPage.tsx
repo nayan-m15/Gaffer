@@ -351,9 +351,6 @@ function ColorSwatch({
         <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {label}
         </span>
-        <span className="mt-1 block font-mono text-sm text-foreground">
-          {value.toUpperCase()}
-        </span>
       </span>
       <input
         type="color"
@@ -857,10 +854,22 @@ export default function ConfirmSquadPage() {
                     "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
                     "transition-all duration-200 ease-out",
                     isHome
-                      ? "scale-105 bg-primary text-primary-foreground shadow-[0_0_18px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-                      : "scale-100 border border-border text-muted-foreground hover:border-primary/40",
+                      ? "scale-105"
+                      : "scale-100 border hover:opacity-90",
                     isHome && venuePulse > 0 && "animate-venue-pop",
                   )}
+                  style={
+                    isHome
+                      ? {
+                          backgroundColor: ownColor,
+                          color: contrastText(ownColor),
+                          boxShadow: `0 0 18px ${ownColor}8c`,
+                        }
+                      : {
+                          borderColor: `${ownColor}66`,
+                          color: ownColor,
+                        }
+                  }
                 >
                   Home
                 </button>
@@ -872,10 +881,22 @@ export default function ConfirmSquadPage() {
                     "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
                     "transition-all duration-200 ease-out",
                     !isHome
-                      ? "scale-105 bg-primary text-primary-foreground shadow-[0_0_18px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-                      : "scale-100 border border-border text-muted-foreground hover:border-primary/40",
+                      ? "scale-105"
+                      : "scale-100 border hover:opacity-90",
                     !isHome && venuePulse > 0 && "animate-venue-pop",
                   )}
+                  style={
+                    !isHome
+                      ? {
+                          backgroundColor: oppColor,
+                          color: contrastText(oppColor),
+                          boxShadow: `0 0 18px ${oppColor}8c`,
+                        }
+                      : {
+                          borderColor: `${oppColor}66`,
+                          color: oppColor,
+                        }
+                  }
                 >
                   Away
                 </button>

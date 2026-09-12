@@ -8,6 +8,12 @@ import type {
   UpdateMatchLogEventInput,
 } from "./types";
 
+/** Same values the live logger writes onto `match_events.detail`. */
+const PENALTY_SCORED_DETAIL = "Penalty";
+const PENALTY_MISSED_DETAIL = "Penalty missed";
+
+export type PenaltyOutcome = "goal" | "miss" | "";
+
 export type EventFormDraft = {
   team: MatchEventTeam;
   minute: number;
@@ -16,6 +22,7 @@ export type EventFormDraft = {
   opponentPlayerId: string;
   opponentLabel: string;
   note: string;
+  penaltyOutcome: PenaltyOutcome;
   assistAthleteId: string;
   assistOpponentPlayerId: string;
   assistOpponentLabel: string;
@@ -76,6 +83,7 @@ export function emptyEventDraft(
     opponentPlayerId: "",
     opponentLabel: "",
     note: "",
+    penaltyOutcome: "",
     assistAthleteId: "",
     assistOpponentPlayerId: "",
     assistOpponentLabel: "",
@@ -85,6 +93,76 @@ export function emptyEventDraft(
     injuryLedToSub: false,
     ...overrides,
   };
+}
+
+export function penaltyOutcomeFromEvent(event: {
+  eventType: MatchEventType;
+  detail: string | null;
+}): PenaltyOutcome {
+  if (event.eventType === "goal" && event.detail === PENALTY_SCORED_DETAIL) {
+    return "goal";
+  }
+  if (event.eventType === "penalty" && event.detail === PENALTY_MISSED_DETAIL) {
+    return "miss";
+  }
+  return "";
+}
+
+export function draftFromLoggedEvent(
+  event: MatchLogEvent,
+  options: {
+    linkedAssist: MatchLogEvent | null;
+    linkedSub: MatchLogEvent | null;
+    roster: boolean;
+  },
+): EventFormDraft {
+  const penaltyLike =
+    event.eventType === "penalty" ||
+    (event.eventType === "goal" && event.detail === PENALTY_SCORED_DETAIL);
+  const incomingRaw =
+    event.eventType === "substitution" ? event.detail : options.linkedSub?.detail;
+  const reservedDetail =
+    event.eventType === "substitution" ||
+    looksLikeId(event.detail) ||
+    penaltyLike ||
+    event.detail === PENALTY_SCORED_DETAIL ||
+    event.detail === PENALTY_MISSED_DETAIL;
+
+  return emptyEventDraft({
+    team: event.team,
+    minute: event.minute,
+    eventType: event.eventType === "assist" ? "goal" : penaltyLike ? "penalty" : event.eventType,
+    athleteId: event.athleteId ?? "",
+    opponentPlayerId: event.opponentPlayerId ?? "",
+    opponentLabel: event.opponentLabel ?? "",
+    note: reservedDetail ? "" : (event.detail ?? ""),
+    penaltyOutcome: penaltyOutcomeFromEvent(event),
+    assistAthleteId: options.linkedAssist?.athleteId ?? "",
+    assistOpponentPlayerId: options.linkedAssist?.opponentPlayerId ?? "",
+    assistOpponentLabel: options.linkedAssist?.opponentLabel ?? "",
+    incomingAthleteId:
+      event.team === "own" && looksLikeId(incomingRaw) ? incomingRaw ?? "" : "",
+    incomingOpponentPlayerId:
+      event.team === "opponent" && options.roster && looksLikeId(incomingRaw)
+        ? incomingRaw ?? ""
+        : "",
+    incomingOpponentLabel:
+      event.team === "opponent" && !options.roster ? (incomingRaw ?? "") : "",
+    injuryLedToSub: Boolean(options.linkedSub),
+  });
+}
+
+export function persistedEventType(draft: EventFormDraft): MatchEventType {
+  if (draft.eventType === "penalty") {
+    return draft.penaltyOutcome === "goal" ? "goal" : "penalty";
+  }
+  return draft.eventType;
+}
+
+function penaltyDetail(draft: EventFormDraft) {
+  return draft.penaltyOutcome === "goal"
+    ? PENALTY_SCORED_DETAIL
+    : PENALTY_MISSED_DETAIL;
 }
 
 export function linkedSubstitutionForInjury(
@@ -178,6 +256,16 @@ function noteOrUndefined(draft: EventFormDraft) {
 }
 
 function primaryCreateInput(draft: EventFormDraft): CreateMatchLogEventInput {
+  if (draft.eventType === "penalty") {
+    return {
+      clientRequestId: crypto.randomUUID(),
+      team: draft.team,
+      eventType: persistedEventType(draft),
+      minute: draft.minute,
+      ...subjectFields(draft),
+      detail: penaltyDetail(draft),
+    };
+  }
   const detail =
     draft.eventType === "substitution"
       ? incomingDetail(draft)
@@ -193,6 +281,18 @@ function primaryCreateInput(draft: EventFormDraft): CreateMatchLogEventInput {
 }
 
 function primaryUpdateInput(draft: EventFormDraft): UpdateMatchLogEventInput {
+  if (draft.eventType === "penalty") {
+    return {
+      eventType: persistedEventType(draft),
+      minute: draft.minute,
+      athleteId: draft.team === "own" ? draft.athleteId || null : null,
+      opponentPlayerId:
+        draft.team === "opponent" ? draft.opponentPlayerId || null : null,
+      opponentLabel:
+        draft.team === "opponent" ? draft.opponentLabel.trim() || null : null,
+      detail: penaltyDetail(draft),
+    };
+  }
   const detail =
     draft.eventType === "substitution"
       ? incomingDetail(draft) ?? null
@@ -214,7 +314,8 @@ export function planAddEvent(draft: EventFormDraft): PlannedOp[] {
     {
       kind: "create",
       input: primaryCreateInput(draft),
-      captureId: draft.eventType === "goal" && hasAssistSelection(draft),
+      captureId:
+        draft.eventType === "goal" && hasAssistSelection(draft),
     },
   ];
 
@@ -272,7 +373,7 @@ export function planEditEvent({
     },
   ];
 
-  if (event.eventType === "goal" && draft.eventType !== "goal" && linkedAssist) {
+  if (event.eventType === "goal" && persistedEventType(draft) !== "goal" && linkedAssist) {
     ops.push({ kind: "delete", eventId: linkedAssist.id });
   }
 
