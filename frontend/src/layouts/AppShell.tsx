@@ -23,10 +23,10 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <Sidebar />
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
         <div className="flex-1">
           <Outlet />
         </div>
