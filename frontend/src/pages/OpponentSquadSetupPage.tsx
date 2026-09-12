@@ -18,6 +18,7 @@ import {
   assignmentsFromPlayers,
   MAX_OPPONENT_PLAYERS,
   remapOpponentAssignments,
+  unassignedPlayers,
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
@@ -66,6 +67,7 @@ export default function OpponentSquadSetupPage() {
   const [shirtInput, setShirtInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  const [formationNotice, setFormationNotice] = useState<string | null>(null);
 
   const oppColor = context.opponentColor;
   const showSquad = visibility !== "none";
@@ -74,6 +76,10 @@ export default function OpponentSquadSetupPage() {
     () =>
       Object.values(assignments).filter((value) => Boolean(value)).length,
     [assignments],
+  );
+  const benchPlayers = useMemo(
+    () => unassignedPlayers(players, assignments),
+    [players, assignments],
   );
 
   const goBack = () => {
@@ -142,15 +148,23 @@ export default function OpponentSquadSetupPage() {
     if (nextId === formationId || !FORMATIONS[nextId]) {
       return;
     }
+    const previouslyPlaced = Object.values(assignments).filter(Boolean).length;
     const remapped = remapOpponentAssignments(
       formationId,
       nextId,
       assignments,
     );
+    const stillPlaced = Object.values(remapped).filter(Boolean).length;
+    const movedToBench = previouslyPlaced - stillPlaced;
     setFormationId(nextId);
     setAssignments(remapped);
     setPlayers((current) =>
       applyAssignmentsToPlayers(current, nextId, remapped),
+    );
+    setFormationNotice(
+      movedToBench > 0
+        ? `${movedToBench} player${movedToBench === 1 ? "" : "s"} moved to unassigned — tap an empty slot to place them.`
+        : null,
     );
   };
 
@@ -159,6 +173,9 @@ export default function OpponentSquadSetupPage() {
     setPlayers((current) =>
       applyAssignmentsToPlayers(current, formationId, next),
     );
+    if (unassignedPlayers(players, next).length === 0) {
+      setFormationNotice(null);
+    }
   };
 
   return (
@@ -303,29 +320,42 @@ export default function OpponentSquadSetupPage() {
 
             {visibility === "numbers" ? (
               <ul className="mt-4 flex flex-wrap gap-2">
-                {players.map((player) => (
-                  <li key={player.shirtNumber}>
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium text-foreground"
-                      style={{
-                        backgroundColor: `${oppColor}33`,
-                        boxShadow: `inset 0 0 0 1px ${oppColor}`,
-                      }}
-                    >
-                      <span className="font-semibold">
-                        #{player.shirtNumber}
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded-full p-0.5 opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        aria-label={`Remove opponent #${player.shirtNumber}`}
-                        onClick={() => removePlayer(player.shirtNumber)}
+                {players.map((player) => {
+                  const onPitch = !benchPlayers.some(
+                    (entry) => entry.shirtNumber === player.shirtNumber,
+                  );
+                  return (
+                    <li key={player.shirtNumber}>
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium text-foreground"
+                        style={{
+                          backgroundColor: onPitch
+                            ? `${oppColor}33`
+                            : "transparent",
+                          boxShadow: `inset 0 0 0 1px ${oppColor}`,
+                          opacity: onPitch ? 1 : 0.7,
+                        }}
                       >
-                        <X className="size-3.5" />
-                      </button>
-                    </span>
-                  </li>
-                ))}
+                        <span className="font-semibold">
+                          #{player.shirtNumber}
+                        </span>
+                        {onPitch ? null : (
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Bench
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="rounded-full p-0.5 opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                          aria-label={`Remove opponent #${player.shirtNumber}`}
+                          onClick={() => removePlayer(player.shirtNumber)}
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <ul className="mt-4 flex flex-col gap-2">
@@ -353,7 +383,11 @@ export default function OpponentSquadSetupPage() {
                       >
                         {player.position}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Unassigned
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
@@ -417,6 +451,34 @@ export default function OpponentSquadSetupPage() {
                 opponentColor={oppColor}
                 onAssignmentsChange={handleAssignmentsChange}
               />
+              {formationNotice ? (
+                <p role="status" className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+                  {formationNotice}
+                </p>
+              ) : null}
+              {benchPlayers.length > 0 ? (
+                <div className="mt-3 rounded-xl border border-dashed border-border bg-background/60 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                    Unassigned · tap an empty slot to place
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {benchPlayers.map((player) => (
+                      <li
+                        key={player.shirtNumber}
+                        className="rounded-full px-2.5 py-1 text-sm font-semibold tabular-nums"
+                        style={{ boxShadow: `inset 0 0 0 1px ${oppColor}` }}
+                      >
+                        #{player.shirtNumber}
+                        {player.name ? (
+                          <span className="ml-1 font-medium text-muted-foreground">
+                            {player.name}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   date,
@@ -11,7 +12,6 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -336,28 +336,6 @@ export interface GamePlanSnapshot {
   cornerTakerId: string | null;
 }
 
-export const competitionType = pgEnum('competition_type', [
-  'league',
-  'cup',
-  'friendly',
-]);
-
-// A league or cup the team is competing in this season.
-export const competitions = pgTable(
-  'competitions',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    teamId: uuid('team_id')
-      .notNull()
-      .references(() => teams.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    type: competitionType('type').notNull(),
-    season: text('season'), // e.g. "2025/26" — optional
-    ...timestamps,
-  },
-  (table) => [index('competitions_team_id_index').on(table.teamId)],
-);
-
 export const events = pgTable(
   'events',
   {
@@ -417,12 +395,71 @@ export const eventRsvps = pgTable(
   ],
 );
 
+// A coach-defined date range that groups a team's matches for aggregate
+// statistics. A match belongs to the season whose [startDate, endDate] contains
+// its event's scheduledAt — matches carry no competition link of their own
+// (startMatch never sets matches.competitionId), so the date range is the only
+// reliable grouping key. Ranges may not overlap within a team, and at most one
+// season per team is flagged current (enforced by the partial unique index).
+export const seasons = pgTable(
+  'seasons',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(), // e.g. "2025/26"
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    endDate: date('end_date', { mode: 'string' }).notNull(),
+    isCurrent: boolean('is_current').default(false).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('seasons_team_id_index').on(table.teamId),
+    index('seasons_team_start_date_index').on(table.teamId, table.startDate),
+    uniqueIndex('seasons_team_name_unique').on(table.teamId, table.name),
+    uniqueIndex('seasons_team_current_unique')
+      .on(table.teamId)
+      .where(sql`${table.isCurrent}`),
+  ],
+);
+
+export const competitionType = pgEnum('competition_type', [
+  'league',
+  'cup',
+  'friendly',
+]);
+
 // How much opponent-player identity the coach records for a given match.
 export const opponentSquadVisibility = pgEnum('opponent_squad_visibility', [
   'none',
   'numbers',
   'full',
 ]);
+
+// A league or cup the team is competing in this season.
+export const competitions = pgTable(
+  'competitions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: competitionType('type').notNull(),
+    seasonId: uuid('season_id').references(() => seasons.id, {
+      onDelete: 'set null',
+    }),
+    // @deprecated — free-text label superseded by seasonId. Still read by the
+    // competition form and standings display; dropped in a follow-up.
+    season: text('season'), // e.g. "2025/26" — optional
+    ...timestamps,
+  },
+  (table) => [
+    index('competitions_team_id_index').on(table.teamId),
+    index('competitions_season_id_index').on(table.seasonId),
+  ],
+);
 
 // One row per event of type 'match'. Populated by the (future) live match
 // logger; this feature only reads from it.
@@ -621,6 +658,13 @@ export const matchEvents = pgTable(
   (table) => [
     index('match_events_match_id_index').on(table.matchId),
     index('match_events_opponent_player_id_index').on(table.opponentPlayerId),
+    // Serves the per-athlete event counts in StatisticsService, which filter on
+    // (match_id, athlete_id, team, event_type) once per athlete_match_stats row.
+    index('match_events_match_athlete_type_index').on(
+      table.matchId,
+      table.athleteId,
+      table.eventType,
+    ),
     uniqueIndex('match_events_match_request_unique')
       .on(table.matchId, table.clientRequestId)
       .where(sql`${table.clientRequestId} is not null`),

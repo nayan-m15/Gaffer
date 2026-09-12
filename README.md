@@ -57,6 +57,27 @@ Frontend runs on `http://localhost:5173`.
 Backend runs on `http://localhost:3000`.
 Swagger docs are available at `http://localhost:3000/api/docs`.
 
+### Demo account
+
+A shared demo coach seeded with a full season of match history, so the
+Statistics page has enough data to show trends, period comparisons and player
+comparison without logging matches by hand.
+
+```
+http://localhost:5173/login
+email:    demo.coach@example.com
+password: password123
+```
+
+It lives in whichever database `DATABASE_URL` points at and persists until
+someone removes it. To recreate it (dev servers must be running):
+
+```bash
+node backend/scripts/seed-demo-account.mjs           # create if missing (safe to re-run)
+node backend/scripts/seed-demo-account.mjs --reset   # rebuild from scratch
+node backend/scripts/seed-demo-account.mjs --clean   # remove it
+```
+
 ## Testing
 
 Three layers of automated tests exist, run from the repo root unless noted:

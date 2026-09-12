@@ -283,10 +283,11 @@ function PlayerMarker({
   return (
     <button
       type="button"
+      disabled={stats.red}
       onClick={onClick}
       onPointerDown={onPointerDown}
       className={cn(
-        "live-marker-hit relative flex -translate-x-1/2 -translate-y-1/2 flex-col items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+        "live-marker-hit relative flex -translate-x-1/2 -translate-y-1/2 flex-col items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-not-allowed",
         selected && "is-selected",
       )}
     >
@@ -332,8 +333,14 @@ function PositionedMarker({
       className="absolute"
       style={
         orientation === "vertical"
-          ? { left: `${y}%`, top: `${100 - x}%` }
-          : { left: `${x}%`, top: `${y}%` }
+          ? {
+              left: `clamp(var(--live-marker-inset, 0px), ${y}%, calc(100% - var(--live-marker-inset, 0px)))`,
+              top: `clamp(var(--live-marker-inset, 0px), ${100 - x}%, calc(100% - var(--live-marker-inset, 0px)))`,
+            }
+          : {
+              left: `clamp(var(--live-marker-inset, 0px), ${x}%, calc(100% - var(--live-marker-inset, 0px)))`,
+              top: `clamp(var(--live-marker-inset, 0px), ${y}%, calc(100% - var(--live-marker-inset, 0px)))`,
+            }
       }
     >
       <PlayerMarker {...markerProps} />
@@ -620,10 +627,11 @@ function BenchPlayer({
   return (
     <button
       type="button"
+      disabled={stats.red}
       onClick={onClick}
       onPointerDown={onPointerDown}
       className={cn(
-        "live-bench-player live-marker-hit flex min-w-16 flex-col items-center focus-visible:outline-none",
+        "live-bench-player live-marker-hit flex min-w-16 flex-col items-center focus-visible:outline-none disabled:cursor-not-allowed",
         selected && "is-selected",
       )}
     >

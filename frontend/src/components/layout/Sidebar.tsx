@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -62,6 +62,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const { user, team, accountKind, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -97,6 +98,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const isRelatedMatchReport =
+            item.path === "/live-logger" &&
+            /^\/matches\/[^/]+\/report\/?$/.test(pathname);
 
           if (item.requiresTeam && !team) {
             return (
@@ -115,11 +119,12 @@ export function Sidebar({ className, variant }: SidebarProps) {
             <NavLink
               key={item.label}
               to={item.path}
+              aria-current={isRelatedMatchReport ? "page" : undefined}
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
                   "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  isActive
+                  isActive || isRelatedMatchReport
                     ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )

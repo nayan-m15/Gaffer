@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
 import { GamePlansModule } from './game-plans/game-plans.module';
 import { MatchesModule } from './matches/matches.module';
+import { SeasonsModule } from './seasons/seasons.module';
 import { StatisticsModule } from './statistics/statistics.module';
 import { TeamsModule } from './teams/teams.module';
 import { AthletesModule } from './athletes/athletes.module';
@@ -28,6 +29,7 @@ import { PlayerModule } from './player/player.module';
     GamePlansModule,
     MatchesModule,
     DashboardModule,
+    SeasonsModule,
     StatisticsModule,
     ProfileModule,
   ],

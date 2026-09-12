@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -11,11 +12,14 @@ import {
   ArrowLeftRight,
   HeartPulse,
   Loader2,
+  Pause,
+  Play,
   RotateCcw,
   Settings,
   ShieldAlert,
   Target,
 } from "lucide-react";
+import { GiWhistle } from "react-icons/gi";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
@@ -46,6 +50,7 @@ import {
   hasPriorYellow,
   isPairedAssistEvent,
   isSecondYellow,
+  linkedAssistsForGoal,
   pairAssistsToGoals,
 } from "@/features/matches/event-visuals";
 import { EventTypeGlyph } from "@/features/matches/EventTypeGlyph";
@@ -242,19 +247,6 @@ function loggingForLabel(
   return `LOGGING FOR ${opponentShirtLabel(target.player, visibility).toUpperCase()}`;
 }
 
-function WhistleIcon({ size = 56 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      <path
-        d="M10 28c0-6 5-11 12-11h16c8 0 14 6 14 13 0 4-2 8-6 10l4 8c1 2 0 4-2 5h-8c-2 0-3-1-4-3l-3-7H22c-7 0-12-5-12-10Z"
-        fill="#00d99a"
-      />
-      <circle cx="22" cy="30" r="5" fill="#070d12" />
-      <path d="M42 22h10c4 0 7 3 7 7v2c0 4-3 7-7 7h-4" stroke="#00d99a" strokeWidth="3" />
-    </svg>
-  );
-}
-
 /**
  * Full-screen live logger. Period/pause/clock are client-side only and reset
  * on refresh — v1 does not persist elapsed time.
@@ -351,10 +343,46 @@ export default function LiveMatchPage() {
     return () => window.clearInterval(id);
   }, [running]);
 
+  useEffect(() => {
+    if (running) {
+      return;
+    }
+    setEventPickerOpen(false);
+    setComposer({ kind: "closed" });
+  }, [running]);
+
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
+  );
+  const dismissedOwnIds = useMemo(
+    () =>
+      new Set(
+        timeline
+          .filter(
+            (event) =>
+              event.team === "own" &&
+              event.eventType === "red_card" &&
+              event.athleteId,
+          )
+          .map((event) => event.athleteId!),
+      ),
+    [timeline],
+  );
+  const dismissedOppIds = useMemo(
+    () =>
+      new Set(
+        timeline
+          .filter(
+            (event) =>
+              event.team === "opponent" &&
+              event.eventType === "red_card" &&
+              event.opponentPlayerId,
+          )
+          .map((event) => event.opponentPlayerId!),
+      ),
+    [timeline],
   );
   const assistsByGoal = useMemo(
     () => pairAssistsToGoals(timeline),
@@ -544,6 +572,22 @@ export default function LiveMatchPage() {
       if (!matchId || persistLockRef.current) {
         return;
       }
+      const dismissed =
+        (input.team === "own" &&
+          Boolean(input.athleteId && dismissedOwnIds.has(input.athleteId))) ||
+        (input.team === "opponent" &&
+          Boolean(
+            input.opponentPlayerId &&
+              dismissedOppIds.has(input.opponentPlayerId),
+          ));
+      if (dismissed) {
+        closeComposer();
+        setEventPickerOpen(false);
+        setActionError(
+          "That player has been sent off. Undo the red card before logging another action.",
+        );
+        return;
+      }
       persistLockRef.current = true;
       setActionError(null);
 
@@ -664,10 +708,12 @@ export default function LiveMatchPage() {
       matchId,
       currentMinute,
       timeline,
+      dismissedOwnIds,
+      dismissedOppIds,
       squad,
       opponentSquad,
-      updateEvent,
       logEvent,
+      updateEvent,
       closeComposer,
     ],
   );
@@ -906,6 +952,15 @@ export default function LiveMatchPage() {
   };
 
   const selectOwn = (athlete: MatchSquadAthlete) => {
+    if (dismissedOwnIds.has(athlete.id)) {
+      setComposer({ kind: "closed" });
+      setTarget(null);
+      setEventPickerOpen(false);
+      setActionError(
+        "That player has been sent off. Undo the red card before logging another action.",
+      );
+      return;
+    }
     if (composer.kind === "assist-pick" && composer.team === "own") {
       completeAssist(athlete);
       return;
@@ -935,6 +990,15 @@ export default function LiveMatchPage() {
   };
 
   const selectOpp = (player: OpponentMatchPlayer) => {
+    if (dismissedOppIds.has(player.id)) {
+      setComposer({ kind: "closed" });
+      setTarget(null);
+      setEventPickerOpen(false);
+      setActionError(
+        "That player has been sent off. Undo the red card before logging another action.",
+      );
+      return;
+    }
     if (composer.kind === "assist-pick" && composer.team === "opponent") {
       completeAssist(player);
       return;
@@ -966,15 +1030,7 @@ export default function LiveMatchPage() {
   const handleUndo = async (eventId: string) => {
     setActionError(null);
     const targetEvent = timeline.find((event) => event.id === eventId);
-    const linkedAssists =
-      targetEvent?.eventType === "goal"
-        ? timeline.filter(
-            (event) =>
-              event.eventType === "assist" &&
-              event.detail === eventId &&
-              !event.pending,
-          )
-        : [];
+    const linkedAssists = linkedAssistsForGoal(timeline, targetEvent);
     try {
       await deleteEvent.mutateAsync(eventId);
       for (const assist of linkedAssists) {
@@ -1113,7 +1169,7 @@ export default function LiveMatchPage() {
   }
 
   return (
-    <div className="live-match flex min-h-dvh flex-col">
+    <div className="live-match relative flex min-h-dvh flex-col">
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />
@@ -1186,6 +1242,35 @@ export default function LiveMatchPage() {
               </div>
             )}
           </div>
+          {liveLogging && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#1c2b36] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
+              onClick={() => {
+                if (running) {
+                  pauseClock();
+                } else {
+                  startClock();
+                }
+              }}
+            >
+              {running ? (
+                <Pause className="size-3.5 sm:size-4" />
+              ) : (
+                <Play className="size-3.5 sm:size-4" />
+              )}
+              {running ? "Pause" : "Resume"}
+            </button>
+          )}
+          {liveLogging && period === "first_half" && (
+            <button
+              type="button"
+              className="rounded-md bg-[#3b82f6] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
+              onClick={() => setConfirm("half")}
+            >
+              Half Time
+            </button>
+          )}
           <button
             type="button"
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1244,20 +1329,6 @@ export default function LiveMatchPage() {
               </span>
             </span>
           </div>
-
-          {period === "half_time" && (
-            <PeriodSummary
-              title="HALF-TIME"
-              ownName={ownName}
-              oppName={oppName}
-              timeline={timeline}
-              onContinue={startSecondHalf}
-              continueLabel="START 2ND HALF"
-              onBack={backToFirstHalf}
-              backLabel="← Back to 1st Half"
-              compact
-            />
-          )}
 
           {period === "full_time" && (
             <PeriodSummary
@@ -1338,27 +1409,6 @@ export default function LiveMatchPage() {
                 </button>
               )}
             </LivePitch>
-            {period === "not_started" && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/60 backdrop-blur-md">
-                <button
-                  type="button"
-                  onClick={startFirstHalf}
-                  className={cn(
-                    "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
-                    "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
-                    "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
-                  )}
-                >
-                  <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
-                    <WhistleIcon size={36} />
-                  </span>
-                  <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
-                    START GAME
-                  </span>
-                </button>
-              </div>
-            )}
           </div>
         </section>
 
@@ -1558,7 +1608,122 @@ export default function LiveMatchPage() {
           </section>
 
         </div>
+
+        {period === "half_time" && (
+          <div
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#070d12]/70 p-4 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Half time"
+          >
+            <div className="w-full max-w-md rounded-2xl border border-[#1c2b36] bg-[#101920]/95 p-6 shadow-[0_0_40px_rgba(0,0,0,0.45)]">
+              <p className="font-oswald text-center text-2xl tracking-[0.28em] text-white sm:text-3xl">
+                HALF TIME
+              </p>
+              <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+                <div className="flex flex-col items-end">
+                  <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                    {homeAbbrev}
+                  </p>
+                  <span
+                    className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                    style={{ backgroundColor: homeColor }}
+                  />
+                </div>
+                <p className="font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+                  <span style={{ color: homeColor }}>{homeScore}</span>
+                  <span className="mx-1.5 text-2xl text-[#8e9ba8]">-</span>
+                  <span style={{ color: awayColor }}>{awayScore}</span>
+                </p>
+                <div className="flex flex-col items-start">
+                  <p className="font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                    {awayAbbrev}
+                  </p>
+                  <span
+                    className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                    style={{ backgroundColor: awayColor }}
+                  />
+                </div>
+              </div>
+              <HalfTimeFacts
+                ownName={ownName}
+                oppName={oppName}
+                timeline={timeline}
+              />
+              <button
+                type="button"
+                className="mt-6 w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f]"
+                onClick={startSecondHalf}
+              >
+                START SECOND HALF
+              </button>
+              <button
+                type="button"
+                className="mt-2 w-full py-2 text-center text-xs font-medium tracking-wide text-[#8e9ba8] hover:text-white"
+                onClick={backToFirstHalf}
+              >
+                Back to 1st Half
+              </button>
+            </div>
+          </div>
+        )}
+        {liveLogging && !running && (
+          <div
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center bg-[#070d12]/70 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Match paused"
+          >
+            <button
+              type="button"
+              onClick={startClock}
+              className={cn(
+                "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
+                "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
+                "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
+              )}
+            >
+              <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
+                <Play className="size-8 fill-[#00d99a] text-[#00d99a]" />
+              </span>
+              <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
+                RESUME
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e9ba8]">
+                Match paused
+              </span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {period === "not_started" && (
+        <div
+          className="live-match-kickoff-overlay flex items-center justify-center bg-[#070d12]/70 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Start game"
+        >
+          <button
+            type="button"
+            onClick={startFirstHalf}
+            className={cn(
+              "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
+              "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
+              "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
+            )}
+          >
+            <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
+              <GiWhistle className="size-9 text-[#00d99a]" aria-hidden />
+            </span>
+            <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
+              START GAME
+            </span>
+          </button>
+        </div>
+      )}
 
       {eventPickerOpen && target && (
         <Overlay onClose={() => setEventPickerOpen(false)} wide>
@@ -1879,6 +2044,54 @@ function Overlay({
       >
         {children}
       </div>
+    </div>
+  );
+}
+
+function halfTimeCount(
+  timeline: MatchLogEvent[],
+  type: MatchEventType,
+  side: MatchEventTeam,
+) {
+  return timeline.filter(
+    (event) => event.eventType === type && event.team === side,
+  ).length;
+}
+
+function HalfTimeFacts({
+  ownName,
+  oppName,
+  timeline,
+}: {
+  ownName: string;
+  oppName: string;
+  timeline: MatchLogEvent[];
+}) {
+  const rows: { type: MatchEventType; label: string }[] = [
+    { type: "goal", label: "Goals" },
+    { type: "yellow_card", label: "Yellow" },
+    { type: "red_card", label: "Red" },
+    { type: "substitution", label: "Subs" },
+  ];
+
+  return (
+    <div className="mt-5 grid grid-cols-3 text-center text-sm">
+      <p className="text-[#8e9ba8]">{ownName}</p>
+      <p className="text-[#8e9ba8]"> </p>
+      <p className="text-[#8e9ba8]">{oppName}</p>
+      {rows.map((row) => (
+        <Fragment key={row.type}>
+          <p className="font-oswald text-2xl">
+            {halfTimeCount(timeline, row.type, "own")}
+          </p>
+          <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+            {row.label}
+          </p>
+          <p className="font-oswald text-2xl">
+            {halfTimeCount(timeline, row.type, "opponent")}
+          </p>
+        </Fragment>
+      ))}
     </div>
   );
 }
