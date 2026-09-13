@@ -9,6 +9,7 @@ import { TeamsService } from '../teams/teams.service';
 import type { SessionUser } from '../auth/auth.guard';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
+import { WeatherService } from '../weather/weather.service';
 
 const user = {
   id: 'user-id',
@@ -49,6 +50,10 @@ describe('EventsController', () => {
     requireCoachTeam: jest.fn(),
   };
 
+  const mockWeatherService = {
+    getEventWeather: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -68,6 +73,10 @@ describe('EventsController', () => {
         {
           provide: TeamsService,
           useValue: mockTeamsService,
+        },
+        {
+          provide: WeatherService,
+          useValue: mockWeatherService,
         },
       ],
     }).compile();
@@ -196,6 +205,17 @@ describe('EventsController', () => {
         'user-id',
         'event-id',
       );
+    });
+
+    it('does not reveal weather for an event outside the caller team', async () => {
+      mockEventsService.findOne.mockRejectedValue(
+        new ForbiddenException('Event is not available to this account.'),
+      );
+
+      await expect(controller.weather(user, 'event-id')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(mockWeatherService.getEventWeather).not.toHaveBeenCalled();
     });
 
     it('lets an assistant start a match (live-logging entry)', async () => {

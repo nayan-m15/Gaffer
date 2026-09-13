@@ -134,6 +134,20 @@
       "when": 1789131395527,
       "tag": "0017_season_statistics",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789200000001,
+      "tag": "0018_acoustic_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789200000002,
+      "tag": "0019_yielding_sir_ram",
+      "breakpoints": true
     }
   ]
 }

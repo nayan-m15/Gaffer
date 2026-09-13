@@ -4,6 +4,7 @@ import {
   cancelEvent,
   createEvent,
   fetchEvent,
+  fetchEventWeather,
   fetchEvents,
   startMatch,
   updateEvent,
@@ -39,13 +40,47 @@ export function useEvent(eventId: string | undefined) {
   });
 }
 
+export function useEventWeather(
+  eventId: string | undefined,
+  scheduledAt: string | undefined,
+  weatherLatitude: number | null | undefined,
+  weatherLongitude: number | null | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [
+      ...eventsQueryKey,
+      eventId,
+      "weather",
+      scheduledAt,
+      weatherLatitude,
+      weatherLongitude,
+    ],
+    queryFn: () => fetchEventWeather(eventId!),
+    enabled: enabled && Boolean(eventId),
+    staleTime: 30 * 60 * 1000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(2_000 * 2 ** attempt, 10_000),
+    refetchInterval: (query) =>
+      query.state.data?.status === "unavailable" ? 60_000 : 30 * 60 * 1000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+async function invalidateEventData(queryClient: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: eventsQueryKey }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+  ]);
+}
+
 export function useCreateEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: createEvent,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: eventsQueryKey });
+      await invalidateEventData(queryClient);
     },
   });
 }
@@ -57,7 +92,7 @@ export function useUpdateEvent() {
     mutationFn: ({ id, input }: { id: string; input: UpdateEventInput }) =>
       updateEvent(id, input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: eventsQueryKey });
+      await invalidateEventData(queryClient);
     },
   });
 }
@@ -68,7 +103,7 @@ export function useCancelEvent() {
   return useMutation({
     mutationFn: cancelEvent,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: eventsQueryKey });
+      await invalidateEventData(queryClient);
     },
   });
 }

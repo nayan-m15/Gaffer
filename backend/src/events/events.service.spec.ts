@@ -272,4 +272,55 @@ describe('EventsService', () => {
       );
     });
   });
+
+  describe('update', () => {
+    it('edits the venue address independently from forecast coordinates', async () => {
+      const setEvent = jest.fn();
+      const eventUpdate = {
+        set: setEvent.mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 'event-id' }]),
+          }),
+        }),
+      };
+      const matchUpdate = {
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue(undefined),
+        }),
+      };
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(
+          selectChain([
+            {
+              ...teamEvent,
+              type: 'training',
+              competitionId: null,
+            },
+          ]),
+        ),
+        update: jest
+          .fn()
+          .mockReturnValueOnce(eventUpdate)
+          .mockReturnValueOnce(matchUpdate),
+      };
+
+      await service.update('user-id', 'event-id', {
+        venueAddress: '12 River Road',
+        weatherLocation: 'Stellenbosch, South Africa',
+        weatherLatitude: -33.9321,
+        weatherLongitude: 18.8602,
+        weatherTimezone: 'Africa/Johannesburg',
+      });
+
+      expect(setEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          venueAddress: '12 River Road',
+          weatherLocation: 'Stellenbosch, South Africa',
+          weatherLatitude: -33.9321,
+          weatherLongitude: 18.8602,
+          weatherTimezone: 'Africa/Johannesburg',
+        }),
+      );
+    });
+  });
 });

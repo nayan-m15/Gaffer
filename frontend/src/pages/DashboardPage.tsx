@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
+import { EventWeatherCard } from "@/features/events/EventWeatherCard";
+import { EventDetailDialog } from "@/features/events/EventDetailDialog";
+import { useEvent, useNow } from "@/features/events/hooks";
 import { useState } from "react";
 import {
   Activity,
@@ -16,7 +19,6 @@ import {
   Calendar,
   CalendarCheck,
   Mail,
-  MapPin,
   Plus,
   RefreshCw,
   TrendingUp,
@@ -68,6 +70,11 @@ interface UpcomingEvent {
   type: "match" | "training" | "meeting";
   scheduledAt: string;
   location: string;
+  venueAddress: string | null;
+  weatherLocation: string | null;
+  weatherLatitude: number | null;
+  weatherLongitude: number | null;
+  weatherTimezone: string | null;
 }
 
 interface MatchStat {
@@ -111,24 +118,14 @@ async function fetchDashboardData(): Promise<DashboardData> {
  *  DATE / TIME FORMATTING HELPERS
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const DATE_FMT = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
-
-const TIME_FMT = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function formatEventDate(iso: string): string {
-  return DATE_FMT.format(new Date(iso));
-}
-
-function formatEventTime(iso: string): string {
-  return TIME_FMT.format(new Date(iso));
+function formatEventWhen(iso: string, timeZone: string | null): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(iso));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -547,51 +544,42 @@ function RecentFormCard({
  *  UPCOMING EVENTS  (Sprint 1 — connected to real backend)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const EVENT_TYPE_STYLES: Record<
-  UpcomingEvent["type"],
-  { bg: string; text: string; label: string }
-> = {
-  match: { bg: "bg-primary/10", text: "text-primary", label: "Match" },
-  training: { bg: "bg-muted", text: "text-foreground", label: "Training" },
-  meeting: {
-    bg: "bg-muted-foreground/10",
-    text: "text-muted-foreground",
-    label: "Meeting",
-  },
-};
-
-function EventItem({ event }: { event: UpcomingEvent }) {
-  const typeStyle = EVENT_TYPE_STYLES[event.type];
+function EventItem({ event, onOpen }: { event: UpcomingEvent; onOpen: () => void }) {
+  const destination = [event.location, event.venueAddress]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <li className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0 last:pb-0">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {event.title}
+    <li
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onOpen();
+      }}
+      className="cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary last:border-b-0 last:pb-0"
+    >
+      <div className="min-w-0 px-1">
+        <p className="truncate text-sm text-foreground">
+          <span className="font-semibold">{event.title}</span>
+          <span className="text-muted-foreground"> · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}</span>
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              typeStyle.bg,
-              typeStyle.text,
-            )}
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <span>{event.location}</span>
+          <span aria-hidden="true">·</span>
+          <a
+            className="font-medium text-primary hover:underline"
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(clickEvent) => clickEvent.stopPropagation()}
           >
-            {typeStyle.label}
-          </span>
-          <span className="flex items-center gap-1">
-            <MapPin className="size-3" aria-hidden="true" />
-            {event.location}
-          </span>
+            Directions
+          </a>
         </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-xs font-medium text-foreground">
-          {formatEventDate(event.scheduledAt)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatEventTime(event.scheduledAt)}
-        </p>
+        <div className="mt-1.5">
+          <EventWeatherCard event={event} compact />
+        </div>
       </div>
     </li>
   );
@@ -599,8 +587,10 @@ function EventItem({ event }: { event: UpcomingEvent }) {
 
 function UpcomingEventsCard({
   events: upcomingEvents,
+  onOpenEvent,
 }: {
   events: UpcomingEvent[];
+  onOpenEvent: (eventId: string) => void;
 }) {
   return (
     <Card aria-label="Upcoming events" className="min-h-[11rem]">
@@ -612,7 +602,7 @@ function UpcomingEventsCard({
       {upcomingEvents.length > 0 ? (
         <ul className="-my-1">
           {upcomingEvents.map((event) => (
-            <EventItem key={event.id} event={event} />
+            <EventItem key={event.id} event={event} onOpen={() => onOpenEvent(event.id)} />
           ))}
         </ul>
       ) : (
@@ -677,6 +667,9 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>();
+  const selectedEventQuery = useEvent(selectedEventId);
+  const now = useNow();
 
   // Read per render instead of snapshotting on mount so the invite resumer's
   // post-accept cleanup is reflected without a remount. localStorage reads
@@ -865,7 +858,7 @@ export default function DashboardPage() {
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3">
-            <UpcomingEventsCard events={upcomingEvents} />
+            <UpcomingEventsCard events={upcomingEvents} onOpenEvent={setSelectedEventId} />
           </div>
           <div className="lg:col-span-2">
             <RecentFormCard
@@ -881,6 +874,16 @@ export default function DashboardPage() {
           <RecentStatsCard stats={recentStats ?? []} />
         </div>
       </div>
+      <EventDetailDialog
+        open={Boolean(selectedEventId)}
+        event={selectedEventQuery.data ?? null}
+        now={now}
+        canManage={team?.role === "coach"}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEventId(undefined);
+        }}
+        onEdit={() => navigate("/events")}
+      />
       <AddTeamModal open={addTeamOpen} onOpenChange={setAddTeamOpen} />
     </>
   );
