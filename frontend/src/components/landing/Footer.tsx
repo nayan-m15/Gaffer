@@ -12,6 +12,8 @@ const FOOTER_LINKS = [
   { label: "Philosophy", href: "/#philosophy" },
   { label: "Tactical Pitch", href: "/#tactics" },
   { label: "Analytics", href: "/#analytics" },
+  { label: "Terms of Service", href: "/terms-of-service.html" },
+  { label: "Privacy Policy", href: "/privacy-policy.html" },
 ] as const;
 
 /**

@@ -28,6 +28,11 @@ const PLAYER_FOOTER_LINKS: FooterLink[] = [
   { label: "Standings", path: "/player/standings" },
 ];
 
+const LEGAL_FOOTER_LINKS: FooterLink[] = [
+  { label: "Terms of Service", path: "/terms-of-service.html" },
+  { label: "Privacy Policy", path: "/privacy-policy.html" },
+];
+
 /**
  * Application footer for authenticated views.
  *
@@ -39,7 +44,11 @@ const PLAYER_FOOTER_LINKS: FooterLink[] = [
  */
 export function Footer({ variant = "coach" }: FooterProps) {
   const year = new Date().getFullYear();
-  const links = variant === "player" ? PLAYER_FOOTER_LINKS : COACH_FOOTER_LINKS;
+  const returnTo = variant === "player" ? "/player/dashboard" : "/dashboard";
+  const links = [
+    ...(variant === "player" ? PLAYER_FOOTER_LINKS : COACH_FOOTER_LINKS),
+    ...LEGAL_FOOTER_LINKS,
+  ];
 
   return (
     <footer className="border-t border-border px-6 py-6 text-sm text-muted-foreground sm:px-8">
@@ -59,12 +68,21 @@ export function Footer({ variant = "coach" }: FooterProps) {
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {links.map((link) => (
               <li key={link.path}>
-                <Link
-                  to={link.path}
-                  className="transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </Link>
+                {link.path.endsWith(".html") ? (
+                  <a
+                    href={`${link.path}?returnTo=${encodeURIComponent(returnTo)}`}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link
+                    to={link.path}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
