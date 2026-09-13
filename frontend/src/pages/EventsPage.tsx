@@ -224,7 +224,7 @@ export default function EventsPage() {
         subtitle="Matches, training sessions, and meetings on one calendar."
       />
 
-      <div className="flex flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
+      <div className="flex w-full min-w-0 flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
@@ -276,7 +276,7 @@ export default function EventsPage() {
         )}
 
         {/* Desktop & Tablet View: Google-Calendar style layout */}
-        <div className="hidden sm:flex sm:flex-col sm:gap-5">
+        <div className="hidden min-w-0 sm:flex sm:flex-col sm:gap-5">
           <CalendarToolbar
             view={view}
             label={label}
@@ -293,7 +293,7 @@ export default function EventsPage() {
 
           {/* Calendar + floating sidebar */}
           {events && (
-            <div className="flex items-stretch gap-6">
+            <div className="flex min-w-0 items-stretch gap-6">
               <div className="min-w-0 flex-1">{viewContent}</div>
 
               <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
