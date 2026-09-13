@@ -13,6 +13,7 @@ import type { EventStatus, TeamEvent } from "./types";
 import { fetchEventRsvps, type AthleteRsvp } from "@/services/rsvps";
 import type { PlayerEvent } from "@/services/player";
 import { RsvpWidget } from "@/features/player/RsvpWidget";
+import { EventWeatherCard } from "./EventWeatherCard";
 
 interface EventDetailDialogProps {
   event: TeamEvent | PlayerEvent | null;
@@ -78,7 +79,7 @@ export function EventDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
-      <DialogContent className="bg-card sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold uppercase tracking-wide text-foreground">Event</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
@@ -99,9 +100,14 @@ export function EventDetailDialog({
               <StatusBadge status={displayEventStatus(event, now)} />
             </div>
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
-            <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt)} />
+            <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
             <DetailRow label="Location" value={event.location} />
+            {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
+            <LocationLinks event={event} />
             <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+            {event.status !== "cancelled" && !readOnly && (
+              <EventWeatherCard event={event} enabled={open} />
+            )}
           </div>
         )}
 
@@ -160,6 +166,19 @@ export function EventDetailDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
+  const destination = [event.location, event.venueAddress]
+    .filter(Boolean)
+    .join(", ");
+  const encoded = encodeURIComponent(destination);
+  return (
+    <div className="flex gap-3 text-xs">
+      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/search/?api=1&query=${encoded}`} target="_blank" rel="noreferrer">View map</a>
+      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`} target="_blank" rel="noreferrer">Get directions</a>
+    </div>
   );
 }
 

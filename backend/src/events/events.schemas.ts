@@ -21,7 +21,38 @@ const hexColorSchema = z
     'Colour must be a 6-digit hex value such as #1A2B3C.',
   );
 
-export const createEventSchema = z.object({
+const timezoneSchema = z
+  .string()
+  .trim()
+  .max(100)
+  .refine(
+    (value) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: value }).format();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Enter a valid IANA timezone such as Africa/Johannesburg.' },
+  );
+
+const venueFieldsSchema = z.object({
+  venueAddress: z.string().trim().max(300).nullable().optional(),
+  weatherLocation: z.string().trim().max(300).nullable().optional(),
+  weatherLatitude: z.number().min(-90).max(90).nullable().optional(),
+  weatherLongitude: z.number().min(-180).max(180).nullable().optional(),
+  weatherTimezone: timezoneSchema.nullable().optional(),
+});
+
+function coordinatesArePaired(value: {
+  weatherLatitude?: number | null;
+  weatherLongitude?: number | null;
+}) {
+  return (value.weatherLatitude == null) === (value.weatherLongitude == null);
+}
+
+const createEventBaseSchema = z.object({
   title: z
     .string()
     .trim()
@@ -43,10 +74,19 @@ export const createEventSchema = z.object({
     .max(2000, 'Notes must be 2000 characters or fewer.')
     .optional(),
   competitionId: z.uuid().nullable().optional(),
+  ...venueFieldsSchema.shape,
 });
+
+export const createEventSchema = createEventBaseSchema.refine(
+  coordinatesArePaired,
+  {
+    message: 'Latitude and longitude must be provided together.',
+    path: ['weatherLatitude'],
+  },
+);
 export type CreateEventDto = z.infer<typeof createEventSchema>;
 
-export const updateEventSchema = createEventSchema
+export const updateEventSchema = createEventBaseSchema
   .partial()
   .extend({
     status: eventStatusSchema.optional(),
@@ -56,6 +96,10 @@ export const updateEventSchema = createEventSchema
       .max(2000, 'Notes must be 2000 characters or fewer.')
       .nullable()
       .optional(),
+  })
+  .refine(coordinatesArePaired, {
+    message: 'Latitude and longitude must be provided together.',
+    path: ['weatherLatitude'],
   })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),

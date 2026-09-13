@@ -15,6 +15,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import { requireCoachTeamId } from '../common/team-access';
 import { TeamsService } from '../teams/teams.service';
+import { WeatherService } from '../weather/weather.service';
 import {
   createEventSchema,
   StartMatchBodyDto,
@@ -30,6 +31,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly teamsService: TeamsService,
+    private readonly weatherService: WeatherService,
   ) {}
 
   /**
@@ -95,6 +97,15 @@ export class EventsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.eventsService.findOne(user.id, id);
+  }
+
+  @Get(':id/weather')
+  async weather(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const event = await this.eventsService.findOne(user.id, id);
+    return this.weatherService.getEventWeather(event);
   }
 
   @Patch(':id')
