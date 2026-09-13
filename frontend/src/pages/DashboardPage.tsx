@@ -8,6 +8,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
+import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { useEvent, useNow } from "@/features/events/hooks";
@@ -829,6 +830,8 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
+
+        <EventRemindersBanner events={upcomingEvents} />
 
         {/* ── Sprint 2: Live Match (deferred — shows empty state) ─────────── */}
         <LiveMatchCard
