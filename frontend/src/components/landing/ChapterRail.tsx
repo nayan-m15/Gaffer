@@ -73,13 +73,16 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
 
     const el = document.getElementById(id);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
       history.replaceState(null, "", `#${id}`);
-    }
 
-    setTimeout(() => {
+      window.setTimeout(() => {
+        isClickingRef.current = false;
+      }, reduceMotion ? 0 : 800);
+    } else {
       isClickingRef.current = false;
-    }, 800);
+    }
   };
 
   return (

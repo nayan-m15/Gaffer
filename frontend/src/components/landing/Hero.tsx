@@ -1,7 +1,9 @@
+import { useCallback, useState } from "react";
 import { ArrowRight, LogIn } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
+import { LandingScene } from "@/components/landing/LandingScene";
 
 /**
  * Hero — The primary marketing section at the top of the landing page.
@@ -20,16 +22,24 @@ import { cn } from "@/lib/utils";
  * atmosphere without competing with the headline or CTA buttons.
  */
 export function Hero() {
+  const [sceneReady, setSceneReady] = useState(false);
+  const handleSceneReadyChange = useCallback((ready: boolean) => setSceneReady(ready), []);
+
   return (
     <section
       aria-labelledby="hero-heading"
       className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col justify-center items-center overflow-hidden bg-background pb-12"
     >
       {/* ── Atmospheric background layer ──────────────────────────────── */}
-      <HeroBackground />
+      <HeroBackground sceneReady={sceneReady} />
+      <LandingScene onReadyChange={handleSceneReadyChange} />
+
+      {/* Protect the reading area while leaving the pitch visible at its edges. */}
+      <div aria-hidden="true" className="landing-scene__readability" />
+      <div aria-hidden="true" className="landing-scene__bottom-fade" />
 
       {/* ── Content grid ──────────────────────────────────────────────── */}
-      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           {/* Eyebrow */}
           <span
@@ -87,7 +97,7 @@ export function Hero() {
       {/* Scroll indicator prompt */}
       <a
         href="#philosophy"
-        className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-muted-foreground text-[10px] sm:text-xs font-mono tracking-widest uppercase transition-colors hover:text-foreground animate-bounce-slow"
+        className="absolute z-10 bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-muted-foreground text-[10px] sm:text-xs font-mono tracking-widest uppercase transition-colors hover:text-foreground animate-bounce-slow"
         aria-label="Scroll to explore"
       >
         <span>Scroll to enter</span>
@@ -120,21 +130,20 @@ export function Hero() {
  * matchday feel without any external images.  The effect is purely decorative
  * and hidden from assistive technology.
  */
-function HeroBackground() {
+function HeroBackground({ sceneReady }: { sceneReady: boolean }) {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-0 z-0 transition-opacity duration-700",
+        sceneReady ? "opacity-0" : "opacity-100",
+      )}
+    >
       {/* Base gradient — theme-aware background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-background" />
 
       {/* Subtle grass / pitch-green tint — gives the feel of a real pitch */}
       <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/[0.06] via-emerald-800/[0.04] to-emerald-900/[0.02] dark:from-emerald-900/[0.08] dark:via-emerald-800/[0.06] dark:to-emerald-900/[0.04]" />
-
-      {/* Floodlight glow — top centre (brighter for atmosphere) */}
-      <div className="absolute left-1/2 top-0 h-[600px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/10 blur-[150px] dark:bg-brand/15" />
-
-      {/* Secondary warm floodlight — lower sides for depth */}
-      <div className="absolute -left-20 top-1/3 h-[300px] w-[400px] rounded-full bg-brand/5 blur-[120px]" />
-      <div className="absolute -right-20 top-1/3 h-[300px] w-[400px] rounded-full bg-brand/5 blur-[120px]" />
 
       {/* Softer vignette — lets pitch markings show through */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,var(--background)_100%)]" />

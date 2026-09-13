@@ -225,9 +225,115 @@ body {
 /* ─── Reduced-motion preference ─────────────────────────────────────────── *
  * Disables transitions and animations for users who prefer reduced motion.   */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Landing-page WebGL background ───────────────────────────────────── */
+.landing-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.landing-scene__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 700ms ease-out;
+}
+
+.landing-scene[data-ready="true"] .landing-scene__canvas {
+  opacity: 0.78;
+}
+
+.landing-scene__readability {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 48% 48% at 50% 47%,
+    color-mix(in srgb, var(--background) 96%, transparent) 0%,
+    color-mix(in srgb, var(--background) 88%, transparent) 42%,
+    color-mix(in srgb, var(--background) 22%, transparent) 78%,
+    transparent 100%
+  );
+}
+
+.landing-scene__bottom-fade {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  height: 36%;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--background));
+}
+
+.landing-scene__motion-control {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 0.4rem 0.65rem;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--background) 84%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.landing-scene__motion-control:hover,
+.landing-scene__motion-control:focus-visible {
+  color: var(--foreground);
+  border-color: var(--brand);
+  background: var(--background);
+}
+
+.landing-scene__motion-control:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.landing-scene__motion-control svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .landing-scene__motion-control {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .landing-scene[data-ready="true"] .landing-scene__canvas {
+    opacity: 0.62;
+  }
+
+  .landing-scene__readability {
+    background: radial-gradient(
+      ellipse 72% 48% at 50% 45%,
+      color-mix(in srgb, var(--background) 98%, transparent) 0%,
+      color-mix(in srgb, var(--background) 92%, transparent) 52%,
+      color-mix(in srgb, var(--background) 28%, transparent) 86%,
+      transparent 100%
+    );
   }
 }
 
