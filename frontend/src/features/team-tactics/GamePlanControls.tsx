@@ -35,6 +35,7 @@ export function GamePlanControls({
     isPlansLoading,
     saving,
     justSaved,
+    lineup,
     save,
     setSaveDialogOpen,
     setDeleteDialogOpen,
@@ -68,6 +69,7 @@ export function GamePlanControls({
           variant="outline"
           size="sm"
           onClick={() => setSaveDialogOpen(true)}
+          disabled={lineup.hasInjuredPitchPlayers}
           className="gap-1.5"
         >
           <Copy className="size-3.5" />
@@ -81,7 +83,7 @@ export function GamePlanControls({
           size="sm"
           className="gap-1.5"
           onClick={save}
-          disabled={saving}
+          disabled={saving || lineup.hasInjuredPitchPlayers}
         >
           {saving ? (
             <Loader2 className="size-3.5 animate-spin" />

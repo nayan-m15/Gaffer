@@ -168,6 +168,17 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
   const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
 
+  /** Injured athletes currently occupying a pitch position (for old saved plans). */
+  const injuredPitchAthleteIds = useMemo(
+    () =>
+      [...pitchAthleteIds].filter(
+        (id) => athletes.find((a) => a.id === id)?.status === "injured",
+      ),
+    [pitchAthleteIds, athletes],
+  );
+
+  const hasInjuredPitchPlayers = injuredPitchAthleteIds.length > 0;
+
   /* ── Auto-fill ─────────────────────────────────────────────────────────── */
 
   /**
@@ -175,8 +186,8 @@ export function useLineupState(athletes: BackendAthlete[]) {
    *
    * Only available players are auto-assigned: injured and suspended athletes
    * stay on the bench (clearly badged) rather than being placed into the
-   * starting XI automatically. The coach can still place them manually via
-   * drag-and-drop — this only affects the automated helper.
+   * starting XI automatically. Injured athletes also cannot be placed on the
+   * pitch manually.
    */
   const runAutoFill = useCallback(
     (targetFormationId: string) => {
@@ -252,6 +263,14 @@ export function useLineupState(athletes: BackendAthlete[]) {
     (athleteId: string, targetPositionId: string) => {
       if (!formation) return;
 
+      const athlete = athletes.find((a) => a.id === athleteId);
+
+      // Injured athletes are not eligible for a starting-XI position.
+      if (athlete?.status === "injured") {
+        setError("Injured players cannot be placed in the starting XI.");
+        return;
+      }
+
       // Validate: no duplicates
       if (pitchAthleteIds.has(athleteId)) {
         setError("This player is already on the pitch.");
@@ -268,7 +287,6 @@ export function useLineupState(athletes: BackendAthlete[]) {
       // Validate: GK position only accepts goalkeepers
       const targetPos = formation.positions.find((p) => p.id === targetPositionId);
       if (targetPos?.role === "GK") {
-        const athlete = athletes.find((a) => a.id === athleteId);
         if (!isGoalkeeper(athlete?.position ?? null)) {
           setError("Only a goalkeeper can play in the GK position.");
           return;
@@ -429,8 +447,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
     pitchCount,
     isXiComplete,
     hasGoalkeeper,
-    misplacedAthleteIds,     
+    misplacedAthleteIds,
     hasMisplacedPlayers,
+    injuredPitchAthleteIds,
+    hasInjuredPitchPlayers,
     pitchAthleteIds,
 
     // Derived athlete counts
