@@ -79,7 +79,7 @@ export function EventDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
-      <DialogContent className="bg-card sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold uppercase tracking-wide text-foreground">Event</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
