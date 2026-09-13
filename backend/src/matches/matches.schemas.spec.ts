@@ -39,4 +39,33 @@ describe('createMatchLogEventSchema', () => {
       detail: goalId,
     });
   });
+
+  it('stores a scored penalty as a goal with Penalty detail', () => {
+    expect(
+      createMatchLogEventSchema.parse({
+        clientRequestId,
+        team: 'own',
+        eventType: 'goal',
+        athleteId,
+        minute: 19,
+        detail: 'Penalty',
+      }),
+    ).toMatchObject({
+      eventType: 'goal',
+      detail: 'Penalty',
+    });
+  });
+
+  it('rejects a scored-penalty detail on a penalty event type', () => {
+    expect(() =>
+      createMatchLogEventSchema.parse({
+        clientRequestId,
+        team: 'own',
+        eventType: 'penalty',
+        athleteId,
+        minute: 19,
+        detail: 'Penalty',
+      }),
+    ).toThrow(/scored penalty must be saved as a goal/i);
+  });
 });

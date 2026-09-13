@@ -83,21 +83,25 @@ export function MobileCalendarView({
     view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   return (
-    <div className="flex flex-col gap-3 pb-3 sm:hidden">
+    <div className="flex w-full min-w-0 flex-col gap-3 pb-3 sm:hidden">
       {/* ── 1. Smartphone Top Navigation & Filter Bar ────────────────────── */}
-      <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
+      <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
         {/* Navigation & Period Title */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
             <Button
               variant="ghost"
               size="icon-xs"
               onClick={() => onNavigate(-1)}
               aria-label="Previous period"
+              className="shrink-0"
             >
               <ChevronLeft className="size-4" />
             </Button>
-            <h2 className="text-base font-bold tracking-tight text-foreground uppercase">
+            <h2
+              title={headerLabel}
+              className="min-w-0 flex-1 truncate text-base font-bold tracking-tight text-foreground uppercase"
+            >
               {headerLabel}
             </h2>
             <Button
@@ -105,12 +109,13 @@ export function MobileCalendarView({
               size="icon-xs"
               onClick={() => onNavigate(1)}
               aria-label="Next period"
+              className="shrink-0"
             >
               <ChevronRight className="size-4" />
             </Button>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Button
               variant="outline"
               size="xs"
@@ -139,7 +144,7 @@ export function MobileCalendarView({
         <div
           role="group"
           aria-label="Filter events by type"
-          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
+          className="flex min-w-0 w-full items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
         >
           {EVENT_TYPE_OPTIONS.map((option) => {
             const isVisible = !hiddenTypes.has(option.value);
@@ -174,7 +179,7 @@ export function MobileCalendarView({
         </div>
 
         {/* View Switcher Tabs (Month / Week / Agenda) */}
-        <div className="grid grid-cols-3 rounded-xl bg-muted/60 p-1 text-center">
+        <div className="grid w-full min-w-0 grid-cols-3 rounded-xl bg-muted/60 p-1 text-center">
           {(["month", "week", "agenda"] as const).map((v) => {
             const active = view === v;
             return (
@@ -280,9 +285,9 @@ function MobileMonthGrid({
   onOpenEvent: (event: TeamEvent) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+    <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
       {/* Weekday Row Header (M T W T F S S) */}
-      <div className="grid grid-cols-7 border-b border-border/60 bg-muted/20 text-center py-1.5">
+      <div className="grid w-full min-w-0 grid-cols-7 border-b border-border/60 bg-muted/20 text-center py-1.5">
         {weekdayLabels.map((label, idx) => (
           <span
             key={label}
@@ -297,7 +302,7 @@ function MobileMonthGrid({
       </div>
 
       {/* Days Grid - Samsung full screen grid style */}
-      <div className="grid grid-cols-7">
+      <div className="grid w-full min-w-0 grid-cols-7">
         {grid.map((day, dayIndex) => {
           const isToday = isSameCalendarDay(day, now);
           const isSelected = isSameCalendarDay(day, selectedDate);
@@ -310,7 +315,7 @@ function MobileMonthGrid({
               key={day.toISOString()}
               onClick={() => onSelectDate(day)}
               className={cn(
-                "group relative flex min-h-[64px] flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
+                "group relative flex min-h-[64px] min-w-0 flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
                 outside && "bg-muted/15 opacity-40",
                 isSelected && !outside && "bg-accent/40",
                 "hover:bg-muted/30",
@@ -392,7 +397,7 @@ function MobileWeekStrip({
   onSelectDate: (date: Date) => void;
 }) {
   return (
-    <div className="grid grid-cols-7 gap-1 rounded-2xl border border-border bg-card p-2 shadow-xs">
+    <div className="grid w-full min-w-0 grid-cols-7 gap-1 rounded-2xl border border-border bg-card p-2 shadow-xs">
       {weekDays.map((day, idx) => {
         const isToday = isSameCalendarDay(day, now);
         const isSelected = isSameCalendarDay(day, selectedDate);
@@ -404,7 +409,7 @@ function MobileWeekStrip({
             type="button"
             onClick={() => onSelectDate(day)}
             className={cn(
-              "flex flex-col items-center rounded-xl py-2 transition-all",
+              "flex min-w-0 flex-col items-center rounded-xl py-2 transition-all",
               isSelected ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-muted/40",
             )}
           >

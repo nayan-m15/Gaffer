@@ -170,7 +170,7 @@ export class MatchesService {
   async logEvent(userId: string, matchId: string, dto: CreateMatchLogEventDto) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
-    this.assertLive(event.status);
+    this.assertEditable(event.status);
 
     if (dto.athleteId) {
       await this.requireMatchAthlete(match.id, dto.athleteId);
@@ -208,6 +208,7 @@ export class MatchesService {
         detail: dto.detail,
         loggedByUserId: userId,
         clientRequestId: dto.clientRequestId,
+        manuallyAdjusted: event.status === 'completed',
       })
       .onConflictDoNothing({
         target: [matchEvents.matchId, matchEvents.clientRequestId],
@@ -285,7 +286,7 @@ export class MatchesService {
         ...(dto.minute !== undefined ? { minute: dto.minute } : {}),
         ...(dto.eventType !== undefined ? { eventType: dto.eventType } : {}),
         ...(dto.detail !== undefined ? { detail: dto.detail } : {}),
-        manuallyAdjusted: true,
+        manuallyAdjusted: event.status === 'completed' ? true : true,
         updatedAt: new Date(),
       })
       .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
@@ -525,6 +526,7 @@ export class MatchesService {
     }
   }
 
+  /** Completed matches stay editable (match report corrections). Cancelled matches do not. */
   private assertEditable(status: string) {
     if (status === 'cancelled') {
       throw new BadRequestException('Cancelled matches cannot be edited.');

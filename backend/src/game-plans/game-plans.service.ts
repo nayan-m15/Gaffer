@@ -149,12 +149,24 @@ export class GamePlansService {
     if (uniqueIds.length === 0) return;
 
     const valid = await this.databaseService.database
-      .select({ id: athletes.id })
+      .select({ id: athletes.id, status: athletes.status })
       .from(athletes)
       .where(and(eq(athletes.teamId, teamId), inArray(athletes.id, uniqueIds)));
     if (valid.length !== uniqueIds.length) {
       throw new BadRequestException(
         'Every referenced athlete must belong to this team.',
+      );
+    }
+
+    const starterIds = new Set(starters);
+    if (
+      valid.some(
+        (athlete) =>
+          starterIds.has(athlete.id) && athlete.status === 'injured',
+      )
+    ) {
+      throw new BadRequestException(
+        'Injured athletes cannot be placed in the starting lineup.',
       );
     }
   }

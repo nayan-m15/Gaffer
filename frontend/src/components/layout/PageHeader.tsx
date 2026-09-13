@@ -29,7 +29,13 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <header className={cn("border-b border-border px-6 py-6 sm:px-8", className)}>
+    <header
+      className={cn(
+        // Mobile: clear fixed sidebar toggle (left-4 top-4) horizontally and vertically
+        "border-b border-border pt-16 pb-6 pl-16 pr-6 sm:pr-8 lg:px-8 lg:py-6",
+        className,
+      )}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold uppercase tracking-widest text-foreground sm:text-3xl">

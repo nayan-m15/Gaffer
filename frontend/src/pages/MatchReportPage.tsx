@@ -27,14 +27,15 @@ import {
   useUpdateMatchEvent,
 } from "@/features/matches/hooks";
 import {
+  draftFromLoggedEvent,
   emptyEventDraft,
   linkedSubstitutionForInjury,
-  looksLikeId,
   opponentPlayerLabel,
   planAddEvent,
   planEditEvent,
   usesOpponentRoster,
   type EventFormDraft,
+  type PenaltyOutcome,
   type PlannedOp,
 } from "@/features/matches/match-report-event-form";
 import type {
@@ -691,10 +692,11 @@ export default function MatchReportPage() {
                                           : ""}
                                         {substitutionIncoming(event, squad)}
                                       </p>
-                                      {event.detail &&
+                                        {event.detail &&
                                         event.eventType !== "substitution" &&
                                         event.eventType !== "assist" &&
                                         event.eventType !== "goal" &&
+                                        event.eventType !== "penalty" &&
                                         !isSecondYellow(event) && (
                                           <p className="mt-0.5 text-[11px] text-[#8e9ba8]">
                                             {event.detail}
@@ -1147,10 +1149,6 @@ function EditEventOverlay({
   onSave: (draft: EventFormDraft) => Promise<void>;
 }) {
   const roster = usesOpponentRoster(visibility, opponentSquad);
-  const incomingRaw =
-    event.eventType === "substitution"
-      ? event.detail
-      : linkedSub?.detail;
   return (
     <EventComposerOverlay
       title="EDIT EVENT"
@@ -1163,31 +1161,10 @@ function EditEventOverlay({
       ownName={ownName}
       oppName={oppName}
       teamLocked
-      initial={emptyEventDraft({
-        team: event.team,
-        minute: event.minute,
-        eventType: event.eventType === "assist" ? "goal" : event.eventType,
-        athleteId: event.athleteId ?? "",
-        opponentPlayerId: event.opponentPlayerId ?? "",
-        opponentLabel: event.opponentLabel ?? "",
-        note:
-          event.eventType === "substitution" || looksLikeId(event.detail)
-            ? ""
-            : (event.detail ?? ""),
-        assistAthleteId: linkedAssist?.athleteId ?? "",
-        assistOpponentPlayerId: linkedAssist?.opponentPlayerId ?? "",
-        assistOpponentLabel: linkedAssist?.opponentLabel ?? "",
-        incomingAthleteId:
-          event.team === "own" && looksLikeId(incomingRaw)
-            ? incomingRaw ?? ""
-            : "",
-        incomingOpponentPlayerId:
-          event.team === "opponent" && roster && looksLikeId(incomingRaw)
-            ? incomingRaw ?? ""
-            : "",
-        incomingOpponentLabel:
-          event.team === "opponent" && !roster ? (incomingRaw ?? "") : "",
-        injuryLedToSub: Boolean(linkedSub),
+      initial={draftFromLoggedEvent(event, {
+        linkedAssist,
+        linkedSub,
+        roster,
       })}
       pending={pending}
       error={error}
@@ -1240,7 +1217,9 @@ function AddEventOverlay({
 }
 
 const fieldClassName =
-  "mt-1 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2 text-sm text-white";
+  "mt-2 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2.5 text-sm leading-normal text-white";
+const fieldLabelClassName =
+  "block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]";
 
 function subjectLabel(eventType: MatchEventType) {
   if (eventType === "goal") {
@@ -1318,13 +1297,17 @@ function EventComposerOverlay({
     initial.incomingOpponentLabel,
   );
   const [injuryLedToSub, setInjuryLedToSub] = useState(initial.injuryLedToSub);
+  const [penaltyOutcome, setPenaltyOutcome] = useState<PenaltyOutcome>(
+    initial.penaltyOutcome,
+  );
   const [formError, setFormError] = useState<string | null>(null);
 
   const roster = usesOpponentRoster(visibility, opponentSquad);
   const isSub = eventType === "substitution";
   const isGoal = eventType === "goal";
   const isInjury = eventType === "injury";
-  const showNote = !isSub;
+  const isPenalty = eventType === "penalty";
+  const showNote = !isSub && !isPenalty;
   const showIncoming = isSub || (isInjury && injuryLedToSub);
   const selectedOpponent = opponentSquad.find(
     (player) => player.id === opponentPlayerId,
@@ -1347,6 +1330,7 @@ function EventComposerOverlay({
             : opponentLabel
           : "",
       note,
+      penaltyOutcome: isPenalty ? penaltyOutcome : "",
       assistAthleteId: team === "own" ? assistAthleteId : "",
       assistOpponentPlayerId:
         team === "opponent" && roster ? assistOpponentPlayerId : "",
@@ -1371,6 +1355,10 @@ function EventComposerOverlay({
       return;
     }
     const draft = buildDraft(parsedMinute);
+    if (isPenalty && penaltyOutcome !== "goal" && penaltyOutcome !== "miss") {
+      setFormError("Choose whether the penalty was a goal or a miss.");
+      return;
+    }
     if (isSub || (isInjury && injuryLedToSub)) {
       const offOk =
         team === "own"
@@ -1394,12 +1382,15 @@ function EventComposerOverlay({
     <Overlay onClose={onClose} sheet>
       <form
         onSubmit={handleSubmit}
-        className="max-h-[82dvh] space-y-3 overflow-y-auto p-4 sm:max-h-[85vh] sm:space-y-4 sm:p-5"
+        className="max-h-[86dvh] space-y-5 overflow-y-auto px-5 sm:max-h-[88vh] sm:space-y-6 sm:px-6"
       >
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex items-start justify-between gap-4 border-b border-[#1c2b36] bg-[#070d12] px-4 pb-3 pt-4 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
+        {/* Vertical padding lives on the sticky header/footer, not the form: a
+            negative margin here would be swallowed by `top-0`, pushing the bar
+            down over the first field. */}
+        <div className="sticky top-0 z-10 -mx-5 flex items-start justify-between gap-4 border-b border-[#1c2b36] bg-[#070d12] px-5 pb-4 pt-5 sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-6">
           <div>
             <p className="font-oswald text-xl tracking-widest sm:text-2xl">{title}</p>
-            <p className="mt-0.5 text-xs text-[#8e9ba8] sm:text-sm">{subtitle}</p>
+            <p className="mt-1 text-xs text-[#8e9ba8] sm:text-sm">{subtitle}</p>
           </div>
           <button
             type="button"
@@ -1412,11 +1403,11 @@ function EventComposerOverlay({
         </div>
 
         {!teamLocked && (
-          <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+          <fieldset className="pt-1">
+            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
               Team
             </legend>
-            <div className="mt-1 grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {(
                 [
                   { id: "own" as const, label: ownName },
@@ -1457,8 +1448,8 @@ function EventComposerOverlay({
         )}
 
         <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3">
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-            Minute
+          <label className="block">
+            <span className={fieldLabelClassName}>Minute</span>
             <input
               type="number"
               min={0}
@@ -1471,8 +1462,8 @@ function EventComposerOverlay({
             />
           </label>
 
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-            Event type
+          <label className="block">
+            <span className={fieldLabelClassName}>Event type</span>
             <select
               value={eventType}
               onChange={(change) => {
@@ -1483,6 +1474,9 @@ function EventComposerOverlay({
                   setAssistAthleteId("");
                   setAssistOpponentPlayerId("");
                   setAssistOpponentLabel("");
+                }
+                if (next !== "penalty") {
+                  setPenaltyOutcome("");
                 }
                 if (next !== "substitution" && next !== "injury") {
                   setIncomingAthleteId("");
@@ -1505,11 +1499,42 @@ function EventComposerOverlay({
           </label>
         </div>
 
+        {isPenalty ? (
+          <fieldset>
+            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
+              Outcome
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { id: "goal" as const, label: "Goal" },
+                  { id: "miss" as const, label: "Miss" },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={cn(
+                    "rounded-lg border px-3 py-2.5 font-oswald text-xs tracking-widest",
+                    penaltyOutcome === option.id
+                      ? "border-[#00d99a]/70 bg-[#00d99a]/10 text-[#00d99a]"
+                      : "border-[#1c2b36] text-[#c5ced6]",
+                  )}
+                  onClick={() => {
+                    setPenaltyOutcome(option.id);
+                    setFormError(null);
+                  }}
+                >
+                  {option.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+
         {team === "own" ? (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-              {subjectLabel(eventType)}
-            </p>
+            <p className={`${fieldLabelClassName} mb-2`}>{subjectLabel(eventType)}</p>
             <AthletePicker
               squad={squad}
               value={athleteId}
@@ -1520,7 +1545,7 @@ function EventComposerOverlay({
           </div>
         ) : roster ? (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
+            <p className={`${fieldLabelClassName} mb-2`}>
               {subjectLabel(eventType)}
             </p>
             <OpponentPlayerPicker
@@ -1533,8 +1558,8 @@ function EventComposerOverlay({
             />
           </div>
         ) : (
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-            {subjectLabel(eventType)}
+          <label className="block">
+            <span className={fieldLabelClassName}>{subjectLabel(eventType)}</span>
             <input
               type="text"
               value={opponentLabel}
@@ -1548,9 +1573,7 @@ function EventComposerOverlay({
 
         {isGoal ? (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-              Who assisted?
-            </p>
+            <p className={`${fieldLabelClassName} mb-2`}>Who assisted?</p>
             {team === "own" ? (
               <AthletePicker
                 squad={squad}
@@ -1607,9 +1630,7 @@ function EventComposerOverlay({
         {showIncoming ? (
           team === "own" ? (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-                Player coming on
-              </p>
+              <p className={`${fieldLabelClassName} mb-2`}>Player coming on</p>
               <AthletePicker
                 squad={squad}
                 value={incomingAthleteId}
@@ -1622,9 +1643,7 @@ function EventComposerOverlay({
             </div>
           ) : roster ? (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-                Player coming on
-              </p>
+              <p className={`${fieldLabelClassName} mb-2`}>Player coming on</p>
               <OpponentPlayerPicker
                 players={opponentSquad}
                 value={incomingOpponentPlayerId}
@@ -1637,8 +1656,8 @@ function EventComposerOverlay({
               />
             </div>
           ) : (
-            <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-              Player coming on
+            <label className="block">
+              <span className={fieldLabelClassName}>Player coming on</span>
               <input
                 type="text"
                 value={incomingOpponentLabel}
@@ -1654,15 +1673,15 @@ function EventComposerOverlay({
         ) : null}
 
         {showNote ? (
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]">
-            Note
-            <input
-              type="text"
+          <label className="block">
+            <span className={fieldLabelClassName}>Note</span>
+            <textarea
               value={note}
               onChange={(change) => setNote(change.target.value)}
               placeholder="Optional"
               maxLength={500}
-              className={fieldClassName}
+              rows={3}
+              className={cn(fieldClassName, "min-h-[4.5rem] resize-y")}
             />
           </label>
         ) : null}
@@ -1673,7 +1692,7 @@ function EventComposerOverlay({
           </p>
         )}
 
-        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 grid grid-cols-2 gap-2 border-t border-[#1c2b36] bg-[#070d12] px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5">
+        <div className="sticky bottom-0 z-10 -mx-5 grid grid-cols-2 gap-2 border-t border-[#1c2b36] bg-[#070d12] px-5 py-4 sm:-mx-6 sm:px-6 sm:py-5">
           <button
             type="button"
             className="w-full rounded-xl border border-[#233747] py-2.5 font-oswald text-sm tracking-widest"
@@ -1720,7 +1739,7 @@ function Overlay({
         className={cn(
           "relative z-10 w-full max-w-md border border-[#1c2b36] bg-[#070d12]",
           sheet
-            ? "max-h-[82dvh] overflow-hidden rounded-t-2xl sm:max-h-[85vh] sm:rounded-2xl"
+            ? "max-h-[88dvh] overflow-hidden rounded-t-2xl sm:max-h-[90vh] sm:rounded-2xl"
             : "max-h-[90vh] overflow-y-auto rounded-2xl p-5",
         )}
       >

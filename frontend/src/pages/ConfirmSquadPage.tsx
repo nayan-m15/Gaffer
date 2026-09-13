@@ -91,13 +91,13 @@ function isBeforeMatchDay(scheduledAt: string, now = new Date()) {
 
 function startingIdsFromGamePlan(
   plan: BackendGamePlan,
-  rosterIds: Set<string>,
+  selectableRosterIds: Set<string>,
 ) {
   const ids: string[] = [];
   for (const athleteId of Object.values(plan.assignments)) {
     if (
       athleteId &&
-      rosterIds.has(athleteId) &&
+      selectableRosterIds.has(athleteId) &&
       !ids.includes(athleteId) &&
       ids.length < STARTING_XI_SIZE
     ) {
@@ -115,6 +115,7 @@ function benchIdsFromRoster(
   plan: BackendGamePlan | undefined,
 ) {
   const nonStarters = athletes
+    .filter((athlete) => athlete.status !== "injured")
     .map((athlete) => athlete.id)
     .filter((id) => !startingIds.has(id));
   if (nonStarters.length <= MAX_BENCH_SIZE) {
@@ -351,9 +352,6 @@ function ColorSwatch({
         <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {label}
         </span>
-        <span className="mt-1 block font-mono text-sm text-foreground">
-          {value.toUpperCase()}
-        </span>
       </span>
       <input
         type="color"
@@ -411,9 +409,13 @@ export default function ConfirmSquadPage() {
     () => gamePlansQuery.data ?? [],
     [gamePlansQuery.data],
   );
-  const rosterIds = useMemo(
-    () => new Set(athletes.map((athlete) => athlete.id)),
+  const selectableAthletes = useMemo(
+    () => athletes.filter((athlete) => athlete.status !== "injured"),
     [athletes],
+  );
+  const selectableRosterIds = useMemo(
+    () => new Set(selectableAthletes.map((athlete) => athlete.id)),
+    [selectableAthletes],
   );
 
   const ownColor = resolveOwnColor(teamColor, team?.primaryColor);
@@ -431,11 +433,22 @@ export default function ConfirmSquadPage() {
       return;
     }
     appliedGamePlanIdRef.current = selectedGamePlanId;
-    setStartingIds(startingIdsFromGamePlan(gamePlanQuery.data, rosterIds));
-  }, [selectedGamePlanId, gamePlanQuery.data, rosterIds]);
+    setStartingIds(
+      startingIdsFromGamePlan(gamePlanQuery.data, selectableRosterIds),
+    );
+  }, [selectedGamePlanId, gamePlanQuery.data, selectableRosterIds]);
+
+  useEffect(() => {
+    setStartingIds((current) => {
+      const next = new Set(
+        [...current].filter((id) => selectableRosterIds.has(id)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [selectableRosterIds]);
 
   const startingCount = startingIds.size;
-  const benchCount = Math.max(athletes.length - startingCount, 0);
+  const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
   const opponentReady = opponentName.trim().length > 0;
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
@@ -534,6 +547,10 @@ export default function ConfirmSquadPage() {
   };
 
   const toggleStarter = (athleteId: string) => {
+    if (!selectableRosterIds.has(athleteId)) {
+      return;
+    }
+
     setStartingIds((current) => {
       const next = new Set(current);
       if (next.has(athleteId)) {
@@ -576,6 +593,11 @@ export default function ConfirmSquadPage() {
         opponentName: opponentName.trim(),
         isHome,
         startingAthleteIds: [...startingIds],
+        benchAthleteIds: benchIdsFromRoster(
+          athletes,
+          startingIds,
+          gamePlanQuery.data,
+        ),
         opponentSquadVisibility,
         teamColor: ownColor,
         opponentColor: oppColor,
@@ -591,14 +613,7 @@ export default function ConfirmSquadPage() {
               })),
             }),
         ...(selectedGamePlanId
-          ? {
-              gamePlanId: selectedGamePlanId,
-              benchAthleteIds: benchIdsFromRoster(
-                athletes,
-                startingIds,
-                gamePlanQuery.data,
-              ),
-            }
+          ? { gamePlanId: selectedGamePlanId }
           : {}),
       });
       navigate(`/matches/${match.id}/live`, { replace: true });
@@ -857,10 +872,22 @@ export default function ConfirmSquadPage() {
                     "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
                     "transition-all duration-200 ease-out",
                     isHome
-                      ? "scale-105 bg-primary text-primary-foreground shadow-[0_0_18px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-                      : "scale-100 border border-border text-muted-foreground hover:border-primary/40",
+                      ? "scale-105"
+                      : "scale-100 border hover:opacity-90",
                     isHome && venuePulse > 0 && "animate-venue-pop",
                   )}
+                  style={
+                    isHome
+                      ? {
+                          backgroundColor: ownColor,
+                          color: contrastText(ownColor),
+                          boxShadow: `0 0 18px ${ownColor}8c`,
+                        }
+                      : {
+                          borderColor: `${ownColor}66`,
+                          color: ownColor,
+                        }
+                  }
                 >
                   Home
                 </button>
@@ -872,10 +899,22 @@ export default function ConfirmSquadPage() {
                     "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
                     "transition-all duration-200 ease-out",
                     !isHome
-                      ? "scale-105 bg-primary text-primary-foreground shadow-[0_0_18px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-                      : "scale-100 border border-border text-muted-foreground hover:border-primary/40",
+                      ? "scale-105"
+                      : "scale-100 border hover:opacity-90",
                     !isHome && venuePulse > 0 && "animate-venue-pop",
                   )}
+                  style={
+                    !isHome
+                      ? {
+                          backgroundColor: oppColor,
+                          color: contrastText(oppColor),
+                          boxShadow: `0 0 18px ${oppColor}8c`,
+                        }
+                      : {
+                          borderColor: `${oppColor}66`,
+                          color: oppColor,
+                        }
+                  }
                 >
                   Away
                 </button>
@@ -1029,7 +1068,7 @@ export default function ConfirmSquadPage() {
                       setStartingIds(
                         startingIdsFromGamePlan(
                           gamePlanQuery.data,
-                          rosterIds,
+                          selectableRosterIds,
                         ),
                       );
                       appliedGamePlanIdRef.current = plan.id;
@@ -1105,7 +1144,7 @@ export default function ConfirmSquadPage() {
           </p>
         )}
 
-        {athletes.length < STARTING_XI_SIZE && (
+        {selectableAthletes.length < STARTING_XI_SIZE && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
             Need at least 11 players for a full XI.
           </p>
@@ -1115,6 +1154,7 @@ export default function ConfirmSquadPage() {
           <ul className="flex flex-col gap-2">
             {sortedAthletes.map((athlete) => {
               const selected = startingIds.has(athlete.id);
+              const injured = athlete.status === "injured";
               const style = roleStyle(athlete.position);
               const positionLabel = (athlete.position ?? "—").toUpperCase();
               return (
@@ -1122,12 +1162,15 @@ export default function ConfirmSquadPage() {
                   <button
                     type="button"
                     onClick={() => toggleStarter(athlete.id)}
+                    disabled={injured}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                      selected
-                        ? "border-primary/70 bg-primary/5"
-                        : "border-border bg-card hover:border-primary/40",
+                      injured
+                        ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70"
+                        : selected
+                          ? "border-primary/70 bg-primary/5"
+                          : "border-border bg-card hover:border-primary/40",
                     )}
                   >
                     <span
@@ -1156,12 +1199,14 @@ export default function ConfirmSquadPage() {
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
-                        selected
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground",
+                        injured
+                          ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                          : selected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground",
                       )}
                     >
-                      {selected ? "Starting" : "Bench"}
+                      {injured ? "Injured" : selected ? "Starting" : "Bench"}
                     </span>
                   </button>
                 </li>

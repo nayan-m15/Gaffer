@@ -162,6 +162,10 @@ export function useGamePlanEditor(
 
   const save = () => {
     setSaveError(null);
+    if (lineup.hasInjuredPitchPlayers) {
+      setSaveError("Remove injured players from the starting XI before saving.");
+      return;
+    }
     if (!selectedPlan) {
       setSaveDialogOpen(true);
       return;
@@ -179,6 +183,12 @@ export function useGamePlanEditor(
   };
 
   const saveAsNew = async (name: string) => {
+    setSaveError(null);
+    if (lineup.hasInjuredPitchPlayers) {
+      setSaveError("Remove injured players from the starting XI before saving.");
+      return;
+    }
+
     const created = await createMutation.mutateAsync({
       name,
       ...currentInput(),
