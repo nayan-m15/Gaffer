@@ -1,6 +1,6 @@
 {
-  "id": "8cb07900-9303-4cff-a1ed-3df2d71a1032",
-  "prevId": "1230e154-248f-48be-a1ca-63a2be08f776",
+  "id": "cb93db2b-553e-4dea-80d0-595016528c33",
+  "prevId": "fc2929fd-2873-4488-a5dd-61b2bc7caa64",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -780,6 +780,12 @@
         },
         "venue_address": {
           "name": "venue_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weather_location": {
+          "name": "weather_location",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1731,6 +1737,12 @@
         "athlete_id": {
           "name": "athlete_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },

@@ -175,8 +175,9 @@ export const athletes = pgTable(
 );
 
 // A one-time invite a coach generates so a player can claim their athlete
-// record as themselves. Only sha256(token) is stored in tokenHash — the raw
-// token is shown to the coach once and never persisted.
+// record as themselves. Each invite is bound to a specific email address,
+// matching assistant invites. Only sha256(token) is stored in tokenHash — the
+// raw token is never persisted.
 export const claimInviteStatus = pgEnum('claim_invite_status', [
   'pending',
   'used',
@@ -190,6 +191,7 @@ export const playerClaimInvites = pgTable(
     athleteId: uuid('athlete_id')
       .notNull()
       .references(() => athletes.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
     tokenHash: text('token_hash').notNull().unique(),
     status: claimInviteStatus('status').default('pending').notNull(),
     createdByUserId: text('created_by_user_id')

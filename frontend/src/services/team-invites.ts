@@ -16,6 +16,14 @@ export interface TeamInviteSummary {
   expiresAt: string;
 }
 
+/** Response from `GET /team-invites/assistants` — accepted assistants. */
+export interface TeamAssistantSummary {
+  id: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+}
+
 /** Response from `GET /team-invites/:token` — the public preview. */
 export interface TeamInvitePreview {
   valid: boolean;
@@ -41,6 +49,11 @@ export async function createTeamInvite(
 /** GET /team-invites — coach-only; lists the team's pending invites. */
 export async function getTeamInvites(): Promise<TeamInviteSummary[]> {
   return apiFetch<TeamInviteSummary[]>("/team-invites");
+}
+
+/** GET /team-invites/assistants — coach-only; lists accepted assistants. */
+export async function getTeamAssistants(): Promise<TeamAssistantSummary[]> {
+  return apiFetch<TeamAssistantSummary[]>("/team-invites/assistants");
 }
 
 /** DELETE /team-invites/:id — coach-only; revokes a pending invite. */

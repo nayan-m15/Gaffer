@@ -23,6 +23,6 @@ export class ClaimsController {
     @Param('token') token: string,
     @CurrentUser() user: SessionUser,
   ) {
-    return this.claimsService.accept(token, user.id);
+    return this.claimsService.accept(token, user.id, user.email);
   }
 }

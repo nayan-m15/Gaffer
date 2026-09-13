@@ -200,15 +200,23 @@ export function toFormValues(backend: BackendAthlete): AthleteFormValues {
 /* ── Claim-invite endpoints ───────────────────────────────────────────── */
 
 export interface ClaimInviteResult {
-  token: string;
-  claimUrl: string;
+  email: string;
   expiresAt: string;
 }
 
-/** POST /athletes/:athleteId/claim-invite — generate a one-time invite link. */
-export async function createClaimInvite(athleteId: string): Promise<ClaimInviteResult> {
+export interface CreateClaimInviteInput {
+  athleteId: string;
+  email: string;
+}
+
+/** POST /athletes/:athleteId/claim-invite — email a one-time claim invite. */
+export async function createClaimInvite({
+  athleteId,
+  email,
+}: CreateClaimInviteInput): Promise<ClaimInviteResult> {
   return apiFetch<ClaimInviteResult>(`${ATHLETES_PATH}/${athleteId}/claim-invite`, {
     method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 

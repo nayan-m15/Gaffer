@@ -1,11 +1,13 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { sendPlayerClaimInviteEmail } from '../email/email';
 import { athletes, playerClaimInvites, teams } from '../database/schema';
 import { claimTokenSchema } from './claims.schemas';
 
@@ -24,9 +26,8 @@ export interface ClaimInvitePreview {
 }
 
 // Only sha256(token) is ever persisted, mirroring a password-reset token —
-// the raw token is shown to the coach exactly once and can never be
-// retrieved or logged again. Lookup is by hash equality in SQL, so no
-// constant-time comparison is needed.
+// the raw token is placed in the emailed claim URL and is never stored.
+// Lookup is by hash equality in SQL, so no constant-time comparison is needed.
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -51,27 +52,58 @@ export class ClaimsService {
   constructor(private readonly databaseService: DatabaseService) {}
 
   /**
-   * Generates a one-time claim invite for an athlete, revoking any pending
-   * invite for that athlete first so at most one is active at a time. The
-   * raw token appears only in this method's response — it is never stored.
+   * Generates a one-time claim invite for an athlete, bound to the supplied
+   * email address. Any existing pending invite for the athlete is revoked,
+   * then the new one-time claim link is sent directly to the player.
    */
   async createInvite(
     athleteId: string,
+    email: string,
     createdByUserId: string,
-  ): Promise<{ token: string; claimUrl: string; expiresAt: Date }> {
+  ): Promise<{ email: string; expiresAt: Date }> {
+    const [athlete] = await this.databaseService.database
+      .select({
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+      })
+      .from(athletes)
+      .where(eq(athletes.id, athleteId))
+      .limit(1);
+
+    if (!athlete) {
+      throw new NotFoundException('Athlete not found.');
+    }
+
     const token = randomBytes(32).toString('base64url');
+    const claimUrl = `${FRONTEND_URL}/claim/${token}`;
     const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
     await this.revokePendingInvites(athleteId);
 
     await this.databaseService.database.insert(playerClaimInvites).values({
       athleteId,
+      email,
       tokenHash: hashToken(token),
       createdByUserId,
       expiresAt,
     });
 
-    return { token, claimUrl: `${FRONTEND_URL}/claim/${token}`, expiresAt };
+    try {
+      await sendPlayerClaimInviteEmail({
+        to: email,
+        playerName: `${athlete.firstName} ${athlete.lastName}`.trim(),
+        url: claimUrl,
+      });
+    } catch (error) {
+      // Do not leave an unusable "Invited" state behind when delivery fails.
+      await this.databaseService.database
+        .update(playerClaimInvites)
+        .set({ status: 'revoked', updatedAt: new Date() })
+        .where(eq(playerClaimInvites.tokenHash, hashToken(token)));
+      throw error;
+    }
+
+    return { email, expiresAt };
   }
 
   /** Revokes the athlete's active pending invite, if any. */
@@ -118,12 +150,11 @@ export class ClaimsService {
   }
 
   /**
-   * Accepts a claim invite for the signed-in user: attaches their user id to
-   * the athlete, then marks the invite used. The token is re-validated
-   * exactly as `preview` does, so expired and already-used invites fail here
-   * too.
+   * Accepts a claim invite for the signed-in user: the account email must
+   * match the address the coach invited, then the user's id is attached to
+   * the athlete and the invite is marked used.
    */
-  async accept(token: string, userId: string) {
+  async accept(token: string, userId: string, email: string) {
     const found = await this.findValidInvite(token);
 
     if (!found) {
@@ -131,6 +162,12 @@ export class ClaimsService {
     }
 
     const { invite, athlete } = found;
+
+    if (invite.email !== email.trim().toLowerCase()) {
+      throw new ForbiddenException(
+        'This invite was issued to a different email address.',
+      );
+    }
 
     if (athlete.userId) {
       throw new ConflictException(
