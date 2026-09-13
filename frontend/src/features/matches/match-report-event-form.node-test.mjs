@@ -27,6 +27,32 @@ assert.equal(
 assert.equal(looksLikeId(scorer), true);
 assert.equal(looksLikeId("Penalty"), false);
 
+const scoredPenaltyOps = planAddEvent(
+  emptyEventDraft({
+    minute: 19,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "goal",
+  }),
+);
+assert.equal(scoredPenaltyOps.length, 1);
+assert.equal(scoredPenaltyOps[0].kind === "create" && scoredPenaltyOps[0].input.eventType, "goal");
+assert.equal(scoredPenaltyOps[0].kind === "create" && scoredPenaltyOps[0].input.detail, "Penalty");
+
+const missedPenaltyOps = planAddEvent(
+  emptyEventDraft({
+    minute: 19,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "miss",
+  }),
+);
+assert.equal(missedPenaltyOps[0].kind === "create" && missedPenaltyOps[0].input.eventType, "penalty");
+assert.equal(
+  missedPenaltyOps[0].kind === "create" && missedPenaltyOps[0].input.detail,
+  "Penalty missed",
+);
+
 const goalDraft = emptyEventDraft({
   minute: 23,
   eventType: "goal",
@@ -167,6 +193,45 @@ const linkedSub = {
   detail: incoming,
 };
 assert.equal(linkedSubstitutionForInjury([injuryEvent, linkedSub], injuryEvent)?.id, subId);
+
+const legacyPenalty = {
+  ...goalEvent,
+  id: "88888888-8888-4888-8888-888888888888",
+  eventType: "penalty",
+  minute: 33,
+  detail: null,
+};
+const flipToGoal = planEditEvent({
+  event: legacyPenalty,
+  draft: emptyEventDraft({
+    minute: 33,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "goal",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+});
+assert.equal(flipToGoal[0].kind === "update" && flipToGoal[0].input.eventType, "goal");
+assert.equal(flipToGoal[0].kind === "update" && flipToGoal[0].input.detail, "Penalty");
+
+const scoredPenaltyEvent = {
+  ...goalEvent,
+  detail: "Penalty",
+};
+const flipToMiss = planEditEvent({
+  event: scoredPenaltyEvent,
+  draft: emptyEventDraft({
+    minute: 23,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "miss",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+});
+assert.equal(flipToMiss[0].kind === "update" && flipToMiss[0].input.eventType, "penalty");
+assert.equal(flipToMiss[0].kind === "update" && flipToMiss[0].input.detail, "Penalty missed");
 
 console.log("[match-report-event-form] passed", {
   goalOps: goalOps.length,
