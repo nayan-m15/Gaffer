@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
 import { fetchPlayerMe, fetchPlayerEvents } from "@/services/player";
 import type { PlayerEvent } from "@/services/player";
 
@@ -96,6 +97,8 @@ export default function PlayerDashboardPage() {
 
         {stats && (
           <>
+            <EventRemindersBanner events={upcomingEvents} />
+
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <StatCard label="Appearances" value={stats.appearances} />
