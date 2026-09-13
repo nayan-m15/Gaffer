@@ -161,7 +161,7 @@ export function SubstitutesArea({
               status={athlete.status}
               variant="sub"
               isDragging={isDragging}
-              readOnly={readOnly}
+              readOnly={readOnly || athlete.status === "injured"}
               onDragStart={handleDragStart(athlete)}
               onDragEnd={handleDragEnd}
             />

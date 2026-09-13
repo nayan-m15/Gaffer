@@ -271,6 +271,12 @@ export default function TeamManagementPage() {
           </span>
         )}
 
+        {lineup.hasInjuredPitchPlayers && (
+          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+            Remove injured players from the starting XI before saving
+          </span>
+        )}
+
         {lineup.hasMisplacedPlayers && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
             {lineup.misplacedAthleteIds.length === 1

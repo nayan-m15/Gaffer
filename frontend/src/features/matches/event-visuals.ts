@@ -35,14 +35,38 @@ export function isSecondYellow(event: {
   );
 }
 
+export function isScoredPenalty(event: {
+  eventType: MatchEventType;
+  detail: string | null;
+}) {
+  return event.eventType === "goal" && event.detail === PENALTY_SCORED_DETAIL;
+}
+
+export function isMissedPenalty(event: {
+  eventType: MatchEventType;
+  detail: string | null;
+}) {
+  return (
+    event.eventType === "penalty" && event.detail === PENALTY_MISSED_DETAIL
+  );
+}
+
+/** Stored as `penalty`, or as a goal whose detail marks a scored penalty. */
+export function isPenaltyLike(event: {
+  eventType: MatchEventType;
+  detail: string | null;
+}) {
+  return event.eventType === "penalty" || isScoredPenalty(event);
+}
+
 export function eventDisplayLabel(event: {
   eventType: MatchEventType;
   detail: string | null;
 }) {
-  if (event.detail === PENALTY_SCORED_DETAIL) {
+  if (isScoredPenalty(event)) {
     return "Penalty";
   }
-  if (event.detail === PENALTY_MISSED_DETAIL) {
+  if (isMissedPenalty(event) || event.detail === PENALTY_MISSED_DETAIL) {
     return "Penalty missed";
   }
   if (isSecondYellow(event)) {

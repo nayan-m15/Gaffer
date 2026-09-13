@@ -289,17 +289,25 @@ export class EventsService {
       .from(athletes)
       .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
 
-    const teamAthleteIds = new Set(teamAthletes.map((athlete) => athlete.id));
+    const teamAthletesById = new Map(
+      teamAthletes.map((athlete) => [athlete.id, athlete]),
+    );
     const requestedIds = dto.benchAthleteIds
       ? [...dto.startingAthleteIds, ...dto.benchAthleteIds]
       : dto.startingAthleteIds;
 
     for (const athleteId of requestedIds) {
-      if (!teamAthleteIds.has(athleteId)) {
+      const athlete = teamAthletesById.get(athleteId);
+      if (!athlete) {
         throw new BadRequestException(
           dto.benchAthleteIds
             ? 'One or more selected athletes are not on this team.'
             : 'One or more starting athletes are not on this team.',
+        );
+      }
+      if (athlete.status === 'injured') {
+        throw new BadRequestException(
+          'Injured athletes cannot be selected for a match.',
         );
       }
     }
@@ -375,7 +383,7 @@ export class EventsService {
     try {
       const squadAthletes = dto.benchAthleteIds
         ? teamAthletes.filter((athlete) => requestedIds.includes(athlete.id))
-        : teamAthletes;
+        : teamAthletes.filter((athlete) => athlete.status !== 'injured');
 
       if (dto.benchAthleteIds && requestedIds.length > 0) {
         await this.databaseService.database
