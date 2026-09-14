@@ -144,6 +144,20 @@ describe('StatisticsController', () => {
   });
 
   describe('coach-only mutations', () => {
+    it('keeps a standing PATCH partial instead of applying create defaults', async () => {
+      mockStatisticsService.updateStanding.mockResolvedValue({
+        id: 'standing-1',
+      });
+
+      await controller.updateStanding(user, 'standing-1', { won: 0 });
+
+      expect(mockStatisticsService.updateStanding).toHaveBeenCalledWith(
+        'user-1',
+        'standing-1',
+        { won: 0 },
+      );
+    });
+
     it.each([
       [
         'createCompetition',

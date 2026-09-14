@@ -14,16 +14,16 @@ export default defineConfig({
   server: {
     proxy: {
       '/auth': {
-        target: 'http://localhost:3000',
+        target: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
         ws: true,
       },
     },

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const backendURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+
 /**
  * Full-stack e2e config — drives a real browser against the real Vite dev
  * server and the real Nest API (not mocked), matching how `npm run dev`
@@ -32,8 +34,10 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm --prefix backend run start:dev',
-      url: 'http://localhost:3000/health/database',
+      command: process.env.CI
+        ? 'npm --prefix backend run start'
+        : 'npm --prefix backend run start:dev',
+      url: `${backendURL}/health/database`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

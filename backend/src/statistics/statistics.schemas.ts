@@ -125,14 +125,17 @@ export const updateStandingSchema = z
   .object({
     teamName: standingFields.teamName.optional(),
     position: standingFields.position.optional(),
-    played: standingFields.played.optional(),
-    won: standingFields.won.optional(),
-    drawn: standingFields.drawn.optional(),
-    lost: standingFields.lost.optional(),
-    goalsFor: standingFields.goalsFor.optional(),
-    goalsAgainst: standingFields.goalsAgainst.optional(),
-    points: standingFields.points.optional(),
-    isOwnTeam: standingFields.isOwnTeam.optional(),
+    // Remove create-time defaults before making fields optional. Otherwise,
+    // Zod fills every omitted PATCH field with zero/false and silently turns a
+    // partial update into a full reset.
+    played: standingFields.played.removeDefault().optional(),
+    won: standingFields.won.removeDefault().optional(),
+    drawn: standingFields.drawn.removeDefault().optional(),
+    lost: standingFields.lost.removeDefault().optional(),
+    goalsFor: standingFields.goalsFor.removeDefault().optional(),
+    goalsAgainst: standingFields.goalsAgainst.removeDefault().optional(),
+    points: standingFields.points.removeDefault().optional(),
+    isOwnTeam: standingFields.isOwnTeam.removeDefault().optional(),
   })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),
