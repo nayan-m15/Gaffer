@@ -13,9 +13,15 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: 'list',
+  reporter: process.env.CI
+    ? [
+        ['list'],
+        ['html', { open: 'never' }],
+      ]
+    : 'list',
   use: {
     baseURL: 'http://localhost:5173',
+    screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },
   projects: [

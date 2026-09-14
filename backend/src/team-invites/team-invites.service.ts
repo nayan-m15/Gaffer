@@ -129,10 +129,7 @@ export class TeamInvitesService {
       .from(teamMembers)
       .innerJoin(user, eq(teamMembers.userId, user.id))
       .where(
-        and(
-          eq(teamMembers.teamId, teamId),
-          eq(teamMembers.role, 'assistant'),
-        ),
+        and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, 'assistant')),
       )
       .orderBy(desc(teamMembers.createdAt));
   }

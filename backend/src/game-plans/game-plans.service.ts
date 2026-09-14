@@ -161,8 +161,7 @@ export class GamePlansService {
     const starterIds = new Set(starters);
     if (
       valid.some(
-        (athlete) =>
-          starterIds.has(athlete.id) && athlete.status === 'injured',
+        (athlete) => starterIds.has(athlete.id) && athlete.status === 'injured',
       )
     ) {
       throw new BadRequestException(
