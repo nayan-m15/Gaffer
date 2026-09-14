@@ -5,9 +5,11 @@
  * section passing its board-only buttons in as `children`.
  */
 
-import type { ReactNode } from "react";
-import { Check, Copy, Loader2, Save, Trash2 } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
+import { Check, Copy, Download, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { downloadGamePlanPdf } from "./exportGamePlanPdf";
 import { GamePlanSelector } from "./GamePlanSelector";
 import type { GamePlanEditor } from "./useGamePlanEditor";
 
@@ -36,10 +38,34 @@ export function GamePlanControls({
     saving,
     justSaved,
     lineup,
+    content,
+    athletes,
     save,
     setSaveDialogOpen,
     setDeleteDialogOpen,
   } = editor;
+
+  const { team } = useAuth();
+
+  const athleteMap = useMemo(
+    () => new Map(athletes.map((athlete) => [athlete.id, athlete])),
+    [athletes],
+  );
+  const getAthlete = (athleteId: string | null) =>
+    athleteId ? (athleteMap.get(athleteId) ?? null) : null;
+
+  const handleDownload = () => {
+    if (!lineup.formation) return;
+    downloadGamePlanPdf({
+      planName: selectedPlan?.name ?? "Untitled game plan",
+      teamName: team?.name ?? null,
+      formation: lineup.formation,
+      assignments: lineup.assignments,
+      substituteIds: lineup.substituteIds,
+      tactics: content,
+      getAthlete,
+    });
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -51,6 +77,17 @@ export function GamePlanControls({
       />
 
       {children}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleDownload}
+        disabled={!lineup.formation}
+        className="gap-1.5"
+      >
+        <Download className="size-3.5" />
+        Download PDF
+      </Button>
 
       {!readOnly && selectedPlan && (
         <Button
