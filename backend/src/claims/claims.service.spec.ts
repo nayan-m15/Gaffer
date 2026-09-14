@@ -3,7 +3,12 @@ import { createHash } from 'node:crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
 import { athletes, playerClaimInvites } from '../database/schema';
+import { sendPlayerClaimInviteEmail } from '../email/email';
 import { ClaimsService } from './claims.service';
+
+jest.mock('../email/email', () => ({
+  sendPlayerClaimInviteEmail: jest.fn(),
+}));
 
 // `crypto.randomBytes(32).toString('base64url')` shape — 43 URL-safe chars.
 const TOKEN = 'a'.repeat(43);
@@ -13,6 +18,7 @@ const pendingInvite = {
   athleteId: 'athlete-id',
   tokenHash: 'stored-hash',
   status: 'pending',
+  email: 'player@example.com',
   createdByUserId: 'coach-user-id',
   expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
   usedAt: null,
@@ -70,7 +76,8 @@ describe('ClaimsService', () => {
   });
 
   describe('createInvite', () => {
-    it('returns a 72-hour one-time link and stores only its sha256 hash', async () => {
+    it('emails a 72-hour one-time link and stores only its sha256 hash', async () => {
+      const chain = selectChain([{ firstName: 'Alex', lastName: 'Morgan' }]);
       const updateChain = {
         set: jest
           .fn()
@@ -79,14 +86,31 @@ describe('ClaimsService', () => {
       const update = jest.fn().mockReturnValue(updateChain);
       const values = jest.fn().mockResolvedValue(undefined);
       const insert = jest.fn().mockReturnValue({ values });
-      mockDatabaseService.database = { update, insert };
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+        insert,
+      };
 
       const before = Date.now();
-      const result = await service.createInvite('athlete-id', 'coach-user-id');
+      const result = await service.createInvite(
+        'athlete-id',
+        'player@example.com',
+        'coach-user-id',
+      );
 
-      // The raw token is URL-safe and appears only in this response.
-      expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-      expect(result.claimUrl).toContain(`/claim/${result.token}`);
+      const mockedSend = jest.mocked(sendPlayerClaimInviteEmail);
+      expect(mockedSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'player@example.com',
+          playerName: 'Alex Morgan',
+        }),
+      );
+      const sentEmail = mockedSend.mock.calls[0]?.[0];
+      expect(sentEmail).toBeDefined();
+      const token = sentEmail.url.split('/').pop()!;
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(result.email).toBe('player@example.com');
 
       // Fixed 72-hour expiry (allowing a small clock buffer).
       expect(result.expiresAt.getTime()).toBeGreaterThan(
@@ -97,12 +121,11 @@ describe('ClaimsService', () => {
       );
 
       // Only sha256(token) is persisted — never the raw token.
-      const expectedHash = createHash('sha256')
-        .update(result.token)
-        .digest('hex');
+      const expectedHash = createHash('sha256').update(token).digest('hex');
       expect(values).toHaveBeenCalledWith(
         expect.objectContaining({
           athleteId: 'athlete-id',
+          email: 'player@example.com',
           createdByUserId: 'coach-user-id',
           tokenHash: expectedHash,
           expiresAt: result.expiresAt,
@@ -243,7 +266,11 @@ describe('ClaimsService', () => {
         update,
       };
 
-      const result = await service.accept(TOKEN, 'user-id');
+      const result = await service.accept(
+        TOKEN,
+        'user-id',
+        'player@example.com',
+      );
 
       expect(result).toBe(claimedAthlete);
       expect(update).toHaveBeenNthCalledWith(1, athletes);
@@ -273,9 +300,9 @@ describe('ClaimsService', () => {
         update,
       };
 
-      await expect(service.accept(TOKEN, 'user-id')).rejects.toThrow(
-        'This invite link is no longer valid.',
-      );
+      await expect(
+        service.accept(TOKEN, 'user-id', 'player@example.com'),
+      ).rejects.toThrow('This invite link is no longer valid.');
       expect(update).not.toHaveBeenCalled();
     });
 
@@ -295,9 +322,9 @@ describe('ClaimsService', () => {
         update,
       };
 
-      await expect(service.accept(TOKEN, 'user-id')).rejects.toThrow(
-        'This invite link is no longer valid.',
-      );
+      await expect(
+        service.accept(TOKEN, 'user-id', 'player@example.com'),
+      ).rejects.toThrow('This invite link is no longer valid.');
       expect(update).not.toHaveBeenCalled();
     });
 
@@ -306,9 +333,9 @@ describe('ClaimsService', () => {
       const update = jest.fn();
       mockDatabaseService.database = { select, update };
 
-      await expect(service.accept('not a token!', 'user-id')).rejects.toThrow(
-        'This invite link is no longer valid.',
-      );
+      await expect(
+        service.accept('not a token!', 'user-id', 'player@example.com'),
+      ).rejects.toThrow('This invite link is no longer valid.');
       expect(select).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
     });
@@ -324,7 +351,7 @@ describe('ClaimsService', () => {
         update,
       };
 
-      const acceptance = service.accept(TOKEN, 'user-id');
+      const acceptance = service.accept(TOKEN, 'user-id', 'player@example.com');
       await expect(acceptance).rejects.toBeInstanceOf(ConflictException);
       await expect(acceptance).rejects.toThrow(
         'This player profile has already been claimed.',
@@ -343,7 +370,7 @@ describe('ClaimsService', () => {
         update,
       };
 
-      const acceptance = service.accept(TOKEN, 'user-id');
+      const acceptance = service.accept(TOKEN, 'user-id', 'player@example.com');
       await expect(acceptance).rejects.toBeInstanceOf(ConflictException);
       await expect(acceptance).rejects.toThrow(
         'This account has already claimed a player profile on this team.',

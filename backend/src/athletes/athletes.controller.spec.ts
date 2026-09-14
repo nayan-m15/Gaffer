@@ -231,13 +231,14 @@ describe('AthletesController', () => {
     it("creates an invite for an athlete on the coach's team", async () => {
       mockAthletesService.findOne.mockResolvedValue({ id: 'athlete-id' });
       const invite = {
-        token: 'token',
-        claimUrl: 'http://localhost:5173/claim/token',
+        email: 'player@example.com',
         expiresAt: new Date(),
       };
       mockClaimsService.createInvite.mockResolvedValue(invite);
 
-      const result = await controller.createClaimInvite(user, 'athlete-id');
+      const result = await controller.createClaimInvite(user, 'athlete-id', {
+        email: ' Player@Example.com ',
+      });
 
       expect(mockAthletesService.findOne).toHaveBeenCalledWith(
         'team-id',
@@ -245,6 +246,7 @@ describe('AthletesController', () => {
       );
       expect(mockClaimsService.createInvite).toHaveBeenCalledWith(
         'athlete-id',
+        'player@example.com',
         'user-id',
       );
       expect(result).toBe(invite);
@@ -256,7 +258,9 @@ describe('AthletesController', () => {
       );
 
       await expect(
-        controller.createClaimInvite(user, 'athlete-id'),
+        controller.createClaimInvite(user, 'athlete-id', {
+          email: 'player@example.com',
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(mockClaimsService.createInvite).not.toHaveBeenCalled();
     });
@@ -265,7 +269,9 @@ describe('AthletesController', () => {
       mockTeamsService.findTeamForUser.mockResolvedValue(null);
 
       await expect(
-        controller.createClaimInvite(user, 'athlete-id'),
+        controller.createClaimInvite(user, 'athlete-id', {
+          email: 'player@example.com',
+        }),
       ).rejects.toThrow('Team not found.');
       expect(mockAthletesService.findOne).not.toHaveBeenCalled();
       expect(mockClaimsService.createInvite).not.toHaveBeenCalled();
