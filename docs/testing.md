@@ -67,7 +67,10 @@ jobs:
 1. **Code quality and build** installs all dependency sets, then lints and builds.
 2. **API tests** runs unit tests, migrates the dedicated database, and runs the
    integration suite.
-3. **UI tests** runs after API validation, installs Chromium, and starts the real
+3. **SonarQube analysis** (push to `main`/`develop` only) runs backend tests
+   with coverage and submits an analysis to the self-hosted SonarQube
+   instance. See [sonarqube.md](sonarqube.md) for one-off setup.
+4. **UI tests** runs after API validation, installs Chromium, and starts the real
    application through Playwright before running the browser suite.
 
 The UI job receives the same test-only database as both `DATABASE_URL` (for the
