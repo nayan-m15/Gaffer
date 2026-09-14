@@ -82,7 +82,8 @@ jobs:
       DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
       TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
-      BETTER_AUTH_URL: http://localhost:3000
+      PORT: "3100"
+      BETTER_AUTH_URL: http://localhost:3100
       FRONTEND_URL: http://localhost:5173
     steps:
       - name: Check out repository
