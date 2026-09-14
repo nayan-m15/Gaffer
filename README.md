@@ -7,7 +7,7 @@ statistics — all scoped per team so coaches only ever see their own data.
 
 Built with a React/Vite frontend and a NestJS backend.
 
-[![Coverage](http://92.4.134.68:9000/api/project_badges/measure?project=sport-coaching-tool&metric=coverage)](http://92.4.134.68:9000/dashboard?id=sport-coaching-tool)
+[![Coverage](https://img.shields.io/sonar/coverage/sport-coaching-tool?server=http%3A%2F%2F92.4.134.68%3A9000&sonarVersion=10.0)](http://92.4.134.68:9000/dashboard?id=sport-coaching-tool)
 
 📖 **Project documentation:** [SDP Interlude Documentation](https://nayan-m15.github.io/SDP-Project-Documentation)
 
