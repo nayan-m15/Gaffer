@@ -97,7 +97,9 @@ test('account switching clears private dashboard cache', async ({ page }) => {
   );
 
   await page.goto('/dashboard');
-  await expect(page.getByText('Alpha FC')).toBeVisible();
+  await expect(
+    page.getByText('Welcome back, Coach A · Alpha FC', { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Active athletes count' }),
   ).toContainText('11');
@@ -109,7 +111,9 @@ test('account switching clears private dashboard cache', async ({ page }) => {
   await page.getByRole('button', { name: /sign in to dugout/i }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText('Beta FC')).toBeVisible();
+  await expect(
+    page.getByText('Welcome back, Coach B · Beta FC', { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Active athletes count' }),
   ).toContainText('2');
@@ -163,7 +167,9 @@ test('post-match correction updates the visible timeline', async ({ page }) => {
   );
 
   await page.goto(`/matches/${MATCH_ID}/report`);
-  await page.getByRole('button', { name: 'Timeline' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Match Events' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /10' Goal/i }).click();
   await page.getByLabel('Minute').fill('12');
   await page.getByLabel('Event type').selectOption('yellow_card');
