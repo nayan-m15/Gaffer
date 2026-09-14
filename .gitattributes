@@ -1,0 +1,15 @@
+# Force these as binary so Windows' autocrlf line-ending conversion never
+# touches them — git's own text/binary heuristic doesn't reliably catch every
+# PDF (e.g. jsPDF output), and a flipped LF/CRLF inside a binary stream is
+# silent, undetectable corruption until something tries to open the file.
+*.pdf -text binary
+*.png -text binary
+*.jpg -text binary
+*.jpeg -text binary
+*.gif -text binary
+*.ico -text binary
+*.woff -text binary
+*.woff2 -text binary
+*.ttf -text binary
+*.otf -text binary
+*.zip -text binary
