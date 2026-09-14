@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -474,6 +475,35 @@ describe('StatisticsService', () => {
           points: 0,
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('updateStanding integrity', () => {
+    it('validates a partial update against the complete stored standing', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+      mockDatabaseService.database.select.mockImplementationOnce(() =>
+        thenable([
+          {
+            id: 'standing-1',
+            competitionId: 'competition-1',
+            teamName: 'Sporting FC',
+            position: 1,
+            played: 1,
+            won: 1,
+            drawn: 0,
+            lost: 0,
+            goalsFor: 2,
+            goalsAgainst: 0,
+            points: 3,
+            isOwnTeam: true,
+          },
+        ]),
+      );
+
+      await expect(
+        service.updateStanding('user-1', 'standing-1', { won: 0 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockDatabaseService.database.update).not.toHaveBeenCalled();
     });
   });
 });
