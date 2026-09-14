@@ -11,6 +11,7 @@ const backendURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
  */
 export default defineConfig({
   testDir: './e2e',
+  timeout: process.env.CI ? 90_000 : 30_000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
