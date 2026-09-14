@@ -115,7 +115,6 @@ export async function sendPlayerClaimInviteEmail({
   });
 }
 
-
 export interface SendAssistantInviteEmailInput {
   to: string;
   url: string;
@@ -157,7 +156,6 @@ export async function sendAssistantInviteEmail({
     `,
   });
 }
-
 
 /** Test-only hook to reset the memoized client between specs. */
 export function __resetEmailClientForTests(): void {

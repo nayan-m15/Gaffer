@@ -175,6 +175,7 @@ describe('Statistics and seasons (e2e)', () => {
       await agent
         .post(`/matches/${matchId}/events`)
         .send({
+          clientRequestId: crypto.randomUUID(),
           team: 'own',
           eventType: 'goal',
           athleteId: options.scorerId ?? squad[0],
@@ -186,6 +187,7 @@ describe('Statistics and seasons (e2e)', () => {
         await agent
           .post(`/matches/${matchId}/events`)
           .send({
+            clientRequestId: crypto.randomUUID(),
             team: 'own',
             eventType: 'assist',
             athleteId: options.assistId,
@@ -199,6 +201,7 @@ describe('Statistics and seasons (e2e)', () => {
       await agent
         .post(`/matches/${matchId}/events`)
         .send({
+          clientRequestId: crypto.randomUUID(),
           team: 'opponent',
           eventType: 'goal',
           opponentLabel: 'Their striker',

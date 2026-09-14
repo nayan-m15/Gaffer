@@ -119,6 +119,7 @@ describe('Dashboard (e2e)', () => {
       await agent
         .post(`/matches/${matchId}/events`)
         .send({
+          clientRequestId: crypto.randomUUID(),
           team: 'own',
           eventType: 'goal',
           athleteId: squad[0],
@@ -131,6 +132,7 @@ describe('Dashboard (e2e)', () => {
       await agent
         .post(`/matches/${matchId}/events`)
         .send({
+          clientRequestId: crypto.randomUUID(),
           team: 'opponent',
           eventType: 'goal',
           opponentLabel: 'Their striker',
