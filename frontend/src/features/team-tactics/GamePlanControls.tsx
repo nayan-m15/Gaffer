@@ -59,6 +59,7 @@ export function GamePlanControls({
     downloadGamePlanPdf({
       planName: selectedPlan?.name ?? "Untitled game plan",
       teamName: team?.name ?? null,
+      teamColor: team?.primaryColor ?? null,
       formation: lineup.formation,
       assignments: lineup.assignments,
       substituteIds: lineup.substituteIds,
