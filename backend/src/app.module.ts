@@ -16,6 +16,7 @@ import { ClaimsModule } from './claims/claims.module';
 import { TeamInvitesModule } from './team-invites/team-invites.module';
 import { PlayerModule } from './player/player.module';
 import { WeatherModule } from './weather/weather.module';
+import { PublicApiModule } from './public-api/public-api.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WeatherModule } from './weather/weather.module';
     StatisticsModule,
     ProfileModule,
     WeatherModule,
+    PublicApiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

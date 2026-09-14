@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
+import { buildCorsOptionsDelegate } from './cors-config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,6 +12,10 @@ async function bootstrap() {
     .setTitle('Sport Coaching Tool API')
     .setDescription('API foundation for the Sport Coaching Tool backend.')
     .setVersion('0.1.0')
+    .addTag(
+      'Public API',
+      'Externally accessible, unauthenticated GET endpoints.',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
@@ -26,21 +31,7 @@ async function bootstrap() {
       .map((origin) => origin.replace(/\/$/, '')),
   );
 
-  app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (error: Error | null, allow?: boolean) => void,
-    ) => {
-      // Allow requests with no origin (e.g. server-to-server, mobile, curl)
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error('Origin is not allowed by CORS.'), false);
-    },
-    credentials: true,
-  });
+  app.enableCors(buildCorsOptionsDelegate(allowedOrigins));
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
