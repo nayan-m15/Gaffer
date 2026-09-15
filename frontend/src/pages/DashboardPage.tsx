@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -25,12 +25,6 @@ import {
   BarChart3,
   Users,
 } from "lucide-react";
-
-const StadiumScene = lazy(() =>
-  import("@/components/dashboard/StadiumScene").then((module) => ({
-    default: module.StadiumScene,
-  })),
-);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TYPES — contracts the dashboard expects from the backend.
@@ -157,12 +151,7 @@ function Card({
 
 function DashboardFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="relative isolate min-h-full">
-      <Suspense fallback={null}>
-        <StadiumScene />
-      </Suspense>
-      <div className="relative z-10">{children}</div>
-    </div>
+    <div className="relative min-h-full">{children}</div>
   );
 }
 

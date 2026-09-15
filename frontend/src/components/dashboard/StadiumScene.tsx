@@ -493,7 +493,6 @@ export function StadiumScene() {
       crowdTexture.dispose();
       glowTexture.dispose();
       renderer.dispose();
-      renderer.forceContextLoss();
       scene.clear();
     };
   }, []);

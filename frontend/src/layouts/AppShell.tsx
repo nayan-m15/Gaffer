@@ -1,8 +1,14 @@
-import { useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { SportLogo } from "@/components/brand/SportLogo";
+
+const StadiumScene = lazy(() =>
+  import("@/components/dashboard/StadiumScene").then((module) => ({
+    default: module.StadiumScene,
+  })),
+);
 
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
@@ -11,6 +17,10 @@ import { SportLogo } from "@/components/brand/SportLogo";
  * present after sign-in.
  */
 export function AppShell() {
+  const { pathname } = useLocation();
+  const showDashboardScene =
+    pathname === "/dashboard" || pathname === "/dashboard/";
+
   useEffect(() => {
     const root = document.documentElement;
     const wasDark = root.classList.contains("dark");
@@ -24,7 +34,13 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
+      {showDashboardScene && (
+        <Suspense fallback={null}>
+          <StadiumScene />
+        </Suspense>
+      )}
+
       <Sidebar />
 
       <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
