@@ -6,8 +6,9 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { Check, Copy, Download, Loader2, Save, Trash2 } from "lucide-react";
+import { Copy, Download, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
 import { useAuth } from "@/hooks/useAuth";
 import { downloadGamePlanPdf } from "./exportGamePlanPdf";
 import { GamePlanSelector } from "./GamePlanSelector";
@@ -37,6 +38,7 @@ export function GamePlanControls({
     isPlansLoading,
     saving,
     justSaved,
+    saveError,
     lineup,
     content,
     athletes,
@@ -116,28 +118,19 @@ export function GamePlanControls({
       )}
 
       {!readOnly && (
-        <Button
-          variant="default"
-          size="sm"
+        <StatefulButton
+          type="button"
           className="gap-1.5"
           onClick={save}
           disabled={saving || lineup.hasInjuredPitchPlayers}
+          status={saving ? "loading" : justSaved ? "success" : saveError ? "error" : "idle"}
+          loadingText="Saving..."
+          successText="Saved"
+          errorText="Try again"
         >
-          {saving ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : justSaved ? (
-            <Check className="size-3.5" />
-          ) : (
-            <Save className="size-3.5" />
-          )}
-          {saving
-            ? "Saving..."
-            : justSaved
-              ? "Saved"
-              : selectedPlan
-                ? "Save"
-                : "Save Game Plan"}
-        </Button>
+          <Save className="size-3.5" />
+          {selectedPlan ? "Save" : "Save Game Plan"}
+        </StatefulButton>
       )}
     </div>
   );

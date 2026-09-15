@@ -82,10 +82,12 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const sidebarContent = (
     <>
       {/* Brand header */}
-      <div className="flex items-center gap-3 border-b border-sidebar-border px-6 py-5">
-        <SportLogo size={36} className="rounded-lg" />
+      <div className="flex items-center gap-3 border-b border-sidebar-border/70 px-5 py-6">
+        <div className="rounded-xl border border-primary/20 bg-primary/10 p-1.5 shadow-[0_0_28px_-10px_var(--primary)]">
+          <SportLogo size={32} className="rounded-md" />
+        </div>
         <div>
-          <h2 className="font-display text-base font-bold tracking-wide text-sidebar-foreground">
+          <h2 className="font-display text-base font-bold tracking-[0.16em] text-sidebar-foreground">
             GAFFER
           </h2>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -95,7 +97,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main navigation">
+      <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Main navigation">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isRelatedMatchReport =
@@ -106,7 +108,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
             return (
               <span
                 key={item.label}
-                className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/50"
+                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40"
                 title="Add a team first"
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
@@ -123,14 +125,20 @@ export function Sidebar({ className, variant }: SidebarProps) {
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-sm font-medium transition-all duration-200 motion-reduce:transition-none",
                   isActive || isRelatedMatchReport
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    ? "border-primary/25 bg-primary/12 text-sidebar-foreground shadow-[inset_0_1px_rgba(255,255,255,0.06)]"
+                    : "border-transparent text-sidebar-foreground/70 hover:border-sidebar-border hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
                 )
               }
             >
-              <Icon className="size-5 shrink-0" aria-hidden="true" />
+              <span
+                className={cn(
+                  "absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary opacity-0 transition-opacity group-aria-[current=page]:opacity-100",
+                )}
+                aria-hidden="true"
+              />
+              <Icon className="size-[18px] shrink-0" aria-hidden="true" />
               {item.label}
             </NavLink>
           );
@@ -139,7 +147,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-sidebar-border px-4 py-4">
+      <div className="border-t border-sidebar-border/70 px-4 py-4">
         {/* Profile — clickable to open the profile editor (coach only) */}
         {resolvedVariant !== "player" && (
         <button
@@ -205,8 +213,8 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
       <aside
         className={cn(
-          "hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0",
-          "bg-sidebar border-r border-sidebar-border",
+          "hidden lg:fixed lg:inset-y-3 lg:left-3 lg:z-20 lg:flex lg:w-[17rem] lg:flex-col lg:overflow-hidden lg:rounded-2xl",
+          "border border-sidebar-border/80 bg-sidebar/85 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.75)] backdrop-blur-xl",
           className,
         )}
       >
@@ -216,7 +224,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Mobile toggle button ──────────────────────────────────────────── */}
       <button
         onClick={() => setIsMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-lg border border-border bg-card p-2 shadow-sm lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-xl border border-border/70 bg-card/80 p-2 shadow-lg backdrop-blur-xl lg:hidden"
         aria-label="Open navigation menu"
       >
         <Menu className="size-5 text-foreground" aria-hidden="true" />
@@ -235,8 +243,8 @@ export function Sidebar({ className, variant }: SidebarProps) {
           {/* Sidebar panel */}
           <aside
             className={cn(
-              "fixed inset-y-0 left-0 w-64 flex flex-col",
-              "bg-sidebar border-r border-sidebar-border",
+              "fixed inset-y-0 left-0 flex w-72 flex-col",
+              "border-r border-sidebar-border bg-sidebar/95 shadow-2xl backdrop-blur-xl",
             )}
           >
             {/* Close button */}

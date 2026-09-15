@@ -24,12 +24,20 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
+      <div
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
+        aria-hidden="true"
+      />
       <Sidebar />
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
+      <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-72">
       
-        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border bg-background/95 backdrop-blur lg:hidden">
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border/60 bg-background/75 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-2">
             <SportLogo size={26} className="rounded-md" />
             <span className="font-display text-sm font-bold tracking-wide text-foreground">
