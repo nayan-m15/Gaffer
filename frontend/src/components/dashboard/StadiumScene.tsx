@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { GammaCorrectionShader } from "three/examples/jsm/shaders/GammaCorrectionShader.js";
 
 function getCanvasContext(canvas: HTMLCanvasElement) {
   const context = canvas.getContext("2d");
@@ -11,7 +16,17 @@ function getCanvasContext(canvas: HTMLCanvasElement) {
 
 /**
  * The animated day/night stadium from the approved dashboard concept.
- * It is deliberately presentation-only so it cannot intercept dashboard input.
+ *
+ * Hyper-realistic pass over the original:
+ * - PBR materials (roughness/bump) + soft PCF shadows from a sun/moon light
+ * - Bloom pass so the floodlights and roof trim actually glow
+ * - A gradient sky dome instead of a flat background color
+ * - Camera only sweeps side-to-side across the stadium front (no full orbit)
+ * - Camera radius tracks the elliptical bowl boundary at each pan angle,
+ *   so it never drifts outside the stands (the bowl is an ellipse, not a
+ *   circle, so a fixed-radius pan would poke outside it at some angles)
+ *
+ * It remains deliberately presentation-only so it cannot intercept dashboard input.
  */
 export function StadiumScene() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,14 +56,20 @@ export function StadiumScene() {
       Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2),
     );
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    // No renderer-level color-space flag needed here — the final
+    // GammaCorrectionShader pass below converts the composite to sRGB,
+    // and tone mapping is already applied when RenderPass draws the scene.
+
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
 
     const scene = new THREE.Scene();
     const darkBackground = new THREE.Color(0x060a08);
     scene.background = darkBackground.clone();
-    const fog = new THREE.FogExp2(
-      0x060a08,
-      isMobile ? 0.0048 : 0.0032,
-    );
+    const fog = new THREE.FogExp2(0x060a08, isMobile ? 0.0048 : 0.0032);
     scene.fog = fog;
 
     const camera = new THREE.PerspectiveCamera(
@@ -57,21 +78,95 @@ export function StadiumScene() {
       0.1,
       2000,
     );
-    let cameraAngle = 0.65;
-    const cameraRadius = 165;
+    const cameraCenterAngle = 0.65;
+    const cameraSweep = 0.5; // radians each side of center — total pan, not a full orbit
     const cameraHeight = 46;
+
+    // --- Stadium footprint (bowl is an ellipse, not a circle) ---
+    // The lathed bowl profile below peaks around radius 136, then the
+    // whole bowl group is scaled by (bowlScaleX, 1, bowlScaleZ). To keep
+    // the panning camera inside the stands at every angle, we compute the
+    // elliptical boundary radius at that angle and stay a fixed clearance
+    // inside it, rather than using one constant radius for the whole pan.
+    const bowlScaleX = 1.55;
+    const bowlScaleZ = 1.05;
+    const bowlOuterRadius = 136; // widest point of the lathed bowl profile
+    const cameraClearance = 28; // stay this far inside the stands at every pan angle
+
+    function bowlBoundaryRadius(angle: number) {
+      const a = bowlOuterRadius * bowlScaleX;
+      const b = bowlOuterRadius * bowlScaleZ;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      return 1 / Math.sqrt((cos * cos) / (a * a) + (sin * sin) / (b * b));
+    }
+
+    function cameraRadiusForAngle(angle: number) {
+      return bowlBoundaryRadius(angle) - cameraClearance;
+    }
+
+    let cameraAngle = cameraCenterAngle;
     camera.position.set(
-      Math.cos(cameraAngle) * cameraRadius,
+      Math.cos(cameraAngle) * cameraRadiusForAngle(cameraAngle),
       cameraHeight,
-      Math.sin(cameraAngle) * cameraRadius,
+      Math.sin(cameraAngle) * cameraRadiusForAngle(cameraAngle),
     );
     camera.lookAt(0, 14, 0);
 
-    const ambient = new THREE.AmbientLight(0x24352b, 1.5);
+    // --- Sky dome (replaces the flat background with a soft gradient) ---
+    const skyDomeMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color(0x0a1220) },
+        bottomColor: { value: new THREE.Color(0x141a16) },
+        offset: { value: 40 },
+        exponent: { value: 0.7 },
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: false,
+    });
+    const skyDome = new THREE.Mesh(
+      new THREE.SphereGeometry(900, 24, 16),
+      skyDomeMaterial,
+    );
+    scene.add(skyDome);
+
+    // --- Lighting ---
+    const ambient = new THREE.AmbientLight(0x24352b, 1.1);
     scene.add(ambient);
-    const sky = new THREE.DirectionalLight(0x30456a, 0.45);
-    sky.position.set(80, 150, 60);
-    scene.add(sky);
+
+    const sun = new THREE.DirectionalLight(0x30456a, 0.5);
+    sun.position.set(80, 150, 60);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048);
+    sun.shadow.camera.left = -260;
+    sun.shadow.camera.right = 260;
+    sun.shadow.camera.top = 200;
+    sun.shadow.camera.bottom = -200;
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far = 500;
+    sun.shadow.bias = -0.0004;
+    scene.add(sun);
+    scene.add(sun.target);
 
     function makePitchTexture() {
       const textureCanvas = document.createElement("canvas");
@@ -90,6 +185,27 @@ export function StadiumScene() {
           textureCanvas.height,
         );
       }
+
+      // Subtle per-blade color noise so the turf reads as grass, not paint.
+      const noise = context.getImageData(
+        0,
+        0,
+        textureCanvas.width,
+        textureCanvas.height,
+      );
+      for (let i = 0; i < noise.data.length; i += 4) {
+        const variance = (Math.random() - 0.5) * 14;
+        noise.data[i] = Math.max(0, Math.min(255, noise.data[i] + variance));
+        noise.data[i + 1] = Math.max(
+          0,
+          Math.min(255, noise.data[i + 1] + variance),
+        );
+        noise.data[i + 2] = Math.max(
+          0,
+          Math.min(255, noise.data[i + 2] + variance * 0.6),
+        );
+      }
+      context.putImageData(noise, 0, 0);
 
       context.strokeStyle = "rgba(255,255,255,0.55)";
       context.lineWidth = 3;
@@ -129,7 +245,43 @@ export function StadiumScene() {
         54,
         112,
       );
+
+      // Soft contact-shadow vignette where the stands meet the pitch.
+      const vignette = context.createRadialGradient(
+        textureCanvas.width / 2,
+        textureCanvas.height / 2,
+        textureCanvas.height * 0.32,
+        textureCanvas.width / 2,
+        textureCanvas.height / 2,
+        textureCanvas.height * 0.62,
+      );
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+      context.fillStyle = vignette;
+      context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
+
       return new THREE.CanvasTexture(textureCanvas);
+    }
+
+    function makePitchBumpTexture() {
+      const textureCanvas = document.createElement("canvas");
+      textureCanvas.width = 512;
+      textureCanvas.height = 512;
+      const context = getCanvasContext(textureCanvas);
+      const image = context.createImageData(512, 512);
+      for (let i = 0; i < image.data.length; i += 4) {
+        const value = 150 + Math.random() * 45;
+        image.data[i] = value;
+        image.data[i + 1] = value;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+      context.putImageData(image, 0, 0);
+      const texture = new THREE.CanvasTexture(textureCanvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(6, 4);
+      return texture;
     }
 
     function makeCrowdTexture() {
@@ -153,14 +305,23 @@ export function StadiumScene() {
       const columns = 90;
       for (let row = 0; row < rows; row += 1) {
         const y = (row / rows) * textureCanvas.height;
+        // Rows further "back" (lower in the texture) read slightly darker
+        // and smaller — a cheap depth cue for the crowd.
+        const depthDarken = 1 - row / (rows * 1.6);
         for (let column = 0; column < columns; column += 1) {
           if (Math.random() > 0.38) {
             const x =
               (column / columns) * textureCanvas.width + Math.random() * 3;
             context.fillStyle =
               colors[Math.floor(Math.random() * colors.length)];
-            context.globalAlpha = 0.4 + Math.random() * 0.55;
-            context.fillRect(x, y + Math.random() * 4, 2.4, 3.4);
+            context.globalAlpha =
+              (0.4 + Math.random() * 0.55) * Math.max(0.35, depthDarken);
+            context.fillRect(
+              x,
+              y + Math.random() * 4,
+              2.4,
+              2.6 + depthDarken * 1.2,
+            );
           }
         }
       }
@@ -188,15 +349,20 @@ export function StadiumScene() {
     }
 
     const pitchTexture = makePitchTexture();
+    const pitchBumpTexture = makePitchBumpTexture();
+    pitchTexture.anisotropy = maxAnisotropy;
     const pitch = new THREE.Mesh(
       new THREE.PlaneGeometry(220, 140),
       new THREE.MeshStandardMaterial({
         map: pitchTexture,
-        roughness: 0.95,
+        bumpMap: pitchBumpTexture,
+        bumpScale: 0.12,
+        roughness: 0.92,
         metalness: 0,
       }),
     );
     pitch.rotation.x = -Math.PI / 2;
+    pitch.receiveShadow = true;
     scene.add(pitch);
 
     const profile = [
@@ -212,6 +378,7 @@ export function StadiumScene() {
     ].map(([x, y]) => new THREE.Vector2(x, y));
     const latheSegments = isMobile ? 26 : 44;
     const crowdTexture = makeCrowdTexture();
+    crowdTexture.anisotropy = maxAnisotropy;
     const bowl = new THREE.Mesh(
       new THREE.LatheGeometry(profile, latheSegments),
       new THREE.MeshStandardMaterial({
@@ -221,6 +388,8 @@ export function StadiumScene() {
         metalness: 0,
       }),
     );
+    bowl.castShadow = true;
+    bowl.receiveShadow = true;
     const roof = new THREE.Mesh(
       new THREE.TorusGeometry(133, 2.4, 6, isMobile ? 26 : 44),
       new THREE.MeshBasicMaterial({
@@ -234,7 +403,7 @@ export function StadiumScene() {
 
     const stadium = new THREE.Group();
     stadium.add(bowl, roof);
-    stadium.scale.set(1.55, 1, 1.05);
+    stadium.scale.set(bowlScaleX, 1, bowlScaleZ);
     scene.add(stadium);
 
     const glowTexture = makeGlowTexture();
@@ -253,6 +422,7 @@ export function StadiumScene() {
         new THREE.MeshStandardMaterial({ color: 0x14181a, roughness: 0.7 }),
       );
       pole.position.set(x, 44, z);
+      pole.castShadow = true;
       scene.add(pole);
 
       const head = new THREE.Mesh(
@@ -260,6 +430,7 @@ export function StadiumScene() {
         new THREE.MeshStandardMaterial({ color: 0x1c2224, roughness: 0.6 }),
       );
       head.position.set(x, 90, z);
+      head.castShadow = true;
       scene.add(head);
 
       const glow = new THREE.Sprite(
@@ -343,6 +514,20 @@ export function StadiumScene() {
     const stars = new THREE.Points(starGeometry, starMaterial);
     scene.add(stars);
 
+    // --- Post-processing (bloom makes the floodlights & roof trim glow) ---
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      isMobile ? 0.55 : 0.85,
+      0.55,
+      0.82,
+    );
+    composer.addPass(bloomPass);
+    // Converts the composite back from linear to sRGB for display — the
+    // widely-available equivalent of OutputPass (added later, in r152).
+    composer.addPass(new ShaderPass(GammaCorrectionShader));
+
     let pointerX = 0;
     let pointerY = 0;
     const handlePointerMove = (event: PointerEvent) => {
@@ -356,10 +541,13 @@ export function StadiumScene() {
     const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setPixelRatio(
-        Math.min(window.devicePixelRatio || 1, window.innerWidth < 760 ? 1.5 : 2),
+      const pixelRatio = Math.min(
+        window.devicePixelRatio || 1,
+        window.innerWidth < 760 ? 1.5 : 2,
       );
+      renderer.setPixelRatio(pixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener("resize", handleResize);
 
@@ -368,12 +556,15 @@ export function StadiumScene() {
       fogColor: new THREE.Color(0x060a08),
       fogDensity: fog.density,
       ambientColor: new THREE.Color(0x24352b),
-      ambientIntensity: 1.5,
-      skyColor: new THREE.Color(0x30456a),
-      skyIntensity: 0.45,
+      ambientIntensity: 1.1,
+      sunColor: new THREE.Color(0x30456a),
+      sunIntensity: 0.5,
+      skyTop: new THREE.Color(0x0a1220),
+      skyBottom: new THREE.Color(0x141a16),
       starsOpacity: 0.5,
       glowOpacity: 0.85,
       lightIntensity: 1,
+      bloomStrength: isMobile ? 0.55 : 0.85,
     };
 
     const setLightTheme = (isLight: boolean) => {
@@ -382,23 +573,29 @@ export function StadiumScene() {
         target.fogColor.set(0xd3e4ea);
         target.fogDensity = isMobile ? 0.0026 : 0.0018;
         target.ambientColor.set(0xffffff);
-        target.ambientIntensity = 1.9;
-        target.skyColor.set(0xfff2d2);
-        target.skyIntensity = 1.15;
+        target.ambientIntensity = 1.4;
+        target.sunColor.set(0xfff2d2);
+        target.sunIntensity = 2.2;
+        target.skyTop.set(0x8fc4f0);
+        target.skyBottom.set(0xeaf2e9);
         target.starsOpacity = 0;
         target.glowOpacity = 0.12;
         target.lightIntensity = 0.15;
+        target.bloomStrength = 0.12;
       } else {
         target.background.set(0x060a08);
         target.fogColor.set(0x060a08);
         target.fogDensity = isMobile ? 0.0048 : 0.0032;
         target.ambientColor.set(0x24352b);
-        target.ambientIntensity = 1.5;
-        target.skyColor.set(0x30456a);
-        target.skyIntensity = 0.45;
+        target.ambientIntensity = 1.1;
+        target.sunColor.set(0x30456a);
+        target.sunIntensity = 0.5;
+        target.skyTop.set(0x0a1220);
+        target.skyBottom.set(0x141a16);
         target.starsOpacity = 0.5;
         target.glowOpacity = 0.85;
         target.lightIntensity = 1;
+        target.bloomStrength = isMobile ? 0.55 : 0.85;
       }
     };
 
@@ -428,11 +625,20 @@ export function StadiumScene() {
       ambient.color.lerp(target.ambientColor, transitionAmount);
       ambient.intensity +=
         (target.ambientIntensity - ambient.intensity) * transitionAmount;
-      sky.color.lerp(target.skyColor, transitionAmount);
-      sky.intensity +=
-        (target.skyIntensity - sky.intensity) * transitionAmount;
+      sun.color.lerp(target.sunColor, transitionAmount);
+      sun.intensity += (target.sunIntensity - sun.intensity) * transitionAmount;
+      (skyDomeMaterial.uniforms.topColor.value as THREE.Color).lerp(
+        target.skyTop,
+        transitionAmount,
+      );
+      (skyDomeMaterial.uniforms.bottomColor.value as THREE.Color).lerp(
+        target.skyBottom,
+        transitionAmount,
+      );
       starMaterial.opacity +=
         (target.starsOpacity - starMaterial.opacity) * transitionAmount;
+      bloomPass.strength +=
+        (target.bloomStrength - bloomPass.strength) * transitionAmount;
 
       glowSprites.forEach((glow) => {
         const material = glow.material as THREE.SpriteMaterial;
@@ -445,13 +651,22 @@ export function StadiumScene() {
       });
 
       if (!reducedMotion) {
-        cameraAngle += delta * 0.026;
-        camera.position.x =
-          Math.cos(cameraAngle) * cameraRadius + pointerX * 8;
-        camera.position.z = Math.sin(cameraAngle) * cameraRadius;
+        // Side-to-side pan only: the angle oscillates between two bounds
+        // around the stadium front instead of orbiting all the way around.
+        // The radius is recomputed per-frame from the elliptical bowl
+        // boundary at the current angle, so the camera stays inside the
+        // stands no matter where in the sweep it is.
+        const panPhase = Math.sin(elapsed * 0.09);
+        cameraAngle = cameraCenterAngle + panPhase * cameraSweep;
+        const radius = cameraRadiusForAngle(cameraAngle);
+
+        camera.position.x = Math.cos(cameraAngle) * radius + pointerX * 8;
+        camera.position.z = Math.sin(cameraAngle) * radius;
         camera.position.y =
           cameraHeight + pointerY * 6 + Math.sin(elapsed * 0.15) * 1.5;
         camera.lookAt(0, 14, 0);
+
+        sun.target.position.set(0, 14, 0);
 
         glowSprites.forEach((glow, index) => {
           const size = 46 + Math.sin(elapsed * 1.6 + index) * 2.2;
@@ -467,7 +682,7 @@ export function StadiumScene() {
         particleGeometry.attributes.position.needsUpdate = true;
       }
 
-      renderer.render(scene, camera);
+      composer.render();
       animationFrame = window.requestAnimationFrame(animate);
     };
     animate();
@@ -489,9 +704,30 @@ export function StadiumScene() {
           object.material.dispose();
         }
       });
+      skyDomeMaterial.dispose();
       pitchTexture.dispose();
+      pitchBumpTexture.dispose();
       crowdTexture.dispose();
       glowTexture.dispose();
+      // Cast to a loose shape: EffectComposer/UnrealBloomPass gained an
+      // explicit `dispose()` in later three.js releases than these
+      // @types cover, but calling it when present avoids leaking the
+      // internal render targets these passes allocate.
+      const disposableBloomPass = bloomPass as unknown as {
+        dispose?: () => void;
+      };
+      const disposableComposer = composer as unknown as {
+        dispose?: () => void;
+        renderTarget1?: THREE.WebGLRenderTarget;
+        renderTarget2?: THREE.WebGLRenderTarget;
+      };
+      disposableBloomPass.dispose?.();
+      if (disposableComposer.dispose) {
+        disposableComposer.dispose();
+      } else {
+        disposableComposer.renderTarget1?.dispose();
+        disposableComposer.renderTarget2?.dispose();
+      }
       renderer.dispose();
       scene.clear();
     };
