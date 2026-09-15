@@ -205,7 +205,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
       <aside
         className={cn(
-          "hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0",
+          "hidden lg:fixed lg:inset-y-0 lg:z-20 lg:flex lg:w-64 lg:flex-col",
           "bg-sidebar border-r border-sidebar-border",
           className,
         )}

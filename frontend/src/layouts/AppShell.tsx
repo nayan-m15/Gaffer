@@ -27,7 +27,7 @@ export function AppShell() {
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <Sidebar />
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
+      <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-64">
       
         <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border bg-background/95 backdrop-blur lg:hidden">
           <div className="flex items-center gap-2">

@@ -51,7 +51,7 @@ export function Footer({ variant = "coach" }: FooterProps) {
   ];
 
   return (
-    <footer className="border-t border-border px-6 py-6 text-sm text-muted-foreground sm:px-8">
+    <footer className="relative z-10 border-t border-border px-6 py-6 text-sm text-muted-foreground sm:px-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <SportLogo size={20} className="rounded" />

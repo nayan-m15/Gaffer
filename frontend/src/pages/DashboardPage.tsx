@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner"
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { useEvent, useNow } from "@/features/events/hooks";
-import { useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -26,6 +25,12 @@ import {
   BarChart3,
   Users,
 } from "lucide-react";
+
+const StadiumScene = lazy(() =>
+  import("@/components/dashboard/StadiumScene").then((module) => ({
+    default: module.StadiumScene,
+  })),
+);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TYPES — contracts the dashboard expects from the backend.
@@ -140,13 +145,24 @@ function Card({
   return (
     <section
       className={cn(
-        "rounded-xl border border-border bg-card p-5",
+        "dashboard-glass-card rounded-xl border border-border p-5",
         className,
       )}
       {...props}
     >
       {children}
     </section>
+  );
+}
+
+function DashboardFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative isolate min-h-full">
+      <Suspense fallback={null}>
+        <StadiumScene />
+      </Suspense>
+      <div className="relative z-10">{children}</div>
+    </div>
   );
 }
 
@@ -703,7 +719,7 @@ export default function DashboardPage() {
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <>
+      <DashboardFrame>
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
@@ -728,14 +744,14 @@ export default function DashboardPage() {
             Try again
           </Button>
         </div>
-      </>
+      </DashboardFrame>
     );
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <>
+      <DashboardFrame>
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
@@ -762,7 +778,7 @@ export default function DashboardPage() {
             <CardSkeleton lines={4} />
           </div>
         </div>
-      </>
+      </DashboardFrame>
     );
   }
 
@@ -782,7 +798,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <>
+    <DashboardFrame>
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
@@ -885,6 +901,6 @@ export default function DashboardPage() {
         onEdit={() => navigate("/events")}
       />
       <AddTeamModal open={addTeamOpen} onOpenChange={setAddTeamOpen} />
-    </>
+    </DashboardFrame>
   );
 }
