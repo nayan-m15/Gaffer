@@ -236,7 +236,7 @@ export default function TeamManagementPage() {
         />
       </PageHeader>
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {activeSection === "tactics" ? (
           <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (

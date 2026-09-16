@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 /**
  * Player-specific app chrome: responsive sidebar (player variant) + main outlet.
@@ -23,6 +25,16 @@ export function PlayerShell() {
   }, []);
 
   return (
+    <SidebarProvider>
+      <PlayerShellContent />
+    </SidebarProvider>
+  );
+}
+
+function PlayerShellContent() {
+  const { expanded } = useSidebar();
+
+  return (
     <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
@@ -34,7 +46,12 @@ export function PlayerShell() {
       />
       <Sidebar variant="player" />
 
-      <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:pl-72">
+      <main
+        className={cn(
+          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto transition-[padding] duration-300 motion-reduce:transition-none",
+          expanded ? "lg:pl-72" : "lg:pl-24",
+        )}
+      >
         <div className="flex-1">
           <Outlet />
         </div>

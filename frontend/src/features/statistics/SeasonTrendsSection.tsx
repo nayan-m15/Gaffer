@@ -34,7 +34,7 @@ export function SeasonTrendsSection({
   // Below two matches there is no trend to show, only a single result.
   if (form.rolling.length < 2) {
     return (
-      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
         <SectionHeading>Season Trends</SectionHeading>
         <p className="mt-2 text-sm text-muted-foreground">
           Trends appear once at least two matches have been played this season.
@@ -45,7 +45,7 @@ export function SeasonTrendsSection({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
-      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
         <SectionHeading>Form Trend</SectionHeading>
         <p className="mb-3 text-xs text-muted-foreground">
           Rolling average over the last {rollingWindow} matches. Early matches
@@ -54,7 +54,7 @@ export function SeasonTrendsSection({
         <RollingFormChart rolling={form.rolling} rollingWindow={rollingWindow} />
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+      <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
         <SectionHeading>Points Progression</SectionHeading>
         <p className="mb-3 text-xs text-muted-foreground">
           Points accumulated across the season.
@@ -63,7 +63,7 @@ export function SeasonTrendsSection({
       </section>
 
       {periods.splits.length >= 2 && (
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6 lg:col-span-2">
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6 lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <SectionHeading>

@@ -4,6 +4,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { BentoGrid } from "@/components/ui/bento-grid";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { HoverEffect } from "@/components/ui/card-hover-effect";
 import { AppCard as Card } from "@/components/app/AppCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
@@ -840,6 +841,22 @@ export default function DashboardPage() {
           match={liveMatch ?? null}
           onOpenLogger={() => navigate("/events")}
         />
+
+        {team && (
+          <section aria-labelledby="quick-actions-heading">
+            <SectionTitle icon={<Activity className="size-4 text-muted-foreground" />}>
+              <span id="quick-actions-heading">Quick Actions</span>
+            </SectionTitle>
+            <HoverEffect
+              items={[
+                { title: "Events", description: "Plan training, matches, and meetings.", to: "/events", icon: <Calendar className="size-5" /> },
+                { title: "Squad", description: "Manage athletes and availability.", to: "/athletes", icon: <Users className="size-5" /> },
+                { title: "Live Logger", description: "Start or continue match tracking.", to: "/live-logger", icon: <Activity className="size-5" /> },
+                { title: "Statistics", description: "Review form and performance trends.", to: "/statistics", icon: <BarChart3 className="size-5" /> },
+              ]}
+            />
+          </section>
+        )}
 
         {/* ── Sprint 1: Stat Cards ────────────────────────────────────────── */}
         <BentoGrid className="max-w-none gap-5 sm:grid-cols-2 md:auto-rows-auto md:grid-cols-2">

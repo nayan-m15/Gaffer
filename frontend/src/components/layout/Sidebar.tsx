@@ -5,6 +5,8 @@ import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
+import { useSidebar } from "@/components/ui/sidebar";
+import { motion, useReducedMotion } from "motion/react";
 import type { LucideIcon } from "lucide-react";
 import {
   Home,
@@ -19,6 +21,8 @@ import {
   X,
   Shield,
   Trophy,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -65,6 +69,8 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const { pathname } = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { expanded, toggle } = useSidebar();
+  const reduceMotion = useReducedMotion();
 
   const resolvedVariant = variant ?? (accountKind === "player" ? "player" : "coach");
   const navItems = resolvedVariant === "player" ? PLAYER_NAV_ITEMS : COACH_NAV_ITEMS;
@@ -82,11 +88,16 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const sidebarContent = (
     <>
       {/* Brand header */}
-      <div className="flex items-center gap-3 border-b border-sidebar-border/70 px-5 py-6">
+      <div
+        className={cn(
+          "flex items-center gap-3 border-b border-sidebar-border/70 px-5 py-6",
+          !expanded && "lg:justify-center lg:px-2",
+        )}
+      >
         <div className="rounded-xl border border-primary/20 bg-primary/10 p-1.5 shadow-[0_0_28px_-10px_var(--primary)]">
           <SportLogo size={32} className="rounded-md" />
         </div>
-        <div>
+        <div className={cn(!expanded && "lg:hidden")}>
           <h2 className="font-display text-base font-bold tracking-[0.16em] text-sidebar-foreground">
             GAFFER
           </h2>
@@ -112,7 +123,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 title="Add a team first"
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
-                {item.label}
+                <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
               </span>
             );
           }
@@ -139,7 +150,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 aria-hidden="true"
               />
               <Icon className="size-[18px] shrink-0" aria-hidden="true" />
-              {item.label}
+              <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
             </NavLink>
           );
         })}
@@ -169,7 +180,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
               (user?.name?.charAt(0).toUpperCase() ?? "C")
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", !expanded && "lg:hidden")}>
             <p className="truncate text-sm font-medium text-sidebar-foreground">
               {user?.name ?? "Coach"}
             </p>
@@ -193,7 +204,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
               <Moon className="size-5" />
             )}
           </span>
-          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          <span className={cn(!expanded && "lg:hidden")}>
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </span>
         </button>
 
         {/* Sign out */}
@@ -202,7 +215,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
         >
           <LogOut className="size-5 shrink-0" aria-hidden="true" />
-          Sign Out
+          <span className={cn(!expanded && "lg:hidden")}>Sign Out</span>
         </button>
       </div>
     </>
@@ -211,15 +224,30 @@ export function Sidebar({ className, variant }: SidebarProps) {
   return (
     <>
       {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
-      <aside
+      <motion.aside
+        animate={{ width: expanded ? 272 : 64 }}
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : { type: "spring", stiffness: 280, damping: 28 }
+        }
         className={cn(
-          "hidden lg:fixed lg:inset-y-3 lg:left-3 lg:z-20 lg:flex lg:w-[17rem] lg:flex-col lg:overflow-hidden lg:rounded-2xl",
+          "hidden lg:fixed lg:inset-y-3 lg:left-3 lg:z-20 lg:flex lg:flex-col lg:overflow-hidden lg:rounded-2xl",
           "border border-sidebar-border/80 bg-sidebar/85 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.75)] backdrop-blur-xl",
           className,
         )}
       >
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={expanded ? "Collapse navigation" : "Expand navigation"}
+          title={expanded ? "Collapse navigation" : "Expand navigation"}
+        >
+          {expanded ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+        </button>
         {sidebarContent}
-      </aside>
+      </motion.aside>
 
       {/* ── Mobile toggle button ──────────────────────────────────────────── */}
       <button
