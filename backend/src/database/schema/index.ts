@@ -680,3 +680,193 @@ export const matchEvents = pgTable(
       .where(sql`${table.clientRequestId} is not null`),
   ],
 );
+
+/* ── Injury & recovery ─────────────────────────────────────────────────────
+ * An injury record is the clinical counterpart to the `injury` match event.
+ * The match event says "something happened at 34'"; the injury record says
+ * what it was, how long the athlete is expected to be out, and how the
+ * recovery actually went. One record may be linked to the match event that
+ * produced it, but records also exist for training and non-match injuries.
+ */
+
+// Sided regions are stored as explicit `_left` / `_right` values rather than
+// a separate side column: every query the UI makes is "which region is hurt",
+// and a nullable side column would make "left hamstring" two fields to match
+// on in every one of them.
+export const injuryBodyRegion = pgEnum('injury_body_region', [
+  'head',
+  'neck',
+  'shoulder_left',
+  'shoulder_right',
+  'upper_arm_left',
+  'upper_arm_right',
+  'forearm_left',
+  'forearm_right',
+  'wrist_hand_left',
+  'wrist_hand_right',
+  'chest',
+  'abdomen',
+  'groin',
+  'back_upper',
+  'back_lower',
+  'glute_left',
+  'glute_right',
+  'hamstring_left',
+  'hamstring_right',
+  'quad_left',
+  'quad_right',
+  'knee_left',
+  'knee_right',
+  'calf_left',
+  'calf_right',
+  'achilles_left',
+  'achilles_right',
+  'ankle_left',
+  'ankle_right',
+  'foot_left',
+  'foot_right',
+]);
+
+export const injuryType = pgEnum('injury_type', [
+  'strain',
+  'sprain',
+  'tear',
+  'fracture',
+  'contusion',
+  'dislocation',
+  'tendinopathy',
+  'concussion',
+  'laceration',
+  'illness',
+  'other',
+]);
+
+// Maps to the grade 1/2/3 language physios use, kept in plain words because
+// the coach logging an injury pitch-side is not grading it clinically.
+export const injurySeverity = pgEnum('injury_severity', [
+  'minor',
+  'moderate',
+  'severe',
+]);
+
+export const injuryStatus = pgEnum('injury_status', [
+  'reported',
+  'assessment',
+  'rehab',
+  'return_to_training',
+  'returned',
+  'season_ending',
+]);
+
+export const injuryContext = pgEnum('injury_context', [
+  'match',
+  'training',
+  'other',
+]);
+
+export const injuries = pgTable(
+  'injuries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athletes.id, { onDelete: 'cascade' }),
+    bodyRegion: injuryBodyRegion('body_region').notNull(),
+    injuryType: injuryType('injury_type').notNull(),
+    severity: injurySeverity('severity').notNull(),
+    status: injuryStatus('status').default('reported').notNull(),
+    context: injuryContext('context').default('other').notNull(),
+    occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
+    // Set only for injuries logged from the live logger. The match event is
+    // the audit trail for "when in the game"; deleting it (a mis-tap being
+    // undone) must not delete the clinical record, hence `set null`.
+    matchId: uuid('match_id').references(() => matches.id, {
+      onDelete: 'set null',
+    }),
+    matchEventId: uuid('match_event_id').references(() => matchEvents.id, {
+      onDelete: 'set null',
+    }),
+    minute: integer('minute'),
+    // Seeded from the protocol table at creation and overridable by a coach,
+    // which is why the day counts are persisted rather than recomputed: a
+    // coach's override has to survive a revision of the protocol table.
+    estimatedReturnMinDays: integer('estimated_return_min_days').notNull(),
+    estimatedReturnMaxDays: integer('estimated_return_max_days').notNull(),
+    estimatedReturnFrom: date('estimated_return_from', {
+      mode: 'string',
+    }).notNull(),
+    estimatedReturnTo: date('estimated_return_to', {
+      mode: 'string',
+    }).notNull(),
+    actualReturnOn: date('actual_return_on', { mode: 'string' }),
+    diagnosedBy: text('diagnosed_by'),
+    description: text('description'),
+    notes: text('notes'),
+    // Protocol phase snapshot, frozen at creation so a later revision of the
+    // protocol table cannot rewrite the plan an athlete is already following.
+    // Not surfaced yet — the rehab-plan UI reads it in a later slice.
+    rehabPhases: jsonb('rehab_phases'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('injuries_team_id_index').on(table.teamId),
+    index('injuries_athlete_id_index').on(table.athleteId),
+    // Serves the open-injury lists and the athlete-status sync, which both
+    // filter on (team_id, status).
+    index('injuries_team_status_index').on(table.teamId, table.status),
+    // Serves the recurrence check, which looks for a prior injury to the same
+    // region on the same athlete.
+    index('injuries_athlete_region_index').on(
+      table.athleteId,
+      table.bodyRegion,
+    ),
+    // One clinical record per logged match event: tapping Injury twice on the
+    // same incident must not produce two records.
+    uniqueIndex('injuries_match_event_unique')
+      .on(table.matchEventId)
+      .where(sql`${table.matchEventId} is not null`),
+  ],
+);
+
+export const injuryTimelineKind = pgEnum('injury_timeline_kind', [
+  'sustained',
+  'assessment',
+  'rehab_started',
+  'reassessment',
+  'setback',
+  'return_to_training',
+  'returned',
+  'note',
+  'estimated_return',
+]);
+
+export const injuryTimelineEntries = pgTable(
+  'injury_timeline_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    injuryId: uuid('injury_id')
+      .notNull()
+      .references(() => injuries.id, { onDelete: 'cascade' }),
+    kind: injuryTimelineKind('kind').notNull(),
+    occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
+    title: text('title').notNull(),
+    detail: text('detail'),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('injury_timeline_entries_injury_index').on(
+      table.injuryId,
+      table.occurredOn,
+    ),
+  ],
+);

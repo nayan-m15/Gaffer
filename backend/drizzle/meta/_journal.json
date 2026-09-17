@@ -155,6 +155,13 @@
       "when": 1789296982997,
       "tag": "0020_futuristic_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789676805996,
+      "tag": "0021_low_triathlon",
+      "breakpoints": true
     }
   ]
 }

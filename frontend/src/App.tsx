@@ -26,6 +26,7 @@ const LiveLoggerPage = lazy(() => import('@/pages/LiveLoggerPage'))
 const LiveMatchPage = lazy(() => import('@/pages/LiveMatchPage'))
 const MatchReportPage = lazy(() => import('@/pages/MatchReportPage'))
 const StatisticsPage = lazy(() => import('@/pages/StatisticsPage'))
+const InjuryRecoveryPage = lazy(() => import('@/features/injuries/InjuryRecoveryPage'))
 const TeamManagementPage = lazy(() => import('@/features/team-management/TeamManagementPage'))
 const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
 const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
@@ -163,6 +164,14 @@ function App() {
             element={
               <RequireTeam>
                 <StatisticsPage />
+              </RequireTeam>
+            }
+          />
+          <Route
+            path="/injuries"
+            element={
+              <RequireTeam>
+                <InjuryRecoveryPage />
               </RequireTeam>
             }
           />

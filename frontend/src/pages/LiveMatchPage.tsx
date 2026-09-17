@@ -73,6 +73,12 @@ import {
 } from "@/features/matches/live-match-model";
 import { SoccerBallIcon, BootIcon } from "@/features/matches/match-icons";
 import {
+  LiveInjurySheet,
+  type LiveInjurySpec,
+} from "@/features/matches/LiveInjurySheet";
+import { injuryTitle } from "@/features/injuries/body-regions";
+import { useCreateInjury } from "@/features/injuries/hooks";
+import {
   LiveBenchRow,
   LivePitch,
   LivePitchPlayers,
@@ -96,6 +102,15 @@ type LogTarget =
 type Composer =
   | { kind: "closed" }
   | { kind: "penalty-outcome" }
+  | {
+      /**
+       * The injury-specification step. Own-team, on-pitch players only —
+       * an opponent's clinical record is not ours to keep.
+       */
+      kind: "injury-detail";
+      athlete: MatchSquadAthlete;
+      minute: number;
+    }
   | {
       kind: "sub-in";
       team: MatchEventTeam;
@@ -164,6 +179,11 @@ type PersistInput = {
   detail?: string;
   minute?: number;
   reassignId?: string;
+  /**
+   * Diagnosis from the injury sheet. When present, an injury record is
+   * created after the match event lands and linked back to it.
+   */
+  injurySpec?: LiveInjurySpec;
 };
 
 function formatClock(elapsedMs: number) {
@@ -287,6 +307,7 @@ export default function LiveMatchPage() {
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");
   const updateClock = useUpdateMatchClock(matchId ?? "");
+  const createInjury = useCreateInjury();
 
   const [period, setPeriod] = useState<Period>("not_started");
   const [running, setRunning] = useState(false);
@@ -754,6 +775,37 @@ export default function LiveMatchPage() {
               eventType,
               nextKind: "mandatory-sub-in",
             });
+            /* The clinical record is created only after the match event has
+             * landed, and its failure is never allowed to propagate: the
+             * mandatory substitution below is the thing the coach cannot do
+             * without, so a failed record degrades to a toast rather than
+             * swallowing the prompt. */
+            if (input.injurySpec && input.athleteId && matchId) {
+              const spec = input.injurySpec;
+              try {
+                await createInjury.mutateAsync({
+                  athleteId: input.athleteId,
+                  bodyRegion: spec.bodyRegion,
+                  injuryType: spec.injuryType,
+                  severity: spec.severity,
+                  occurredOn: new Date().toISOString().slice(0, 10),
+                  context: "match",
+                  matchId,
+                  matchEventId: created.id,
+                  minute: created.minute,
+                });
+                setToast({
+                  label: `${injuryTitle(spec)} recorded`,
+                });
+                window.setTimeout(() => setToast(null), 5000);
+              } catch {
+                setToast({
+                  label:
+                    "Injury logged, but the details were not saved. Add them on the Injury page.",
+                });
+                window.setTimeout(() => setToast(null), 6000);
+              }
+            }
             if (input.team === "own" && input.athleteId) {
               const outgoing = squad.find(
                 (athlete) => athlete.id === input.athleteId,
@@ -819,11 +871,16 @@ export default function LiveMatchPage() {
       opponentSquad,
       logEvent,
       updateEvent,
+      createInjury,
       closeComposer,
     ],
   );
 
-  const persistFromTarget = (eventType: LogAction, detail?: string) => {
+  const persistFromTarget = (
+    eventType: LogAction,
+    detail?: string,
+    injurySpec?: LiveInjurySpec,
+  ) => {
     if (!target) {
       setActionError("Select a player first.");
       return;
@@ -837,6 +894,7 @@ export default function LiveMatchPage() {
         eventType,
         athleteId: target.athlete.id,
         detail,
+        ...(injurySpec ? { injurySpec } : {}),
       });
       return;
     }
@@ -930,6 +988,17 @@ export default function LiveMatchPage() {
       return;
     }
     if (eventType === "injury") {
+      /* An own-team injury is specified first, so the record carries a
+       * diagnosis and a return estimate. Opponent injuries keep the original
+       * behaviour: we do not hold their athlete records. */
+      if (target.kind === "own") {
+        setComposer({
+          kind: "injury-detail",
+          athlete: target.athlete,
+          minute: currentMinute,
+        });
+        return;
+      }
       const next = mandatorySubInComposer(target);
       console.log("[live-callout:handleAction] opening", next.kind);
       setComposer(next);
@@ -1984,6 +2053,35 @@ export default function LiveMatchPage() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {composer.kind === "injury-detail" && (
+        <LiveInjurySheet
+          athlete={composer.athlete}
+          minute={composer.minute}
+          onConfirm={(spec) => {
+            /* Hand straight over to the mandatory substitution: the coach
+               still has to bring someone on, and the record is created in
+               the background by persistEvent. */
+            setComposer(
+              mandatorySubInComposer({
+                kind: "own",
+                athlete: composer.athlete,
+              }),
+            );
+            persistFromTarget("injury", undefined, spec);
+          }}
+          onSkip={() => {
+            setComposer(
+              mandatorySubInComposer({
+                kind: "own",
+                athlete: composer.athlete,
+              }),
+            );
+            persistFromTarget("injury");
+          }}
+          onClose={closeComposer}
+        />
       )}
 
       {composer.kind === "penalty-outcome" && (
