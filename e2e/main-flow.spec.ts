@@ -74,9 +74,6 @@ test('coach can register, verify, create a team, and see an athlete reflected on
         page.getByRole('heading', { name: 'Dashboard' }),
       ).toBeVisible();
       await expect(page.getByRole('button', { name: 'Add Team' })).toBeVisible();
-      await expect(
-        page.getByRole('region', { name: 'Active athletes count' }),
-      ).toContainText('0');
       // Live match / season summary / recent form / stats are Sprint 2
       // fields the backend doesn't send yet — the page should render their
       // empty states rather than error out.
@@ -96,9 +93,10 @@ test('coach can register, verify, create a team, and see an athlete reflected on
         page.getByText(`Welcome back, ${name} · ${teamName}`),
       ).toBeVisible();
       // With a team in place there is nothing left for Add Team to do.
+      await expect(page.getByRole('button', { name: 'Add Team' })).toBeHidden();
       await expect(
-        page.getByRole('button', { name: 'Add Team' }),
-      ).toBeHidden();
+        page.getByRole('link', { name: /0 Active Athletes/ }),
+      ).toBeVisible();
     });
 
     await test.step('add an athlete from the roster page', async () => {
@@ -142,8 +140,8 @@ test('coach can register, verify, create a team, and see an athlete reflected on
       // reload to force the same fresh fetch a real page load would do.
       await page.reload();
       await expect(
-        page.getByRole('region', { name: 'Active athletes count' }),
-      ).toContainText('1');
+        page.getByRole('link', { name: /1 Active Athletes/ }),
+      ).toBeVisible();
     });
   } finally {
     await cleanupUser({ email, teamName });

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const backendURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const frontendPort = new URL(frontendURL).port || '5173';
 
 /**
  * Full-stack e2e config — drives a real browser against the real Vite dev
@@ -12,6 +14,9 @@ const backendURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
 export default defineConfig({
   testDir: './e2e',
   timeout: process.env.CI ? 90_000 : 30_000,
+  expect: {
+    timeout: process.env.CI ? 15_000 : 5_000,
+  },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -23,7 +28,7 @@ export default defineConfig({
       ]
     : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: frontendURL,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },
@@ -43,8 +48,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'npm --prefix frontend run dev',
-      url: 'http://localhost:5173',
+      command: `npm --prefix frontend run dev -- --port ${frontendPort}`,
+      url: frontendURL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
