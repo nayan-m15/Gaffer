@@ -828,22 +828,27 @@ export function StadiumScene() {
       glowOpacity: 0.85,
       lightIntensity: 1,
       bloomStrength: isMobile ? 0.55 : 0.85,
+      exposure: 1.05,
     };
 
     const setLightTheme = (isLight: boolean) => {
       if (isLight) {
-        target.background.set(0xc7dce6);
-        target.fogColor.set(0xd3e4ea);
+        // Keep daylight colourful and readable without washing the stadium
+        // out: richer sky/fog hues paired with lower exposure and key-light
+        // intensity preserve contrast in the pitch, crowd and dugout glass.
+        target.background.set(0xa9cbd5);
+        target.fogColor.set(0xbcd8da);
         target.fogDensity = isMobile ? 0.0026 : 0.0018;
-        target.ambientColor.set(0xffffff);
-        target.ambientIntensity = 1.4;
-        target.sunColor.set(0xfff2d2);
-        target.sunIntensity = 2.2;
-        target.skyTop.set(0x8fc4f0);
-        target.skyBottom.set(0xeaf2e9);
+        target.ambientColor.set(0xcfe5d9);
+        target.ambientIntensity = 1.12;
+        target.sunColor.set(0xffe2a8);
+        target.sunIntensity = 1.6;
+        target.skyTop.set(0x65a7d8);
+        target.skyBottom.set(0xc6dfcf);
         target.glowOpacity = 0.12;
         target.lightIntensity = 0.15;
-        target.bloomStrength = 0.12;
+        target.bloomStrength = 0.07;
+        target.exposure = 0.9;
       } else {
         target.background.set(0x060a08);
         target.fogColor.set(0x060a08);
@@ -857,6 +862,7 @@ export function StadiumScene() {
         target.glowOpacity = 0.85;
         target.lightIntensity = 1;
         target.bloomStrength = isMobile ? 0.55 : 0.85;
+        target.exposure = 1.05;
       }
     };
 
@@ -897,6 +903,8 @@ export function StadiumScene() {
       );
       bloomPass.strength +=
         (target.bloomStrength - bloomPass.strength) * transitionAmount;
+      renderer.toneMappingExposure +=
+        (target.exposure - renderer.toneMappingExposure) * transitionAmount;
 
       glowSprites.forEach((glow) => {
         const material = glow.material as THREE.SpriteMaterial;
