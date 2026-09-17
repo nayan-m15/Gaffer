@@ -1,10 +1,6 @@
 import { useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Trophy,
-} from "lucide-react";
-import type { CompetitionWithStandings } from "@/features/statistics/types";
+import { ChevronDown, ChevronRight, Trophy } from "lucide-react";
+import type { CompetitionType } from "@/features/statistics/types";
 import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -16,10 +12,32 @@ import { cn } from "@/lib/utils";
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 interface StandingsDisplayProps {
-  competitions: CompetitionWithStandings[];
+  competitions: ReadOnlyCompetition[];
   isLoading?: boolean;
   /** Shown when there are no competitions. */
   emptyMessage?: string;
+}
+
+export interface ReadOnlyStanding {
+  id: string;
+  teamName: string;
+  position: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
+  isOwnTeam: boolean;
+}
+
+export interface ReadOnlyCompetition {
+  id: string;
+  name: string;
+  type: CompetitionType;
+  season?: string | null;
+  standings: ReadOnlyStanding[];
 }
 
 export function StandingsDisplay({
@@ -73,7 +91,7 @@ export function StandingsDisplay({
 function ReadOnlyCompetitionCard({
   competition,
 }: {
-  competition: CompetitionWithStandings;
+  competition: ReadOnlyCompetition;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -135,7 +153,7 @@ const STANDINGS_COLUMNS = [
 function ReadOnlyStandingsTable({
   standings,
 }: {
-  standings: CompetitionWithStandings["standings"];
+  standings: ReadOnlyStanding[];
 }) {
   return (
     <div className="overflow-x-auto">
@@ -156,7 +174,10 @@ function ReadOnlyStandingsTable({
         <tbody>
           {standings.length === 0 ? (
             <tr>
-              <td colSpan={STANDINGS_COLUMNS.length} className="py-6 text-center">
+              <td
+                colSpan={STANDINGS_COLUMNS.length}
+                className="py-6 text-center"
+              >
                 <p className="text-sm text-muted-foreground">
                   No standings rows yet.
                 </p>

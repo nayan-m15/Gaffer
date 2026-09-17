@@ -27,6 +27,7 @@ import PlayerTeamPage from '@/features/player/PlayerTeamPage'
 import PlayerEventsPage from '@/features/player/PlayerEventsPage'
 import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
+import PublicDashboard from '@/pages/PublicDashboard'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 
@@ -76,6 +77,7 @@ function App() {
       <TeamInviteResumer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/public-dashboard" element={<PublicDashboard />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />

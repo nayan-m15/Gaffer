@@ -1,4 +1,4 @@
-import { ArrowRight, LogIn } from "lucide-react";
+import { ArrowRight, BarChart3, LogIn } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,17 @@ export function Hero() {
             >
               <LogIn className="size-4" />
               Log In
+            </a>
+
+            <a
+              href="/public-dashboard"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "lg" }),
+                "w-full gap-2 text-brand hover:bg-brand/10 hover:text-brand sm:w-auto",
+              )}
+            >
+              <BarChart3 className="size-4" />
+              Public Dashboard
             </a>
           </div>
 

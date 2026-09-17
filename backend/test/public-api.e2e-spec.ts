@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DatabaseService } from './../src/database/database.service';
+import { PublicDashboardService } from './../src/public-api/public-dashboard.service';
 
 interface CatalogBody {
   success: boolean;
@@ -30,6 +31,16 @@ describe('Public API (e2e)', () => {
   const databaseService = {
     assertConnection: jest.fn().mockResolvedValue(undefined),
   };
+  const publicDashboardService = {
+    getFilters: jest.fn().mockResolvedValue({
+      teams: [{ id: 'team-1', name: 'Gaffer FC' }],
+      competitions: [],
+      seasons: [],
+    }),
+    getMatches: jest.fn().mockResolvedValue([]),
+    getPlayers: jest.fn().mockResolvedValue([]),
+    getTeamStatistics: jest.fn().mockResolvedValue([]),
+  };
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -37,6 +48,8 @@ describe('Public API (e2e)', () => {
     })
       .overrideProvider(DatabaseService)
       .useValue(databaseService)
+      .overrideProvider(PublicDashboardService)
+      .useValue(publicDashboardService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -145,6 +158,47 @@ describe('Public API (e2e)', () => {
         .expect(404);
 
       expect(response.body as ErrorBody).toMatchObject({ statusCode: 404 });
+    });
+  });
+
+  describe('/v1/public-dashboard (GET)', () => {
+    it('returns dashboard filters with no auth cookie', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/public-dashboard/filters')
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          teams: [{ id: 'team-1', name: 'Gaffer FC' }],
+          competitions: [],
+          seasons: [],
+        },
+      });
+    });
+
+    it('validates public dashboard query parameters', async () => {
+      await request(app.getHttpServer())
+        .get('/v1/public-dashboard/matches?teamId=not-a-uuid')
+        .expect(400);
+    });
+
+    it('does not expose account or private athlete fields', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/public-dashboard/filters')
+        .expect(200);
+      const serialized = JSON.stringify(response.body).toLowerCase();
+
+      for (const forbidden of [
+        'email',
+        'password',
+        'token',
+        'userid',
+        'dateofbirth',
+        'notes',
+      ]) {
+        expect(serialized).not.toContain(forbidden);
+      }
     });
   });
 });

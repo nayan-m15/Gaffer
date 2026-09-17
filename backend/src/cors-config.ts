@@ -11,13 +11,18 @@ type CorsCallback = (
 ) => void;
 
 /**
- * `/v1/formations` and `/v1/tactics` are `PublicApiModule`'s externally
+ * `/v1/formations`, `/v1/tactics`, and `/v1/public-dashboard` are
+ * `PublicApiModule`'s externally
  * accessible, unauthenticated API. They carry no cookies and no user data,
  * so they're meant to be fetched from any origin — the strict allowlist
  * that guards cookie-authenticated routes doesn't apply to them.
  */
 export function isPublicApiPath(path: string): boolean {
-  return path.startsWith('/v1/formations') || path.startsWith('/v1/tactics');
+  return (
+    path.startsWith('/v1/formations') ||
+    path.startsWith('/v1/tactics') ||
+    path.startsWith('/v1/public-dashboard')
+  );
 }
 
 /**

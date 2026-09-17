@@ -15,3 +15,26 @@ export const publicResourceQuerySchema = z.object({
 });
 
 export type PublicResourceQuery = z.infer<typeof publicResourceQuerySchema>;
+
+const optionalUuid = z.uuid().optional();
+
+export const publicDashboardQuerySchema = z.object({
+  teamId: optionalUuid,
+  competitionId: optionalUuid,
+  seasonId: optionalUuid,
+});
+
+export const publicMatchesQuerySchema = publicDashboardQuerySchema.extend({
+  status: z.enum(['scheduled', 'cancelled', 'completed']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const publicPlayersQuerySchema = publicDashboardQuerySchema.extend({
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export type PublicDashboardQuery = z.infer<typeof publicDashboardQuerySchema>;
+export type PublicMatchesQuery = z.infer<typeof publicMatchesQuerySchema>;
+export type PublicPlayersQuery = z.infer<typeof publicPlayersQuerySchema>;
