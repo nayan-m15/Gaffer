@@ -558,66 +558,6 @@ export function StadiumScene() {
       pointLights.push(light);
     });
 
-    const particleCount = isMobile ? 45 : 110;
-    const particleGeometry = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-    const particleColors = new Float32Array(particleCount * 3);
-    const palette = [
-      [0.98, 0.85, 0.6],
-      [0.6, 0.95, 0.75],
-      [0.9, 0.92, 0.9],
-    ];
-    for (let index = 0; index < particleCount; index += 1) {
-      particlePositions[index * 3] = (Math.random() - 0.5) * 260;
-      particlePositions[index * 3 + 1] = Math.random() * 70 + 4;
-      particlePositions[index * 3 + 2] = (Math.random() - 0.5) * 200;
-      const color = palette[Math.floor(Math.random() * palette.length)];
-      particleColors[index * 3] = color[0];
-      particleColors[index * 3 + 1] = color[1];
-      particleColors[index * 3 + 2] = color[2];
-    }
-    particleGeometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(particlePositions, 3),
-    );
-    particleGeometry.setAttribute(
-      "color",
-      new THREE.BufferAttribute(particleColors, 3),
-    );
-    const particles = new THREE.Points(
-      particleGeometry,
-      new THREE.PointsMaterial({
-        size: 1.4,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.38,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
-    scene.add(particles);
-
-    const starCount = isMobile ? 90 : 180;
-    const starGeometry = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(starCount * 3);
-    for (let index = 0; index < starCount; index += 1) {
-      starPositions[index * 3] = (Math.random() - 0.5) * 900;
-      starPositions[index * 3 + 1] = Math.random() * 220 + 90;
-      starPositions[index * 3 + 2] = (Math.random() - 0.5) * 900;
-    }
-    starGeometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(starPositions, 3),
-    );
-    const starMaterial = new THREE.PointsMaterial({
-      size: 1,
-      color: 0xcfe3ff,
-      transparent: true,
-      opacity: 0.5,
-    });
-    const stars = new THREE.Points(starGeometry, starMaterial);
-    scene.add(stars);
-
     // --- Post-processing (bloom makes the floodlights & roof trim glow) ---
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
@@ -665,7 +605,6 @@ export function StadiumScene() {
       sunIntensity: 0.5,
       skyTop: new THREE.Color(0x0a1220),
       skyBottom: new THREE.Color(0x141a16),
-      starsOpacity: 0.5,
       glowOpacity: 0.85,
       lightIntensity: 1,
       bloomStrength: isMobile ? 0.55 : 0.85,
@@ -682,7 +621,6 @@ export function StadiumScene() {
         target.sunIntensity = 2.2;
         target.skyTop.set(0x8fc4f0);
         target.skyBottom.set(0xeaf2e9);
-        target.starsOpacity = 0;
         target.glowOpacity = 0.12;
         target.lightIntensity = 0.15;
         target.bloomStrength = 0.12;
@@ -696,7 +634,6 @@ export function StadiumScene() {
         target.sunIntensity = 0.5;
         target.skyTop.set(0x0a1220);
         target.skyBottom.set(0x141a16);
-        target.starsOpacity = 0.5;
         target.glowOpacity = 0.85;
         target.lightIntensity = 1;
         target.bloomStrength = isMobile ? 0.55 : 0.85;
@@ -716,8 +653,7 @@ export function StadiumScene() {
     const clock = new THREE.Clock();
     let animationFrame = 0;
     const animate = () => {
-      const delta = Math.min(clock.getDelta(), 0.1);
-      const elapsed = clock.elapsedTime;
+      const elapsed = clock.getElapsedTime();
       const transitionAmount = 0.035;
 
       (scene.background as THREE.Color).lerp(
@@ -739,8 +675,6 @@ export function StadiumScene() {
         target.skyBottom,
         transitionAmount,
       );
-      starMaterial.opacity +=
-        (target.starsOpacity - starMaterial.opacity) * transitionAmount;
       bloomPass.strength +=
         (target.bloomStrength - bloomPass.strength) * transitionAmount;
 
@@ -777,13 +711,6 @@ export function StadiumScene() {
           glow.scale.set(size, size, 1);
         });
 
-        for (let index = 0; index < particleCount; index += 1) {
-          particlePositions[index * 3 + 1] += delta * 1.2;
-          if (particlePositions[index * 3 + 1] > 78) {
-            particlePositions[index * 3 + 1] = 4;
-          }
-        }
-        particleGeometry.attributes.position.needsUpdate = true;
       }
 
       composer.render();
@@ -798,7 +725,7 @@ export function StadiumScene() {
       themeObserver.disconnect();
 
       scene.traverse((object) => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
+        if (object instanceof THREE.Mesh) {
           object.geometry.dispose();
           const materials = Array.isArray(object.material)
             ? object.material
