@@ -13,7 +13,9 @@ const frontendPort = new URL(frontendURL).port || '5173';
  */
 export default defineConfig({
   testDir: './e2e',
-  timeout: process.env.CI ? 90_000 : 30_000,
+  // Full-stack flows perform several real database round trips. Shared CI
+  // runners can take well over 90 seconds even when every assertion passes.
+  timeout: process.env.CI ? 180_000 : 30_000,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,
   },
