@@ -119,6 +119,57 @@ test('account switching clears private dashboard cache', async ({ page }) => {
   ).toContainText('2');
 });
 
+test('authenticated sidebar navigates on mobile and preserves history', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.route('**/auth/session', (route) =>
+    json(route, session('Mobile Coach', 'Pocket FC', 'mobile-coach')),
+  );
+  await page.route('**/api/dashboard', (route) =>
+    json(route, {
+      activeAthletesCount: 8,
+      totalEventsCount: 0,
+      upcomingEvents: [],
+    }),
+  );
+  await page.route('**/api/events**', (route) => json(route, []));
+
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Open navigation menu' }).click();
+  const mobileSidebar = page.locator('aside:visible');
+  await expect(mobileSidebar.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await mobileSidebar.getByRole('link', { name: 'Events' }).click();
+
+  await expect(page).toHaveURL(/\/events$/);
+  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+});
+
+test('desktop sidebar collapse persists and theme toggle remains usable', async ({ page }) => {
+  await page.route('**/auth/session', (route) =>
+    json(route, session('Desktop Coach', 'Wide FC', 'desktop-coach')),
+  );
+  await page.route('**/api/dashboard', (route) =>
+    json(route, {
+      activeAthletesCount: 11,
+      totalEventsCount: 2,
+      upcomingEvents: [],
+    }),
+  );
+
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Collapse navigation' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('gaffer-sidebar-expanded'))).toBe('false');
+
+  await page.getByRole('button', { name: /Switch to (light|dark) mode/ }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sport-coaching-theme'))).not.toBeNull();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
+});
+
 test('live match clock resumes from the persisted value', async ({ page }) => {
   await mockAuthenticatedMatch(page);
   await page.route(`**/api/matches/${MATCH_ID}/events`, (route) =>

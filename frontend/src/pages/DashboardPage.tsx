@@ -2,6 +2,10 @@ import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { BentoGrid } from "@/components/ui/bento-grid";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { HoverEffect } from "@/components/ui/card-hover-effect";
+import { AppCard as Card } from "@/components/app/AppCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -305,13 +309,29 @@ function LiveMatchCard({
   onOpenLogger: () => void;
 }) {
   return (
-    <Card
+    <div
       className={cn(
-        "relative overflow-hidden transition-colors",
-        match && "border-primary/30",
+        "relative rounded-2xl",
+        match && "shadow-[0_0_50px_-24px_rgba(16,185,129,0.9)]",
       )}
-      aria-label="Live match"
     >
+      {match && (
+        <GlowingEffect
+          variant="brand"
+          glow
+          disabled={false}
+          spread={32}
+          proximity={96}
+          borderWidth={2}
+        />
+      )}
+      <Card
+        className={cn(
+          "relative overflow-hidden transition-colors",
+          match && "border-primary/30",
+        )}
+        aria-label="Live match"
+      >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Left — badge and status */}
         <div className="flex items-center gap-3">
@@ -371,7 +391,8 @@ function LiveMatchCard({
           {match ? "Open Live Logger" : "Live Logger"}
         </Button>
       </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -748,7 +769,7 @@ export default function DashboardPage() {
           pendingInvite={hasPendingInvite}
           onAddTeam={() => setAddTeamOpen(true)}
         />
-        <div className="space-y-6 p-6 sm:p-8">
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
           <div className="grid gap-6 sm:grid-cols-2">
             <CardSkeleton lines={1} />
             <CardSkeleton lines={1} />
@@ -797,7 +818,7 @@ export default function DashboardPage() {
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card aria-label="Pending team invitation" className="border-primary/30">
@@ -844,8 +865,24 @@ export default function DashboardPage() {
           onOpenLogger={() => navigate("/events")}
         />
 
+        {team && (
+          <section aria-labelledby="quick-actions-heading">
+            <SectionTitle icon={<Activity className="size-4 text-muted-foreground" />}>
+              <span id="quick-actions-heading">Quick Actions</span>
+            </SectionTitle>
+            <HoverEffect
+              items={[
+                { title: "Events", description: "Plan training, matches, and meetings.", to: "/events", icon: <Calendar className="size-5" /> },
+                { title: "Squad", description: "Manage athletes and availability.", to: "/athletes", icon: <Users className="size-5" /> },
+                { title: "Live Logger", description: "Start or continue match tracking.", to: "/live-logger", icon: <Activity className="size-5" /> },
+                { title: "Statistics", description: "Review form and performance trends.", to: "/statistics", icon: <BarChart3 className="size-5" /> },
+              ]}
+            />
+          </section>
+        )}
+
         {/* ── Sprint 1: Stat Cards ────────────────────────────────────────── */}
-        <div className="grid gap-6 sm:grid-cols-2">
+        <BentoGrid className="max-w-none gap-5 sm:grid-cols-2 md:auto-rows-auto md:grid-cols-2">
           <StatCard
             label="Active Athletes"
             value={activeAthletesCount}
@@ -858,26 +895,26 @@ export default function DashboardPage() {
             icon={<CalendarCheck className="size-6" aria-hidden="true" />}
             ariaLabel="Total events count"
           />
-        </div>
+        </BentoGrid>
 
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+        <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-5">
+          <div className="md:col-span-3">
             <UpcomingEventsCard events={upcomingEvents} onOpenEvent={setSelectedEventId} />
           </div>
-          <div className="lg:col-span-2">
+          <div className="md:col-span-2">
             <RecentFormCard
               results={recentForm ?? []}
               teamName={team?.name ?? "Our Team"}
             />
           </div>
-        </div>
+        </BentoGrid>
 
         {/* ── Sprint 2: Season Summary + Recent Stats (deferred) ──────────── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-2">
           <SeasonSummaryCard summary={seasonSummary ?? null} />
           <RecentStatsCard stats={recentStats ?? []} />
-        </div>
+        </BentoGrid>
       </div>
       <EventDetailDialog
         open={Boolean(selectedEventId)}

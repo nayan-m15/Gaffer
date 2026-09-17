@@ -1,10 +1,12 @@
 import { cn } from "@/lib/utils";
+import { BentoGrid } from "@/components/ui/bento-grid";
+import { AppCard } from "@/components/app/AppCard";
 import { formatAvg, formatDiff, formatRate } from "./formatting";
 import type { TeamOverview } from "./types";
 
 export function StatCardsGrid({ overview }: { overview: TeamOverview }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+    <BentoGrid className="max-w-none grid-cols-2 gap-4 sm:grid-cols-3 md:auto-rows-auto md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
       <StatCard label="Matches Played" value={overview.matchesPlayed} />
       <StatCard label="Wins" value={overview.wins} variant="positive" />
       <StatCard label="Draws" value={overview.draws} />
@@ -29,7 +31,7 @@ export function StatCardsGrid({ overview }: { overview: TeamOverview }) {
         value={formatAvg(overview.avgGoalsAgainst)}
         variant="negative"
       />
-    </div>
+    </BentoGrid>
   );
 }
 
@@ -43,7 +45,7 @@ function StatCard({
   variant?: "positive" | "negative" | "neutral";
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 text-center">
+    <AppCard className="rounded-xl p-4 text-center" interactive>
       <p
         className={cn(
           "text-2xl font-bold tabular-nums",
@@ -57,6 +59,6 @@ function StatCard({
       <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-    </div>
+    </AppCard>
   );
 }

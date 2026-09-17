@@ -7,6 +7,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BentoGrid } from "@/components/ui/bento-grid";
+import { AppCard } from "@/components/app/AppCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
@@ -67,7 +69,7 @@ export default function PlayerDashboardPage() {
         }
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* Loading */}
         {meQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -78,7 +80,7 @@ export default function PlayerDashboardPage() {
 
         {/* Error */}
         {meQuery.isError && (
-          <div className="rounded-xl border border-border bg-card p-6">
+          <AppCard>
             <p className="text-sm text-destructive">
               {meQuery.error instanceof ApiError
                 ? meQuery.error.message
@@ -92,7 +94,7 @@ export default function PlayerDashboardPage() {
               <RefreshCw className="size-4" />
               Try again
             </Button>
-          </div>
+          </AppCard>
         )}
 
         {stats && (
@@ -100,18 +102,18 @@ export default function PlayerDashboardPage() {
             <EventRemindersBanner events={upcomingEvents} />
 
             {/* Stat cards */}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <BentoGrid className="max-w-none grid-cols-2 gap-3 sm:grid-cols-3 md:auto-rows-auto md:grid-cols-3 lg:grid-cols-6">
               <StatCard label="Appearances" value={stats.appearances} />
               <StatCard label="Starts" value={stats.starts} />
               <StatCard label="Goals" value={stats.goals} variant="positive" />
               <StatCard label="Assists" value={stats.assists} variant="positive" />
               <StatCard label="Yellow Cards" value={stats.yellowCards} variant="warning" />
               <StatCard label="Red Cards" value={stats.redCards} variant="negative" />
-            </div>
+            </BentoGrid>
 
             {/* Recent form */}
             {stats.matches.length > 0 && (
-              <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <AppCard>
                 <div className="mb-4 flex items-center gap-2">
                   <Activity className="size-4 text-muted-foreground" />
                   <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -123,11 +125,11 @@ export default function PlayerDashboardPage() {
                     <ResultBadge key={i} result={m.result} />
                   ))}
                 </div>
-              </section>
+              </AppCard>
             )}
 
             {/* Upcoming events */}
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <AppCard>
               <div className="mb-4 flex items-center gap-2">
                 <Calendar className="size-4 text-muted-foreground" />
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -145,7 +147,7 @@ export default function PlayerDashboardPage() {
                   ))}
                 </ul>
               )}
-            </section>
+            </AppCard>
           </>
         )}
       </div>
@@ -165,7 +167,7 @@ function StatCard({
   variant?: "positive" | "negative" | "warning" | "neutral";
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 text-center">
+    <AppCard className="p-4 text-center">
       <p
         className={cn(
           "text-2xl font-bold tabular-nums",
@@ -180,7 +182,7 @@ function StatCard({
       <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-    </div>
+    </AppCard>
   );
 }
 

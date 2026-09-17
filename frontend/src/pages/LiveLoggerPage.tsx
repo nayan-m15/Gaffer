@@ -41,7 +41,7 @@ export default function LiveLoggerPage() {
         subtitle="Select a match to confirm the squad and start logging."
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {isLoading && (
           <p className="text-sm text-muted-foreground">Loading events…</p>
         )}
@@ -118,7 +118,7 @@ function MatchRow({
     : formatDateLabel(scheduledDate);
 
   const className = cn(
-    "w-full rounded-xl border border-border bg-card p-4 text-left",
+    "w-full rounded-xl border border-border/70 bg-card/80 p-4 text-left shadow-[0_20px_60px_-45px_rgba(0,0,0,0.75)] backdrop-blur-xl",
     cancelled && "opacity-55",
     clickable &&
       "transition-colors hover:border-primary/40 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
