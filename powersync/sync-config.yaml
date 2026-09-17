@@ -1,0 +1,21 @@
+config:
+  edition: 3
+
+streams:
+  team_match_events:
+    auto_subscribe: true
+    query: |
+      SELECT me.*
+      FROM match_events me
+      JOIN matches m ON m.id = me.match_id
+      JOIN events e ON e.id = m.event_id
+      WHERE e.team_id = auth.parameter('team_id')
+
+  team_match_reviews:
+    auto_subscribe: true
+    query: |
+      SELECT r.*
+      FROM match_event_reviews r
+      JOIN matches m ON m.id = r.match_id
+      JOIN events e ON e.id = m.event_id
+      WHERE e.team_id = auth.parameter('team_id')

@@ -22,6 +22,39 @@ describe('createMatchLogEventSchema', () => {
     });
   });
 
+  it('accepts precise offline observation metadata', () => {
+    expect(
+      createMatchLogEventSchema.parse({
+        clientRequestId,
+        deviceId: '22222222-3333-4444-8555-666666666666',
+        clientCreatedAt: '2026-09-17T12:34:56.000Z',
+        period: 'first_half',
+        matchElapsedMs: 754321,
+        team: 'own',
+        eventType: 'goal',
+        athleteId,
+        minute: 12,
+      }),
+    ).toMatchObject({
+      period: 'first_half',
+      matchElapsedMs: 754321,
+    });
+  });
+
+  it('rejects impossible offline match clock values', () => {
+    expect(() =>
+      createMatchLogEventSchema.parse({
+        clientRequestId,
+        period: 'first_half',
+        matchElapsedMs: -1,
+        team: 'own',
+        eventType: 'goal',
+        athleteId,
+        minute: 12,
+      }),
+    ).toThrow();
+  });
+
   it('accepts an assist event linked via existing detail field', () => {
     expect(
       createMatchLogEventSchema.parse({

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -12,12 +13,16 @@ import {
   competitions,
   events,
   matchEvents,
+  matchEventMemberships,
+  matchEventObservations,
+  matchEventReviews,
   matches,
   opponentMatchPlayers,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import type {
   CreateMatchLogEventDto,
+  ResolveMatchEventReviewDto,
   UpdateMatchLogEventDto,
   UpdateMatchClockDto,
 } from './matches.schemas';
@@ -55,7 +60,12 @@ export class MatchesService {
         opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal')::int`,
       })
       .from(matchEvents)
-      .where(eq(matchEvents.matchId, match.id));
+      .where(
+        and(
+          eq(matchEvents.matchId, match.id),
+          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+        ),
+      );
 
     return {
       ...match,
@@ -113,6 +123,9 @@ export class MatchesService {
         loggedByUserId: matchEvents.loggedByUserId,
         manuallyAdjusted: matchEvents.manuallyAdjusted,
         clientRequestId: matchEvents.clientRequestId,
+        period: matchEvents.period,
+        matchElapsedMs: matchEvents.matchElapsedMs,
+        lifecycleStatus: matchEvents.lifecycleStatus,
         createdAt: matchEvents.createdAt,
         updatedAt: matchEvents.updatedAt,
         athleteFirstName: athletes.firstName,
@@ -128,7 +141,12 @@ export class MatchesService {
         opponentMatchPlayers,
         eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
       )
-      .where(eq(matchEvents.matchId, matchId))
+      .where(
+        and(
+          eq(matchEvents.matchId, matchId),
+          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+        ),
+      )
       .orderBy(desc(matchEvents.minute), desc(matchEvents.createdAt));
 
     return rows.map((row) => ({
@@ -144,6 +162,9 @@ export class MatchesService {
       loggedByUserId: row.loggedByUserId,
       manuallyAdjusted: row.manuallyAdjusted,
       clientRequestId: row.clientRequestId,
+      period: row.period,
+      matchElapsedMs: row.matchElapsedMs,
+      lifecycleStatus: row.lifecycleStatus,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       athlete:
@@ -195,42 +216,385 @@ export class MatchesService {
       opponentLabel: dto.opponentLabel,
     });
 
+    const period = dto.period ?? match.clockPeriod;
+    const matchElapsedMs = dto.matchElapsedMs ?? dto.minute * 60_000;
+    const opponentLabel =
+      attribution.opponentLabel ?? dto.opponentLabel ?? null;
+    const opponentPlayerId = attribution.opponentPlayerId ?? null;
+    const payload = {
+      team: dto.team,
+      eventType: dto.eventType,
+      athleteId: dto.athleteId ?? null,
+      opponentLabel,
+      opponentPlayerId,
+      period,
+      matchElapsedMs,
+      detail: dto.detail ?? null,
+    };
+    const payloadHash = createHash('sha256')
+      .update(JSON.stringify(payload))
+      .digest('hex');
+
+    if (process.env.OFFLINE_RECONCILIATION_FUNCTION !== 'disabled') {
+      const persistedResult = await this.databaseService.database.execute<{
+        canonical_event_id: string;
+      }>(sql`select ingest_match_event_observation(
+          ${dto.clientRequestId}::uuid,
+          ${match.id}::uuid,
+          ${dto.deviceId ?? dto.clientRequestId}::uuid,
+          ${userId}::text,
+          ${dto.eventType}::match_event_type,
+          ${dto.team}::match_event_team,
+          ${dto.athleteId ?? null}::uuid,
+          ${opponentLabel}::text,
+          ${opponentPlayerId}::uuid,
+          ${period}::text,
+          ${matchElapsedMs}::integer,
+          ${dto.minute}::integer,
+          ${dto.detail ?? null}::text,
+          ${JSON.stringify(payload)}::jsonb,
+          ${payloadHash}::text,
+          ${(dto.clientCreatedAt ? new Date(dto.clientCreatedAt) : new Date()).toISOString()}::timestamptz,
+          ${event.status === 'completed'}::boolean
+        ) as canonical_event_id`);
+      const persisted = persistedResult.rows[0];
+      if (!persisted?.canonical_event_id) {
+        throw new BadRequestException(
+          'Could not persist the match observation.',
+        );
+      }
+      return this.requireMatchEvent(match.id, persisted.canonical_event_id);
+    }
+
+    const [insertedObservation] = await this.databaseService.database
+      .insert(matchEventObservations)
+      .values({
+        id: dto.clientRequestId,
+        matchId: match.id,
+        deviceId: dto.deviceId ?? dto.clientRequestId,
+        loggedByUserId: userId,
+        eventType: dto.eventType,
+        team: dto.team,
+        athleteId: dto.athleteId,
+        opponentLabel,
+        opponentPlayerId,
+        period,
+        matchElapsedMs,
+        payload,
+        payloadHash,
+        clientCreatedAt: dto.clientCreatedAt
+          ? new Date(dto.clientCreatedAt)
+          : new Date(),
+      })
+      .onConflictDoNothing({ target: matchEventObservations.id })
+      .returning();
+
+    if (!insertedObservation) {
+      const [existingObservation] = await this.databaseService.database
+        .select()
+        .from(matchEventObservations)
+        .where(eq(matchEventObservations.id, dto.clientRequestId))
+        .limit(1);
+      if (
+        !existingObservation ||
+        existingObservation.matchId !== match.id ||
+        existingObservation.payloadHash !== payloadHash
+      ) {
+        throw new BadRequestException(
+          'This offline operation ID was already used with different data.',
+        );
+      }
+      const [membership] = await this.databaseService.database
+        .select()
+        .from(matchEventMemberships)
+        .where(eq(matchEventMemberships.observationId, dto.clientRequestId))
+        .limit(1);
+      if (membership) {
+        return this.requireMatchEvent(match.id, membership.canonicalEventId);
+      }
+    }
+
+    // A semantic duplicate has a different operation ID, so ordinary database
+    // uniqueness cannot detect it. Attach close, equivalent observations to one
+    // canonical event and open an explicit coach review.
+    const [candidate] = await this.databaseService.database
+      .select({ canonicalEventId: matchEventMemberships.canonicalEventId })
+      .from(matchEventObservations)
+      .innerJoin(
+        matchEventMemberships,
+        eq(matchEventMemberships.observationId, matchEventObservations.id),
+      )
+      .where(
+        sql`
+        ${matchEventObservations.matchId} = ${match.id}
+        and ${matchEventObservations.id} <> ${dto.clientRequestId}
+        and ${matchEventObservations.period} = ${period}
+        and ${matchEventObservations.eventType} = ${dto.eventType}
+        and ${matchEventObservations.team} = ${dto.team}
+        and ${matchEventObservations.athleteId} is not distinct from ${dto.athleteId ?? null}
+        and ${matchEventObservations.opponentPlayerId} is not distinct from ${opponentPlayerId}
+        and ${matchEventObservations.opponentLabel} is not distinct from ${opponentLabel}
+        and abs(${matchEventObservations.matchElapsedMs} - ${matchElapsedMs}) <= 5000
+      `,
+      )
+      .orderBy(asc(matchEventMemberships.canonicalEventId))
+      .limit(1);
+
+    if (candidate) {
+      const currentBecomesAnchor =
+        dto.clientRequestId.localeCompare(candidate.canonicalEventId) < 0;
+      if (currentBecomesAnchor) {
+        await this.databaseService.database.insert(matchEvents).values({
+          id: dto.clientRequestId,
+          matchId: match.id,
+          athleteId: dto.athleteId,
+          team: dto.team,
+          opponentLabel,
+          opponentPlayerId,
+          eventType: dto.eventType,
+          minute: dto.minute,
+          detail: dto.detail,
+          loggedByUserId: userId,
+          clientRequestId: dto.clientRequestId,
+          manuallyAdjusted: event.status === 'completed',
+          period,
+          matchElapsedMs,
+          structuredPayload: payload,
+          lifecycleStatus: 'needs_review',
+        });
+      }
+      const canonicalEventId = currentBecomesAnchor
+        ? dto.clientRequestId
+        : candidate.canonicalEventId;
+      await this.databaseService.database
+        .insert(matchEventMemberships)
+        .values({
+          observationId: dto.clientRequestId,
+          canonicalEventId,
+        })
+        .onConflictDoNothing({ target: matchEventMemberships.observationId });
+      if (currentBecomesAnchor) {
+        await this.databaseService.database
+          .update(matchEventMemberships)
+          .set({ canonicalEventId })
+          .where(
+            eq(
+              matchEventMemberships.canonicalEventId,
+              candidate.canonicalEventId,
+            ),
+          );
+        await this.databaseService.database
+          .delete(matchEvents)
+          .where(eq(matchEvents.id, candidate.canonicalEventId));
+      }
+      await this.databaseService.database
+        .update(matchEvents)
+        .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
+        .where(eq(matchEvents.id, canonicalEventId));
+      await this.databaseService.database
+        .insert(matchEventReviews)
+        .values({
+          matchId: match.id,
+          canonicalEventId,
+          reason: 'possible_duplicate',
+        })
+        .onConflictDoNothing();
+      return this.requireMatchEvent(match.id, canonicalEventId);
+    }
+
     const [created] = await this.databaseService.database
       .insert(matchEvents)
       .values({
+        id: dto.clientRequestId,
         matchId: match.id,
         athleteId: dto.athleteId,
         team: dto.team,
-        opponentLabel: attribution.opponentLabel ?? dto.opponentLabel,
-        opponentPlayerId: attribution.opponentPlayerId,
+        opponentLabel,
+        opponentPlayerId,
         eventType: dto.eventType,
         minute: dto.minute,
         detail: dto.detail,
         loggedByUserId: userId,
         clientRequestId: dto.clientRequestId,
         manuallyAdjusted: event.status === 'completed',
+        period,
+        matchElapsedMs,
+        structuredPayload: payload,
       })
-      .onConflictDoNothing({
-        target: [matchEvents.matchId, matchEvents.clientRequestId],
-        where: sql`${matchEvents.clientRequestId} is not null`,
-      })
+      .onConflictDoNothing({ target: matchEvents.id })
       .returning();
+    const canonical =
+      created ?? (await this.requireMatchEvent(match.id, dto.clientRequestId));
+    await this.databaseService.database
+      .insert(matchEventMemberships)
+      .values({
+        observationId: dto.clientRequestId,
+        canonicalEventId: canonical.id,
+      })
+      .onConflictDoNothing({ target: matchEventMemberships.observationId });
 
-    if (!created) {
-      const [existing] = await this.databaseService.database
-        .select()
-        .from(matchEvents)
-        .where(
-          and(
-            eq(matchEvents.matchId, match.id),
-            eq(matchEvents.clientRequestId, dto.clientRequestId),
-          ),
-        )
-        .limit(1);
-      return existing;
+    // Close the race where two devices inserted their memberships between the
+    // first candidate lookup and this insert. The lexicographically smallest
+    // client UUID is the stable anchor, independent of reconnect order.
+    const [lateCandidate] = await this.databaseService.database
+      .select({ canonicalEventId: matchEventMemberships.canonicalEventId })
+      .from(matchEventObservations)
+      .innerJoin(
+        matchEventMemberships,
+        eq(matchEventMemberships.observationId, matchEventObservations.id),
+      )
+      .where(
+        sql`
+        ${matchEventObservations.matchId} = ${match.id}
+        and ${matchEventObservations.id} <> ${dto.clientRequestId}
+        and ${matchEventObservations.period} = ${period}
+        and ${matchEventObservations.eventType} = ${dto.eventType}
+        and ${matchEventObservations.team} = ${dto.team}
+        and ${matchEventObservations.athleteId} is not distinct from ${dto.athleteId ?? null}
+        and ${matchEventObservations.opponentPlayerId} is not distinct from ${opponentPlayerId}
+        and ${matchEventObservations.opponentLabel} is not distinct from ${opponentLabel}
+        and abs(${matchEventObservations.matchElapsedMs} - ${matchElapsedMs}) <= 5000
+      `,
+      )
+      .orderBy(asc(matchEventMemberships.canonicalEventId))
+      .limit(1);
+    if (!lateCandidate || lateCandidate.canonicalEventId === canonical.id) {
+      return canonical;
     }
+    const winningId = [canonical.id, lateCandidate.canonicalEventId].sort()[0];
+    const losingId =
+      winningId === canonical.id
+        ? lateCandidate.canonicalEventId
+        : canonical.id;
+    await this.databaseService.database
+      .update(matchEventMemberships)
+      .set({ canonicalEventId: winningId })
+      .where(eq(matchEventMemberships.canonicalEventId, losingId));
+    await this.databaseService.database
+      .delete(matchEvents)
+      .where(eq(matchEvents.id, losingId));
+    await this.databaseService.database
+      .update(matchEvents)
+      .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
+      .where(eq(matchEvents.id, winningId));
+    await this.databaseService.database
+      .insert(matchEventReviews)
+      .values({
+        matchId: match.id,
+        canonicalEventId: winningId,
+        reason: 'possible_duplicate',
+      })
+      .onConflictDoNothing();
+    return this.requireMatchEvent(match.id, winningId);
+  }
 
-    return created;
+  async listEventReviews(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    const rows = await this.databaseService.database
+      .select()
+      .from(matchEventReviews)
+      .where(eq(matchEventReviews.matchId, matchId))
+      .orderBy(desc(matchEventReviews.createdAt));
+    return Promise.all(
+      rows.map(async (review) => {
+        const observations = await this.databaseService.database
+          .select()
+          .from(matchEventObservations)
+          .innerJoin(
+            matchEventMemberships,
+            eq(matchEventMemberships.observationId, matchEventObservations.id),
+          )
+          .where(
+            eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
+          );
+        return {
+          ...review,
+          observations: observations.map((row) => row.match_event_observations),
+        };
+      }),
+    );
+  }
+
+  async resolveEventReview(
+    userId: string,
+    matchId: string,
+    reviewId: string,
+    dto: ResolveMatchEventReviewDto,
+  ) {
+    const team = await this.teamsService.requireCoachTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    const [review] = await this.databaseService.database
+      .select()
+      .from(matchEventReviews)
+      .where(
+        and(
+          eq(matchEventReviews.id, reviewId),
+          eq(matchEventReviews.matchId, matchId),
+          eq(matchEventReviews.status, 'open'),
+        ),
+      )
+      .limit(1);
+    if (!review) throw new NotFoundException('Open event review not found.');
+
+    if (dto.resolution === 'separate_events') {
+      const observations = await this.databaseService.database
+        .select({ observation: matchEventObservations })
+        .from(matchEventObservations)
+        .innerJoin(
+          matchEventMemberships,
+          eq(matchEventMemberships.observationId, matchEventObservations.id),
+        )
+        .where(
+          eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
+        )
+        .orderBy(asc(matchEventObservations.id));
+      for (const { observation } of observations.slice(1)) {
+        const data = observation.payload as CreateMatchLogEventDto & {
+          period: string;
+          matchElapsedMs: number;
+        };
+        await this.databaseService.database
+          .insert(matchEvents)
+          .values({
+            id: observation.id,
+            matchId,
+            athleteId: observation.athleteId,
+            team: observation.team,
+            opponentLabel: observation.opponentLabel,
+            opponentPlayerId: observation.opponentPlayerId,
+            eventType: observation.eventType,
+            minute: Math.floor(observation.matchElapsedMs / 60_000),
+            detail: typeof data.detail === 'string' ? data.detail : null,
+            loggedByUserId: observation.loggedByUserId,
+            clientRequestId: observation.id,
+            period: observation.period,
+            matchElapsedMs: observation.matchElapsedMs,
+            structuredPayload: observation.payload,
+          })
+          .onConflictDoNothing({ target: matchEvents.id });
+        await this.databaseService.database
+          .update(matchEventMemberships)
+          .set({ canonicalEventId: observation.id })
+          .where(eq(matchEventMemberships.observationId, observation.id));
+      }
+    }
+    await this.databaseService.database
+      .update(matchEvents)
+      .set({ lifecycleStatus: 'confirmed', updatedAt: new Date() })
+      .where(eq(matchEvents.id, review.canonicalEventId));
+    const [resolved] = await this.databaseService.database
+      .update(matchEventReviews)
+      .set({
+        status: 'resolved',
+        resolution: dto.resolution,
+        resolvedByUserId: userId,
+        resolvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(matchEventReviews.id, review.id))
+      .returning();
+    return resolved;
   }
 
   async updateEvent(
@@ -305,7 +669,8 @@ export class MatchesService {
     this.assertEditable(event.status);
 
     const [deleted] = await this.databaseService.database
-      .delete(matchEvents)
+      .update(matchEvents)
+      .set({ lifecycleStatus: 'voided', updatedAt: new Date() })
       .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
       .returning();
 
