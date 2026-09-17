@@ -12,6 +12,7 @@ const StadiumScene = lazy(() =>
   })),
 );
 
+
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
  *
@@ -19,10 +20,6 @@ const StadiumScene = lazy(() =>
  * present after sign-in.
  */
 export function AppShell() {
-  const { pathname } = useLocation();
-  const showDashboardScene =
-    pathname === "/dashboard" || pathname === "/dashboard/";
-
   useEffect(() => {
     const root = document.documentElement;
     const wasDark = root.classList.contains("dark");
@@ -44,9 +41,12 @@ export function AppShell() {
 
 function AppShellContent() {
   const { expanded } = useSidebar();
+  const { pathname } = useLocation();
+  const showDashboardScene =
+    pathname === "/dashboard" || pathname === "/dashboard/";
 
   return (
-    <div className="relative relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
         aria-hidden="true"

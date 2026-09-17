@@ -135,24 +135,6 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
  *  SHARED UI PRIMITIVES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function Card({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLElement>) {
-  return (
-    <section
-      className={cn(
-        "dashboard-glass-card rounded-xl border border-border p-5",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </section>
-  );
-}
-
 function DashboardFrame({ children }: { children: ReactNode }) {
   return (
     <div className="relative min-h-full">{children}</div>
