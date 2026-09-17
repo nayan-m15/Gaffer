@@ -36,7 +36,7 @@ export default defineConfig({
   webServer: [
     {
       command: process.env.CI
-        ? 'npm --prefix backend run start'
+        ? 'npm --prefix backend run start:prod'
         : 'npm --prefix backend run start:dev',
       url: `${backendURL}/health/database`,
       reuseExistingServer: !process.env.CI,
