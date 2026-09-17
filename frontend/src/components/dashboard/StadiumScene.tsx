@@ -284,53 +284,155 @@ export function StadiumScene() {
       return texture;
     }
 
-    function makeCrowdTexture() {
+    function makeCrowdTexture(isLowPower: boolean) {
       const textureCanvas = document.createElement("canvas");
-      textureCanvas.width = 512;
-      textureCanvas.height = 128;
+      // The bowl surface is roughly 16 times wider around its circumference
+      // than it is tall. Matching that ratio avoids stretched spectators and
+      // lets one panoramic texture cover the whole stadium without obvious
+      // repeated tiles. Mobile gets the same composition at quarter memory.
+      textureCanvas.width = isLowPower ? 1024 : 2048;
+      textureCanvas.height = isLowPower ? 64 : 128;
       const context = getCanvasContext(textureCanvas);
-      context.fillStyle = "#171D22";
-      context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
+      const width = textureCanvas.width;
+      const height = textureCanvas.height;
+      const scale = height / 128;
 
-      const colors = [
-        "#e8b95a",
-        "#3acc7d",
-        "#e8ece9",
-        "#7a8ba3",
-        "#c46a6a",
-        "#171D22",
-        "#171D22",
+      const standGradient = context.createLinearGradient(0, 0, 0, height);
+      standGradient.addColorStop(0, "#20282b");
+      standGradient.addColorStop(0.55, "#151c1f");
+      standGradient.addColorStop(1, "#0c1214");
+      context.fillStyle = standGradient;
+      context.fillRect(0, 0, width, height);
+
+      // Seeded randomness keeps the crowd stable between mounts and avoids a
+      // distracting new colour pattern whenever the dashboard is revisited.
+      let randomState = 0x5f3759df;
+      const random = () => {
+        randomState = (randomState + 0x6d2b79f5) | 0;
+        let value = Math.imul(randomState ^ (randomState >>> 15), 1 | randomState);
+        value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+
+      const shirtColors = [
+        "#38b978",
+        "#43cf86",
+        "#d9e0dc",
+        "#aeb9b6",
+        "#d5a94f",
+        "#a75555",
+        "#536f91",
+        "#704f83",
+        "#263b35",
+        "#202a2d",
       ];
-      const rows = 10;
-      const columns = 90;
-      for (let row = 0; row < rows; row += 1) {
-        const y = (row / rows) * textureCanvas.height;
-        // Rows further "back" (lower in the texture) read slightly darker
-        // and smaller — a cheap depth cue for the crowd.
-        const depthDarken = 1 - row / (rows * 1.6);
-        for (let column = 0; column < columns; column += 1) {
-          if (Math.random() > 0.38) {
-            const x =
-              (column / columns) * textureCanvas.width + Math.random() * 3;
-            context.fillStyle =
-              colors[Math.floor(Math.random() * colors.length)];
-            context.globalAlpha =
-              (0.4 + Math.random() * 0.55) * Math.max(0.35, depthDarken);
-            context.fillRect(
-              x,
-              y + Math.random() * 4,
-              2.4,
-              2.6 + depthDarken * 1.2,
+      const skinColors = ["#f0c7a1", "#dca77d", "#bd805d", "#8e5d45", "#593c32"];
+      const rowCount = 9;
+      const sectionCount = 14;
+      const sectionWidth = width / sectionCount;
+      const aisleHalfWidth = 5 * scale;
+      const rowStep = height / rowCount;
+
+      for (let row = 0; row < rowCount; row += 1) {
+        const rowTop = row * rowStep;
+        const personHeight = (7.2 + (row / rowCount) * 1.6) * scale;
+        const spacing = (6.2 + random() * 1.4) * scale;
+
+        // Seat lips and risers give the figures a physical place in the bowl
+        // and remain readable after mipmapping.
+        context.fillStyle = row % 2 === 0 ? "#273236" : "#20292d";
+        context.fillRect(0, rowTop + rowStep - 1.3 * scale, width, 1.3 * scale);
+        context.fillStyle = "rgba(109, 130, 126, 0.22)";
+        context.fillRect(0, rowTop + rowStep - 2.1 * scale, width, 0.65 * scale);
+
+        for (let x = spacing * 0.5; x < width; x += spacing) {
+          const distanceFromAisle = Math.abs(
+            ((x + sectionWidth * 0.5) % sectionWidth) - sectionWidth * 0.5,
+          );
+          const isAisle = distanceFromAisle < aisleHalfWidth;
+          const isEmptySeat = random() < 0.085;
+          if (isAisle || isEmptySeat) continue;
+
+          const jitterX = (random() - 0.5) * 1.5 * scale;
+          const jitterY = (random() - 0.5) * 1.1 * scale;
+          const figureX = x + jitterX;
+          const feetY = rowTop + rowStep - 1.8 * scale + jitterY;
+          const headRadius = (1.05 + random() * 0.28) * scale;
+          const torsoWidth = (3.1 + random() * 0.9) * scale;
+          const torsoHeight = personHeight * (0.48 + random() * 0.08);
+          const shirtIndex = Math.floor(random() * shirtColors.length);
+          const skinIndex = Math.floor(random() * skinColors.length);
+          const pose = Math.floor(random() * 6);
+
+          context.globalAlpha = 0.86 + random() * 0.14;
+          context.fillStyle = shirtColors[shirtIndex];
+          context.beginPath();
+          context.moveTo(figureX - torsoWidth * 0.55, feetY);
+          context.lineTo(figureX - torsoWidth * 0.42, feetY - torsoHeight);
+          context.quadraticCurveTo(
+            figureX,
+            feetY - torsoHeight - 0.7 * scale,
+            figureX + torsoWidth * 0.42,
+            feetY - torsoHeight,
+          );
+          context.lineTo(figureX + torsoWidth * 0.55, feetY);
+          context.closePath();
+          context.fill();
+
+          // A small proportion of raised or offset arms breaks up the row
+          // silhouette without introducing animation or extra geometry.
+          if (pose === 0 || pose === 1) {
+            context.strokeStyle = shirtColors[shirtIndex];
+            context.lineWidth = Math.max(1, 1.05 * scale);
+            context.lineCap = "round";
+            context.beginPath();
+            context.moveTo(figureX - torsoWidth * 0.35, feetY - torsoHeight * 0.72);
+            context.lineTo(
+              figureX + (pose === 0 ? -2.8 : 2.8) * scale,
+              feetY - torsoHeight - (pose === 0 ? 2.5 : 0.7) * scale,
             );
+            context.stroke();
           }
+
+          context.fillStyle = skinColors[skinIndex];
+          context.beginPath();
+          context.arc(
+            figureX,
+            feetY - torsoHeight - headRadius * 1.25,
+            headRadius,
+            0,
+            Math.PI * 2,
+          );
+          context.fill();
         }
+      }
+
+      // Dark stair aisles separate the audience into believable sections and
+      // also hide the panoramic UV seam at the edge of the lathed geometry.
+      context.globalAlpha = 1;
+      context.fillStyle = "rgba(8, 13, 15, 0.72)";
+      for (let section = 0; section <= sectionCount; section += 1) {
+        const aisleX = section * sectionWidth;
+        context.fillRect(aisleX - aisleHalfWidth, 0, aisleHalfWidth * 2, height);
+      }
+      context.fillStyle = "rgba(116, 139, 134, 0.28)";
+      for (let section = 0; section <= sectionCount; section += 1) {
+        const aisleX = section * sectionWidth;
+        context.fillRect(aisleX - aisleHalfWidth, 0, 0.75 * scale, height);
+        context.fillRect(aisleX + aisleHalfWidth, 0, 0.75 * scale, height);
       }
       context.globalAlpha = 1;
 
       const texture = new THREE.CanvasTexture(textureCanvas);
       texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(18, 1);
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.repeat.set(1, 1);
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      // Three r128 uses `encoding`; `colorSpace` was introduced much later.
+      texture.encoding = THREE.sRGBEncoding;
+      texture.name = isLowPower ? "Crowd panorama (mobile)" : "Crowd panorama";
       return texture;
     }
 
@@ -377,8 +479,10 @@ export function StadiumScene() {
       [132, 50],
     ].map(([x, y]) => new THREE.Vector2(x, y));
     const latheSegments = isMobile ? 26 : 44;
-    const crowdTexture = makeCrowdTexture();
-    crowdTexture.anisotropy = maxAnisotropy;
+    const crowdTexture = makeCrowdTexture(isMobile);
+    // Oblique stadium views benefit from anisotropy, but sampling at the
+    // device maximum is wasteful for a background crowd texture.
+    crowdTexture.anisotropy = Math.min(maxAnisotropy, isMobile ? 4 : 8);
     const bowl = new THREE.Mesh(
       new THREE.LatheGeometry(profile, latheSegments),
       new THREE.MeshStandardMaterial({
