@@ -328,7 +328,7 @@ export class StatisticsService {
     const appearanceRows = await this.databaseService.database
       .select({
         athleteId: athleteMatchStats.athleteId,
-        appearances: sql<number>`count(*)::int`,
+        appearances: sql<number>`count(*) filter (where ${appearedInMatch()})::int`,
         starts: sql<number>`count(*) filter (where ${athleteMatchStats.started})::int`,
         minutesPlayed: sql<number>`coalesce(sum(${athleteMatchStats.minutesPlayed}), 0)::int`,
         matchesWithMinutes: sql<number>`count(*) filter (where ${athleteMatchStats.minutesPlayed} is not null)::int`,
