@@ -450,6 +450,52 @@ export function StadiumScene() {
       return new THREE.CanvasTexture(textureCanvas);
     }
 
+    function makeAdvertisementTexture(isLowPower: boolean) {
+      const textureCanvas = document.createElement("canvas");
+      textureCanvas.width = isLowPower ? 512 : 1024;
+      textureCanvas.height = isLowPower ? 64 : 128;
+      const context = getCanvasContext(textureCanvas);
+      const width = textureCanvas.width;
+      const height = textureCanvas.height;
+      const scale = height / 128;
+
+      const background = context.createLinearGradient(0, 0, width, 0);
+      background.addColorStop(0, "#071713");
+      background.addColorStop(0.5, "#0c2a21");
+      background.addColorStop(1, "#071713");
+      context.fillStyle = background;
+      context.fillRect(0, 0, width, height);
+
+      context.fillStyle = "#38d789";
+      context.fillRect(0, 5 * scale, width, 3 * scale);
+      context.fillRect(0, height - 8 * scale, width, 3 * scale);
+
+      const markX = width * 0.32;
+      context.strokeStyle = "#38d789";
+      context.lineWidth = 5 * scale;
+      context.beginPath();
+      context.arc(markX, height / 2, 31 * scale, 0.3, Math.PI * 1.78);
+      context.stroke();
+
+      context.fillStyle = "#effff7";
+      context.font = `800 ${54 * scale}px Inter, Arial, sans-serif`;
+      context.textAlign = "left";
+      context.textBaseline = "middle";
+      context.fillText("GAFFER", width * 0.39, height / 2 + 1 * scale);
+
+      const texture = new THREE.CanvasTexture(textureCanvas);
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.encoding = THREE.sRGBEncoding;
+      texture.name = isLowPower
+        ? "Gaffer advertisement (mobile)"
+        : "Gaffer advertisement";
+      return texture;
+    }
+
     const pitchTexture = makePitchTexture();
     const pitchBumpTexture = makePitchBumpTexture();
     pitchTexture.anisotropy = maxAnisotropy;
@@ -466,6 +512,180 @@ export function StadiumScene() {
     pitch.rotation.x = -Math.PI / 2;
     pitch.receiveShadow = true;
     scene.add(pitch);
+
+    // --- Perimeter advertising ---
+    // Every panel shares one geometry/material and is submitted as a single
+    // instanced draw call. A gap in the far touchline reveals the dugout.
+    const adTexture = makeAdvertisementTexture(isMobile);
+    adTexture.anisotropy = Math.min(maxAnisotropy, isMobile ? 4 : 8);
+    const adPanelGeometry = new THREE.BoxGeometry(16, 2.8, 0.65);
+    const adPanelMaterial = new THREE.MeshStandardMaterial({
+      map: adTexture,
+      emissive: new THREE.Color(0xffffff),
+      emissiveMap: adTexture,
+      emissiveIntensity: 0.22,
+      roughness: 0.48,
+      metalness: 0.12,
+    });
+    const adPanelTransforms: Array<{
+      x: number;
+      z: number;
+      rotationY: number;
+    }> = [];
+    const longSideZ = 72.6;
+    for (let index = 0; index < 14; index += 1) {
+      const x = -104 + index * 16;
+      adPanelTransforms.push({ x, z: longSideZ, rotationY: 0 });
+      if (Math.abs(x) > 24) {
+        adPanelTransforms.push({ x, z: -longSideZ, rotationY: Math.PI });
+      }
+    }
+    for (let index = 0; index < 9; index += 1) {
+      const z = -64 + index * 16;
+      adPanelTransforms.push({ x: -112.6, z, rotationY: Math.PI / 2 });
+      adPanelTransforms.push({ x: 112.6, z, rotationY: -Math.PI / 2 });
+    }
+
+    const adPanels = new THREE.InstancedMesh(
+      adPanelGeometry,
+      adPanelMaterial,
+      adPanelTransforms.length,
+    );
+    const adPanelTransform = new THREE.Object3D();
+    adPanelTransforms.forEach((transform, index) => {
+      adPanelTransform.position.set(transform.x, 1.4, transform.z);
+      adPanelTransform.rotation.set(0, transform.rotationY, 0);
+      adPanelTransform.updateMatrix();
+      adPanels.setMatrixAt(index, adPanelTransform.matrix);
+    });
+    adPanels.instanceMatrix.needsUpdate = true;
+    adPanels.castShadow = true;
+    adPanels.receiveShadow = true;
+    scene.add(adPanels);
+
+    // --- Far-touchline dugout ---
+    // A compact glass-and-metal shelter gives the stadium a professional
+    // technical area while staying below the dashboard's visual hierarchy.
+    const dugout = new THREE.Group();
+    dugout.position.set(0, 0, -79.2);
+
+    const dugoutMetal = new THREE.MeshStandardMaterial({
+      color: 0x101719,
+      roughness: 0.42,
+      metalness: 0.72,
+    });
+    const dugoutConcrete = new THREE.MeshStandardMaterial({
+      color: 0x303839,
+      roughness: 0.92,
+      metalness: 0,
+    });
+    const dugoutGlass = new THREE.MeshPhysicalMaterial({
+      color: 0x86c9b4,
+      roughness: 0.12,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const seatMaterial = new THREE.MeshStandardMaterial({
+      color: 0x16734f,
+      roughness: 0.62,
+      metalness: 0.08,
+    });
+
+    const dugoutBase = new THREE.Mesh(
+      new THREE.BoxGeometry(44, 0.55, 8.4),
+      dugoutConcrete,
+    );
+    dugoutBase.position.y = 0.28;
+    dugoutBase.receiveShadow = true;
+    dugout.add(dugoutBase);
+
+    const dugoutRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(44, 0.55, 8.2),
+      dugoutMetal,
+    );
+    dugoutRoof.position.set(0, 7.1, -0.15);
+    dugoutRoof.rotation.x = -0.045;
+    dugoutRoof.castShadow = true;
+    dugout.add(dugoutRoof);
+
+    const dugoutBack = new THREE.Mesh(
+      new THREE.BoxGeometry(42, 6.2, 0.18),
+      dugoutGlass,
+    );
+    dugoutBack.position.set(0, 3.75, -3.85);
+    dugout.add(dugoutBack);
+
+    [-21.1, 21.1].forEach((x) => {
+      const side = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 6.2, 7.5),
+        dugoutGlass,
+      );
+      side.position.set(x, 3.75, -0.1);
+      dugout.add(side);
+    });
+
+    const frontBeam = new THREE.Mesh(
+      new THREE.BoxGeometry(43, 0.38, 0.38),
+      dugoutMetal,
+    );
+    frontBeam.position.set(0, 6.65, 3.6);
+    frontBeam.castShadow = true;
+    dugout.add(frontBeam);
+
+    const postGeometry = new THREE.BoxGeometry(0.3, 6.2, 0.3);
+    const postPositions = [-21, -16, -11, -6, -1, 4, 9, 14, 19, 21];
+    const dugoutPosts = new THREE.InstancedMesh(
+      postGeometry,
+      dugoutMetal,
+      postPositions.length,
+    );
+    const postTransform = new THREE.Object3D();
+    postPositions.forEach((x, index) => {
+      postTransform.position.set(x, 3.65, -3.68);
+      postTransform.updateMatrix();
+      dugoutPosts.setMatrixAt(index, postTransform.matrix);
+    });
+    dugoutPosts.instanceMatrix.needsUpdate = true;
+    dugoutPosts.castShadow = true;
+    dugout.add(dugoutPosts);
+
+    const seatCount = isMobile ? 8 : 10;
+    const seatGeometry = new THREE.BoxGeometry(3.2, 0.55, 2.15);
+    const seatBackGeometry = new THREE.BoxGeometry(3.2, 2.1, 0.42);
+    const dugoutSeats = new THREE.InstancedMesh(
+      seatGeometry,
+      seatMaterial,
+      seatCount,
+    );
+    const dugoutSeatBacks = new THREE.InstancedMesh(
+      seatBackGeometry,
+      seatMaterial,
+      seatCount,
+    );
+    const seatTransform = new THREE.Object3D();
+    const seatSpacing = 3.65;
+    const firstSeatX = -((seatCount - 1) * seatSpacing) / 2;
+    for (let index = 0; index < seatCount; index += 1) {
+      const x = firstSeatX + index * seatSpacing;
+      seatTransform.position.set(x, 1.35, -0.55);
+      seatTransform.rotation.set(0, 0, 0);
+      seatTransform.updateMatrix();
+      dugoutSeats.setMatrixAt(index, seatTransform.matrix);
+
+      seatTransform.position.set(x, 2.55, -1.55);
+      seatTransform.rotation.set(-0.1, 0, 0);
+      seatTransform.updateMatrix();
+      dugoutSeatBacks.setMatrixAt(index, seatTransform.matrix);
+    }
+    dugoutSeats.instanceMatrix.needsUpdate = true;
+    dugoutSeatBacks.instanceMatrix.needsUpdate = true;
+    dugoutSeats.castShadow = true;
+    dugoutSeatBacks.castShadow = true;
+    dugout.add(dugoutSeats, dugoutSeatBacks);
+    scene.add(dugout);
 
     const profile = [
       [90, 0],
@@ -739,6 +959,7 @@ export function StadiumScene() {
       pitchTexture.dispose();
       pitchBumpTexture.dispose();
       crowdTexture.dispose();
+      adTexture.dispose();
       glowTexture.dispose();
       // Cast to a loose shape: EffectComposer/UnrealBloomPass gained an
       // explicit `dispose()` in later three.js releases than these
