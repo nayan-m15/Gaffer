@@ -20,7 +20,6 @@ import {
   Activity,
   AlertCircle,
   Calendar,
-  CalendarCheck,
   Mail,
   Plus,
   RefreshCw,
@@ -41,6 +40,7 @@ import {
 
 interface LiveMatchData {
   id: string;
+  eventTitle: string;
   homeTeam: string;
   awayTeam: string;
   homeScore: number;
@@ -248,42 +248,10 @@ function DashboardHeader({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  STAT CARDS — Active Athletes & Total Events  (Sprint 1)
+ *  ACTIVE MATCH NOTIFICATION
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function StatCard({
-  label,
-  value,
-  icon,
-  ariaLabel,
-}: {
-  label: string;
-  value: number;
-  icon: ReactNode;
-  ariaLabel: string;
-}) {
-  return (
-    <Card aria-label={ariaLabel}>
-      <div className="flex items-center gap-4">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          {icon}
-        </div>
-        <div>
-          <p className="text-3xl font-bold tabular-nums text-foreground">
-            {value}
-          </p>
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  LIVE MATCH CARD  (Sprint 2 — deferred)
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function LiveMatchCard({
+function LiveMatchPanel({
   match,
   onOpenLogger,
 }: {
@@ -310,69 +278,62 @@ function LiveMatchCard({
       <Card
         className={cn(
           "relative overflow-hidden transition-colors",
-          match && "border-primary/30",
+          match && "border-primary/40 bg-primary/[0.06]",
         )}
-        aria-label="Live match"
+        aria-label="Live match status"
+        aria-live="polite"
       >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left — badge and status */}
-        <div className="flex items-center gap-3">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-              match
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            {match ? (
-              <>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                match
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {match && (
                 <span
                   className="size-1.5 animate-pulse rounded-full bg-current"
                   aria-hidden="true"
                 />
-                Live Match Logger
-              </>
-            ) : (
-              "No Active Match"
+              )}
+              {match ? "Live Now" : "No Active Match"}
+            </span>
+            {match && (
+              <span className="text-xs text-muted-foreground">
+                {match.elapsedMinutes}&apos;
+              </span>
             )}
-          </span>
-          {match && (
-            <span className="text-xs text-muted-foreground">
-              {match.elapsedMinutes}&apos;
-            </span>
-          )}
-        </div>
-
-        {/* Centre — score */}
-        {match ? (
-          <div className="flex items-center justify-center gap-4 sm:gap-6">
-            <span className="text-lg font-bold text-foreground sm:text-xl">
-              {match.homeTeam}
-            </span>
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
-              {match.homeScore}&thinsp;\u2013&thinsp;{match.awayScore}
-            </span>
-            <span className="text-lg font-bold text-foreground sm:text-xl">
-              {match.awayTeam}
-            </span>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground sm:mx-auto">
-            No match currently in progress
-          </p>
-        )}
-
-        {/* Right — action */}
-        <Button
-          variant={match ? "default" : "outline"}
-          size="sm"
-          onClick={onOpenLogger}
-        >
-          <Activity className="size-4" aria-hidden="true" />
-          {match ? "Open Live Logger" : "Live Logger"}
-        </Button>
-      </div>
+          {match ? (
+            <div className="space-y-2">
+              <p className="truncate text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {match.eventTitle}
+              </p>
+              <div className="flex items-center justify-between gap-4">
+                <p className="min-w-0 truncate text-sm font-semibold text-foreground">
+                  {match.homeTeam} vs {match.awayTeam}
+                </p>
+                <span className="shrink-0 font-mono text-3xl font-bold tabular-nums text-foreground">
+                  {match.homeScore}&thinsp;{"–"}&thinsp;{match.awayScore}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-semibold text-foreground">Live Logger</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Start or continue match tracking.
+              </p>
+            </div>
+          )}
+          <Button size="sm" className="w-full" onClick={onOpenLogger}>
+            <Activity className="size-4" aria-hidden="true" />
+            {match ? "Open Live Logger" : "Go to Live Logger"}
+          </Button>
+        </div>
       </Card>
     </div>
   );
@@ -501,7 +462,7 @@ function RecentFormCard({
   const [selectedId, setSelectedId] = useState<string | null>(
     results[0]?.id ?? null,
   );
-  const recentResults = results.slice(0, 5);
+  const recentResults = results.slice(0, 10);
   const selected =
     recentResults.find((result) => result.id === selectedId) ?? recentResults[0];
 
@@ -514,7 +475,7 @@ function RecentFormCard({
       </SectionTitle>
       {results.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2" aria-label="Recent results">
+          <div className="flex flex-wrap items-center gap-2" aria-label="Recent results">
             {recentResults.map((result) => (
               <ResultBadge
                 key={result.id}
@@ -752,17 +713,20 @@ export default function DashboardPage() {
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <CardSkeleton lines={1} />
-            <CardSkeleton lines={1} />
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <CardSkeleton key={index} lines={2} />
+            ))}
           </div>
-          <CardSkeleton lines={2} />
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="lg:col-span-3">
               <CardSkeleton lines={3} />
             </div>
             <div className="lg:col-span-2">
-              <CardSkeleton lines={3} />
+              <div className="space-y-5">
+                <CardSkeleton lines={3} />
+                <CardSkeleton lines={2} />
+              </div>
             </div>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -841,12 +805,6 @@ export default function DashboardPage() {
 
         <EventRemindersBanner events={upcomingEvents} />
 
-        {/* ── Sprint 2: Live Match (deferred — shows empty state) ─────────── */}
-        <LiveMatchCard
-          match={liveMatch ?? null}
-          onOpenLogger={() => navigate("/events")}
-        />
-
         {team && (
           <section aria-labelledby="quick-actions-heading">
             <SectionTitle icon={<Activity className="size-4 text-muted-foreground" />}>
@@ -854,8 +812,20 @@ export default function DashboardPage() {
             </SectionTitle>
             <HoverEffect
               items={[
-                { title: "Events", description: "Plan training, matches, and meetings.", to: "/events", icon: <Calendar className="size-5" /> },
-                { title: "Squad", description: "Manage athletes and availability.", to: "/athletes", icon: <Users className="size-5" /> },
+                {
+                  title: "Events",
+                  description: "Plan training, matches, and meetings.",
+                  to: "/events",
+                  icon: <Calendar className="size-5" />,
+                  stat: { label: "Total Events", value: totalEventsCount },
+                },
+                {
+                  title: "Squad",
+                  description: "Manage athletes and availability.",
+                  to: "/athletes",
+                  icon: <Users className="size-5" />,
+                  stat: { label: "Active Athletes", value: activeAthletesCount },
+                },
                 { title: "Live Logger", description: "Start or continue match tracking.", to: "/live-logger", icon: <Activity className="size-5" /> },
                 { title: "Statistics", description: "Review form and performance trends.", to: "/statistics", icon: <BarChart3 className="size-5" /> },
               ]}
@@ -863,31 +833,23 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* ── Sprint 1: Stat Cards ────────────────────────────────────────── */}
-        <BentoGrid className="max-w-none gap-5 sm:grid-cols-2 md:auto-rows-auto md:grid-cols-2">
-          <StatCard
-            label="Active Athletes"
-            value={activeAthletesCount}
-            icon={<Users className="size-6" aria-hidden="true" />}
-            ariaLabel="Active athletes count"
-          />
-          <StatCard
-            label="Total Events"
-            value={totalEventsCount}
-            icon={<CalendarCheck className="size-6" aria-hidden="true" />}
-            ariaLabel="Total events count"
-          />
-        </BentoGrid>
-
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-5">
           <div className="md:col-span-3">
             <UpcomingEventsCard events={upcomingEvents} onOpenEvent={setSelectedEventId} />
           </div>
-          <div className="md:col-span-2">
+          <div className="space-y-5 md:col-span-2">
             <RecentFormCard
               results={recentForm ?? []}
               teamName={team?.name ?? "Our Team"}
+            />
+            <LiveMatchPanel
+              match={liveMatch ?? null}
+              onOpenLogger={() =>
+                navigate(
+                  liveMatch ? `/matches/${liveMatch.id}/live` : "/live-logger",
+                )
+              }
             />
           </div>
         </BentoGrid>

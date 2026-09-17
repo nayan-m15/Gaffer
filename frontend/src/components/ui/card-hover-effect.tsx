@@ -8,6 +8,10 @@ export interface HoverActionItem {
   description: string;
   to: string;
   icon: ReactNode;
+  stat?: {
+    label: string;
+    value: number;
+  };
 }
 
 export function HoverEffect({
@@ -45,9 +49,24 @@ export function HoverEffect({
             )}
           </AnimatePresence>
           <div className="relative z-10 h-full rounded-xl border border-border/60 bg-card/70 p-4 backdrop-blur-xl">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              {item.icon}
-            </span>
+            <div className="flex items-start justify-between gap-4">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                {item.icon}
+              </span>
+              {item.stat && (
+                <div
+                  className="text-right"
+                  aria-label={`${item.stat.value} ${item.stat.label}`}
+                >
+                  <p className="text-2xl font-bold leading-none tabular-nums text-foreground">
+                    {item.stat.value}
+                  </p>
+                  <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    {item.stat.label}
+                  </p>
+                </div>
+              )}
+            </div>
             <h3 className="mt-3 text-sm font-semibold text-foreground">{item.title}</h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
           </div>
