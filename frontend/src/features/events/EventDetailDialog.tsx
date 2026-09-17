@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { displayEventStatus, eventStatusLabel, eventTypeLabel, formatEventDateTime } from "./event-utils";
@@ -79,7 +80,7 @@ export function EventDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-lg">
+      <AnimatedModalContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold uppercase tracking-wide text-foreground">Event</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
@@ -164,7 +165,7 @@ export function EventDetailDialog({
             )}
           </DialogFooter>
         )}
-      </DialogContent>
+      </AnimatedModalContent>
     </Dialog>
   );
 }

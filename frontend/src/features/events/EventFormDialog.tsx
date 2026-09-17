@@ -1,14 +1,15 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { CalendarIcon, Check, ClockIcon, MapPinned, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -265,7 +266,7 @@ export function EventFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+      <AnimatedModalContent
         className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-lg"
         showCloseButton
       >
@@ -539,11 +540,12 @@ export function EventFormDialog({
             </p>
           )}
 
-          <Button
+          <StatefulButton
             type="submit"
-            size="lg"
             disabled={isPending}
             className="mt-1 w-full font-semibold tracking-wide"
+            status={isPending ? "loading" : "idle"}
+            loadingText={isEditing ? "Saving event..." : "Creating event..."}
           >
             {isPending
               ? isEditing
@@ -552,9 +554,9 @@ export function EventFormDialog({
               : isEditing
                 ? "SAVE EVENT"
                 : "CREATE EVENT"}
-          </Button>
+          </StatefulButton>
         </form>
-      </DialogContent>
+      </AnimatedModalContent>
     </Dialog>
   );
 }

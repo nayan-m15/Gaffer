@@ -2,11 +2,11 @@ import { format } from "date-fns";
 import { Plus } from "lucide-react";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { cn } from "@/lib/utils";
 import { formatEventTime } from "./calendar-utils";
 import { displayEventStatus, eventTypeLabel } from "./event-utils";
@@ -46,7 +46,7 @@ export function DayEventsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card sm:max-w-md p-5 rounded-3xl border border-border shadow-2xl">
+      <AnimatedModalContent className="sm:max-w-md p-5 rounded-3xl">
         <DialogHeader className="gap-0.5 pb-2">
           <DialogTitle className="flex items-baseline gap-2.5 text-foreground">
             <span className="text-2xl sm:text-3xl font-black tracking-tight">{dayNumber}</span>
@@ -145,7 +145,7 @@ export function DayEventsDialog({
             <Plus className="size-4.5 text-foreground" />
           </button>
         )}
-      </DialogContent>
+      </AnimatedModalContent>
     </Dialog>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExpandableCard } from "@/components/ui/expandable-card";
 import { cn } from "@/lib/utils";
 import { formatEventTime, formatMonthYear, getMonthEvents, toDayKey } from "./calendar-utils";
 import { displayEventStatus, eventTypeLabel } from "./event-utils";
@@ -185,48 +186,48 @@ function AgendaEventRow({
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => onOpenEvent(event)}
+      <ExpandableCard
+        buttonLabel={`${event.title}, ${formatEventTime(event.scheduledAt)}. Show event summary`}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg border border-border bg-background px-3 py-2 text-left transition-colors",
-          "hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "bg-background",
           cancelled && "opacity-60",
           !cancelled && completed && "opacity-75",
         )}
+        summary={
+          <div className="flex items-center gap-2.5">
+            <span className={cn("size-2 shrink-0 rounded-full", style.swatch)} aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1.5">
+                <span className={cn("truncate text-xs font-semibold text-foreground", cancelled && "line-through")}>
+                  {event.title}
+                </span>
+                <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
+                  {formatEventTime(event.scheduledAt)}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Icon className="size-3 shrink-0" aria-hidden="true" />
+                  {eventTypeLabel(event.type)}
+                </span>
+                {event.location && (
+                  <span className="flex items-center gap-1 truncate">
+                    <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                    <span className="max-w-[100px] truncate">{event.location}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        }
       >
-        <span
-          className={cn("size-2 shrink-0 rounded-full", style.swatch)}
-          aria-hidden="true"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-1.5">
-            <span
-              className={cn(
-                "truncate text-xs font-semibold text-foreground",
-                cancelled && "line-through",
-              )}
-            >
-              {event.title}
-            </span>
-            <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
-              {formatEventTime(event.scheduledAt)}
-            </span>
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Icon className="size-3 shrink-0" aria-hidden="true" />
-              {eventTypeLabel(event.type)}
-            </span>
-            {event.location && (
-              <span className="flex items-center gap-1 truncate">
-                <MapPin className="size-3 shrink-0" aria-hidden="true" />
-                <span className="truncate max-w-[100px]">{event.location}</span>
-              </span>
-            )}
-          </div>
+        <div className="space-y-2 text-xs text-muted-foreground">
+          <p>{event.notes?.trim() || "No additional notes for this event."}</p>
+          <Button size="sm" variant="outline" onClick={() => onOpenEvent(event)}>
+            View full details
+          </Button>
         </div>
-      </button>
+      </ExpandableCard>
     </li>
   );
 }

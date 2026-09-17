@@ -763,7 +763,7 @@ export default function ConfirmSquadPage() {
       };
 
   return (
-    <div className="space-y-5 p-6 sm:p-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
       <section className={cardClassName}>
         <div className="flex items-start justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">

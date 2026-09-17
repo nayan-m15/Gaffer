@@ -315,6 +315,79 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* ─── Coach dashboard stadium treatment ────────────────────────────────── *
+ * The canvas and glass values mirror the approved dashboard concept while
+ * leaving the existing component spacing and responsive grid untouched.     */
+
+.dashboard-stadium-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dashboard-stadium-scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dashboard-stadium-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 92% 74% at 50% 38%,
+      transparent 0%,
+      rgba(255, 255, 255, 0.02) 60%,
+      rgba(205, 222, 212, 0.38) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.3) 0%,
+      transparent 20%,
+      transparent 68%,
+      rgba(196, 214, 203, 0.5) 100%
+    );
+  transition: background 0.5s ease;
+}
+
+.dashboard-glass-card {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(20, 35, 28, 0.12);
+  box-shadow: 0 8px 26px rgba(25, 45, 35, 0.12);
+  backdrop-filter: blur(15px) saturate(150%);
+  -webkit-backdrop-filter: blur(15px) saturate(150%);
+  transition:
+    background 0.4s ease,
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.dark .dashboard-stadium-vignette {
+  background:
+    radial-gradient(
+      ellipse 92% 74% at 50% 38%,
+      transparent 0%,
+      rgba(5, 8, 10, 0.14) 60%,
+      rgba(5, 8, 10, 0.55) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(5, 8, 10, 0.32) 0%,
+      transparent 20%,
+      transparent 68%,
+      rgba(5, 8, 10, 0.68) 100%
+    );
+}
+
+.dark .dashboard-glass-card {
+  background: rgba(14, 20, 17, 0.24);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
 /* ─── Scroll indicator bounce ───────────────────────────────────────────── *
  * A slow, gentle bounce used by the scroll-down chevron indicator on the     *
  * How It Works hero.  Travels 8px down and back over 2 seconds.              */
