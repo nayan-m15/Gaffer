@@ -1,10 +1,17 @@
-import { useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+
+const StadiumScene = lazy(() =>
+  import("@/components/dashboard/StadiumScene").then((module) => ({
+    default: module.StadiumScene,
+  })),
+);
+
 
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
@@ -34,9 +41,12 @@ export function AppShell() {
 
 function AppShellContent() {
   const { expanded } = useSidebar();
+  const { pathname } = useLocation();
+  const showDashboardScene =
+    pathname === "/dashboard" || pathname === "/dashboard/";
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
         aria-hidden="true"
@@ -45,6 +55,12 @@ function AppShellContent() {
         className="pointer-events-none fixed inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
         aria-hidden="true"
       />
+      {showDashboardScene && (
+        <Suspense fallback={null}>
+          <StadiumScene />
+        </Suspense>
+      )}
+
       <Sidebar />
 
       <main
