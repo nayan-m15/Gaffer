@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -573,14 +574,21 @@ function EditForm({
           <X className="size-4" />
           Cancel
         </Button>
-        <Button type="submit" disabled={isSaving} className="gap-1.5">
+        <StatefulButton
+          type="submit"
+          disabled={isSaving}
+          className="gap-1.5"
+          status={isSaving ? "loading" : errorMessage ? "error" : "idle"}
+          loadingText="Saving..."
+          errorText="Try again"
+        >
           {isSaving ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Check className="size-4" />
           )}
           {isSaving ? "Saving…" : "Save Changes"}
-        </Button>
+        </StatefulButton>
       </div>
     </form>
   );

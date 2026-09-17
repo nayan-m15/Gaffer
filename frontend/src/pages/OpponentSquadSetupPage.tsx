@@ -179,7 +179,7 @@ export default function OpponentSquadSetupPage() {
   };
 
   return (
-    <div className="space-y-5 p-6 sm:p-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />

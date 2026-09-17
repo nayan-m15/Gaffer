@@ -17,8 +17,7 @@ export interface PageHeaderProps {
 /**
  * Standardized page header component for authenticated views.
  *
- * Ensures consistent typography (uppercase tracking, font sizes),
- * border-bottom separation, padding, and responsive action placement
+ * Ensures consistent typography, spacing, and responsive action placement
  * across all pages.
  */
 export function PageHeader({
@@ -32,17 +31,23 @@ export function PageHeader({
     <header
       className={cn(
         // Mobile: clear fixed sidebar toggle (left-4 top-4) horizontally and vertically
-        "border-b border-border pt-16 pb-6 pl-16 pr-6 sm:pr-8 lg:px-8 lg:py-6",
+        "mx-auto w-full max-w-[1600px] pt-16 pb-7 pl-16 pr-6 sm:pr-8 lg:px-10 lg:pb-6 lg:pt-9",
         className,
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold uppercase tracking-widest text-foreground sm:text-3xl">
+          <div className="mb-3 flex items-center gap-2" aria-hidden="true">
+            <span className="h-px w-7 bg-primary" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
+              Gaffer workspace
+            </span>
+          </div>
+          <h1 className="font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
           )}
         </div>
 

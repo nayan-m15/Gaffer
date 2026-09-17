@@ -224,7 +224,7 @@ export default function EventsPage() {
         subtitle="Matches, training sessions, and meetings on one calendar."
       />
 
-      <div className="flex w-full min-w-0 flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
+      <div className="mx-auto flex w-full max-w-[1800px] min-w-0 flex-col gap-3 px-3 pb-6 sm:gap-4 sm:px-5 lg:px-8">
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">

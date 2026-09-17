@@ -11,6 +11,8 @@ import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AppCard } from "@/components/app/AppCard";
+import { BentoGrid } from "@/components/ui/bento-grid";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -128,6 +130,9 @@ export default function AthletesPage() {
 
   const activeCount = activeAthletes.length;
   const archivedCount = archivedAthletes.length;
+  const unavailableCount = activeAthletes.filter(
+    (athlete) => athlete.status !== "Available",
+  ).length;
 
   const createMutation = useMutation({
     mutationFn: createAthlete,
@@ -316,11 +321,25 @@ export default function AthletesPage() {
         }
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
+        <BentoGrid className="max-w-none grid-cols-1 gap-4 md:auto-rows-auto md:grid-cols-3">
+          <AppCard className="flex items-center justify-between py-4">
+            <div><p className="text-2xl font-bold tabular-nums">{activeCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active athletes</p></div>
+            <Users className="size-6 text-primary" aria-hidden="true" />
+          </AppCard>
+          <AppCard className="flex items-center justify-between py-4">
+            <div><p className="text-2xl font-bold tabular-nums">{unavailableCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unavailable</p></div>
+            <AlertCircle className="size-6 text-amber-500" aria-hidden="true" />
+          </AppCard>
+          <AppCard className="flex items-center justify-between py-4">
+            <div><p className="text-2xl font-bold tabular-nums">{archivedCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Archived</p></div>
+            <Archive className="size-6 text-muted-foreground" aria-hidden="true" />
+          </AppCard>
+        </BentoGrid>
         {/* Main layout */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
             {/* Squad management card */}
-            <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6 lg:col-span-2">
+            <AppCard className="p-4 md:p-6 lg:col-span-2">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
@@ -416,7 +435,7 @@ export default function AthletesPage() {
                   )}
                 </>
               )}
-            </section>
+            </AppCard>
 
             {/* Selected athlete details */}
             <section
@@ -444,7 +463,7 @@ export default function AthletesPage() {
 
         {/* ── Assistants management card (coach-only) ────────────────── */}
         {canManageRoster && (
-          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <AppCard className="p-4 md:p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
@@ -577,7 +596,7 @@ export default function AthletesPage() {
                 )}
               </div>
             </div>
-          </section>
+          </AppCard>
         )}
       </div>
 
@@ -586,6 +605,7 @@ export default function AthletesPage() {
         onClose={closeForm}
         initialValues={editingBackendAthlete ? toFormValues(editingBackendAthlete) : null}
         onSubmit={handleFormSubmit}
+        isSubmitting={createMutation.isPending || updateMutation.isPending}
       />
 
       <ArchiveConfirmDialog
