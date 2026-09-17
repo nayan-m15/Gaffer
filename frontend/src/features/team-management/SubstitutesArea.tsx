@@ -159,6 +159,11 @@ export function SubstitutesArea({
               position={athlete.position ?? "UN"}
               squadNumber={athlete.squadNumber}
               status={athlete.status}
+              appearances={athlete.appearances}
+              goals={athlete.goals}
+              assists={athlete.assists}
+              yellowCards={athlete.yellowCards}
+              redCards={athlete.redCards}
               variant="sub"
               isDragging={isDragging}
               readOnly={readOnly || athlete.status === "injured"}

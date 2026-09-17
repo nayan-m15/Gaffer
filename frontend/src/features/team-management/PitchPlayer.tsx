@@ -194,6 +194,11 @@ export function PitchPlayer({
         position={athlete.position ?? position.label}
         squadNumber={athlete.squadNumber}
         status={athlete.status}
+        appearances={athlete.appearances}
+        goals={athlete.goals}
+        assists={athlete.assists}
+        yellowCards={athlete.yellowCards}
+        redCards={athlete.redCards}
         variant="pitch"
         isDragging={isDragging}
         isDropTarget={isDragOver && isValidDrop}
