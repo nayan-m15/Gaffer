@@ -25,6 +25,7 @@ export const signUpSchema = z.object({
     .min(8, 'Password must be at least 8 characters.')
     .max(128, 'Password must be 128 characters or fewer.'),
   inviteToken: inviteTokenField,
+  inviteKind: z.enum(['team', 'competition']).optional(),
 });
 export type SignUpDto = z.infer<typeof signUpSchema>;
 
@@ -48,6 +49,7 @@ export const resendVerificationEmailSchema = z.object({
     .email('Enter a valid email address.')
     .max(255, 'Email must be 255 characters or fewer.'),
   inviteToken: inviteTokenField,
+  inviteKind: z.enum(['team', 'competition']).optional(),
 });
 export type ResendVerificationEmailDto = z.infer<
   typeof resendVerificationEmailSchema

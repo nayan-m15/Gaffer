@@ -57,7 +57,7 @@ export function TeamInviteResumer() {
   useEffect(() => {
     if (status !== "authenticated") return;
     // JoinTeamPage owns acceptance while the user is actually on the invite.
-    if (location.pathname.startsWith("/join-team/")) return;
+    if (location.pathname.startsWith("/join-team/") || location.pathname.startsWith("/join-competition/")) return;
     // Already on a team: any pending token is stale, clean it up silently.
     if (team) {
       clearPendingTeamInviteToken();

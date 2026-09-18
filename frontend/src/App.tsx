@@ -10,6 +10,8 @@ import { PlayerShell } from '@/layouts/PlayerShell'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
 import ClaimPage from '@/pages/ClaimPage'
+import JoinCompetitionPage from '@/pages/JoinCompetitionPage'
+import { CompetitionInviteResumer } from '@/components/CompetitionInviteResumer'
 import JoinTeamPage from '@/pages/JoinTeamPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import LandingPage from '@/pages/LandingPage'
@@ -89,6 +91,7 @@ function App() {
       <BrowserRouter useTransitions={false}>
       <ClaimResumer />
       <TeamInviteResumer />
+      <CompetitionInviteResumer />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -96,6 +99,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
+        <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
         <Route path="/join-team/:token" element={<JoinTeamPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route

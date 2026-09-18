@@ -25,6 +25,8 @@ export default function VerifyEmailPendingPage() {
   const inviteToken = (location.state as { inviteToken?: string } | null)
     ?.inviteToken;
 
+  const inviteKind = (location.state as { inviteKind?: "team" | "competition" } | null)?.inviteKind;
+
   const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
   const [cooldown, setCooldown] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,7 +44,7 @@ export default function VerifyEmailPendingPage() {
   const handleResend = async () => {
     setStatus("sending");
     try {
-      await resendVerificationEmail(email, inviteToken);
+      await resendVerificationEmail(email, inviteToken, inviteKind);
       setStatus("idle");
       setCooldown(RESEND_COOLDOWN_SECONDS);
       timerRef.current = setInterval(() => {
@@ -84,7 +86,7 @@ export default function VerifyEmailPendingPage() {
 
           {inviteToken && (
             <p className="mt-2 text-sm text-muted-foreground">
-              After verifying, you&apos;ll return to your team invitation to
+              After verifying, you&apos;ll return to your {inviteKind === "competition" ? "competition" : "team"} invitation to
               finish joining.
             </p>
           )}
@@ -112,7 +114,7 @@ export default function VerifyEmailPendingPage() {
           <p className="mt-6 text-sm text-muted-foreground">
             Wrong email?{" "}
             <Link
-              to="/signup"
+              to={inviteToken ? `/join-${inviteKind ?? "team"}/${encodeURIComponent(inviteToken)}` : "/signup"}
               className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               Sign up again
