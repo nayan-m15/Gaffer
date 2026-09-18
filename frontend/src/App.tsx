@@ -27,6 +27,7 @@ const LiveLoggerPage = lazy(() => import('@/pages/LiveLoggerPage'))
 const LiveMatchPage = lazy(() => import('@/pages/LiveMatchPage'))
 const MatchReportPage = lazy(() => import('@/pages/MatchReportPage'))
 const StatisticsPage = lazy(() => import('@/pages/StatisticsPage'))
+const CompetitionsPage = lazy(() => import('@/features/competitions/CompetitionsPage'))
 const TeamManagementPage = lazy(() => import('@/features/team-management/TeamManagementPage'))
 const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
 const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
@@ -115,6 +116,8 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/competitions" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
+          <Route path="/competitions/:id" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
           <Route
             path="/athletes"
             element={

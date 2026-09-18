@@ -42,6 +42,7 @@ const COACH_NAV_ITEMS: NavItem[] = [
   { label: "Events", path: "/events", icon: Calendar, requiresTeam: true },
   { label: "Live Logger", path: "/live-logger", icon: Radio, requiresTeam: true },
   { label: "Stats", path: "/statistics", icon: BarChart3, requiresTeam: true },
+  { label: "Leagues & Competitions", path: "/competitions", icon: Trophy, requiresTeam: true },
   { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
 
