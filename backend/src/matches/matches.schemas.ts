@@ -107,6 +107,14 @@ export type ResolveMatchEventReviewDto = z.infer<
   typeof resolveMatchEventReviewSchema
 >;
 
+export const finaliseMatchProjectionSchema = z.object({
+  expectedRevision: z.number().int().min(1),
+});
+
+export const reopenMatchProjectionSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
+
 export const updateMatchLogEventSchema = z
   .object({
     athleteId: z.uuid().nullable().optional(),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -15,6 +15,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Footer } from "@/components/landing/Footer";
 import { ChapterRail } from "@/components/landing/ChapterRail";
+import { LandingScene } from "@/components/landing/LandingScene";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -23,62 +24,34 @@ import { cn } from "@/lib/utils";
  *  SCROLL-REVEAL HOOK
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function useScrollReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-
-  useEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-
-    const targets = root.querySelectorAll<HTMLElement>(".animate-on-scroll");
-    if (targets.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            observer.unobserve(entry.target);
-          }
-        }
-      },
-      { threshold: 0.12 },
-    );
-
-    targets.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
-
-  return ref;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
  *  LANDING PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function LandingPage() {
-  const pageRef = useScrollReveal<HTMLDivElement>();
+  const [sceneReady, setSceneReady] = useState(false);
 
   return (
     <div
-      ref={pageRef}
       className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
     >
-      {/* Background Stadium Atmosphere */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
+      {/* One persistent environmental background for the complete page. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <img
           src="/hero-stadium-bg.png"
           alt=""
-          className="size-full object-cover object-center opacity-20 dark:opacity-30"
+          className={cn(
+            "absolute inset-0 size-full object-cover object-center transition-opacity duration-700",
+            sceneReady ? "opacity-0" : "opacity-100",
+          )}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/85 to-background" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,var(--background)_100%)]" />
       </div>
+      <LandingScene onReadyChange={setSceneReady} />
 
       {/* Sticky Navbar */}
       <Navbar />
 
-      {/* Right-Hand Scroll Tab Menu (Chapter Rail) */}
+      {/* Desktop section navigation */}
       <ChapterRail />
 
       <main className="relative z-10 flex flex-1 flex-col">
@@ -87,23 +60,25 @@ export default function LandingPage() {
           <Hero />
         </section>
 
-        {/* ── Section 1: Philosophy & Quick Workflow ────────────────────── */}
-        <PhilosophySection />
+        <div className="xl:pl-48">
+          {/* ── Section 1: Philosophy & Quick Workflow ──────────────────── */}
+          <PhilosophySection />
 
-        {/* ── Section 2: Squad Roster Management ────────────────────────── */}
-        <RosterSection />
+          {/* ── Section 2: Squad Roster Management ──────────────────────── */}
+          <RosterSection />
 
-        {/* ── Section 3: Tactical Pitch & Starting XI ───────────────────── */}
-        <TacticsSection />
+          {/* ── Section 3: Tactical Pitch & Starting XI ─────────────────── */}
+          <TacticsSection />
 
-        {/* ── Section 4: Live Sideline Match Tracking & Sync ────────────── */}
-        <MatchdaySection />
+          {/* ── Section 4: Live Sideline Match Tracking & Sync ──────────── */}
+          <MatchdaySection />
 
-        {/* ── Section 5: Performance Analytics & League ─────────────────── */}
-        <AnalyticsSection />
+          {/* ── Section 5: Performance Analytics & League ───────────────── */}
+          <AnalyticsSection />
 
-        {/* ── Section 6: Final Single CTA ───────────────────────────────── */}
-        <FinalCtaSection />
+          {/* ── Section 6: Final Single CTA ─────────────────────────────── */}
+          <FinalCtaSection />
+        </div>
       </main>
 
       {/* Global Footer */}
@@ -145,18 +120,18 @@ function PhilosophySection() {
   return (
     <section
       id="philosophy"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/60 py-16 backdrop-blur-sm sm:py-24"
+      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-3.5 py-1 text-xs font-semibold tracking-wide text-brand dark:text-brand">
-            <Sparkles className="size-3 text-brand" />
+          <span className="landing-scene-accent inline-flex items-center gap-1.5 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-3.5 py-1 text-xs font-semibold tracking-wide shadow-sm">
+            <Sparkles className="size-3" />
             Core Philosophy &amp; Workflow
           </span>
-          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h2 className="landing-scene-copy mt-4 font-display text-3xl font-bold tracking-tight sm:text-4xl">
             Engineered for the Realities of Amateur Football
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="landing-scene-copy-secondary mt-3 text-sm leading-relaxed sm:text-base">
             Everything in {brand.name} is designed around simplicity, clear records, and practical matchday speed.
           </p>
         </div>
@@ -168,7 +143,7 @@ function PhilosophySection() {
             return (
               <div
                 key={p.title}
-                className="hover-lift rounded-2xl border border-border bg-card p-7 shadow-lg transition-all hover:border-brand/40 hover:bg-muted/50"
+                className="hover-lift rounded-2xl border border-border-strong/60 bg-card p-7 shadow-lg transition-all hover:border-brand hover:bg-muted/50"
               >
                 <div className="flex size-12 items-center justify-center rounded-xl border border-brand/30 bg-brand/10">
                   <Icon className="size-6 text-brand" />
@@ -181,7 +156,7 @@ function PhilosophySection() {
         </div>
 
         {/* 4-Step Workflow Banner */}
-        <div className="mt-12 rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="mt-12 rounded-2xl border border-border-strong/60 bg-card p-6 shadow-sm">
           <div className="mb-4 text-xs font-mono font-semibold uppercase tracking-wider text-brand">
             Matchday Workflow in 4 Steps
           </div>
@@ -304,18 +279,18 @@ function FinalCtaSection() {
   return (
     <section
       id="cta"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-gradient-to-b from-background via-muted/30 to-background py-20 sm:py-28"
+      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-20 sm:py-28"
     >
       <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
+        <span className="landing-scene-accent inline-flex items-center gap-1.5 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider shadow-sm">
           Ready for Matchday
         </span>
 
-        <h2 className="mt-5 font-display text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
+        <h2 className="landing-scene-copy mt-5 font-display text-3xl font-bold tracking-tight sm:text-5xl">
           Run your season with confidence.
         </h2>
 
-        <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
+        <p className="landing-scene-copy-secondary mx-auto mt-4 max-w-xl text-base sm:text-lg">
           Join amateur and grassroots football coaches managing rosters, tactical lineups, and live matches with {brand.name}.
         </p>
 
@@ -324,7 +299,7 @@ function FinalCtaSection() {
             href="/signup"
             className={cn(
               buttonVariants({ size: "lg" }),
-              "w-full gap-2 bg-brand text-brand-foreground font-semibold hover:bg-brand-light shadow-xl shadow-brand/25 sm:w-auto",
+              "w-full gap-2 bg-brand text-brand-foreground font-semibold hover:bg-brand-dark shadow-xl shadow-black/25 sm:w-auto",
             )}
           >
             Get Started Free
@@ -335,7 +310,7 @@ function FinalCtaSection() {
             href="/login"
             className={cn(
               buttonVariants({ variant: "outline", size: "lg" }),
-              "w-full gap-2 sm:w-auto",
+              "w-full gap-2 border-border-strong sm:w-auto",
             )}
           >
             <LogIn className="size-4" />
@@ -343,7 +318,7 @@ function FinalCtaSection() {
           </a>
         </div>
 
-        <p className="mt-5 text-xs text-muted-foreground">
+        <p className="landing-scene-copy-muted mt-5 text-xs">
           Free to get started &bull; 100% grassroots focused &bull; Zero credit card required
         </p>
       </div>
@@ -377,7 +352,7 @@ function SectionLayout({
   return (
     <section
       id={id}
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/45 py-16 backdrop-blur-sm sm:py-24"
+      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
@@ -388,20 +363,20 @@ function SectionLayout({
         >
           {/* Text Content */}
           <div className="lg:col-span-5">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+            <div className="landing-scene-accent mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-3 py-1 text-xs font-semibold shadow-sm [&_svg]:text-current">
               {icon}
               <span>{badge}</span>
             </div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+            <h2 className="landing-scene-copy font-display text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               {title}
             </h2>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            <p className="landing-scene-copy-secondary mt-4 text-sm leading-relaxed sm:text-base">
               {description}
             </p>
             <ul className="mt-6 space-y-3">
               {bullets.map((b, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm text-muted-foreground">
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
+                <li key={idx} className="landing-scene-copy-secondary flex items-start gap-3 text-sm">
+                  <CheckCircle2 className="landing-scene-accent mt-0.5 size-4 shrink-0" aria-hidden="true" />
                   <span>{b}</span>
                 </li>
               ))}
@@ -432,7 +407,7 @@ function MockupCard({
   return (
     <div
       className={cn(
-        "hover-lift w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6",
+        "hover-lift w-full max-w-lg rounded-2xl border border-border-strong/70 bg-card p-5 shadow-2xl sm:p-6",
         className,
       )}
     >
@@ -648,7 +623,7 @@ function LiveMatchMockup() {
       <div className="mb-4 rounded-xl border border-brand/30 bg-muted/50 p-3.5 text-center">
         <div className="flex items-center justify-between text-xs">
           <span className="font-semibold text-foreground">St. Jude FC</span>
-          <span className="rounded bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-500 dark:text-red-400 animate-pulse">
+          <span className="rounded border border-red-500/50 bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-300 animate-pulse">
             LIVE 64&apos;
           </span>
           <span className="font-semibold text-muted-foreground">Riverside Utd</span>
@@ -662,7 +637,7 @@ function LiveMatchMockup() {
       <div className="mb-4 grid grid-cols-4 gap-2">
         {[
           { label: "Goal", color: "bg-brand text-brand-foreground" },
-          { label: "Card", color: "bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-300" },
+          { label: "Card", color: "bg-amber-500/20 border border-amber-500/50 text-amber-700 dark:text-amber-300" },
           { label: "Sub", color: "bg-blue-500/20 border border-blue-500/40 text-blue-600 dark:text-blue-300" },
           { label: "Undo", color: "bg-muted text-muted-foreground" },
         ].map((btn) => (

@@ -6,11 +6,12 @@
  * from the starting XI.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerCard } from "./PlayerCard";
 import type { BackendAthlete } from "@/services/athletes";
 import type { DragItem, DragPayload } from "./types";
+import { usePointerDrag } from "./usePointerDrag";
 
 interface SubstitutesAreaProps {
   /** Athletes currently on the substitutes bench. */
@@ -24,7 +25,10 @@ interface SubstitutesAreaProps {
   /** Called when a drag ends. */
   onDragEnd: () => void;
   /** Called when a pitch player is dropped onto the bench. */
-  onDrop: (source: DragItem, target: { type: "subs" }) => void;
+  onDrop: (
+    source: DragItem,
+    target: { type: "pitch"; positionId: string } | { type: "subs" },
+  ) => void;
 }
 
 /** Parse the JSON drag payload from a DataTransfer object. */
@@ -34,6 +38,77 @@ function parseDragPayload(data: string): DragPayload | null {
   } catch {
     return null;
   }
+}
+
+interface SubstitutePlayerProps {
+  athlete: BackendAthlete;
+  isDragging: boolean;
+  readOnly: boolean;
+  onDragStart: (item: DragItem) => void;
+  onDragEnd: () => void;
+  onDrop: (
+    source: DragItem,
+    target: { type: "pitch"; positionId: string } | { type: "subs" },
+  ) => void;
+}
+
+function SubstitutePlayer({
+  athlete,
+  isDragging,
+  readOnly,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+}: SubstitutePlayerProps) {
+  const disabled = readOnly || athlete.status === "injured";
+  const item = useMemo<DragItem>(
+    () => ({ athleteId: athlete.id, source: "subs" }),
+    [athlete.id],
+  );
+  const pointerDragHandlers = usePointerDrag(
+    disabled ? null : item,
+    onDragStart,
+    onDragEnd,
+    onDrop,
+  );
+
+  const handleDragStart = useCallback(
+    (event: React.DragEvent) => {
+      const payload: DragPayload = {
+        athleteId: athlete.id,
+        source: "subs",
+        positionId: null,
+      };
+      event.dataTransfer.setData("application/json", JSON.stringify(payload));
+      event.dataTransfer.effectAllowed = "move";
+      onDragStart(item);
+    },
+    [athlete.id, item, onDragStart],
+  );
+
+  const initials = `${athlete.firstName.charAt(0)}${athlete.lastName.charAt(0)}`.toUpperCase();
+  const name = `${athlete.firstName} ${athlete.lastName}`;
+
+  return (
+    <PlayerCard
+      initials={initials}
+      name={name}
+      position={athlete.position ?? "UN"}
+      squadNumber={athlete.squadNumber}
+      status={athlete.status}
+      appearances={athlete.appearances}
+      goals={athlete.goals}
+      assists={athlete.assists}
+      yellowCards={athlete.yellowCards}
+      redCards={athlete.redCards}
+      variant="sub"
+      isDragging={isDragging}
+      readOnly={disabled}
+      onDragStart={handleDragStart}
+      onDragEnd={onDragEnd}
+      {...pointerDragHandlers}
+    />
+  );
 }
 
 export function SubstitutesArea({
@@ -48,24 +123,6 @@ export function SubstitutesArea({
 
   // Only pitch players can be dropped onto the subs area
   const canAcceptDrop = dragItem?.source === "pitch";
-
-  const handleDragStart = useCallback(
-    (athlete: BackendAthlete) => (e: React.DragEvent) => {
-      const payload: DragPayload = {
-        athleteId: athlete.id,
-        source: "subs",
-        positionId: null,
-      };
-      e.dataTransfer.setData("application/json", JSON.stringify(payload));
-      e.dataTransfer.effectAllowed = "move";
-
-      onDragStart({
-        athleteId: athlete.id,
-        source: "subs",
-      });
-    },
-    [onDragStart],
-  );
 
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -128,6 +185,7 @@ export function SubstitutesArea({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        data-lineup-drop-target="subs"
         role="region"
         aria-label="Substitute players"
       >
@@ -144,26 +202,20 @@ export function SubstitutesArea({
         )}
 
         {athletes.map((athlete) => {
-          const initials = `${athlete.firstName.charAt(0)}${athlete.lastName.charAt(0)}`.toUpperCase();
-          const name = `${athlete.firstName} ${athlete.lastName}`;
           const isDragging =
             dragItem !== null &&
             dragItem.source === "subs" &&
             dragItem.athleteId === athlete.id;
 
           return (
-            <PlayerCard
+            <SubstitutePlayer
               key={athlete.id}
-              initials={initials}
-              name={name}
-              position={athlete.position ?? "UN"}
-              squadNumber={athlete.squadNumber}
-              status={athlete.status}
-              variant="sub"
+              athlete={athlete}
               isDragging={isDragging}
-              readOnly={readOnly || athlete.status === "injured"}
-              onDragStart={handleDragStart(athlete)}
+              readOnly={readOnly}
+              onDragStart={onDragStart}
               onDragEnd={handleDragEnd}
+              onDrop={onDrop}
             />
           );
         })}

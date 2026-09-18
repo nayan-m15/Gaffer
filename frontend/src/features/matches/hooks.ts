@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   useMutation,
   useQuery,
@@ -12,9 +13,12 @@ import {
   fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
+  finaliseMatchProjection,
+  reopenMatchProjection,
   updateMatchLogEvent,
   updateMatchClock,
 } from "./api";
+import { subscribeToSyncedMatchEventChanges } from "@/offline/match-store";
 import type {
   CreateMatchLogEventInput,
   MatchEventTeam,
@@ -55,6 +59,34 @@ export function useMatchSquad(matchId: string | undefined) {
 }
 
 export function useMatchEvents(matchId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!matchId) return;
+
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void subscribeToSyncedMatchEventChanges(() => {
+      void queryClient.invalidateQueries({
+        queryKey: matchEventsQueryKey(matchId),
+      });
+      void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
+    })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unsubscribe = dispose;
+      })
+      .catch((error: unknown) => {
+        console.warn("Could not subscribe to synced match events.", error);
+      });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [matchId, queryClient]);
+
   return useQuery({
     queryKey: matchEventsQueryKey(matchId ?? ""),
     queryFn: () => fetchMatchEvents(matchId!),
@@ -202,13 +234,23 @@ export function useLogMatchEvent(matchId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The mutation function writes to SQLite before attempting HTTP, so it
+    // must run while the browser reports offline. TanStack otherwise pauses
+    // it before createMatchLogEvent can reach the durable local queue.
+    networkMode: "always",
     mutationFn: (input: CreateMatchLogEventInput) =>
       createMatchLogEvent(matchId, input),
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
       const affectsScore = input.eventType === "goal";
-      if (affectsScore) {
-        await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      // A request that was already refetching when connectivity disappeared
+      // may not settle promptly. Do not let cancelling it block the local
+      // optimistic row or the durable SQLite enqueue.
+      if (!offline) {
+        await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
+        if (affectsScore) {
+          await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+        }
       }
 
       const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(
@@ -493,5 +535,24 @@ export function useUpdateMatchClock(matchId: string) {
     scope: { id: `match-clock-${matchId}` },
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
       updateMatchClock(matchId, input),
+  });
+}
+
+export function useFinaliseMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (expectedRevision: number) =>
+      finaliseMatchProjection(matchId, expectedRevision),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
+  });
+}
+
+export function useReopenMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => reopenMatchProjection(matchId, reason),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
   });
 }

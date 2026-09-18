@@ -26,6 +26,22 @@ export const EVENT_LABEL: Record<MatchEventType, string> = {
   injury: "Injury",
 };
 
+/**
+ * Preserve an authoritative server score while also showing goals that only
+ * exist in the rehydrated offline timeline. `max` avoids counting the same
+ * goal twice when the optimistic match cache has already been incremented.
+ */
+export function displayedGoalScore(
+  serverScore: number,
+  timeline: MatchLogEvent[],
+  team: MatchLogEvent["team"],
+) {
+  const loggedGoals = timeline.filter(
+    (event) => event.eventType === "goal" && event.team === team,
+  ).length;
+  return Math.max(serverScore, loggedGoals);
+}
+
 export function isSecondYellow(event: {
   eventType: MatchEventType;
   detail: string | null;

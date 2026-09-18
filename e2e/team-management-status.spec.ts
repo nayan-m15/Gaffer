@@ -116,7 +116,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       // All three start on the bench with their real status badges (the
       // badge text is the roster's display label inside the card).
       const domiCard = bench.getByRole('button', { name: /Domi Available —/ });
-      const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
+      const inesCard = bench.getByLabel(/Ines Injured —/);
       const suriCard = bench.getByRole('button', { name: /Suri Suspended —/ });
       await expect(domiCard).toBeVisible();
       await expect(inesCard).toBeVisible();
@@ -146,7 +146,7 @@ test('team management reflects athlete status badges and roster edits', async ({
 
       // Unavailable players stay badged on the bench.
       const bench = page.getByRole('region', { name: 'Substitute players' });
-      const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
+      const inesCard = bench.getByLabel(/Ines Injured —/);
       await expect(inesCard).toBeVisible();
       await expect(inesCard.getByText('Injured', { exact: true })).toBeVisible();
       await expect(

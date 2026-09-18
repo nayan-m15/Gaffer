@@ -14,8 +14,13 @@ describe('SyncController', () => {
   it('fails closed when PowerSync signing is not configured', async () => {
     delete process.env.POWERSYNC_URL;
     delete process.env.POWERSYNC_SHARED_SECRET;
+    delete process.env.POWERSYNC_PRIVATE_KEY;
     delete process.env.POWERSYNC_KID;
-    const controller = new SyncController({} as never);
+    const controller = new SyncController(
+      {} as never,
+      {} as never,
+      {} as never,
+    );
     await expect(
       controller.token({ id: 'user-1' } as never),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
@@ -27,12 +32,16 @@ describe('SyncController', () => {
     process.env.POWERSYNC_SHARED_SECRET = Buffer.from(
       'a sufficiently long development secret',
     ).toString('base64url');
-    const controller = new SyncController({
-      findTeamForUser: jest.fn().mockResolvedValue({
-        id: 'team-1',
-        role: 'assistant',
-      }),
-    } as never);
+    const controller = new SyncController(
+      {
+        findTeamForUser: jest.fn().mockResolvedValue({
+          id: 'team-1',
+          role: 'assistant',
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+    );
     const result = await controller.token({ id: 'user-1' } as never);
     expect(result.endpoint).toBe(process.env.POWERSYNC_URL);
     expect(result.token.split('.')).toHaveLength(3);

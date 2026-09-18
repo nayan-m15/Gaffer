@@ -49,6 +49,20 @@ export interface MatchRecord {
   eventLocation: string;
   competitionName: string | null;
   opponentSquad: OpponentMatchPlayer[];
+  projection?: {
+    revision: number;
+    confirmedTeamScore: number;
+    confirmedOpponentScore: number;
+    provisionalTeamScore: number;
+    provisionalOpponentScore: number;
+    possibleEffects: {
+      teamGoals?: number;
+      opponentGoals?: number;
+      disciplinaryEvents?: number;
+    };
+    unresolvedReviewCount: number;
+    finalisationState: "open" | "finalised" | "amendment_required";
+  };
 }
 
 export interface MatchSquadAthlete {
@@ -84,7 +98,7 @@ export interface MatchLogEvent {
   pending?: boolean;
   /** Client-only: stable list key so confirming a log does not remount the row. */
   optimisticKey?: string;
-  syncStatus?: "queued" | "rejected" | "synced";
+  syncStatus?: "queued" | "uploading" | "rejected" | "synced";
   syncError?: string | null;
 }
 

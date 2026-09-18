@@ -19,3 +19,12 @@ streams:
       JOIN matches ON matches.id = match_event_reviews.match_id
       JOIN events ON events.id = matches.event_id
       WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_projections:
+    auto_subscribe: true
+    query: |
+      SELECT match_projection_state.*
+      FROM match_projection_state
+      JOIN matches ON matches.id = match_projection_state.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')

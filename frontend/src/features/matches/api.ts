@@ -18,7 +18,9 @@ import {
   queuedEventAsTimelineRow,
   readCachedResponse,
   readSyncedMatchEvents,
+  readSyncedMatchProjection,
   rejectQueuedEvent,
+  setQueuedEventState,
 } from "@/offline/match-store";
 
 async function cachedFetch<T>(key: string, load: () => Promise<T>): Promise<T> {
@@ -33,10 +35,24 @@ async function cachedFetch<T>(key: string, load: () => Promise<T>): Promise<T> {
   }
 }
 
-export function fetchMatch(matchId: string) {
-  return cachedFetch(`match:${matchId}`, () =>
-    apiFetch<MatchRecord>(`/matches/${matchId}`),
-  );
+export async function fetchMatch(matchId: string) {
+  try {
+    const match = await apiFetch<MatchRecord>(`/matches/${matchId}`);
+    await cacheResponse(`match:${matchId}`, match);
+    return match;
+  } catch (error) {
+    const match = await readCachedResponse<MatchRecord>(`match:${matchId}`);
+    if (!match) throw error;
+    const projection = await readSyncedMatchProjection(matchId);
+    return projection
+      ? {
+          ...match,
+          teamScore: projection.provisionalTeamScore,
+          opponentScore: projection.provisionalOpponentScore,
+          projection,
+        }
+      : match;
+  }
 }
 
 export function fetchMatchSquad(matchId: string) {
@@ -78,6 +94,13 @@ async function uploadMatchLogEvent(
   });
 }
 
+async function queuedTimelineRow(matchId: string, clientRequestId: string) {
+  const row = (await listQueuedEvents(matchId)).find(
+    (item) => item.id === clientRequestId,
+  );
+  return row ? queuedEventAsTimelineRow(row) : null;
+}
+
 export async function createMatchLogEvent(
   matchId: string,
   input: CreateMatchLogEventInput,
@@ -88,7 +111,17 @@ export async function createMatchLogEvent(
     clientCreatedAt: input.clientCreatedAt ?? new Date().toISOString(),
   };
   await enqueueEvent(matchId, enriched);
+
+  // Once the operation is in SQLite it is safe to release the live logger.
+  // Attempting fetch while the browser already knows it is offline can leave
+  // the mutation (and goal follow-up composer) waiting on the network stack.
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+    if (queued) return queued;
+  }
+
   try {
+    await setQueuedEventState(enriched.clientRequestId, "uploading");
     const created = await uploadMatchLogEvent(matchId, enriched);
     await completeQueuedEvent(enriched.clientRequestId);
     return created;
@@ -97,11 +130,10 @@ export async function createMatchLogEvent(
       await rejectQueuedEvent(enriched.clientRequestId, error.message);
       throw error;
     }
-    const row = (await listQueuedEvents(matchId)).find(
-      (item) => item.id === enriched.clientRequestId,
-    );
-    if (!row) throw error;
-    return queuedEventAsTimelineRow(row);
+    await setQueuedEventState(enriched.clientRequestId, "queued");
+    const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+    if (!queued) throw error;
+    return queued;
   }
 }
 
@@ -110,6 +142,7 @@ export async function flushOfflineMatchEvents() {
   for (const row of queued) {
     if (row.state !== "queued") continue;
     try {
+      await setQueuedEventState(row.id, "uploading");
       await uploadMatchLogEvent(
         row.match_id,
         JSON.parse(row.payload) as CreateMatchLogEventInput,
@@ -120,6 +153,7 @@ export async function flushOfflineMatchEvents() {
         await rejectQueuedEvent(row.id, error.message);
         continue;
       }
+      await setQueuedEventState(row.id, "queued");
       break;
     }
   }
@@ -152,5 +186,19 @@ export function updateMatchClock(matchId: string, input: UpdateMatchClockInput) 
   return apiFetch<MatchRecord>(`/matches/${matchId}/clock`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export function finaliseMatchProjection(matchId: string, expectedRevision: number) {
+  return apiFetch(`/matches/${matchId}/finalise`, {
+    method: "POST",
+    body: JSON.stringify({ expectedRevision }),
+  });
+}
+
+export function reopenMatchProjection(matchId: string, reason: string) {
+  return apiFetch(`/matches/${matchId}/reopen`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }

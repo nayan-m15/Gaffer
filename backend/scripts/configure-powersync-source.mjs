@@ -23,6 +23,7 @@ await sql.transaction((tx) => [
   tx.query(`GRANT SELECT ON TABLE
     public.match_events,
     public.match_event_reviews,
+    public.match_projection_state,
     public.matches,
     public.events
     TO powersync_role`),
@@ -35,6 +36,7 @@ if (!publication) {
   await sql.query(`CREATE PUBLICATION powersync FOR TABLE
     public.match_events,
     public.match_event_reviews,
+    public.match_projection_state,
     public.matches,
     public.events`);
 } else {
@@ -47,6 +49,7 @@ if (!publication) {
   for (const table of [
     'match_events',
     'match_event_reviews',
+    'match_projection_state',
     'matches',
     'events',
   ]) {
