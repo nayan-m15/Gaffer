@@ -48,6 +48,7 @@ import {
   PENALTY_MISSED_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
+  displayedGoalScore,
   eventDisplayLabel,
   hasPriorYellow,
   isPairedAssistEvent,
@@ -395,6 +396,12 @@ export default function LiveMatchPage() {
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
   );
+  const loggedGoalsOwn = timeline.filter(
+    (event) => event.eventType === "goal" && event.team === "own",
+  ).length;
+  const loggedGoalsOpp = timeline.filter(
+    (event) => event.eventType === "goal" && event.team === "opponent",
+  ).length;
   const dismissedOwnIds = useMemo(
     () =>
       new Set(
@@ -470,8 +477,19 @@ export default function LiveMatchPage() {
   const awayColor = isHome ? oppColor : ownColor;
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = matchQuery.data?.teamScore ?? 0;
-  const oppScore = matchQuery.data?.opponentScore ?? 0;
+  // A reloaded offline page restores the last server score and the queued
+  // timeline independently. Include locally queued goals without adding them
+  // twice when the optimistic match cache already contains the same score.
+  const teamScore = displayedGoalScore(
+    matchQuery.data?.teamScore ?? 0,
+    timeline,
+    "own",
+  );
+  const oppScore = displayedGoalScore(
+    matchQuery.data?.opponentScore ?? 0,
+    timeline,
+    "opponent",
+  );
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
@@ -527,13 +545,6 @@ export default function LiveMatchPage() {
     () => runningScoreByEvent(timeline, isHome),
     [timeline, isHome],
   );
-
-  const loggedGoalsOwn = timeline.filter(
-    (event) => event.eventType === "goal" && event.team === "own",
-  ).length;
-  const loggedGoalsOpp = timeline.filter(
-    (event) => event.eventType === "goal" && event.team === "opponent",
-  ).length;
 
   const persistClock = useCallback(
     (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {

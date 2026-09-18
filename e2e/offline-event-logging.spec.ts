@@ -148,6 +148,7 @@ test("all live event workflows remain usable and visible offline", async ({
   await expectCalloutAboveBench(page, '[data-callout="assist-pick"]');
   await player(page, 10).click();
   await expect(page.getByText(/Assist saved on this device/i)).toBeVisible();
+  await expect(page.locator(".live-match-scoreline")).toContainText("1-0");
 
   await openEventPicker(page, 4);
   await page.getByRole("button", { name: "Yellow" }).click();
