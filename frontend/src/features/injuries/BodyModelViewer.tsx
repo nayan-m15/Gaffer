@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   Expand,
   Minus,
@@ -10,40 +11,75 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  BODY_PARTS,
   BODY_VIEWS,
   BODY_VIEW_LABELS,
   DEFAULT_ORBIT_RADIUS,
   ORBIT_TARGET,
-  REGION_PLACEMENTS,
   VIEW_AZIMUTHS,
   clampPolar,
   clampRadius,
   nearestView,
   orbitPosition,
-  regionsForPart,
   shortestAngleTo,
-  type BodyPartId,
   type BodyView,
-  type ShapeSpec,
-  type Vec3,
 } from "./body-model";
 import { BODY_REGIONS, bodyRegionLabel } from "./body-regions";
+import { HEAD_HIDDEN_MESH_NAMES, MESH_NAME_TO_REGIONS } from "./anatomy-regions";
 import type { BodyRegion } from "./types";
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SCENE CONSTANTS
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* A mid-slate mannequin: light enough to read its form against the dark
- * page, dark enough that ACES tone mapping does not blow it out to white. */
-const BASE_COLOR = 0x7c8794;
-const HOVER_COLOR = 0xa6b2c0;
+/* Flat hex literals, not sRGB texture data — see the renderer setup below for
+ * why that keeps colour management off. */
+const SMOOTH_BODY_COLOR = 0xcccfd2;
 const INJURED_COLOR = 0xef4444;
 const INJURED_EMISSIVE = 0xb91c1c;
+const MARKER_IDLE_COLOR = 0xef4444;
+const MARKER_ACTIVE_DOT_COLOR = 0xffffff;
 /** Radians per second the camera tweens toward a preset view. */
 const TWEEN_SPEED = 7;
 const DRAG_SENSITIVITY = 0.0075;
+
+/** Served from `frontend/public/models`, so these are plain URLs, not imports. */
+const SMOOTH_BODY_MODEL_URL = "/models/smooth_player.glb";
+const ANATOMY_MODEL_URL = "/models/anatomy.glb";
+const HEAD_MODEL_URL = "/models/head.glb";
+/** Matches body-model.ts's frame: feet at y = 0, crown at y ≈ 1.80. */
+const FIGURE_HEIGHT = 1.8;
+/**
+ * Whichever of the two horizontal axes ends up "forward" after correcting
+ * for a source file's up axis isn't guaranteed to face the camera. These are
+ * guesses, one per model — flip to Math.PI (or nudge in increments of it)
+ * if a loaded figure turns out to be facing away from the camera on the
+ * "front" preset.
+ */
+const SMOOTH_BODY_ROTATION_Y = 0;
+const ANATOMY_ROTATION_Y = 0;
+const HEAD_MODEL_ROTATION_Y = 0;
+/**
+ * The anatomy figure and the smooth mannequin are independently authored
+ * models with no guarantee their limb proportions match at any given point
+ * — a revealed muscle can end up visibly wider than the mannequin's own
+ * limb there. Shrinking each muscle/tendon toward its own centre by this
+ * fraction is a cheap mitigation so it reads as sitting inside the body
+ * rather than bulging out of it; it does not fix a genuine misalignment.
+ */
+const ANATOMY_MESH_SHRINK = 0.4;
+/**
+ * `smooth_player.glb`'s bind pose is a T-pose (no animation clip ships with
+ * it to relax it, and — per the lesson learned with the anatomy rig's own
+ * clips — playing an unfamiliar clip on a rig this app didn't author is as
+ * likely to corrupt its orientation as fix its pose). Rotating just the
+ * upper-arm bones down before the skin is baked gets a relaxed standing
+ * pose without needing any animation data at all.
+ */
+const RELAXED_ARM_ANGLE_FROM_DOWN_DEG = 15;
+const LEFT_UPPER_ARM_BONE = "mixamorig1LeftArm_09";
+const LEFT_FOREARM_BONE = "mixamorig1LeftForeArm_010";
+const RIGHT_UPPER_ARM_BONE = "mixamorig1RightArm_033";
+const RIGHT_FOREARM_BONE = "mixamorig1RightForeArm_034";
 
 interface CalloutContent {
   title: string;
@@ -51,90 +87,297 @@ interface CalloutContent {
 }
 
 export interface BodyModelViewerProps {
-  /** Regions with an open injury; these light up. */
+  /** Regions with an open injury; only these are hoverable/clickable, and
+   * each gets a subtle idle marker even before it's hovered. */
   injuredRegions: readonly BodyRegion[];
-  /** The region the callout is pinned to, if any. */
+  /** The region the callout stays pinned to once hover ends. */
   selectedRegion?: BodyRegion | null;
-  /** Text for the pinned callout. */
-  callout?: CalloutContent | null;
+  /** Callout text per injured region, keyed by region — whichever region is
+   * currently active (hovered, falling back to selected) is shown. */
+  injuryCallouts?: Partial<Record<BodyRegion, CalloutContent>>;
   onSelectRegion?: (region: BodyRegion) => void;
   className?: string;
 }
 
-interface BuiltMesh {
-  geometry: THREE.BufferGeometry;
-  position: THREE.Vector3;
-  scale: THREE.Vector3;
-  quaternion: THREE.Quaternion;
+/** One anatomy mesh, hidden until its region is revealed by hover/selection. */
+interface MeshEntry {
+  mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  /** The app regions this muscle/tendon counts toward; usually one. */
+  regions: readonly BodyRegion[];
 }
 
-const UNIT_Y = new THREE.Vector3(0, 1, 0);
+/** A region's idle-vs-active marker pair, floating at its anatomy centroid. */
+interface MarkerEntry {
+  dot: THREE.Mesh;
+  halo: THREE.Mesh;
+  dotMaterial: THREE.MeshBasicMaterial;
+  haloMaterial: THREE.MeshBasicMaterial;
+}
 
-function ellipsoidMesh(center: Vec3, radii: Vec3): BuiltMesh {
-  return {
-    geometry: new THREE.SphereGeometry(1, 30, 22),
-    position: new THREE.Vector3(...center),
-    scale: new THREE.Vector3(...radii),
-    quaternion: new THREE.Quaternion(),
-  };
+/** Disposes a texture-bearing material's own textures before the material. */
+function disposeMaterial(material: THREE.Material) {
+  for (const value of Object.values(material)) {
+    if (value instanceof THREE.Texture) {
+      value.dispose();
+    }
+  }
+  material.dispose();
+}
+
+/** Disposes every geometry/material (and its textures) under a loaded rig. */
+function disposeObject3D(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
+      materials.forEach(disposeMaterial);
+    }
+  });
 }
 
 /**
- * Builds the meshes for one shape of a part.
+ * Rotates a freshly loaded model onto this viewer's Y-up, feet-at-0 frame.
  *
- * A segment becomes a tapered cylinder plus a sphere at each end. The caps
- * are what make a joint read as a joint: without them an elbow or a knee is
- * a visible dark gap between two disconnected tubes.
+ * glTF only guarantees Y-up, but a model authored outside a glTF-native
+ * pipeline (the anatomy set is exported straight from OBJ) commonly keeps
+ * its source tool's Z-up convention instead. Rather than assume either way,
+ * this measures which horizontal axis is actually the tall one and rotates
+ * Z-up onto Y-up when that's what it finds; a properly Y-up file (Y already
+ * the tall axis) is left alone.
  */
-function buildShape(shape: ShapeSpec): BuiltMesh[] {
-  if (shape.kind === "ellipsoid") {
-    return [ellipsoidMesh(shape.center, shape.radii)];
+function orientToYUp(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  if (size.z > size.y) {
+    // Standard Z-up -> Y-up: (x, y, z) -> (x, z, -y).
+    root.rotation.x = -Math.PI / 2;
+  }
+}
+
+const SKIN_COMPONENT_GETTERS = [
+  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
+    attr.getX(i),
+  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
+    attr.getY(i),
+  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
+    attr.getZ(i),
+  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
+    attr.getW(i),
+];
+
+/**
+ * Bakes a SkinnedMesh's current (bind) pose into a plain, static Mesh.
+ *
+ * Replicates three.js's own skinning shader math (see `skinning_vertex.glsl`
+ * / `skinnormal_vertex.glsl`) on the CPU, once, rather than every frame on
+ * the GPU. It sidesteps a real bug this app has hit twice now: this
+ * renderer's uniform-array skinning path silently drops meshes whose rig has
+ * "too many" bones for its vertex-uniform budget rather than drawing them —
+ * and since this viewer only ever shows a single static pose, runtime
+ * skinning was never needed in the first place.
+ */
+function bakeSkinnedMesh(mesh: THREE.SkinnedMesh): THREE.Mesh {
+  mesh.skeleton.update();
+  const boneMatrices = mesh.skeleton.boneMatrices;
+
+  const sourceGeometry = mesh.geometry;
+  const positionAttr = sourceGeometry.attributes.position;
+  const normalAttr = sourceGeometry.attributes.normal;
+  const skinIndexAttr = sourceGeometry.attributes.skinIndex;
+  const skinWeightAttr = sourceGeometry.attributes.skinWeight;
+
+  const bakedPositions = new Float32Array(positionAttr.count * 3);
+  const bakedNormals = new Float32Array(positionAttr.count * 3);
+
+  const vertex = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const skinMatrix = new THREE.Matrix4();
+  const vertexMatrix = new THREE.Matrix4();
+  const weightedSum = new Float32Array(16);
+
+  for (let i = 0; i < positionAttr.count; i++) {
+    vertex.fromBufferAttribute(positionAttr, i);
+    normal.fromBufferAttribute(normalAttr, i);
+
+    weightedSum.fill(0);
+    for (let influence = 0; influence < 4; influence++) {
+      const weight = SKIN_COMPONENT_GETTERS[influence](skinWeightAttr, i);
+      if (weight === 0) {
+        continue;
+      }
+      const boneOffset =
+        SKIN_COMPONENT_GETTERS[influence](skinIndexAttr, i) * 16;
+      for (let e = 0; e < 16; e++) {
+        weightedSum[e] += boneMatrices[boneOffset + e] * weight;
+      }
+    }
+    skinMatrix.fromArray(weightedSum);
+    vertexMatrix
+      .copy(mesh.bindMatrixInverse)
+      .multiply(skinMatrix)
+      .multiply(mesh.bindMatrix);
+
+    vertex.applyMatrix4(vertexMatrix);
+    normal.transformDirection(vertexMatrix);
+
+    bakedPositions[i * 3] = vertex.x;
+    bakedPositions[i * 3 + 1] = vertex.y;
+    bakedPositions[i * 3 + 2] = vertex.z;
+    bakedNormals[i * 3] = normal.x;
+    bakedNormals[i * 3 + 1] = normal.y;
+    bakedNormals[i * 3 + 2] = normal.z;
   }
 
-  const from = new THREE.Vector3(...shape.from);
-  const to = new THREE.Vector3(...shape.to);
-  const direction = new THREE.Vector3().subVectors(to, from);
-  const length = direction.length();
+  const bakedGeometry = new THREE.BufferGeometry();
+  bakedGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(bakedPositions, 3),
+  );
+  bakedGeometry.setAttribute(
+    "normal",
+    new THREE.BufferAttribute(bakedNormals, 3),
+  );
+  const uv = sourceGeometry.attributes.uv;
+  if (uv) {
+    bakedGeometry.setAttribute("uv", uv);
+  }
+  if (sourceGeometry.index) {
+    bakedGeometry.setIndex(sourceGeometry.index);
+  }
 
-  return [
-    {
-      geometry: new THREE.CylinderGeometry(
-        shape.radiusTo,
-        shape.radiusFrom,
-        length,
-        22,
-        1,
-      ),
-      position: new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5),
-      scale: new THREE.Vector3(1, 1, 1),
-      // A cylinder is built along +Y, so it is rotated onto the segment's
-      // own axis rather than being rebuilt in place.
-      quaternion: new THREE.Quaternion().setFromUnitVectors(
-        UNIT_Y,
-        direction.clone().normalize(),
-      ),
-    },
-    ellipsoidMesh(shape.from, [
-      shape.radiusFrom,
-      shape.radiusFrom,
-      shape.radiusFrom,
-    ]),
-    ellipsoidMesh(shape.to, [
-      shape.radiusTo,
-      shape.radiusTo,
-      shape.radiusTo,
-    ]),
-  ];
+  const baked = new THREE.Mesh(bakedGeometry, mesh.material);
+  baked.name = mesh.name;
+  return baked;
+}
+
+/**
+ * Rotates one bone so the direction from it to `child` swings down toward
+ * vertical, to `angleFromDownDeg` off straight down, while keeping whichever
+ * side it was already leaning toward (T-pose arms point sideways, so this
+ * just reduces that lean rather than needing to know which world axis is
+ * "left" or "right" for this particular rig).
+ *
+ * Works in world space and converts back to the bone's local (parent-
+ * relative) rotation, so it doesn't need to know the bone's own rest-pose
+ * axis convention either — only the direction to its child, which is read
+ * from the current pose.
+ */
+function relaxArmBone(
+  bone: THREE.Object3D,
+  child: THREE.Object3D,
+  angleFromDownDeg: number,
+) {
+  bone.updateMatrixWorld(true);
+  const boneWorldPos = new THREE.Vector3();
+  bone.getWorldPosition(boneWorldPos);
+  const childWorldPos = new THREE.Vector3();
+  child.getWorldPosition(childWorldPos);
+  const currentDir = childWorldPos.sub(boneWorldPos).normalize();
+
+  const horizontal = new THREE.Vector3(currentDir.x, 0, currentDir.z);
+  if (horizontal.lengthSq() < 1e-6) {
+    // Already pointing straight down/up — no lean direction to preserve.
+    return;
+  }
+  horizontal.normalize();
+
+  const angleRad = THREE.MathUtils.degToRad(angleFromDownDeg);
+  const targetDir = new THREE.Vector3(
+    horizontal.x * Math.sin(angleRad),
+    -Math.cos(angleRad),
+    horizontal.z * Math.sin(angleRad),
+  ).normalize();
+
+  const rotationDelta = new THREE.Quaternion().setFromUnitVectors(
+    currentDir,
+    targetDir,
+  );
+  const boneWorldQuat = new THREE.Quaternion();
+  bone.getWorldQuaternion(boneWorldQuat);
+  const desiredWorldQuat = rotationDelta.multiply(boneWorldQuat);
+
+  const parentWorldQuat = new THREE.Quaternion();
+  bone.parent?.getWorldQuaternion(parentWorldQuat);
+  const localQuat = parentWorldQuat.invert().multiply(desiredWorldQuat);
+  bone.quaternion.copy(localQuat);
+  bone.updateMatrixWorld(true);
+}
+
+/** Finds a descendant by its (glTF-sanitized) name, if present. */
+function findByName(
+  root: THREE.Object3D,
+  name: string,
+): THREE.Object3D | null {
+  let found: THREE.Object3D | null = null;
+  root.traverse((child) => {
+    if (!found && child.name === name) {
+      found = child;
+    }
+  });
+  return found;
+}
+
+/** Shrinks a geometry toward its own bounding-box centre, in place. */
+function shrinkGeometryTowardCenter(
+  geometry: THREE.BufferGeometry,
+  factor: number,
+) {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) {
+    return;
+  }
+  const center = box.getCenter(new THREE.Vector3());
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.scale(factor, factor, factor);
+  geometry.translate(center.x, center.y, center.z);
+}
+
+/** Auto-fits a loaded model onto the shared "feet at 0, crown at 1.80" frame. */
+function autoFit(root: THREE.Object3D, rotationY: number) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const height = box.max.y - box.min.y || 1;
+  const scale = FIGURE_HEIGHT / height;
+  const centerX = (box.min.x + box.max.x) / 2;
+
+  root.scale.setScalar(scale);
+  root.position.set(-centerX * scale, -box.min.y * scale, 0);
+  root.rotation.y += rotationY;
+  root.updateMatrixWorld(true);
 }
 
 /**
  * Interactive 3D body model for the Injury & Recovery page.
  *
- * Built procedurally from the specification in `body-model.ts` rather than a
- * loaded asset: it needs no licensed model, stays themable, and every region
- * is a first-class object that can be lit up and picked. The mesh source sits
- * behind this component's props, so a licensed anatomical model can replace
- * the procedural figure later without the page changing.
+ * Three layers, all sharing the same "feet at y = 0, crown at y ≈ 1.80"
+ * frame so they line up despite coming from unrelated source files:
+ *
+ *  - a smooth, coach-friendly mannequin (`smooth_player.glb`), always
+ *    visible — this is what a coach sees by default, never clinical;
+ *  - a real anatomical atlas (`anatomy.glb` + `head.glb`, hundreds of named
+ *    muscles/tendons — see `anatomy-regions.ts`), hidden entirely except for
+ *    whichever region is actively hovered — it never turns red just from
+ *    being selected, only from the pointer being over it right now;
+ *  - a small pulsing marker per injured region, so injuries are discoverable
+ *    on the smooth body before a coach hovers anything; the selected (or
+ *    hovered) region's marker and callout are emphasised regardless of
+ *    whether its anatomy is currently revealed.
+ *
+ * Only regions with a recorded injury are interactive at all — hovering
+ * elsewhere on the smooth body does nothing, matching how this viewer is
+ * only ever used to browse an athlete's *existing* injuries (a new injury's
+ * region is chosen elsewhere, in the log-injury dialog's region list).
+ *
+ * Revealed anatomy is drawn depth-test-disabled so it reads as "showing
+ * through" the opaque mannequin at that spot without needing a real
+ * per-pixel transparency mask — a deliberately simple stand-in for that.
  *
  * Falls back to an accessible region list whenever WebGL is unavailable — the
  * page must never depend on the canvas.
@@ -142,7 +385,7 @@ function buildShape(shape: ShapeSpec): BuiltMesh[] {
 export function BodyModelViewer({
   injuredRegions,
   selectedRegion = null,
-  callout = null,
+  injuryCallouts,
   onSelectRegion,
   className,
 }: BodyModelViewerProps) {
@@ -160,16 +403,13 @@ export function BodyModelViewer({
   const radiusRef = useRef(DEFAULT_ORBIT_RADIUS);
   const targetAzimuthRef = useRef(VIEW_AZIMUTHS.front);
   const targetPolarRef = useRef(0);
-
-  /* Scene handles the imperative controls need to reach. */
-  const materialsRef = useRef(new Map<BodyPartId, THREE.MeshStandardMaterial>());
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
 
   /* Latest props for the animation loop and pointer handlers, so neither has
    * to be torn down and rebuilt when the injury selection changes. */
   const injuredRef = useRef(injuredRegions);
   const selectedRef = useRef(selectedRegion);
-  const hoveredPartRef = useRef<BodyPartId | null>(null);
+  const hoveredRegionRef = useRef<BodyRegion | null>(null);
   const onSelectRef = useRef(onSelectRegion);
 
   useEffect(() => {
@@ -181,22 +421,6 @@ export function BodyModelViewer({
   useEffect(() => {
     onSelectRef.current = onSelectRegion;
   }, [onSelectRegion]);
-
-  const injuredParts = useMemo(() => {
-    const parts = new Set<BodyPartId>();
-    for (const region of injuredRegions) {
-      const placement = REGION_PLACEMENTS[region];
-      if (placement) {
-        parts.add(placement.part);
-      }
-    }
-
-    return parts;
-  }, [injuredRegions]);
-  const injuredPartsRef = useRef(injuredParts);
-  useEffect(() => {
-    injuredPartsRef.current = injuredParts;
-  }, [injuredParts]);
 
   /* ── Scene setup ──────────────────────────────────────────────────────── */
 
@@ -225,11 +449,9 @@ export function BodyModelViewer({
     }
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    /* `outputEncoding` is deliberately left at r128's linear default, as in
-     * StadiumScene. This version has no colour management, so a material
-     * colour set from a hex literal is already display-referred; adding an
-     * sRGB output transform gamma-encodes it a second time and washes the
-     * whole figure out to near-white. */
+    /* Every material below is a flat hex literal (no textures in any of
+     * these models), which is already display-referred — an sRGB output
+     * transform would gamma-encode it a second time and wash them out. */
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1;
 
@@ -251,40 +473,292 @@ export function BodyModelViewer({
     rim.position.set(-2.8, 1.8, -2.6);
     scene.add(rim);
 
-    /* ── Meshes ─────────────────────────────────────────────────────────── */
-
     const geometries: THREE.BufferGeometry[] = [];
-    const materials = new Map<BodyPartId, THREE.MeshStandardMaterial>();
-    const pickables: THREE.Mesh[] = [];
-    const figure = new THREE.Group();
+    let disposed = false;
 
-    for (const part of BODY_PARTS) {
-      const material = new THREE.MeshStandardMaterial({
-        color: BASE_COLOR,
-        roughness: 0.68,
-        metalness: 0.04,
-        emissive: new THREE.Color(0x000000),
-        emissiveIntensity: 0,
-      });
-      materials.set(part.id, material);
+    /* ── Smooth body (always visible, coach-friendly default) ────────────── */
 
-      for (const shape of part.shapes) {
-        for (const built of buildShape(shape)) {
-          geometries.push(built.geometry);
-          const mesh = new THREE.Mesh(built.geometry, material);
-          mesh.position.copy(built.position);
-          mesh.scale.copy(built.scale);
-          mesh.quaternion.copy(built.quaternion);
-          // Read back by the raycaster to resolve a hit to its part.
-          mesh.userData.partId = part.id;
-          figure.add(mesh);
-          pickables.push(mesh);
+    let loadedSmoothRoot: THREE.Object3D | null = null;
+
+    new GLTFLoader().load(
+      SMOOTH_BODY_MODEL_URL,
+      (gltf) => {
+        if (disposed) {
+          return;
+        }
+
+        const root = gltf.scene;
+        orientToYUp(root);
+        root.updateMatrixWorld(true);
+
+        const leftUpperArm = findByName(root, LEFT_UPPER_ARM_BONE);
+        const leftForearm = findByName(root, LEFT_FOREARM_BONE);
+        const rightUpperArm = findByName(root, RIGHT_UPPER_ARM_BONE);
+        const rightForearm = findByName(root, RIGHT_FOREARM_BONE);
+        if (leftUpperArm && leftForearm) {
+          relaxArmBone(
+            leftUpperArm,
+            leftForearm,
+            RELAXED_ARM_ANGLE_FROM_DOWN_DEG,
+          );
+        }
+        if (rightUpperArm && rightForearm) {
+          relaxArmBone(
+            rightUpperArm,
+            rightForearm,
+            RELAXED_ARM_ANGLE_FROM_DOWN_DEG,
+          );
+        }
+
+        const skinnedReplacements: Array<{
+          parent: THREE.Object3D;
+          skinned: THREE.SkinnedMesh;
+          baked: THREE.Mesh;
+        }> = [];
+        root.traverse((child) => {
+          if ((child as THREE.SkinnedMesh).isSkinnedMesh && child.parent) {
+            const skinned = child as THREE.SkinnedMesh;
+            skinnedReplacements.push({
+              parent: child.parent,
+              skinned,
+              baked: bakeSkinnedMesh(skinned),
+            });
+          }
+        });
+        for (const { parent, skinned, baked } of skinnedReplacements) {
+          baked.position.copy(skinned.position);
+          baked.rotation.copy(skinned.rotation);
+          baked.scale.copy(skinned.scale);
+          parent.add(baked);
+          parent.remove(skinned);
+        }
+
+        const smoothMaterial = new THREE.MeshStandardMaterial({
+          color: SMOOTH_BODY_COLOR,
+          roughness: 0.78,
+          metalness: 0,
+        });
+        root.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.material = smoothMaterial;
+          }
+        });
+
+        autoFit(root, SMOOTH_BODY_ROTATION_Y);
+        loadedSmoothRoot = root;
+        scene.add(root);
+      },
+      undefined,
+      (error) => {
+        console.error("Failed to load the smooth body model.", error);
+      },
+    );
+
+    /* ── Anatomy + head (hidden; revealed per-region on hover/selection) ─── */
+    /* The anatomy figure. Auto-scaled and re-centred to the same "feet at
+     * y = 0, crown at y ≈ 1.80" frame the smooth body and hotspot math use,
+     * from its own bounding box rather than a hard-coded size, since
+     * nothing about the source file guarantees its authored scale. */
+    let loadedAnatomyRoot: THREE.Object3D | null = null;
+    let loadedHeadRoot: THREE.Object3D | null = null;
+    let meshEntries: MeshEntry[] = [];
+    let allAnatomyMeshes: THREE.Mesh[] = [];
+    let regionHotspots = new Map<BodyRegion, THREE.Vector3>();
+
+    /* Recomputes every region's hotspot from whatever anatomy meshes are
+     * currently registered — called once after the anatomy body loads and
+     * again once head.glb fits into the facial-muscle gap, since the two
+     * loads finish independently. */
+    function refreshHotspots() {
+      const regionMeshBoxes = new Map<BodyRegion, THREE.Box3>();
+      const meshBox = new THREE.Box3();
+      for (const entry of meshEntries) {
+        if (entry.regions.length === 0) {
+          continue;
+        }
+        meshBox.setFromObject(entry.mesh);
+        for (const region of entry.regions) {
+          const existing = regionMeshBoxes.get(region);
+          if (existing) {
+            existing.union(meshBox);
+          } else {
+            regionMeshBoxes.set(region, meshBox.clone());
+          }
         }
       }
+      const hotspots = new Map<BodyRegion, THREE.Vector3>();
+      for (const [region, regionBox] of regionMeshBoxes) {
+        hotspots.set(region, regionBox.getCenter(new THREE.Vector3()));
+      }
+      regionHotspots = hotspots;
     }
 
-    scene.add(figure);
-    materialsRef.current = materials;
+    /** Shared setup for every revealed anatomy/head mesh's material. */
+    function revealableMaterial(): THREE.MeshStandardMaterial {
+      return new THREE.MeshStandardMaterial({
+        color: INJURED_COLOR,
+        emissive: new THREE.Color(INJURED_EMISSIVE),
+        emissiveIntensity: 0,
+        roughness: 0.6,
+        metalness: 0.03,
+        // Drawn after (and over) the opaque smooth body regardless of which
+        // is geometrically nearer the camera — a deliberately simple stand-in
+        // for a true local-transparency mask (see the component doc above).
+        depthTest: false,
+        depthWrite: false,
+      });
+    }
+
+    /* A single throwaway material for the invisible full-size pick meshes
+     * below — never rendered, just needed to satisfy the Mesh constructor. */
+    const pickOnlyMaterial = new THREE.MeshBasicMaterial();
+
+    new GLTFLoader().load(
+      ANATOMY_MODEL_URL,
+      (gltf) => {
+        if (disposed) {
+          return;
+        }
+
+        const root = gltf.scene;
+        orientToYUp(root);
+
+        const entries: MeshEntry[] = [];
+        const hiddenHeadMeshes: THREE.Mesh[] = [];
+        const allMeshes: THREE.Mesh[] = [];
+
+        root.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) {
+            return;
+          }
+          if (HEAD_HIDDEN_MESH_NAMES.has(child.name)) {
+            // Kept in the scene graph (invisible) only so its geometry can
+            // still size where head.glb needs to fit, below.
+            child.visible = false;
+            hiddenHeadMeshes.push(child);
+            return;
+          }
+          const regions = MESH_NAME_TO_REGIONS.get(child.name) ?? [];
+          // Raycasting is done against a same-named, full-size, invisible
+          // sibling rather than the visual mesh below: shrinking the visual
+          // mesh so a revealed muscle doesn't bulge past the mannequin's
+          // skin would otherwise shrink its hoverable area by the same
+          // amount, making regions harder to hover the more they're shrunk.
+          const pickMesh = new THREE.Mesh(
+            child.geometry.clone(),
+            pickOnlyMaterial,
+          );
+          pickMesh.name = child.name;
+          pickMesh.visible = false;
+          child.parent!.add(pickMesh);
+          allMeshes.push(pickMesh);
+
+          shrinkGeometryTowardCenter(child.geometry, ANATOMY_MESH_SHRINK);
+          const material = revealableMaterial();
+          child.material = material;
+          child.visible = false;
+          child.renderOrder = 5;
+          entries.push({ mesh: child, material, regions });
+        });
+
+        if (import.meta.env.DEV) {
+          const found = new Set(entries.map((entry) => entry.mesh.name));
+          const missing = Array.from(MESH_NAME_TO_REGIONS.keys()).filter(
+            (name) => !found.has(name),
+          );
+          if (missing.length > 0) {
+            console.warn(
+              "anatomy-regions.ts references mesh names not found in anatomy.glb:",
+              missing,
+            );
+          }
+        }
+
+        autoFit(root, ANATOMY_ROTATION_Y);
+
+        meshEntries = entries;
+        allAnatomyMeshes = allMeshes;
+        refreshHotspots();
+        loadedAnatomyRoot = root;
+        scene.add(root);
+
+        /* The gap left by the hidden facial muscles, still measurable from
+         * their (invisible) geometry — head.glb is fitted into exactly this
+         * box once it loads, below. */
+        const headBox = new THREE.Box3();
+        for (const hiddenMesh of hiddenHeadMeshes) {
+          headBox.union(new THREE.Box3().setFromObject(hiddenMesh));
+        }
+        if (headBox.isEmpty()) {
+          return;
+        }
+
+        new GLTFLoader().load(
+          HEAD_MODEL_URL,
+          (headGltf) => {
+            if (disposed) {
+              return;
+            }
+
+            const headRoot = headGltf.scene;
+            orientToYUp(headRoot);
+            headRoot.updateMatrixWorld(true);
+
+            const headModelBox = new THREE.Box3().setFromObject(headRoot);
+            const headModelHeight =
+              headModelBox.max.y - headModelBox.min.y || 1;
+            const targetHeight = headBox.max.y - headBox.min.y;
+            const headScale = targetHeight / headModelHeight;
+            const headModelCenter = headModelBox.getCenter(new THREE.Vector3());
+            const targetCenter = headBox.getCenter(new THREE.Vector3());
+
+            headRoot.scale.setScalar(headScale);
+            headRoot.position.set(
+              targetCenter.x - headModelCenter.x * headScale,
+              targetCenter.y - headModelCenter.y * headScale,
+              targetCenter.z - headModelCenter.z * headScale,
+            );
+            headRoot.rotation.y += HEAD_MODEL_ROTATION_Y;
+            headRoot.updateMatrixWorld(true);
+
+            const headEntries: MeshEntry[] = [];
+            headRoot.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) {
+                return;
+              }
+              const sourceMaterial = Array.isArray(child.material)
+                ? child.material[0]
+                : child.material;
+              if (sourceMaterial?.name === "Eye_Ball") {
+                // Hidden along with the rest of the head — eyes have no
+                // "region" of their own to be revealed by.
+                child.visible = false;
+                return;
+              }
+              const material = revealableMaterial();
+              child.material = material;
+              child.visible = false;
+              child.renderOrder = 5;
+              allAnatomyMeshes.push(child);
+              headEntries.push({ mesh: child, material, regions: ["head"] });
+            });
+
+            meshEntries = [...meshEntries, ...headEntries];
+            refreshHotspots();
+            loadedHeadRoot = headRoot;
+            scene.add(headRoot);
+          },
+          undefined,
+          (error) => {
+            console.error("Failed to load the head model.", error);
+          },
+        );
+      },
+      undefined,
+      (error) => {
+        console.error("Failed to load the anatomy model.", error);
+      },
+    );
 
     /* A soft ground shadow so the figure does not float. */
     const groundGeometry = new THREE.CircleGeometry(0.75, 48);
@@ -299,27 +773,54 @@ export function BodyModelViewer({
     ground.position.y = 0.002;
     scene.add(ground);
 
-    /* ── Hotspot marker ───────────────────────────────────────────────────
-     * A small billboarded ring that sits on the selected region, matching
-     * the approved design's pinpoint. Its screen position also drives the
-     * HTML callout. */
-    const hotspotGeometry = new THREE.SphereGeometry(0.018, 16, 12);
-    geometries.push(hotspotGeometry);
-    const hotspotMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const hotspot = new THREE.Mesh(hotspotGeometry, hotspotMaterial);
-    hotspot.visible = false;
-    scene.add(hotspot);
+    /* ── Injury markers ───────────────────────────────────────────────────
+     * One dot+halo pair per currently-injured region, kept in sync with the
+     * `injuredRegions` prop every frame (cheap: there are never more than a
+     * handful at once). Idle markers are small and faint so the smooth body
+     * stays the dominant visual; whichever region is hovered/selected gets a
+     * bigger, brighter pair instead. Drawn depth-test-disabled like the
+     * revealed anatomy, since their world position sits inside the body. */
+    const markerDotGeometry = new THREE.SphereGeometry(0.018, 16, 12);
+    const markerHaloGeometry = new THREE.SphereGeometry(0.036, 16, 12);
+    geometries.push(markerDotGeometry, markerHaloGeometry);
+    const markers = new Map<BodyRegion, MarkerEntry>();
 
-    const haloGeometry = new THREE.SphereGeometry(0.036, 16, 12);
-    geometries.push(haloGeometry);
-    const haloMaterial = new THREE.MeshBasicMaterial({
-      color: 0xef4444,
-      transparent: true,
-      opacity: 0.45,
-    });
-    const halo = new THREE.Mesh(haloGeometry, haloMaterial);
-    halo.visible = false;
-    scene.add(halo);
+    function syncMarkers(currentInjured: readonly BodyRegion[]) {
+      const currentSet = new Set(currentInjured);
+      for (const [region, entry] of markers) {
+        if (!currentSet.has(region)) {
+          scene.remove(entry.dot, entry.halo);
+          entry.dotMaterial.dispose();
+          entry.haloMaterial.dispose();
+          markers.delete(region);
+        }
+      }
+      for (const region of currentSet) {
+        if (markers.has(region)) {
+          continue;
+        }
+        const dotMaterial = new THREE.MeshBasicMaterial({
+          color: MARKER_ACTIVE_DOT_COLOR,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+        });
+        const haloMaterial = new THREE.MeshBasicMaterial({
+          color: MARKER_IDLE_COLOR,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+        });
+        const dot = new THREE.Mesh(markerDotGeometry, dotMaterial);
+        const halo = new THREE.Mesh(markerHaloGeometry, haloMaterial);
+        dot.renderOrder = 10;
+        halo.renderOrder = 10;
+        dot.visible = false;
+        halo.visible = false;
+        scene.add(dot, halo);
+        markers.set(region, { dot, halo, dotMaterial, haloMaterial });
+      }
+    }
 
     /* ── Sizing ─────────────────────────────────────────────────────────── */
 
@@ -338,60 +839,33 @@ export function BodyModelViewer({
     resizeObserver.observe(container);
 
     /* ── Picking ────────────────────────────────────────────────────────── */
+    /* Only a region with a recorded injury is interactive: a hit on anatomy
+     * that doesn't map to a currently-injured region is treated as a miss.
+     * A new injury's region is chosen elsewhere (the log-injury dialog), not
+     * by clicking this model, so nothing is lost by restricting it this way. */
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
-    /**
-     * Resolves a hit on a part to the specific region that was clicked.
-     *
-     * A thigh carries both the quad and the hamstring, so the nearest
-     * hotspot to the actual intersection decides which — clicking the back
-     * of the leg selects the hamstring, the front selects the quad.
-     */
-    function regionAtPoint(
-      partId: BodyPartId,
-      point: THREE.Vector3,
-    ): BodyRegion | null {
-      const candidates = regionsForPart(partId);
-      if (candidates.length === 0) {
-        return null;
-      }
-      let best = candidates[0];
-      let bestDistance = Infinity;
-      for (const region of candidates) {
-        const hotspot = REGION_PLACEMENTS[region].hotspot;
-        const distance = point.distanceToSquared(
-          new THREE.Vector3(hotspot[0], hotspot[1], hotspot[2]),
-        );
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = region;
-        }
-      }
-
-      return best;
-    }
-
-    function pick(event: PointerEvent): {
-      partId: BodyPartId;
-      region: BodyRegion;
-    } | null {
+    function pick(event: PointerEvent): BodyRegion | null {
       const rect = container!.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
-      const [hit] = raycaster.intersectObjects(pickables, false);
-      if (!hit) {
-        return null;
+      // Nearby unmapped (or non-injured) muscles routinely sit in front of
+      // the mapped one along the same ray — e.g. the thigh is many
+      // overlapping meshes — so every hit is checked in distance order
+      // rather than only trusting the nearest.
+      const hits = raycaster.intersectObjects(allAnatomyMeshes, false);
+      const injuredNow = injuredRef.current;
+      for (const hit of hits) {
+        const regions = MESH_NAME_TO_REGIONS.get(hit.object.name);
+        const match = regions?.find((region) => injuredNow.includes(region));
+        if (match) {
+          return match;
+        }
       }
-      const partId = hit.object.userData.partId as BodyPartId | undefined;
-      if (!partId) {
-        return null;
-      }
-      const region = regionAtPoint(partId, hit.point);
-
-      return region ? { partId, region } : null;
+      return null;
     }
 
     /* ── Pointer interaction ────────────────────────────────────────────── */
@@ -436,10 +910,10 @@ export function BodyModelViewer({
         return;
       }
 
-      const hit = pick(event);
-      hoveredPartRef.current = hit?.partId ?? null;
-      setHoveredRegion(hit?.region ?? null);
-      container!.style.cursor = hit ? "pointer" : "grab";
+      const region = pick(event);
+      hoveredRegionRef.current = region;
+      setHoveredRegion(region);
+      container!.style.cursor = region ? "pointer" : "grab";
     }
 
     function endDrag(event: PointerEvent) {
@@ -455,14 +929,14 @@ export function BodyModelViewer({
       if (dragMoved) {
         return;
       }
-      const hit = pick(event);
-      if (hit) {
-        onSelectRef.current?.(hit.region);
+      const region = pick(event);
+      if (region) {
+        onSelectRef.current?.(region);
       }
     }
 
     function onPointerLeave() {
-      hoveredPartRef.current = null;
+      hoveredRegionRef.current = null;
       setHoveredRegion(null);
     }
 
@@ -516,55 +990,71 @@ export function BodyModelViewer({
       camera.position.set(x, y, z);
       camera.lookAt(target);
 
-      /* Region tinting. Injured parts glow, the hovered part lifts, and
-       * everything else returns to the base tone. */
-      const injuredPartSet = injuredPartsRef.current;
+      /* Anatomy only ever goes red while actively hovered — selecting a
+       * region (clicking it) keeps its marker/callout emphasised but does
+       * not, by itself, reveal anatomy. */
+      const hoveredNow = hoveredRegionRef.current;
+      const activeRegion = hoveredNow ?? selectedRef.current;
       const pulse = reducedMotion ? 0.55 : 0.42 + Math.sin(now / 420) * 0.22;
-      for (const [partId, material] of materials) {
-        const isInjured = injuredPartSet.has(partId);
-        const isHovered = hoveredPartRef.current === partId;
-        if (isInjured) {
-          material.color.setHex(INJURED_COLOR);
-          material.emissive.setHex(INJURED_EMISSIVE);
-          material.emissiveIntensity = pulse;
-        } else {
-          material.color.setHex(isHovered ? HOVER_COLOR : BASE_COLOR);
-          material.emissive.setHex(0x000000);
-          material.emissiveIntensity = 0;
+
+      for (const entry of meshEntries) {
+        const revealed =
+          hoveredNow !== null && entry.regions.includes(hoveredNow);
+        entry.mesh.visible = revealed;
+        if (revealed) {
+          entry.material.emissiveIntensity = pulse;
         }
       }
 
-      /* Hotspot and its HTML callout follow the selected region. */
-      const selected = selectedRef.current;
-      const placement = selected ? REGION_PLACEMENTS[selected] : null;
-      if (placement) {
-        const [hx, hy, hz] = placement.hotspot;
-        hotspot.position.set(hx, hy, hz);
-        halo.position.set(hx, hy, hz);
-        hotspot.visible = true;
-        halo.visible = true;
-        halo.scale.setScalar(reducedMotion ? 1 : 1 + Math.sin(now / 420) * 0.22);
+      /* Injury markers: idle and faint by default, stronger for the active
+       * region — kept in sync with the injuredRegions prop every frame since
+       * there are only ever a handful at once. */
+      syncMarkers(injuredRef.current);
+      const idlePulse = reducedMotion ? 0.85 : 0.85 + Math.sin(now / 650) * 0.08;
+      const activePulse = reducedMotion ? 1 : 1 + Math.sin(now / 420) * 0.22;
+      for (const [region, marker] of markers) {
+        const position = regionHotspots.get(region);
+        if (!position) {
+          marker.dot.visible = false;
+          marker.halo.visible = false;
+          continue;
+        }
+        marker.dot.position.copy(position);
+        marker.halo.position.copy(position);
+        marker.dot.visible = true;
+        marker.halo.visible = true;
+        if (region === activeRegion) {
+          marker.dotMaterial.opacity = 0.95;
+          marker.haloMaterial.opacity = 0.5;
+          marker.dot.scale.setScalar(1.4);
+          marker.halo.scale.setScalar(activePulse * 1.6);
+        } else {
+          marker.dotMaterial.opacity = 0.5;
+          marker.haloMaterial.opacity = 0.22;
+          marker.dot.scale.setScalar(0.85);
+          marker.halo.scale.setScalar(idlePulse);
+        }
+      }
 
-        const element = calloutRef.current;
-        if (element) {
-          projected.set(hx, hy, hz).project(camera);
-          const rect = container!.getBoundingClientRect();
-          const screenX = (projected.x * 0.5 + 0.5) * rect.width;
-          const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
-          // Flip the callout to the other side near the right edge so it
-          // never runs off the canvas.
-          const flip = screenX > rect.width - 210;
-          element.style.transform = `translate(${
-            flip ? screenX - 8 : screenX + 8
-          }px, ${screenY}px) translate(${flip ? "-100%" : "0"}, -50%)`;
-          element.style.opacity = projected.z < 1 ? "1" : "0";
-        }
-      } else {
-        hotspot.visible = false;
-        halo.visible = false;
-        if (calloutRef.current) {
-          calloutRef.current.style.opacity = "0";
-        }
+      /* The HTML callout follows the active region's hotspot. */
+      const hotspotPosition = activeRegion
+        ? regionHotspots.get(activeRegion)
+        : null;
+      const element = calloutRef.current;
+      if (hotspotPosition && element) {
+        projected.copy(hotspotPosition).project(camera);
+        const rect = container!.getBoundingClientRect();
+        const screenX = (projected.x * 0.5 + 0.5) * rect.width;
+        const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
+        // Flip the callout to the other side near the right edge so it
+        // never runs off the canvas.
+        const flip = screenX > rect.width - 210;
+        element.style.transform = `translate(${
+          flip ? screenX - 8 : screenX + 8
+        }px, ${screenY}px) translate(${flip ? "-100%" : "0"}, -50%)`;
+        element.style.opacity = projected.z < 1 ? "1" : "0";
+      } else if (element) {
+        element.style.opacity = "0";
       }
 
       renderer.render(scene, camera);
@@ -575,6 +1065,7 @@ export function BodyModelViewer({
     /* ── Teardown ───────────────────────────────────────────────────────── */
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       container.removeEventListener("pointerdown", onPointerDown);
@@ -587,14 +1078,22 @@ export function BodyModelViewer({
       for (const geometry of geometries) {
         geometry.dispose();
       }
-      for (const material of materials.values()) {
-        material.dispose();
-      }
       groundMaterial.dispose();
-      hotspotMaterial.dispose();
-      haloMaterial.dispose();
+      pickOnlyMaterial.dispose();
+      for (const entry of markers.values()) {
+        entry.dotMaterial.dispose();
+        entry.haloMaterial.dispose();
+      }
+      if (loadedSmoothRoot) {
+        disposeObject3D(loadedSmoothRoot);
+      }
+      if (loadedAnatomyRoot) {
+        disposeObject3D(loadedAnatomyRoot);
+      }
+      if (loadedHeadRoot) {
+        disposeObject3D(loadedHeadRoot);
+      }
       renderer.dispose();
-      materialsRef.current = new Map();
       cameraRef.current = null;
     };
   }, []);
@@ -641,6 +1140,8 @@ export function BodyModelViewer({
     );
   }
 
+  const activeRegion = hoveredRegion ?? selectedRegion ?? null;
+  const activeCallout = activeRegion ? injuryCallouts?.[activeRegion] : null;
   const hoverLabel = hoveredRegion ? bodyRegionLabel(hoveredRegion) : null;
 
   return (
@@ -687,19 +1188,20 @@ export function BodyModelViewer({
       >
         <canvas ref={canvasRef} className="block size-full" />
 
-        {/* The pinned callout for the selected region, positioned each frame
-            from the hotspot's projected screen coordinates. */}
-        {callout && (
+        {/* The callout for the active (hovered, else selected) region,
+            positioned each frame from the hotspot's projected screen
+            coordinates. */}
+        {activeCallout && (
           <div
             ref={calloutRef}
             className="pointer-events-none absolute left-0 top-0 max-w-[200px] rounded-lg border border-border/70 bg-card/95 px-3 py-2 opacity-0 shadow-xl backdrop-blur transition-opacity"
           >
             <p className="text-xs font-semibold text-foreground">
-              {callout.title}
+              {activeCallout.title}
             </p>
-            {callout.subtitle && (
+            {activeCallout.subtitle && (
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {callout.subtitle}
+                {activeCallout.subtitle}
               </p>
             )}
           </div>

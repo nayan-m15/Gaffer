@@ -135,6 +135,22 @@ export default function InjuryRecoveryPage() {
     [athleteInjuries],
   );
 
+  /* One callout per injured region, so hovering any of them on the model
+   * (not just the focused one) shows its own title/status. */
+  const injuryCallouts = useMemo(
+    () =>
+      Object.fromEntries(
+        athleteInjuries.map((injury) => [
+          injury.bodyRegion,
+          {
+            title: injuryTitle(injury),
+            subtitle: INJURY_STATUS_LABELS[injury.status],
+          },
+        ]),
+      ) as Partial<Record<BodyRegion, { title: string; subtitle: string }>>,
+    [athleteInjuries],
+  );
+
   /* Follow the focused record unless the coach has clicked another region on
    * the model. */
   useEffect(() => {
@@ -312,14 +328,7 @@ export default function InjuryRecoveryPage() {
                   <BodyModelViewer
                     injuredRegions={injuredRegions}
                     selectedRegion={selectedRegion}
-                    callout={
-                      focused
-                        ? {
-                            title: injuryTitle(focused),
-                            subtitle: INJURY_STATUS_LABELS[focused.status],
-                          }
-                        : null
-                    }
+                    injuryCallouts={injuryCallouts}
                     onSelectRegion={handleRegionSelect}
                   />
 
