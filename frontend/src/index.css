@@ -524,6 +524,86 @@ body {
   );
 }
 
+/* Public match centre: one fixed, theme-aware stadium behind the full page. */
+.public-dashboard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: url("/publicDashboardBgLightMobile.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.public-dashboard-backdrop::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--background) 12%, transparent),
+    color-mix(in srgb, var(--background) 5%, transparent) 48%,
+    color-mix(in srgb, var(--background) 18%, transparent)
+  );
+}
+
+.dark .public-dashboard-backdrop {
+  background-image: url("/publicDashboardBgMobile.png");
+}
+
+@media (min-width: 768px) {
+  .public-dashboard-backdrop {
+    background-image: url("/publicDashboardBgLight.png");
+  }
+
+  .dark .public-dashboard-backdrop {
+    background-image: url("/publicDashboardBg.png");
+  }
+}
+
+/* Keep the shared navigation readable without making it opaque. */
+.public-dashboard-page > header {
+  background: color-mix(in srgb, var(--background) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+
+.public-dashboard-page > footer {
+  z-index: 10;
+  opacity: 1;
+  transform: none;
+}
+
+.public-dashboard-match-list {
+  scrollbar-color: color-mix(in srgb, var(--brand) 42%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 42%, transparent);
+}
+
+.public-dashboard-page :where(a, button, input, select, [tabindex]):focus {
+  scroll-margin-top: 17rem;
+}
+
+@media (min-width: 1024px) {
+  .public-dashboard-page :where(a, button, input, select, [tabindex]):focus {
+    scroll-margin-top: 11rem;
+  }
+}
+
 .squad-formation-pitch-vignette {
   background: radial-gradient(
     ellipse 72% 62% at 50% 48%,

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
  * landing-page sections are built in later phases.
  */
 const NAV_LINKS = [
+  { label: "Public Dashboard", href: "/public-dashboard" },
   { label: "Philosophy", href: "/#philosophy" },
   { label: "Roster", href: "/#roster" },
   { label: "Tactics", href: "/#tactics" },
@@ -92,6 +93,13 @@ export function Navbar() {
 
         {/* ── Desktop actions ──────────────────────────────────────────── */}
         <div className="hidden items-center gap-3 md:flex">
+          <a
+            href="/public-dashboard"
+            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Public Dashboard
+          </a>
+
           {/* Theme toggle */}
           <Button
             variant="ghost"

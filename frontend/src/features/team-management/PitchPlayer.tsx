@@ -11,6 +11,7 @@ import { PlayerCard } from "./PlayerCard";
 import { AnimatedTooltip } from "@/components/ui/animated-tooltip";
 import type { BackendAthlete } from "@/services/athletes";
 import type { FormationPosition, DragItem, DragPayload } from "./types";
+import { usePointerDrag } from "./usePointerDrag";
 
 interface PitchPlayerProps {
   /** The formation position slot (coordinates and label). */
@@ -28,7 +29,10 @@ interface PitchPlayerProps {
   /** Called when a drag ends. */
   onDragEnd: () => void;
   /** Called when something is dropped on this position. */
-  onDrop: (source: DragItem, target: { type: "pitch"; positionId: string }) => void;
+  onDrop: (
+    source: DragItem,
+    target: { type: "pitch"; positionId: string } | { type: "subs" },
+  ) => void;
 }
 
 /** Parse the JSON drag payload from a DataTransfer object. */
@@ -136,6 +140,15 @@ export function PitchPlayer({
     onDragEnd();
   }, [onDragEnd]);
 
+  const pointerDragHandlers = usePointerDrag(
+    athlete && !readOnly
+      ? { athleteId: athlete.id, source: "pitch", positionId: position.id }
+      : null,
+    onDragStart,
+    onDragEnd,
+    onDrop,
+  );
+
   /* ── Empty slot ─────────────────────────────────────────────────────────── */
   if (!athlete) {
     return (
@@ -145,6 +158,8 @@ export function PitchPlayer({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        data-lineup-drop-target="pitch"
+        data-position-id={position.id}
       >
         <div
           className={cn(
@@ -188,6 +203,8 @@ export function PitchPlayer({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      data-lineup-drop-target="pitch"
+      data-position-id={position.id}
     >
       <AnimatedTooltip
         label={name}
@@ -206,6 +223,7 @@ export function PitchPlayer({
           readOnly={readOnly}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          {...pointerDragHandlers}
         />
       </AnimatedTooltip>
     </div>

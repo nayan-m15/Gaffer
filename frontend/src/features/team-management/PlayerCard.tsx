@@ -1,56 +1,118 @@
-/**
- * Player card component for the Team Management tactical board.
- *
- * Renders in two variants:
- * - **pitch**: Compact card for placement on the football pitch.
- * - **sub**: Horizontal card for the substitutes bench.
- *
- * Both variants are draggable and display only data that actually exists
- * in the database (name via initials, position, squad number, availability
- * status).
- */
-
+import { useId } from "react";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/roster/StatusBadge";
 import { STATUS_LABELS, type AthleteStatusValue } from "@/services/athletes";
+import "./PlayerCard.css";
 
-/**
- * Availability dot colours for the compact pitch variant, matching the
- * roster StatusBadge palette (Available → blue, Injured → red, Suspended →
- * yellow). Kept readable against the grass with a light border.
- */
-const STATUS_DOT_STYLES: Record<AthleteStatusValue, string> = {
-  available: "bg-blue-500 dark:bg-blue-400",
-  injured: "bg-red-500 dark:bg-red-400",
-  suspended: "bg-yellow-500 dark:bg-yellow-400",
+type PositionGroup = "gk" | "def" | "mid" | "fwd";
+
+const POSITION_GROUPS: Record<PositionGroup, readonly string[]> = {
+  gk: ["GK"],
+  def: ["CB", "LB", "RB", "LWB", "RWB", "SW", "DEF"],
+  mid: ["CDM", "DM", "CM", "CAM", "AM", "LM", "RM", "MID", "UN"],
+  fwd: ["LW", "RW", "ST", "CF", "SS", "FW", "ATT"],
 };
 
+function positionGroup(position: string): PositionGroup {
+  const code = position.trim().toUpperCase();
+  return (
+    (Object.keys(POSITION_GROUPS) as PositionGroup[]).find((group) =>
+      POSITION_GROUPS[group].includes(code),
+    ) ?? "mid"
+  );
+}
+
+function splitName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return {
+    given: parts.length > 1 ? parts.slice(0, -1).join(" ") : "",
+    family: (parts.at(-1) ?? name).toUpperCase(),
+  };
+}
+
+function Nameset({ text, pathId }: { text: string; pathId: string }) {
+  const size =
+    text.length <= 7 ? 36 : text.length <= 9 ? 33 : text.length <= 12 ? 29 : 25;
+
+  return (
+    <svg
+      className="player-card__nameset"
+      viewBox="0 0 240 60"
+      role="img"
+      aria-label={text}
+    >
+      <defs>
+        <path id={pathId} d="M14 52 Q120 4 226 52" fill="none" />
+      </defs>
+      <text fontSize={size} letterSpacing="1.5">
+        <textPath
+          href={`#${pathId}`}
+          startOffset="50%"
+          textAnchor="middle"
+          textLength="198"
+          lengthAdjust="spacingAndGlyphs"
+        >
+          {text}
+        </textPath>
+      </text>
+    </svg>
+  );
+}
+
+function Stat({
+  value,
+  label,
+  card,
+}: {
+  value: number;
+  label: string;
+  card?: "yellow" | "red";
+}) {
+  return (
+    <span
+      className={cn(
+        "player-card__stat",
+        value === 0 && "player-card__stat--zero",
+      )}
+    >
+      <span className="player-card__stat-value">
+        {card && (
+          <i
+            className={`player-card__booking player-card__booking--${card}`}
+            aria-hidden="true"
+          />
+        )}
+        {value}
+      </span>
+      <span className="player-card__stat-label">{label}</span>
+    </span>
+  );
+}
+
 interface PlayerCardProps {
-  /** Player initials for the avatar circle. */
   initials: string;
-  /** Full display name. */
   name: string;
-  /** Short position label (e.g. "GK", "CB", "ST"). */
   position: string;
-  /** Squad number, or null if not set. */
   squadNumber: number | null;
-  /** Persisted availability status, or null/undefined when unknown. */
   status?: AthleteStatusValue | null;
-  /** Card variant. */
+  appearances?: number;
+  goals?: number;
+  assists?: number;
+  yellowCards?: number;
+  redCards?: number;
+  minutesPlayed?: number;
+  preferredFoot?: "left" | "right" | "both";
   variant: "pitch" | "sub";
-  /** Whether this card is currently being dragged. */
   isDragging?: boolean;
-  /** Whether this is a valid drop target highlight. */
   isDropTarget?: boolean;
-  /** Whether this drop target is invalid. */
   isInvalid?: boolean;
-  /** Coach-only: when true the card is not draggable (assistant view). */
   readOnly?: boolean;
-  /** Called when the card drag starts. */
+  publicView?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
-  /** Called when the card drag ends. */
   onDragEnd?: (e: React.DragEvent) => void;
-  /** Additional class name. */
+  onPointerDown?: React.PointerEventHandler<HTMLElement>;
+  onPointerMove?: React.PointerEventHandler<HTMLElement>;
+  onPointerUp?: React.PointerEventHandler<HTMLElement>;
+  onPointerCancel?: React.PointerEventHandler<HTMLElement>;
   className?: string;
 }
 
@@ -59,17 +121,38 @@ export function PlayerCard({
   name,
   position,
   squadNumber,
-  status,
+  status = "available",
+  appearances = 0,
+  goals = 0,
+  assists = 0,
+  yellowCards = 0,
+  redCards = 0,
+  minutesPlayed = 0,
+  preferredFoot = "right",
   variant,
   isDragging = false,
   isDropTarget = false,
   isInvalid = false,
   readOnly = false,
+  publicView = false,
   onDragStart,
   onDragEnd,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
   className,
 }: PlayerCardProps) {
-  const statusSuffix = status ? ` · ${STATUS_LABELS[status]}` : "";
+  const pathId = `player-card-arc-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const group = positionGroup(position);
+  const resolvedStatus = status ?? "available";
+  const displayPosition = position.trim().toUpperCase() || "UN";
+  const displayNumber = squadNumber ?? "—";
+  const statusLabel = STATUS_LABELS[resolvedStatus];
+  const accessibleLabel = `${name} — ${displayPosition}, number ${displayNumber}${
+    publicView ? "" : ` · ${statusLabel}`
+  }`;
+  const { given, family } = splitName(name);
 
   if (variant === "pitch") {
     return (
@@ -77,120 +160,111 @@ export function PlayerCard({
         draggable={!readOnly}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         className={cn(
-          "flex flex-col items-center gap-0.5 select-none",
-          !readOnly && "cursor-grab",
-          "w-[clamp(52px,8vw,68px)]",
-          isDragging && "opacity-40 cursor-grabbing",
+          "player-card player-card--pitch",
+          !readOnly && "player-card--draggable",
+          isDragging && "player-card--dragging",
+          isDropTarget && !isInvalid && "player-card--drop-target",
+          isInvalid && "player-card--invalid",
           className,
         )}
-        role="button"
-        aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}${statusSuffix}`}
-        tabIndex={0}
+        data-group={group}
+        data-status={resolvedStatus}
+        role={readOnly ? undefined : "button"}
+        aria-label={accessibleLabel}
+        tabIndex={readOnly ? undefined : 0}
       >
-        {/* Avatar */}
-        <div
-          className={cn(
-            "relative flex items-center justify-center rounded-full",
-            "size-[clamp(32px,5vw,42px)]",
-            "text-[10px] font-bold uppercase",
-            "border-2 shadow-sm transition-colors duration-150",
-            position.toUpperCase() === "GK"
-              ? "bg-amber-400 text-amber-950 border-amber-500"
-              : "bg-white text-slate-900 border-slate-900/25",
-            isDropTarget && !isInvalid && "ring-2 ring-primary scale-110",
-            isInvalid && "ring-2 ring-destructive bg-destructive/15",
-          )}
-        >
-          {initials}
-          {/* Availability indicator */}
-          {status && (
+        <span className="player-card__pitch-topline">
+          <span className="player-card__position">{displayPosition}</span>
+          {!publicView && (
             <span
-              className={cn(
-                "absolute -right-0.5 -top-0.5 size-2.5 rounded-full",
-                "border border-white/80 shadow-sm",
-                STATUS_DOT_STYLES[status],
-              )}
-              title={STATUS_LABELS[status]}
+              className="player-card__status-dot"
+              title={statusLabel}
               aria-hidden="true"
             />
           )}
-        </div>
-
-        {/* Name */}
-        <span className="text-[clamp(8px,1.3vw,11px)] font-medium text-foreground text-center leading-tight truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">
-          {name}
         </span>
-
-        {/* Position + number row */}
-        <span className="text-[clamp(7px,1.1vw,9px)] font-medium text-foreground/80 leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">
-          {position}
-          {squadNumber ? ` · #${squadNumber}` : ""}
-        </span>
+        <span className="player-card__pitch-number">{displayNumber}</span>
+        <span className="player-card__pitch-name">{family || initials}</span>
       </div>
     );
   }
 
-  /* ─── Sub variant (horizontal card) ──────────────────────────────────── */
   return (
-    <div
+    <article
       draggable={!readOnly}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg border px-2.5 py-2",
-        "bg-card text-card-foreground",
-        "select-none",
-        !readOnly &&
-          "cursor-grab transition-colors duration-150 hover:border-primary/40 hover:bg-primary/5",
-        "min-w-[160px] max-w-[200px] shrink-0",
-        isDragging && "opacity-40 cursor-grabbing",
-        isDropTarget && !isInvalid && "ring-2 ring-primary border-primary",
-        isInvalid && "ring-2 ring-destructive border-destructive",
+        "player-card player-card--sub",
+        !readOnly && "player-card--draggable",
+        isDragging && "player-card--dragging",
+        isDropTarget && !isInvalid && "player-card--drop-target",
+        isInvalid && "player-card--invalid",
         className,
       )}
-      role="button"
-      aria-label={`${name} — ${position}${squadNumber ? ` #${squadNumber}` : ""}${statusSuffix}`}
-      tabIndex={0}
+      data-group={group}
+      data-status={resolvedStatus}
+      role={readOnly ? undefined : "button"}
+      aria-label={accessibleLabel}
+      tabIndex={readOnly ? undefined : 0}
     >
-      {/* Avatar */}
-      <div
-        className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-full",
-          "size-8 text-[10px] font-bold uppercase",
-          "border",
-          position.toUpperCase() === "GK"
-            ? "bg-amber-500/15 text-amber-600 border-amber-500/30 dark:text-amber-400 dark:border-amber-400/30"
-            : "bg-primary/10 text-primary border-primary/20 dark:text-primary",
-        )}
-      >
-        {initials}
-        {/* Availability indicator */}
-        {status && (
-          <span
-            className={cn(
-              "absolute -right-0.5 -top-0.5 size-2 rounded-full",
-              "border border-background shadow-sm",
-              STATUS_DOT_STYLES[status],
-            )}
-            aria-hidden="true"
-          />
+      <div className="player-card__top">
+        <span className="player-card__position">{displayPosition}</span>
+        {!publicView && (
+          <span className="player-card__status">
+            <i className="player-card__status-dot" aria-hidden="true" />
+            {statusLabel}
+          </span>
         )}
       </div>
 
-      {/* Info */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground leading-tight">
-          {name}
-        </p>
-        <p className="truncate text-[10px] text-muted-foreground leading-tight">
-          {position}
-          {squadNumber ? ` · #${squadNumber}` : ""}
-        </p>
-        {status && (
-          <StatusBadge status={STATUS_LABELS[status]} className="mt-1 px-2 py-0.5 text-[10px]" />
+      <div className="player-card__jersey">
+        {given && <p className="player-card__given-name">{given}</p>}
+        <Nameset text={family || initials} pathId={pathId} />
+        <p className="player-card__number">{displayNumber}</p>
+      </div>
+
+      <div className="player-card__stats">
+        <Stat value={appearances} label="Apps" />
+        <Stat value={goals} label="Goals" />
+        <Stat value={assists} label="Assists" />
+        <Stat value={yellowCards} label="Yellows" card="yellow" />
+        <Stat value={redCards} label="Reds" card="red" />
+        {publicView ? (
+          <Stat value={minutesPlayed} label="Minutes" />
+        ) : (
+          <span className="player-card__stat">
+            <span className="player-card__stat-value player-card__foot">
+              <span
+                className={
+                  preferredFoot !== "right"
+                    ? "player-card__foot--on"
+                    : undefined
+                }
+              >
+                L
+              </span>
+              <span
+                className={
+                  preferredFoot !== "left" ? "player-card__foot--on" : undefined
+                }
+              >
+                R
+              </span>
+            </span>
+            <span className="player-card__stat-label">Foot</span>
+          </span>
         )}
       </div>
-    </div>
+    </article>
   );
 }

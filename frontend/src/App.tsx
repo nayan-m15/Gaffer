@@ -13,6 +13,7 @@ import ClaimPage from '@/pages/ClaimPage'
 import JoinTeamPage from '@/pages/JoinTeamPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import LandingPage from '@/pages/LandingPage'
+import PublicDashboard from '@/pages/PublicDashboard'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 import { Loader2 } from 'lucide-react'
@@ -90,6 +91,7 @@ function App() {
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/public-dashboard" element={<PublicDashboard />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />

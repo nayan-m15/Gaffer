@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { FormationsController } from './formations.controller';
 import { TacticsController } from './tactics.controller';
 import { PublicApiService } from './public-api.service';
+import { PublicDashboardController } from './public-dashboard.controller';
+import { PublicDashboardService } from './public-dashboard.service';
 
 /**
  * Externally accessible, unauthenticated GET-only API (`/v1/formations`,
@@ -10,7 +12,11 @@ import { PublicApiService } from './public-api.service';
  * see `public-api.service.ts`.
  */
 @Module({
-  controllers: [FormationsController, TacticsController],
-  providers: [PublicApiService],
+  controllers: [
+    FormationsController,
+    TacticsController,
+    PublicDashboardController,
+  ],
+  providers: [PublicApiService, PublicDashboardService],
 })
 export class PublicApiModule {}
