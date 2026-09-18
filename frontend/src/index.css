@@ -575,6 +575,34 @@ body {
   z-index: 10;
 }
 
+.public-dashboard-match-list {
+  scrollbar-color: color-mix(in srgb, var(--brand) 42%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.public-dashboard-match-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 42%, transparent);
+}
+
+.public-dashboard-page :where(a, button, input, select, [tabindex]):focus {
+  scroll-margin-top: 17rem;
+}
+
+@media (min-width: 1024px) {
+  .public-dashboard-page :where(a, button, input, select, [tabindex]):focus {
+    scroll-margin-top: 11rem;
+  }
+}
+
 .squad-formation-pitch-vignette {
   background: radial-gradient(
     ellipse 72% 62% at 50% 48%,

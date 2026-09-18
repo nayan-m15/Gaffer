@@ -1,4 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -9,6 +15,7 @@ import {
   Filter as FilterIcon,
   MapPin,
   RotateCcw,
+  Search,
   ShieldCheck,
   Target,
   Trophy,
@@ -49,6 +56,7 @@ export default function PublicDashboard() {
   const [competitionId, setCompetitionId] = useState("");
   const [matchStatus, setMatchStatus] = useState<PublicMatchStatus | "">("");
   const [positionFilter, setPositionFilter] = useState<PositionCategory>("ALL");
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const filtersQuery = useQuery({
     queryKey: ["public-dashboard", "filters"],
@@ -102,6 +110,7 @@ export default function PublicDashboard() {
     setCompetitionId("");
     setMatchStatus("");
     setPositionFilter("ALL");
+    setPlayerSearch("");
   }
 
   function changeTeam(value: string) {
@@ -130,23 +139,53 @@ export default function PublicDashboard() {
     return { upcomingMatches: upcoming, completedMatches: completed };
   }, [matchesQuery.data]);
 
-  // Filter players by position pill
+  // Apply the position filter first, then search the already loaded players.
   const filteredPlayers = useMemo(() => {
     const players = playersQuery.data ?? [];
-    if (positionFilter === "ALL") return players;
-    return players.filter((player) => {
-      const pos = (player.position ?? "").toUpperCase();
-      if (positionFilter === "FWD")
-        return pos.includes("FW") || pos.includes("ST") || pos.includes("ATT") || pos.includes("FORWARD");
-      if (positionFilter === "MID")
-        return pos.includes("MID") || pos.includes("CAM") || pos.includes("CDM") || pos.includes("CM");
-      if (positionFilter === "DEF")
-        return pos.includes("DEF") || pos.includes("CB") || pos.includes("LB") || pos.includes("RB");
-      if (positionFilter === "GK")
-        return pos.includes("GK") || pos.includes("KEEP") || pos.includes("GOAL");
-      return true;
-    });
-  }, [playersQuery.data, positionFilter]);
+    const positionFiltered =
+      positionFilter === "ALL"
+        ? players
+        : players.filter((player) => {
+            const pos = (player.position ?? "").toUpperCase();
+            if (positionFilter === "FWD")
+              return (
+                pos.includes("FW") ||
+                pos.includes("ST") ||
+                pos.includes("ATT") ||
+                pos.includes("FORWARD")
+              );
+            if (positionFilter === "MID")
+              return (
+                pos.includes("MID") ||
+                pos.includes("CAM") ||
+                pos.includes("CDM") ||
+                pos.includes("CM")
+              );
+            if (positionFilter === "DEF")
+              return (
+                pos.includes("DEF") ||
+                pos.includes("CB") ||
+                pos.includes("LB") ||
+                pos.includes("RB")
+              );
+            if (positionFilter === "GK")
+              return (
+                pos.includes("GK") ||
+                pos.includes("KEEP") ||
+                pos.includes("GOAL")
+              );
+            return true;
+          });
+    const normalizedSearch = playerSearch.trim().toLocaleLowerCase();
+
+    if (!normalizedSearch) return positionFiltered;
+
+    return positionFiltered.filter((player) =>
+      `${player.firstName} ${player.lastName}`
+        .toLocaleLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [playerSearch, playersQuery.data, positionFilter]);
 
   // Calculate team telemetry metrics from standings data
   const teamMetrics = useMemo(() => {
@@ -195,20 +234,24 @@ export default function PublicDashboard() {
             aria-hidden="true"
           />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
+            <div className="flex justify-center text-center">
+              <div className="max-w-3xl">
                 <h1 className="font-display text-4xl font-extrabold tracking-tight drop-shadow-sm sm:text-5xl lg:text-6xl">
                   Gaffer Match Center
                 </h1>
-                <p className="mt-3 max-w-2xl text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
+                <p className="mt-3 text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
                   Follow live match fixtures, player roster statistics, and league standings across all {brand.name} teams.
                 </p>
               </div>
 
             </div>
 
-            {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
-            <div className="mt-8 rounded-2xl border border-border/80 bg-card/80 p-4 shadow-lg backdrop-blur-xl sm:mt-10 dark:bg-card/70">
+          </div>
+        </section>
+
+        {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
+        <div className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:p-4 dark:bg-card/70">
               <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   <FilterIcon className="size-4 text-brand" />
@@ -223,10 +266,11 @@ export default function PublicDashboard() {
                 {activeFilterCount > 0 && (
                   <button
                     onClick={resetFilters}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-brand-dark transition-colors cursor-pointer"
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand-dark"
+                    aria-label="Reset filters"
                   >
                     <RotateCcw className="size-3.5" />
-                    Reset Filters
+                    <span className="hidden sm:inline">Reset Filters</span>
                   </button>
                 )}
               </div>
@@ -245,12 +289,11 @@ export default function PublicDashboard() {
                 onCompetitionChange={setCompetitionId}
                 onStatusChange={setMatchStatus}
               />
-            </div>
           </div>
-        </section>
+        </div>
 
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
-        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-4 sm:gap-14 sm:px-6 sm:pt-6 lg:gap-16 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
           
           {/* SECTION 1: Player Showcase Carousel */}
           <DashboardSection
@@ -259,9 +302,27 @@ export default function PublicDashboard() {
             description="Active players across teams, featuring career telemetry and match statistics."
             icon={<Users className="size-5" />}
           >
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
+            <div className="mt-4 flex flex-col gap-4 border-b border-border/60 pb-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="relative w-full lg:max-w-xs">
+                <label htmlFor="player-search" className="sr-only">
+                  Search players by name
+                </label>
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <input
+                  id="player-search"
+                  type="search"
+                  value={playerSearch}
+                  onChange={(event) => setPlayerSearch(event.target.value)}
+                  placeholder="Search players..."
+                  className="h-10 w-full rounded-xl border border-input bg-background/85 py-2 pl-9 pr-3 text-sm text-foreground shadow-sm outline-none backdrop-blur-sm transition-colors placeholder:text-muted-foreground focus:border-brand focus:ring-2 focus:ring-brand/30 dark:bg-background/75"
+                />
+              </div>
+
               {/* Position Filter Chips */}
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 lg:justify-center">
                 <span className="mr-2 text-xs font-semibold text-muted-foreground">Position:</span>
                 {(["ALL", "FWD", "MID", "DEF", "GK"] as const).map((cat) => (
                   <button
@@ -278,7 +339,7 @@ export default function PublicDashboard() {
                 ))}
               </div>
 
-              <div className="text-xs font-medium text-muted-foreground">
+              <div className="shrink-0 text-xs font-medium text-muted-foreground">
                 Showing <strong className="text-foreground">{filteredPlayers.length}</strong> players
               </div>
             </div>
@@ -287,7 +348,11 @@ export default function PublicDashboard() {
               loading={playersQuery.isLoading}
               error={playersQuery.isError}
               empty={filteredPlayers.length === 0}
-              emptyMessage="No players found matching the selected filters."
+              emptyMessage={
+                playerSearch.trim()
+                  ? `No players found matching “${playerSearch.trim()}”.`
+                  : "No players found matching the selected filters."
+              }
             >
               <PlayerCarousel players={filteredPlayers} />
             </SectionState>
@@ -326,11 +391,10 @@ export default function PublicDashboard() {
                       No upcoming fixtures currently scheduled.
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-3">
-                      {upcomingMatches.map((match) => (
-                        <MatchCard key={match.id} match={match} />
-                      ))}
-                    </div>
+                    <MatchList
+                      matches={upcomingMatches}
+                      label="Upcoming fixtures"
+                    />
                   )}
                 </div>
 
@@ -353,11 +417,10 @@ export default function PublicDashboard() {
                       No completed match results found.
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-3">
-                      {completedMatches.map((match) => (
-                        <MatchCard key={match.id} match={match} />
-                      ))}
-                    </div>
+                    <MatchList
+                      matches={completedMatches}
+                      label="Completed match results"
+                    />
                   )}
                 </div>
               </div>
@@ -537,7 +600,7 @@ function DashboardFilters({
   onStatusChange: (value: PublicMatchStatus | "") => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <FilterField label="Select Team">
         <select
           className={selectClassName}
@@ -625,12 +688,16 @@ function DashboardSection({
   children: ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-24">
-      <div className="mb-6 inline-flex max-w-3xl items-start gap-3.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-sm backdrop-blur-md dark:bg-card/60">
+    <section
+      id={id}
+      aria-labelledby={`${id}-heading`}
+      className="scroll-mt-64 lg:scroll-mt-44"
+    >
+      <div className="mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand shadow-sm">
           {icon}
         </span>
-        <div>
+        <div className="max-w-2xl">
           <h2
             id={`${id}-heading`}
             className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
@@ -680,6 +747,68 @@ function ErrorState() {
     <div className="flex items-center justify-center gap-3 rounded-2xl border border-destructive/30 bg-card/80 px-6 py-12 text-sm font-semibold text-destructive shadow-sm backdrop-blur-md dark:bg-card/70">
       <AlertCircle className="size-5" aria-hidden="true" />
       This section could not be loaded. Please check your network connection.
+    </div>
+  );
+}
+
+function MatchList({
+  matches,
+  label,
+}: {
+  matches: PublicMatch[];
+  label: string;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number>();
+  const isScrollable = matches.length > 4;
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !isScrollable) {
+      setMaxHeight(undefined);
+      return;
+    }
+
+    const updateMaxHeight = () => {
+      const fourthCard = list.children.item(3) as HTMLElement | null;
+      setMaxHeight(
+        fourthCard
+          ? Math.ceil(
+              fourthCard.getBoundingClientRect().bottom -
+                list.getBoundingClientRect().top,
+            )
+          : undefined,
+      );
+    };
+    const observer = new ResizeObserver(updateMaxHeight);
+
+    updateMaxHeight();
+    observer.observe(list);
+    Array.from(list.children)
+      .slice(0, 4)
+      .forEach((card) => observer.observe(card));
+
+    return () => observer.disconnect();
+  }, [isScrollable, matches]);
+
+  return (
+    <div
+      ref={listRef}
+      className={`public-dashboard-match-list flex flex-col gap-3 overflow-x-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        isScrollable ? "overflow-y-auto pr-2" : ""
+      }`}
+      style={isScrollable ? { maxHeight } : undefined}
+      role={isScrollable ? "region" : undefined}
+      aria-label={
+        isScrollable
+          ? `${label}: ${matches.length} events. Scroll for more.`
+          : undefined
+      }
+      tabIndex={isScrollable ? 0 : undefined}
+    >
+      {matches.map((match) => (
+        <MatchCard key={match.id} match={match} />
+      ))}
     </div>
   );
 }
