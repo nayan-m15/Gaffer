@@ -3,6 +3,7 @@ import type {
   CreateMatchLogEventInput,
   MatchLogEvent,
 } from "@/features/matches/types";
+import { apiUrl } from "@/lib/api-url";
 
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
 let userScope = localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
@@ -78,12 +79,9 @@ async function database() {
       if (import.meta.env.VITE_POWERSYNC_URL) {
         await db.connect({
           fetchCredentials: async () => {
-            const response = await fetch(
-              import.meta.env.VITE_API_URL
-                ? `${import.meta.env.VITE_API_URL}/sync/token`
-                : "/api/sync/token",
-              { credentials: "include" },
-            );
+            const response = await fetch(apiUrl("/sync/token"), {
+              credentials: "include",
+            });
             if (response.status === 401) return null;
             if (!response.ok) throw new Error("Could not authenticate PowerSync.");
             const credentials = (await response.json()) as {
