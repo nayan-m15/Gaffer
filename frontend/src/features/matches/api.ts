@@ -78,6 +78,13 @@ async function uploadMatchLogEvent(
   });
 }
 
+async function queuedTimelineRow(matchId: string, clientRequestId: string) {
+  const row = (await listQueuedEvents(matchId)).find(
+    (item) => item.id === clientRequestId,
+  );
+  return row ? queuedEventAsTimelineRow(row) : null;
+}
+
 export async function createMatchLogEvent(
   matchId: string,
   input: CreateMatchLogEventInput,
@@ -88,6 +95,15 @@ export async function createMatchLogEvent(
     clientCreatedAt: input.clientCreatedAt ?? new Date().toISOString(),
   };
   await enqueueEvent(matchId, enriched);
+
+  // Once the operation is in SQLite it is safe to release the live logger.
+  // Attempting fetch while the browser already knows it is offline can leave
+  // the mutation (and goal follow-up composer) waiting on the network stack.
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+    if (queued) return queued;
+  }
+
   try {
     const created = await uploadMatchLogEvent(matchId, enriched);
     await completeQueuedEvent(enriched.clientRequestId);
@@ -97,11 +113,9 @@ export async function createMatchLogEvent(
       await rejectQueuedEvent(enriched.clientRequestId, error.message);
       throw error;
     }
-    const row = (await listQueuedEvents(matchId)).find(
-      (item) => item.id === enriched.clientRequestId,
-    );
-    if (!row) throw error;
-    return queuedEventAsTimelineRow(row);
+    const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+    if (!queued) throw error;
+    return queued;
   }
 }
 

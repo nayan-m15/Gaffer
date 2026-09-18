@@ -212,10 +212,6 @@
     letter-spacing: 0;
   }
 
-  .live-match-callout {
-    position: static;
-  }
-
   .live-match-activity { min-height: 20rem; }
 }
 

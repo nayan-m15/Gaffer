@@ -77,7 +77,10 @@ async function database() {
       });
       await db.init();
       if (import.meta.env.VITE_POWERSYNC_URL) {
-        await db.connect({
+        // Local queue access must never wait for the remote sync connection.
+        // PowerSync can remain pending while a device is offline; awaiting it
+        // here would block enqueueEvent and leave the live logger locked.
+        void db.connect({
           fetchCredentials: async () => {
             const response = await fetch(apiUrl("/sync/token"), {
               credentials: "include",
@@ -101,6 +104,8 @@ async function database() {
             const transaction = await syncDatabase.getNextCrudTransaction();
             if (transaction) await transaction.complete();
           },
+        }).catch((error: unknown) => {
+          console.warn("PowerSync connection is unavailable; using local storage.", error);
         });
       }
       return db;

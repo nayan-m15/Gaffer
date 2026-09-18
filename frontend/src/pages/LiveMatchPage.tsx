@@ -750,9 +750,13 @@ export default function LiveMatchPage() {
               : {}),
             ...(detail ? { detail } : {}),
           });
+          const label = eventDisplayLabel({ eventType, detail: detail ?? null });
           setToast({
             id: created.id,
-            label: `${eventDisplayLabel({ eventType, detail: detail ?? null })} logged`,
+            label:
+              created.syncStatus === "queued"
+                ? `${label} saved on this device`
+                : `${label} logged`,
           });
           window.setTimeout(() => setToast(null), 5000);
           if (eventType === "injury") {

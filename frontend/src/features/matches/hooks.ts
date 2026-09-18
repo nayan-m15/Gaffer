@@ -202,13 +202,23 @@ export function useLogMatchEvent(matchId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The mutation function writes to SQLite before attempting HTTP, so it
+    // must run while the browser reports offline. TanStack otherwise pauses
+    // it before createMatchLogEvent can reach the durable local queue.
+    networkMode: "always",
     mutationFn: (input: CreateMatchLogEventInput) =>
       createMatchLogEvent(matchId, input),
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
       const affectsScore = input.eventType === "goal";
-      if (affectsScore) {
-        await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      // A request that was already refetching when connectivity disappeared
+      // may not settle promptly. Do not let cancelling it block the local
+      // optimistic row or the durable SQLite enqueue.
+      if (!offline) {
+        await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
+        if (affectsScore) {
+          await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+        }
       }
 
       const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(
