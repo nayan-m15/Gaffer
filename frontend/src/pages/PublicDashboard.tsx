@@ -39,7 +39,7 @@ import {
 } from "@/services/public-dashboard";
 
 const selectClassName =
-  "h-10 w-full min-w-0 rounded-xl border border-input bg-background/80 px-3 text-sm text-foreground outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50";
+  "h-10 w-full min-w-0 rounded-xl border border-input bg-background/85 px-3 text-sm text-foreground shadow-sm outline-none backdrop-blur-sm transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50 dark:bg-background/75";
 
 type PositionCategory = "ALL" | "FWD" | "MID" | "DEF" | "GK";
 
@@ -183,23 +183,24 @@ export default function PublicDashboard() {
   }, [statisticsQuery.data, matchesQuery.data]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground selection:bg-brand/20 selection:text-brand">
+    <div className="public-dashboard-page relative isolate flex min-h-screen flex-col overflow-x-clip text-foreground selection:bg-brand/20 selection:text-brand">
+      <div className="public-dashboard-backdrop" aria-hidden="true" />
       <Navbar />
 
-      <main className="flex-1 pb-20">
+      <main className="relative z-10 flex-1 pb-16 sm:pb-20">
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
-        <section className="relative overflow-hidden border-b border-border bg-gradient-to-b from-brand/5 via-background to-background py-12 sm:py-16">
+        <section className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
           <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,var(--brand)_0%,transparent_50%)] opacity-10"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--card)_82%,transparent)_0%,color-mix(in_srgb,var(--card)_45%,transparent)_38%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--background)_88%,transparent)_0%,color-mix(in_srgb,var(--background)_52%,transparent)_40%,transparent_74%)]"
             aria-hidden="true"
           />
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h1 className="mt-4 font-display text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+                <h1 className="font-display text-4xl font-extrabold tracking-tight drop-shadow-sm sm:text-5xl lg:text-6xl">
                   Gaffer Match Center
                 </h1>
-                <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+                <p className="mt-3 max-w-2xl text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
                   Follow live match fixtures, player roster statistics, and league standings across all {brand.name} teams.
                 </p>
               </div>
@@ -207,7 +208,7 @@ export default function PublicDashboard() {
             </div>
 
             {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
-            <div className="mt-10 rounded-2xl border border-border/80 bg-card/95 p-4 shadow-lg backdrop-blur-md">
+            <div className="mt-8 rounded-2xl border border-border/80 bg-card/80 p-4 shadow-lg backdrop-blur-xl sm:mt-10 dark:bg-card/70">
               <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   <FilterIcon className="size-4 text-brand" />
@@ -249,7 +250,7 @@ export default function PublicDashboard() {
         </section>
 
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
-        <div className="mx-auto flex max-w-7xl flex-col gap-16 px-4 pt-12 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-4 sm:gap-14 sm:px-6 sm:pt-6 lg:gap-16 lg:px-8">
           
           {/* SECTION 1: Player Showcase Carousel */}
           <DashboardSection
@@ -307,7 +308,7 @@ export default function PublicDashboard() {
             >
               <div className="grid gap-8 lg:grid-cols-2">
                 {/* Left Column: Scheduled / Upcoming Fixtures */}
-                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/60 p-5 shadow-sm backdrop-blur-sm">
+                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/75 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/65">
                   <div className="flex items-center justify-between border-b border-border/60 pb-3">
                     <div className="flex items-center gap-2 font-bold text-foreground">
                       <span className="flex size-7 items-center justify-center rounded-lg bg-brand/10 text-brand">
@@ -334,7 +335,7 @@ export default function PublicDashboard() {
                 </div>
 
                 {/* Right Column: Completed Match Results */}
-                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/60 p-5 shadow-sm backdrop-blur-sm">
+                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/75 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/65">
                   <div className="flex items-center justify-between border-b border-border/60 pb-3">
                     <div className="flex items-center gap-2 font-bold text-foreground">
                       <span className="flex size-7 items-center justify-center rounded-lg bg-brand/10 text-brand">
@@ -375,7 +376,7 @@ export default function PublicDashboard() {
             ) : (
               <div className="grid gap-8 lg:grid-cols-12 items-start">
                 {/* Left (65%): Standings Table */}
-                <div className="lg:col-span-8 rounded-2xl border border-border/80 bg-card/80 p-5 shadow-sm">
+                <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-md sm:p-5 lg:col-span-8 dark:bg-card/70">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-lg font-bold">Competition Table</h3>
                     <span className="text-xs text-muted-foreground">Live Season Rankings</span>
@@ -391,7 +392,7 @@ export default function PublicDashboard() {
 
                 {/* Right (35%): Performance Telemetry Cards */}
                 <div className="lg:col-span-4 flex flex-col gap-4">
-                  <div className="rounded-2xl border border-border/80 bg-card/80 p-5 shadow-sm">
+                  <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/70">
                     <h3 className="mb-4 text-base font-bold text-foreground flex items-center gap-2">
                       <BarChart3 className="size-4 text-brand" />
                       Season Overview
@@ -425,7 +426,7 @@ export default function PublicDashboard() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-xs text-muted-foreground">
+                  <div className="rounded-2xl border border-brand/25 bg-card/65 p-4 text-xs text-muted-foreground shadow-sm backdrop-blur-md dark:bg-card/55">
                     <strong className="block font-bold text-brand">Portal Data Notice:</strong>
                     Statistics update automatically following completed match report validation by team head coaches.
                   </div>
@@ -494,7 +495,7 @@ function MetricCard({
   subtext: string;
 }) {
   return (
-    <div className="flex flex-col rounded-xl border border-border/60 bg-card p-3.5 shadow-sm transition-all hover:border-brand/30">
+    <div className="flex flex-col rounded-xl border border-border/60 bg-card/85 p-3.5 shadow-sm backdrop-blur-sm transition-all hover:border-brand/30 dark:bg-card/75">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-muted-foreground">{label}</span>
         {icon}
@@ -625,7 +626,7 @@ function DashboardSection({
 }) {
   return (
     <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-24">
-      <div className="mb-6 flex items-start gap-3.5">
+      <div className="mb-6 inline-flex max-w-3xl items-start gap-3.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-sm backdrop-blur-md dark:bg-card/60">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand shadow-sm">
           {icon}
         </span>
@@ -659,7 +660,7 @@ function SectionState({
 }) {
   if (loading)
     return (
-      <div className="flex items-center justify-center gap-3 rounded-2xl border border-border bg-card/80 py-16 text-sm font-semibold text-muted-foreground shadow-sm">
+      <div className="flex items-center justify-center gap-3 rounded-2xl border border-border bg-card/80 py-16 text-sm font-semibold text-muted-foreground shadow-sm backdrop-blur-md dark:bg-card/70">
         <span className="size-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
         Fetching telemetry data…
       </div>
@@ -667,7 +668,7 @@ function SectionState({
   if (error) return <ErrorState />;
   if (empty)
     return (
-      <div className="rounded-2xl border border-dashed border-border/80 bg-card/50 px-6 py-14 text-center text-sm font-medium text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border/80 bg-card/70 px-6 py-14 text-center text-sm font-medium text-muted-foreground backdrop-blur-md dark:bg-card/60">
         {emptyMessage}
       </div>
     );
@@ -676,7 +677,7 @@ function SectionState({
 
 function ErrorState() {
   return (
-    <div className="flex items-center justify-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-6 py-12 text-sm font-semibold text-destructive">
+    <div className="flex items-center justify-center gap-3 rounded-2xl border border-destructive/30 bg-card/80 px-6 py-12 text-sm font-semibold text-destructive shadow-sm backdrop-blur-md dark:bg-card/70">
       <AlertCircle className="size-5" aria-hidden="true" />
       This section could not be loaded. Please check your network connection.
     </div>
@@ -692,7 +693,7 @@ function MatchCard({ match }: { match: PublicMatch }) {
   const isCompleted = match.status === "completed";
 
   return (
-    <article className="group rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-all hover:border-brand/40 hover:shadow-md">
+    <article className="group rounded-2xl border border-border/70 bg-card/90 p-4 shadow-sm backdrop-blur-sm transition-all hover:border-brand/40 hover:shadow-md dark:bg-card/80">
       <div className="flex items-center justify-between gap-3">
         <span className="rounded-full bg-muted/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           {match.competition?.name ?? "Fixture"}
