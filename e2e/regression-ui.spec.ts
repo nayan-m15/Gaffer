@@ -97,10 +97,12 @@ test('account switching clears private dashboard cache', async ({ page }) => {
   );
 
   await page.goto('/dashboard');
-  await expect(page.getByText('Alpha FC')).toBeVisible();
   await expect(
-    page.getByRole('region', { name: 'Active athletes count' }),
-  ).toContainText('11');
+    page.getByText('Welcome back, Coach A · Alpha FC', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /11 Active Athletes/ }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Sign Out' }).click();
   await page.goto('/login');
@@ -109,10 +111,63 @@ test('account switching clears private dashboard cache', async ({ page }) => {
   await page.getByRole('button', { name: /sign in to dugout/i }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText('Beta FC')).toBeVisible();
   await expect(
-    page.getByRole('region', { name: 'Active athletes count' }),
-  ).toContainText('2');
+    page.getByText('Welcome back, Coach B · Beta FC', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /2 Active Athletes/ }),
+  ).toBeVisible();
+});
+
+test('authenticated sidebar navigates on mobile and preserves history', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.route('**/auth/session', (route) =>
+    json(route, session('Mobile Coach', 'Pocket FC', 'mobile-coach')),
+  );
+  await page.route('**/api/dashboard', (route) =>
+    json(route, {
+      activeAthletesCount: 8,
+      totalEventsCount: 0,
+      upcomingEvents: [],
+    }),
+  );
+  await page.route('**/api/events**', (route) => json(route, []));
+
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Open navigation menu' }).click();
+  const mobileSidebar = page.locator('aside:visible');
+  await expect(mobileSidebar.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await mobileSidebar.getByRole('link', { name: 'Events' }).click();
+
+  await expect(page).toHaveURL(/\/events$/);
+  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+});
+
+test('desktop sidebar collapse persists and theme toggle remains usable', async ({ page }) => {
+  await page.route('**/auth/session', (route) =>
+    json(route, session('Desktop Coach', 'Wide FC', 'desktop-coach')),
+  );
+  await page.route('**/api/dashboard', (route) =>
+    json(route, {
+      activeAthletesCount: 11,
+      totalEventsCount: 2,
+      upcomingEvents: [],
+    }),
+  );
+
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Collapse navigation' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('gaffer-sidebar-expanded'))).toBe('false');
+
+  await page.getByRole('button', { name: /Switch to (light|dark) mode/ }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sport-coaching-theme'))).not.toBeNull();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
 });
 
 test('live match clock resumes from the persisted value', async ({ page }) => {
@@ -163,7 +218,9 @@ test('post-match correction updates the visible timeline', async ({ page }) => {
   );
 
   await page.goto(`/matches/${MATCH_ID}/report`);
-  await page.getByRole('button', { name: 'Timeline' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Match Events' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /10' Goal/i }).click();
   await page.getByLabel('Minute').fill('12');
   await page.getByLabel('Event type').selectOption('yellow_card');

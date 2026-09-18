@@ -1,4 +1,8 @@
-import { startMatchSchema } from './events.schemas';
+import {
+  createEventSchema,
+  startMatchSchema,
+  updateEventSchema,
+} from './events.schemas';
 
 const starterIds = Array.from(
   { length: 11 },
@@ -51,6 +55,52 @@ describe('startMatchSchema opponent positions', () => {
           opponentSquad: [{ shirtNumber: 9, position: 'XX' }],
         }),
       ),
+    ).toThrow();
+  });
+});
+
+describe('event venue coordinates', () => {
+  const event = {
+    title: 'Evening training',
+    type: 'training',
+    scheduledAt: '2026-09-20T18:00:00+02:00',
+    location: 'Main pitch',
+  };
+
+  it('accepts a confirmed location with paired coordinates', () => {
+    expect(
+      createEventSchema.parse({
+        ...event,
+        venueAddress: '1 Sport Street',
+        weatherLocation: 'Stellenbosch, Western Cape, South Africa',
+        weatherLatitude: -33.9321,
+        weatherLongitude: 18.8602,
+        weatherTimezone: 'Africa/Johannesburg',
+      }),
+    ).toMatchObject({
+      venueAddress: '1 Sport Street',
+      weatherLatitude: -33.9321,
+      weatherLongitude: 18.8602,
+    });
+  });
+
+  it('rejects an invalid venue timezone', () => {
+    expect(() =>
+      createEventSchema.parse({
+        ...event,
+        weatherLatitude: -33.9321,
+        weatherLongitude: 18.8602,
+        weatherTimezone: 'South Africa time',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects an unpaired coordinate on create or update', () => {
+    expect(() =>
+      createEventSchema.parse({ ...event, weatherLatitude: -33.9321 }),
+    ).toThrow();
+    expect(() =>
+      updateEventSchema.parse({ weatherLongitude: 18.8602 }),
     ).toThrow();
   });
 });

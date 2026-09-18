@@ -1,21 +1,26 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { BentoGrid } from "@/components/ui/bento-grid";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { HoverEffect } from "@/components/ui/card-hover-effect";
+import { AppCard as Card } from "@/components/app/AppCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
-import { useState } from "react";
+import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
+import { EventWeatherCard } from "@/features/events/EventWeatherCard";
+import { EventDetailDialog } from "@/features/events/EventDetailDialog";
+import { useEvent, useNow } from "@/features/events/hooks";
 import {
   Activity,
   AlertCircle,
   Calendar,
-  CalendarCheck,
   Mail,
-  MapPin,
   Plus,
   RefreshCw,
   TrendingUp,
@@ -35,6 +40,7 @@ import {
 
 interface LiveMatchData {
   id: string;
+  eventTitle: string;
   homeTeam: string;
   awayTeam: string;
   homeScore: number;
@@ -67,6 +73,11 @@ interface UpcomingEvent {
   type: "match" | "training" | "meeting";
   scheduledAt: string;
   location: string;
+  venueAddress: string | null;
+  weatherLocation: string | null;
+  weatherLatitude: number | null;
+  weatherLongitude: number | null;
+  weatherTimezone: string | null;
 }
 
 interface MatchStat {
@@ -110,45 +121,23 @@ async function fetchDashboardData(): Promise<DashboardData> {
  *  DATE / TIME FORMATTING HELPERS
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const DATE_FMT = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
-
-const TIME_FMT = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function formatEventDate(iso: string): string {
-  return DATE_FMT.format(new Date(iso));
-}
-
-function formatEventTime(iso: string): string {
-  return TIME_FMT.format(new Date(iso));
+function formatEventWhen(iso: string, timeZone: string | null): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(iso));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SHARED UI PRIMITIVES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function Card({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLElement>) {
+function DashboardFrame({ children }: { children: ReactNode }) {
   return (
-    <section
-      className={cn(
-        "rounded-xl border border-border bg-card p-5",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </section>
+    <div className="relative min-h-full">{children}</div>
   );
 }
 
@@ -259,42 +248,10 @@ function DashboardHeader({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  STAT CARDS — Active Athletes & Total Events  (Sprint 1)
+ *  ACTIVE MATCH NOTIFICATION
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function StatCard({
-  label,
-  value,
-  icon,
-  ariaLabel,
-}: {
-  label: string;
-  value: number;
-  icon: ReactNode;
-  ariaLabel: string;
-}) {
-  return (
-    <Card aria-label={ariaLabel}>
-      <div className="flex items-center gap-4">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          {icon}
-        </div>
-        <div>
-          <p className="text-3xl font-bold tabular-nums text-foreground">
-            {value}
-          </p>
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  LIVE MATCH CARD  (Sprint 2 — deferred)
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function LiveMatchCard({
+function LiveMatchPanel({
   match,
   onOpenLogger,
 }: {
@@ -302,73 +259,83 @@ function LiveMatchCard({
   onOpenLogger: () => void;
 }) {
   return (
-    <Card
+    <div
       className={cn(
-        "relative overflow-hidden transition-colors",
-        match && "border-primary/30",
+        "relative rounded-2xl",
+        match && "shadow-[0_0_50px_-24px_rgba(16,185,129,0.9)]",
       )}
-      aria-label="Live match"
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left — badge and status */}
-        <div className="flex items-center gap-3">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-              match
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground",
-            )}
-          >
-            {match ? (
-              <>
+      {match && (
+        <GlowingEffect
+          variant="brand"
+          glow
+          disabled={false}
+          spread={32}
+          proximity={96}
+          borderWidth={2}
+        />
+      )}
+      <Card
+        className={cn(
+          "relative overflow-hidden transition-colors",
+          match && "border-primary/40 bg-primary/[0.06]",
+        )}
+        aria-label="Live match status"
+        aria-live="polite"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                match
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {match && (
                 <span
                   className="size-1.5 animate-pulse rounded-full bg-current"
                   aria-hidden="true"
                 />
-                Live Match Logger
-              </>
-            ) : (
-              "No Active Match"
+              )}
+              {match ? "Live Now" : "No Active Match"}
+            </span>
+            {match && (
+              <span className="text-xs text-muted-foreground">
+                {match.elapsedMinutes}&apos;
+              </span>
             )}
-          </span>
-          {match && (
-            <span className="text-xs text-muted-foreground">
-              {match.elapsedMinutes}&apos;
-            </span>
-          )}
-        </div>
-
-        {/* Centre — score */}
-        {match ? (
-          <div className="flex items-center justify-center gap-4 sm:gap-6">
-            <span className="text-lg font-bold text-foreground sm:text-xl">
-              {match.homeTeam}
-            </span>
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
-              {match.homeScore}&thinsp;\u2013&thinsp;{match.awayScore}
-            </span>
-            <span className="text-lg font-bold text-foreground sm:text-xl">
-              {match.awayTeam}
-            </span>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground sm:mx-auto">
-            No match currently in progress
-          </p>
-        )}
-
-        {/* Right — action */}
-        <Button
-          variant={match ? "default" : "outline"}
-          size="sm"
-          onClick={onOpenLogger}
-        >
-          <Activity className="size-4" aria-hidden="true" />
-          {match ? "Open Live Logger" : "Live Logger"}
-        </Button>
-      </div>
-    </Card>
+          {match ? (
+            <div className="space-y-2">
+              <p className="truncate text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {match.eventTitle}
+              </p>
+              <div className="flex items-center justify-between gap-4">
+                <p className="min-w-0 truncate text-sm font-semibold text-foreground">
+                  {match.homeTeam} vs {match.awayTeam}
+                </p>
+                <span className="shrink-0 font-mono text-3xl font-bold tabular-nums text-foreground">
+                  {match.homeScore}&thinsp;{"–"}&thinsp;{match.awayScore}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-semibold text-foreground">Live Logger</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Start or continue match tracking.
+              </p>
+            </div>
+          )}
+          <Button size="sm" className="w-full" onClick={onOpenLogger}>
+            <Activity className="size-4" aria-hidden="true" />
+            {match ? "Open Live Logger" : "Go to Live Logger"}
+          </Button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -495,7 +462,7 @@ function RecentFormCard({
   const [selectedId, setSelectedId] = useState<string | null>(
     results[0]?.id ?? null,
   );
-  const recentResults = results.slice(0, 5);
+  const recentResults = results.slice(0, 10);
   const selected =
     recentResults.find((result) => result.id === selectedId) ?? recentResults[0];
 
@@ -508,7 +475,7 @@ function RecentFormCard({
       </SectionTitle>
       {results.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2" aria-label="Recent results">
+          <div className="flex flex-wrap items-center gap-2" aria-label="Recent results">
             {recentResults.map((result) => (
               <ResultBadge
                 key={result.id}
@@ -546,51 +513,42 @@ function RecentFormCard({
  *  UPCOMING EVENTS  (Sprint 1 — connected to real backend)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const EVENT_TYPE_STYLES: Record<
-  UpcomingEvent["type"],
-  { bg: string; text: string; label: string }
-> = {
-  match: { bg: "bg-primary/10", text: "text-primary", label: "Match" },
-  training: { bg: "bg-muted", text: "text-foreground", label: "Training" },
-  meeting: {
-    bg: "bg-muted-foreground/10",
-    text: "text-muted-foreground",
-    label: "Meeting",
-  },
-};
-
-function EventItem({ event }: { event: UpcomingEvent }) {
-  const typeStyle = EVENT_TYPE_STYLES[event.type];
+function EventItem({ event, onOpen }: { event: UpcomingEvent; onOpen: () => void }) {
+  const destination = [event.location, event.venueAddress]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <li className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0 last:pb-0">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {event.title}
+    <li
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onOpen();
+      }}
+      className="cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary last:border-b-0 last:pb-0"
+    >
+      <div className="min-w-0 px-1">
+        <p className="truncate text-sm text-foreground">
+          <span className="font-semibold">{event.title}</span>
+          <span className="text-muted-foreground"> · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}</span>
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              typeStyle.bg,
-              typeStyle.text,
-            )}
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+          <span>{event.location}</span>
+          <span aria-hidden="true">·</span>
+          <a
+            className="font-medium text-primary hover:underline"
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(clickEvent) => clickEvent.stopPropagation()}
           >
-            {typeStyle.label}
-          </span>
-          <span className="flex items-center gap-1">
-            <MapPin className="size-3" aria-hidden="true" />
-            {event.location}
-          </span>
+            Directions
+          </a>
         </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-xs font-medium text-foreground">
-          {formatEventDate(event.scheduledAt)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatEventTime(event.scheduledAt)}
-        </p>
+        <div className="mt-1.5">
+          <EventWeatherCard event={event} compact />
+        </div>
       </div>
     </li>
   );
@@ -598,8 +556,10 @@ function EventItem({ event }: { event: UpcomingEvent }) {
 
 function UpcomingEventsCard({
   events: upcomingEvents,
+  onOpenEvent,
 }: {
   events: UpcomingEvent[];
+  onOpenEvent: (eventId: string) => void;
 }) {
   return (
     <Card aria-label="Upcoming events" className="min-h-[11rem]">
@@ -611,7 +571,7 @@ function UpcomingEventsCard({
       {upcomingEvents.length > 0 ? (
         <ul className="-my-1">
           {upcomingEvents.map((event) => (
-            <EventItem key={event.id} event={event} />
+            <EventItem key={event.id} event={event} onOpen={() => onOpenEvent(event.id)} />
           ))}
         </ul>
       ) : (
@@ -676,6 +636,9 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>();
+  const selectedEventQuery = useEvent(selectedEventId);
+  const now = useNow();
 
   // Read per render instead of snapshotting on mount so the invite resumer's
   // post-accept cleanup is reflected without a remount. localStorage reads
@@ -709,7 +672,7 @@ export default function DashboardPage() {
   /* ── Error state ──────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <>
+      <DashboardFrame>
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
@@ -734,14 +697,14 @@ export default function DashboardPage() {
             Try again
           </Button>
         </div>
-      </>
+      </DashboardFrame>
     );
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <>
+      <DashboardFrame>
         <DashboardHeader
           userName={user?.name ?? null}
           teamName={team?.name ?? null}
@@ -749,18 +712,21 @@ export default function DashboardPage() {
           pendingInvite={hasPendingInvite}
           onAddTeam={() => setAddTeamOpen(true)}
         />
-        <div className="space-y-6 p-6 sm:p-8">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <CardSkeleton lines={1} />
-            <CardSkeleton lines={1} />
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <CardSkeleton key={index} lines={2} />
+            ))}
           </div>
-          <CardSkeleton lines={2} />
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="lg:col-span-3">
               <CardSkeleton lines={3} />
             </div>
             <div className="lg:col-span-2">
-              <CardSkeleton lines={3} />
+              <div className="space-y-5">
+                <CardSkeleton lines={3} />
+                <CardSkeleton lines={2} />
+              </div>
             </div>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -768,7 +734,7 @@ export default function DashboardPage() {
             <CardSkeleton lines={4} />
           </div>
         </div>
-      </>
+      </DashboardFrame>
     );
   }
 
@@ -788,7 +754,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <>
+    <DashboardFrame>
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
@@ -798,7 +764,7 @@ export default function DashboardPage() {
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card aria-label="Pending team invitation" className="border-primary/30">
@@ -837,48 +803,74 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* ── Sprint 2: Live Match (deferred — shows empty state) ─────────── */}
-        <LiveMatchCard
-          match={liveMatch ?? null}
-          onOpenLogger={() => navigate("/events")}
-        />
+        <EventRemindersBanner events={upcomingEvents} />
 
-        {/* ── Sprint 1: Stat Cards ────────────────────────────────────────── */}
-        <div className="grid gap-6 sm:grid-cols-2">
-          <StatCard
-            label="Active Athletes"
-            value={activeAthletesCount}
-            icon={<Users className="size-6" aria-hidden="true" />}
-            ariaLabel="Active athletes count"
-          />
-          <StatCard
-            label="Total Events"
-            value={totalEventsCount}
-            icon={<CalendarCheck className="size-6" aria-hidden="true" />}
-            ariaLabel="Total events count"
-          />
-        </div>
+        {team && (
+          <section aria-labelledby="quick-actions-heading">
+            <SectionTitle icon={<Activity className="size-4 text-muted-foreground" />}>
+              <span id="quick-actions-heading">Quick Actions</span>
+            </SectionTitle>
+            <HoverEffect
+              items={[
+                {
+                  title: "Events",
+                  description: "Plan training, matches, and meetings.",
+                  to: "/events",
+                  icon: <Calendar className="size-5" />,
+                  stat: { label: "Total Events", value: totalEventsCount },
+                },
+                {
+                  title: "Squad",
+                  description: "Manage athletes and availability.",
+                  to: "/athletes",
+                  icon: <Users className="size-5" />,
+                  stat: { label: "Active Athletes", value: activeAthletesCount },
+                },
+                { title: "Live Logger", description: "Start or continue match tracking.", to: "/live-logger", icon: <Activity className="size-5" /> },
+                { title: "Statistics", description: "Review form and performance trends.", to: "/statistics", icon: <BarChart3 className="size-5" /> },
+              ]}
+            />
+          </section>
+        )}
 
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-3">
-            <UpcomingEventsCard events={upcomingEvents} />
+        <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-5">
+          <div className="md:col-span-3">
+            <UpcomingEventsCard events={upcomingEvents} onOpenEvent={setSelectedEventId} />
           </div>
-          <div className="lg:col-span-2">
+          <div className="space-y-5 md:col-span-2">
             <RecentFormCard
               results={recentForm ?? []}
               teamName={team?.name ?? "Our Team"}
             />
+            <LiveMatchPanel
+              match={liveMatch ?? null}
+              onOpenLogger={() =>
+                navigate(
+                  liveMatch ? `/matches/${liveMatch.id}/live` : "/live-logger",
+                )
+              }
+            />
           </div>
-        </div>
+        </BentoGrid>
 
         {/* ── Sprint 2: Season Summary + Recent Stats (deferred) ──────────── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-2">
           <SeasonSummaryCard summary={seasonSummary ?? null} />
           <RecentStatsCard stats={recentStats ?? []} />
-        </div>
+        </BentoGrid>
       </div>
+      <EventDetailDialog
+        open={Boolean(selectedEventId)}
+        event={selectedEventQuery.data ?? null}
+        now={now}
+        canManage={team?.role === "coach"}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEventId(undefined);
+        }}
+        onEdit={() => navigate("/events")}
+      />
       <AddTeamModal open={addTeamOpen} onOpenChange={setAddTeamOpen} />
-    </>
+    </DashboardFrame>
   );
 }

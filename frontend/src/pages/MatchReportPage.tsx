@@ -16,6 +16,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Timeline } from "@/components/ui/timeline";
+import { StatefulButton } from "@/components/ui/stateful-button";
 import { useGamePlan } from "@/features/team-tactics/api";
 import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
@@ -637,30 +639,14 @@ export default function MatchReportPage() {
                   </div>
                 ) : (
                   <div className="max-h-[32rem] overflow-y-auto pr-1 xl:max-h-[38rem]">
-                    <ul className="relative">
-                      <span
-                        aria-hidden="true"
-                        className="absolute bottom-3 left-[9px] top-3 w-px bg-[#1c2b36]"
-                      />
-                      {timeline
+                    <Timeline
+                      data={timeline
                         .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
-                        .map((event) => (
-                          <li
-                            key={event.optimisticKey ?? event.id}
-                            className={cn(
-                              "relative flex gap-3 pb-3.5 last:pb-0",
-                              event.pending && "opacity-55",
-                            )}
-                          >
-                            <span
-                              className="relative z-10 mt-3 size-[19px] shrink-0 rounded-full border-2 bg-[#070d12]"
-                              style={{ borderColor: EVENT_COLOR[event.eventType] }}
-                            >
-                              <span
-                                className="absolute inset-[3px] rounded-full"
-                                style={{ background: EVENT_COLOR[event.eventType] }}
-                              />
-                            </span>
+                        .map((event) => ({
+                          id: event.optimisticKey ?? event.id,
+                          markerColor: EVENT_COLOR[event.eventType],
+                          pending: event.pending,
+                          content: (
                             <div className="flex min-w-0 flex-1 items-stretch gap-1.5">
                               <button
                                 type="button"
@@ -723,9 +709,9 @@ export default function MatchReportPage() {
                                 <Trash2 className="size-3.5" />
                               </button>
                             </div>
-                          </li>
-                        ))}
-                    </ul>
+                          ),
+                        }))}
+                    />
                   </div>
                 )}
               </section>
@@ -1700,13 +1686,15 @@ function EventComposerOverlay({
           >
             CANCEL
           </button>
-          <button
+          <StatefulButton
             type="submit"
-            className="w-full rounded-xl bg-[#00d99a] py-2.5 font-oswald text-sm tracking-widest text-[#07110f] disabled:opacity-40"
+            className="h-auto w-full rounded-xl bg-[#00d99a] py-2.5 font-oswald text-sm tracking-widest text-[#07110f] hover:bg-[#00d99a]/90 disabled:opacity-40"
             disabled={pending}
+            status={pending ? "loading" : "idle"}
+            loadingText={pendingLabel}
           >
-            {pending ? pendingLabel : submitLabel}
-          </button>
+            {submitLabel}
+          </StatefulButton>
         </div>
       </form>
     </Overlay>

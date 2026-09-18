@@ -1,11 +1,9 @@
 import { createAuthClient } from "better-auth/react";
+import { apiUrl } from "@/lib/api-url";
 
 const getBaseURL = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return `${import.meta.env.VITE_API_URL}/auth`;
-  }
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/auth`;
+    return new URL(apiUrl("/auth"), window.location.origin).toString();
   }
   return "http://localhost:3000/auth";
 };
@@ -13,4 +11,4 @@ const getBaseURL = () => {
 export const authClient = createAuthClient({
   baseURL: getBaseURL(),
 });
-
+

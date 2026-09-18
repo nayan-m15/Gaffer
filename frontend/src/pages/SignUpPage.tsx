@@ -128,6 +128,14 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = async () => {
+    if (!termsAccepted) {
+      setErrors((prev) => ({
+        ...prev,
+        terms: "You must agree to the terms to continue.",
+      }));
+      return;
+    }
+
     setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
@@ -307,7 +315,16 @@ export default function SignUpPage() {
                   id={`${baseId}-terms`}
                   type="checkbox"
                   checked={termsAccepted}
-                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  onChange={(e) => {
+                    setTermsAccepted(e.target.checked);
+                    if (e.target.checked) {
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.terms;
+                        return next;
+                      });
+                    }
+                  }}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-card accent-primary focus:ring-2 focus:ring-ring focus:ring-offset-0"
                   aria-invalid={!!errors.terms}
                   aria-describedby={errors.terms ? termsErrorId : undefined}
@@ -317,13 +334,13 @@ export default function SignUpPage() {
                   className="cursor-pointer text-sm leading-relaxed text-muted-foreground"
                 >
                   I agree to the{" "}
-                  <span className="text-primary hover:underline">
+                  <a href="/terms-of-service.html" className="text-primary hover:underline">
                     Terms of Service
-                  </span>{" "}
+                  </a>{" "}
                   and{" "}
-                  <span className="text-primary hover:underline">
+                  <a href="/privacy-policy.html" className="text-primary hover:underline">
                     Privacy Policy
-                  </span>
+                  </a>
                 </label>
               </div>
               {errors.terms && (

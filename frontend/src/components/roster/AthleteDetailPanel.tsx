@@ -1,6 +1,9 @@
-import { Archive, Pencil, RotateCcw, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Archive, ArrowLeft, BarChart3, Pencil, RotateCcw, UserPlus } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
 import type { Athlete, RecentAppearance } from "@/components/roster/data";
+import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
+import { useAthleteStatistics } from "@/features/statistics/hooks";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +23,8 @@ interface AthleteDetailPanelProps {
  *
  * Displays profile summary, quick info cards, season performance and recent
  * appearances using mock data only.  Active athletes can be edited or archived;
- * archived athletes can be restored.
+ * archived athletes can be restored. "View Statistics" swaps this panel to the
+ * shared AthleteStatsPanel (same query as the Statistics page).
  */
 export function AthleteDetailPanel({
   athlete,
@@ -30,10 +34,37 @@ export function AthleteDetailPanel({
   onInviteClaim,
   readOnly = false,
 }: AthleteDetailPanelProps) {
+  const [showingStats, setShowingStats] = useState(false);
+  const statsQuery = useAthleteStatistics(showingStats ? athlete.id : null);
+
+  useEffect(() => {
+    setShowingStats(false);
+  }, [athlete.id]);
+
   const showClaimInvite =
     !athlete.isArchived &&
     athlete.claimStatus === "Unclaimed" &&
     Boolean(onInviteClaim);
+
+  if (showingStats) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowingStats(false)}
+          className="w-fit gap-1.5"
+        >
+          <ArrowLeft className="size-4" />
+          Back to Profile
+        </Button>
+        <div className="min-h-0 flex-1">
+          <AthleteStatsPanel athleteId={athlete.id} query={statsQuery} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-6">
@@ -129,6 +160,16 @@ export function AthleteDetailPanel({
             )}
           </div>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowingStats(true)}
+          className="mt-4 gap-1.5"
+        >
+          <BarChart3 className="size-4" />
+          View Statistics
+        </Button>
       </div>
 
       {/* Quick info cards */}

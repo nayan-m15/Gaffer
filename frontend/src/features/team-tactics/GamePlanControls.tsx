@@ -5,9 +5,13 @@
  * section passing its board-only buttons in as `children`.
  */
 
-import type { ReactNode } from "react";
-import { Check, Copy, Loader2, Save, Trash2 } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Copy, Download, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
+import { MultiStepLoader } from "@/components/ui/multi-step-loader";
+import { useAuth } from "@/hooks/useAuth";
+import { downloadGamePlanPdf } from "./exportGamePlanPdf";
 import { GamePlanSelector } from "./GamePlanSelector";
 import type { GamePlanEditor } from "./useGamePlanEditor";
 
@@ -35,14 +39,58 @@ export function GamePlanControls({
     isPlansLoading,
     saving,
     justSaved,
+    saveError,
     lineup,
+    content,
+    athletes,
     save,
     setSaveDialogOpen,
     setDeleteDialogOpen,
   } = editor;
 
+  const { team } = useAuth();
+  const [exporting, setExporting] = useState(false);
+
+  const athleteMap = useMemo(
+    () => new Map(athletes.map((athlete) => [athlete.id, athlete])),
+    [athletes],
+  );
+  const getAthlete = (athleteId: string | null) =>
+    athleteId ? (athleteMap.get(athleteId) ?? null) : null;
+
+  const handleDownload = () => {
+    if (!lineup.formation || exporting) return;
+    setExporting(true);
+    window.setTimeout(() => {
+      try {
+        downloadGamePlanPdf({
+          planName: selectedPlan?.name ?? "Untitled game plan",
+          teamName: team?.name ?? null,
+          teamColor: team?.primaryColor ?? null,
+          formation: lineup.formation,
+          assignments: lineup.assignments,
+          substituteIds: lineup.substituteIds,
+          tactics: content,
+          getAthlete,
+        });
+      } finally {
+        window.setTimeout(() => setExporting(false), 650);
+      }
+    }, 100);
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <>
+      <MultiStepLoader
+        loading={exporting}
+        loadingStates={[
+          { text: "Preparing game plan" },
+          { text: "Rendering formation" },
+          { text: "Generating PDF" },
+        ]}
+        duration={180}
+      />
+      <div className="flex flex-wrap items-center gap-2">
       <GamePlanSelector
         gamePlans={plans}
         selectedId={selectedId}
@@ -51,6 +99,17 @@ export function GamePlanControls({
       />
 
       {children}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleDownload}
+        disabled={!lineup.formation || exporting}
+        className="gap-1.5"
+      >
+        <Download className="size-3.5" />
+        Download PDF
+      </Button>
 
       {!readOnly && selectedPlan && (
         <Button
@@ -78,29 +137,21 @@ export function GamePlanControls({
       )}
 
       {!readOnly && (
-        <Button
-          variant="default"
-          size="sm"
+        <StatefulButton
+          type="button"
           className="gap-1.5"
           onClick={save}
           disabled={saving || lineup.hasInjuredPitchPlayers}
+          status={saving ? "loading" : justSaved ? "success" : saveError ? "error" : "idle"}
+          loadingText="Saving..."
+          successText="Saved"
+          errorText="Try again"
         >
-          {saving ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : justSaved ? (
-            <Check className="size-3.5" />
-          ) : (
-            <Save className="size-3.5" />
-          )}
-          {saving
-            ? "Saving..."
-            : justSaved
-              ? "Saved"
-              : selectedPlan
-                ? "Save"
-                : "Save Game Plan"}
-        </Button>
+          <Save className="size-3.5" />
+          {selectedPlan ? "Save" : "Save Game Plan"}
+        </StatefulButton>
       )}
-    </div>
+      </div>
+    </>
   );
 }

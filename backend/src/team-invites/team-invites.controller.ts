@@ -47,6 +47,14 @@ export class TeamInvitesController {
     return this.teamInvitesService.listInvites(team.id);
   }
 
+  @Get('assistants')
+  @UseGuards(AuthGuard)
+  async listAssistants(@CurrentUser() user: SessionUser) {
+    const team = await this.teamsService.requireCoachTeam(user.id);
+
+    return this.teamInvitesService.listAssistants(team.id);
+  }
+
   @Delete(':id')
   @UseGuards(AuthGuard)
   async revoke(

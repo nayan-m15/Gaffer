@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Archive, Pencil, RotateCcw } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
 import type { Athlete } from "@/components/roster/data";
@@ -10,6 +11,8 @@ interface RosterTableProps {
   showArchived: boolean;
   /** When true, hides the ACTIONS column and all edit/archive/restore affordances. */
   readOnly?: boolean;
+  /** Whether the staff-only player claim-status column is visible. */
+  showClaimStatus?: boolean;
   onSelect?: (athlete: Athlete) => void;
   onEdit?: (athlete: Athlete) => void;
   onArchive?: (athlete: Athlete) => void;
@@ -21,7 +24,6 @@ const DATA_COLUMNS = [
   { key: "name", label: "NAME", className: "min-w-[140px]" },
   { key: "position", label: "POS", className: "w-16" },
   { key: "status", label: "STATUS", className: "w-28" },
-  { key: "claimStatus", label: "CLAIM", className: "w-28" },
   { key: "appearances", label: "APPS", className: "w-16 text-center" },
   { key: "goals", label: "GOALS", className: "w-16 text-center" },
   { key: "assists", label: "AST", className: "w-16 text-center" },
@@ -41,6 +43,7 @@ export function RosterTable({
   selectedId,
   showArchived,
   readOnly = false,
+  showClaimStatus = false,
   onSelect,
   onEdit,
   onArchive,
@@ -52,13 +55,19 @@ export function RosterTable({
         <thead>
           <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {DATA_COLUMNS.map((col) => (
-              <th
-                key={col.key}
-                scope="col"
-                className={cn("py-3 px-4", col.className)}
-              >
-                {col.label}
-              </th>
+              <Fragment key={col.key}>
+                <th
+                  scope="col"
+                  className={cn("py-3 px-4", col.className)}
+                >
+                  {col.label}
+                </th>
+                {col.key === "status" && showClaimStatus && (
+                  <th scope="col" className="w-28 px-4 py-3">
+                    CLAIM
+                  </th>
+                )}
+              </Fragment>
             ))}
             {!readOnly && (
               <th scope="col" className="w-28 px-4 py-3 text-right">
@@ -118,9 +127,11 @@ export function RosterTable({
                   <StatusBadge status={athlete.status} />
                 </td>
 
-                <td className="px-4 py-3">
-                  <StatusBadge status={athlete.claimStatus} />
-                </td>
+                {showClaimStatus && (
+                  <td className="px-4 py-3">
+                    <StatusBadge status={athlete.claimStatus} />
+                  </td>
+                )}
 
                 <td className="px-4 py-3 text-center tabular-nums text-foreground">
                   {athlete.appearances}

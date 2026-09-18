@@ -102,10 +102,19 @@ export class AthletesService {
     return this.databaseService.database
       .select({
         ...getTableColumns(athletes),
+        claimStatus,
         ...athleteStatistics,
       })
       .from(athletes)
-      .where(and(eq(athletes.teamId, teamId), isNotNull(athletes.archivedAt)));
+      .leftJoin(
+        playerClaimInvites,
+        and(
+          eq(playerClaimInvites.athleteId, athletes.id),
+          eq(playerClaimInvites.status, 'pending'),
+        ),
+      )
+      .where(and(eq(athletes.teamId, teamId), isNotNull(athletes.archivedAt)))
+      .groupBy(athletes.id);
   }
 
   /**

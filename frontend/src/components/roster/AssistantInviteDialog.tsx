@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { TeamInviteResult } from "@/services/team-invites";
 
@@ -14,19 +14,14 @@ interface AssistantInviteDialogProps {
   isSubmitting: boolean;
   /** Error message from the failed invite creation, if any. */
   submitError: string | null;
-  /** When set, the dialog switches from the email form to the link display. */
+  /** When set, the dialog switches from the email form to the sent state. */
   result: TeamInviteResult | null;
 }
 
 /**
- * AssistantInviteDialog — invites an assistant to the team by email.
- *
- * Two phases: the coach first enters the assistant's email address; once the
- * backend returns the one-time join link, the dialog shows it with a copy
- * button so the coach can share it (no email delivery in this sprint).
- *
- * Shell pattern copied from ClaimInviteDialog: fixed overlay, backdrop blur,
- * card panel, and ghost close button.
+ * AssistantInviteDialog — invites an assistant to the team by email. The
+ * coach enters the assistant's email address and the backend sends the
+ * one-time join link directly to that address.
  */
 export function AssistantInviteDialog({
   isOpen,
@@ -37,12 +32,10 @@ export function AssistantInviteDialog({
   result,
 }: AssistantInviteDialogProps) {
   const [email, setEmail] = useState("");
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setEmail("");
-    setCopied(false);
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -52,21 +45,6 @@ export function AssistantInviteDialog({
     const trimmed = email.trim();
     if (!trimmed) return;
     onInvite(trimmed);
-  };
-
-  const handleCopy = async () => {
-    if (!result) return;
-    try {
-      await navigator.clipboard.writeText(result.inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback: select the text for manual copy
-      const input = document.getElementById(
-        "assistant-invite-url-input",
-      ) as HTMLInputElement | null;
-      input?.select();
-    }
   };
 
   return (
@@ -102,47 +80,23 @@ export function AssistantInviteDialog({
 
         {result ? (
           <div className="flex flex-col items-center gap-5">
-            {/* Invited email */}
-            <p className="text-sm font-semibold text-foreground">
-              {result.email}
-            </p>
-
-            {/* Copyable URL field */}
-            <div className="flex w-full items-center gap-2">
-              <input
-                id="assistant-invite-url-input"
-                type="text"
-                readOnly
-                value={result.inviteUrl}
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleCopy()}
-                className="shrink-0 gap-1.5"
-              >
-                {copied ? (
-                  <>
-                    <Check className="size-3.5 text-emerald-500" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3.5" />
-                    Copy
-                  </>
-                )}
-              </Button>
+            <div className="flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
+              <Check className="size-6 text-emerald-500" />
             </div>
 
-            {/* Explanatory copy */}
+            <div className="text-center">
+              <p className="text-sm font-semibold text-foreground">
+                Invite sent to {result.email}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                The assistant can use the link in the email to sign in or
+                create an account and join your team.
+              </p>
+            </div>
+
             <p className="text-center text-xs leading-relaxed text-muted-foreground">
-              Share this link with the assistant. It is tied to their email
-              address, expires in 72 hours, and can only be used once — they
-              can create their account straight from the link.
+              The invite expires in 72 hours, can only be used once, and must
+              be accepted by an account using the invited email address.
             </p>
 
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -151,6 +105,13 @@ export function AssistantInviteDialog({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Enter the assistant's email address. Their one-time team invite
+                link will be sent directly to this address.
+              </p>
+            </div>
+
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Email address
@@ -158,7 +119,7 @@ export function AssistantInviteDialog({
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 placeholder="assistant@example.com"
                 required
                 maxLength={255}
@@ -184,7 +145,7 @@ export function AssistantInviteDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating…" : "Create Invite"}
+                {isSubmitting ? "Sending…" : "Send Invite"}
               </Button>
             </div>
           </form>

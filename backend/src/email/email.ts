@@ -70,6 +70,93 @@ export async function sendVerificationEmail({
   });
 }
 
+export interface SendPlayerClaimInviteEmailInput {
+  to: string;
+  playerName: string;
+  url: string;
+}
+
+/**
+ * Sends a player-profile claim invitation via Brevo.
+ *
+ * When `BREVO_API_KEY` isn't set (local dev/test), the claim link is logged
+ * instead, matching the verification-email development behaviour above.
+ */
+export async function sendPlayerClaimInviteEmail({
+  to,
+  playerName,
+  url,
+}: SendPlayerClaimInviteEmailInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the player invite link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safePlayerName = escapeHtml(playerName || 'Player');
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to, name: playerName }],
+    subject: 'You have been invited to claim your player profile',
+    htmlContent: `
+      <p>Hi ${safePlayerName},</p>
+      <p>Your coach has invited you to claim your player profile in Gaffer.</p>
+      <p><a href="${safeUrl}">Claim player profile</a></p>
+      <p>This invite expires in 72 hours and can only be used once.</p>
+      <p>If you were not expecting this invitation, you can safely ignore this email.</p>
+    `,
+  });
+}
+
+export interface SendAssistantInviteEmailInput {
+  to: string;
+  url: string;
+}
+
+/**
+ * Sends an assistant team invitation via Brevo.
+ *
+ * When `BREVO_API_KEY` isn't set (local dev/test), the invite link is logged
+ * instead, matching the other transactional-email development behaviour.
+ */
+export async function sendAssistantInviteEmail({
+  to,
+  url,
+}: SendAssistantInviteEmailInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the assistant invite link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to }],
+    subject: 'You have been invited to join a team as an assistant',
+    htmlContent: `
+      <p>Hi,</p>
+      <p>You have been invited to join a team in Gaffer as an assistant.</p>
+      <p><a href="${safeUrl}">Join the team</a></p>
+      <p>This invite expires in 72 hours, can only be used once, and must be accepted using this email address.</p>
+      <p>If you were not expecting this invitation, you can safely ignore this email.</p>
+    `,
+  });
+}
+
 /** Test-only hook to reset the memoized client between specs. */
 export function __resetEmailClientForTests(): void {
   client = undefined;

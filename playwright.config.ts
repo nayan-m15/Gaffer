@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const backendURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+const frontendURL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const frontendPort = new URL(frontendURL).port || '5173';
+
 /**
  * Full-stack e2e config — drives a real browser against the real Vite dev
  * server and the real Nest API (not mocked), matching how `npm run dev`
@@ -9,13 +13,25 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Full-stack flows perform several real database round trips. Shared CI
+  // runners can take well over 90 seconds even when every assertion passes.
+  timeout: process.env.CI ? 180_000 : 30_000,
+  expect: {
+    timeout: process.env.CI ? 15_000 : 5_000,
+  },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: 'list',
+  reporter: process.env.CI
+    ? [
+        ['list'],
+        ['html', { open: 'never' }],
+      ]
+    : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: frontendURL,
+    screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },
   projects: [
@@ -26,14 +42,16 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm --prefix backend run start:dev',
-      url: 'http://localhost:3000/health/database',
+      command: process.env.CI
+        ? 'npm --prefix backend run start:prod'
+        : 'npm --prefix backend run start:dev',
+      url: `${backendURL}/health/database`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
     {
-      command: 'npm --prefix frontend run dev',
-      url: 'http://localhost:5173',
+      command: `npm --prefix frontend run dev -- --port ${frontendPort}`,
+      url: frontendURL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

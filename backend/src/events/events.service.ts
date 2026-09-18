@@ -54,6 +54,11 @@ export class EventsService {
         type: dto.type,
         scheduledAt: new Date(dto.scheduledAt),
         location: dto.location,
+        venueAddress: dto.venueAddress,
+        weatherLocation: dto.weatherLocation,
+        weatherLatitude: dto.weatherLatitude,
+        weatherLongitude: dto.weatherLongitude,
+        weatherTimezone: dto.weatherTimezone,
         notes: dto.notes,
         competitionId,
       })
@@ -209,6 +214,21 @@ export class EventsService {
           ? { scheduledAt: new Date(dto.scheduledAt) }
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
+        ...(dto.venueAddress !== undefined
+          ? { venueAddress: dto.venueAddress }
+          : {}),
+        ...(dto.weatherLocation !== undefined
+          ? { weatherLocation: dto.weatherLocation }
+          : {}),
+        ...(dto.weatherLatitude !== undefined
+          ? { weatherLatitude: dto.weatherLatitude }
+          : {}),
+        ...(dto.weatherLongitude !== undefined
+          ? { weatherLongitude: dto.weatherLongitude }
+          : {}),
+        ...(dto.weatherTimezone !== undefined
+          ? { weatherTimezone: dto.weatherTimezone }
+          : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         ...(dto.competitionId !== undefined || type !== 'match'
           ? { competitionId }

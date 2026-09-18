@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Loader2, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AppCard } from "@/components/app/AppCard";
 import { useAuth } from "@/hooks/useAuth";
 import { AthleteComparisonSection } from "@/features/statistics/AthleteComparisonSection";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
@@ -301,7 +302,7 @@ export default function StatisticsPage() {
         }
       />
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {/* ── Statistics overview ──────────────────────────────────────────── */}
         {overviewQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -367,7 +368,7 @@ export default function StatisticsPage() {
 
             {/* Player stats + detail panel */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
-              <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6 lg:col-span-2">
+              <AppCard className="p-4 md:p-6 lg:col-span-2">
                 <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-foreground">
                   Player Statistics
                 </h2>
@@ -378,7 +379,7 @@ export default function StatisticsPage() {
                   compareIds={compareIds}
                   onToggleCompare={toggleCompareId}
                 />
-              </section>
+              </AppCard>
 
               <section
                 className={cn(

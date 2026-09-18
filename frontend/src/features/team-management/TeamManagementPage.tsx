@@ -10,12 +10,20 @@
  * data is used; empty and loading states are handled explicitly.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { AnimatedTabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
-import { RotateCcw, Wand2, Users, ShieldAlert, Loader2 } from "lucide-react";
+import {
+  RotateCcw,
+  Wand2,
+  Users,
+  ShieldAlert,
+  Loader2,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { useAthletes } from "./api";
 import { FootballPitch } from "./FootballPitch";
@@ -30,6 +38,21 @@ import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
 import { SaveGamePlanDialog } from "@/features/team-tactics/SaveGamePlanDialog";
 import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 
+type TeamSection = "squad" | "tactics";
+
+const TEAM_SECTIONS = [
+  {
+    value: "squad",
+    label: "Squad",
+    icon: <Users className="size-4" aria-hidden="true" />,
+  },
+  {
+    value: "tactics",
+    label: "Tactics",
+    icon: <SlidersHorizontal className="size-4" aria-hidden="true" />,
+  },
+] satisfies Array<{ value: TeamSection; label: string; icon: ReactNode }>;
+
 export default function TeamManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { team } = useAuth();
@@ -40,7 +63,7 @@ export default function TeamManagementPage() {
   const activeSection =
     searchParams.get("section") === "tactics" ? "tactics" : "squad";
 
-  const setActiveSection = (section: "squad" | "tactics") => {
+  const setActiveSection = (section: TeamSection) => {
     setSearchParams(section === "tactics" ? { section } : {});
   };
 
@@ -205,37 +228,15 @@ export default function TeamManagementPage() {
           </GamePlanControls>
         }
       >
-        <nav className="flex gap-1" aria-label="Team sections">
-          <button
-            type="button"
-            onClick={() => setActiveSection("squad")}
-            aria-current={activeSection === "squad" ? "page" : undefined}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              activeSection === "squad"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Squad
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSection("tactics")}
-            aria-current={activeSection === "tactics" ? "page" : undefined}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              activeSection === "tactics"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Tactics
-          </button>
-        </nav>
+        <AnimatedTabs
+          items={TEAM_SECTIONS}
+          value={activeSection}
+          onValueChange={setActiveSection}
+          ariaLabel="Team sections"
+        />
       </PageHeader>
 
-      <div className="space-y-6 p-6 sm:p-8">
+      <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {activeSection === "tactics" ? (
           <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (
