@@ -9,6 +9,7 @@ import { brand } from "@/data/brand";
  * rendered from another public route.
  */
 const FOOTER_LINKS = [
+  { label: "Public Dashboard", href: "/public-dashboard" },
   { label: "Philosophy", href: "/#philosophy" },
   { label: "Tactical Pitch", href: "/#tactics" },
   { label: "Analytics", href: "/#analytics" },
