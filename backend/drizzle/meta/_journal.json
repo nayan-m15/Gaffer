@@ -169,6 +169,13 @@
       "when": 1790180000000,
       "tag": "0022_shared_competition_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790180000001,
+      "tag": "0023_competition_invites",
+      "breakpoints": true
     }
   ]
 }

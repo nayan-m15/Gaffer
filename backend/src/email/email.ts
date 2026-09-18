@@ -157,6 +157,43 @@ export async function sendAssistantInviteEmail({
   });
 }
 
+export interface SendCompetitionInviteEmailInput {
+  to: string;
+  competitionName: string;
+  teamName: string;
+  url: string;
+}
+
+export async function sendCompetitionInviteEmail({
+  to,
+  competitionName,
+  teamName,
+  url,
+}: SendCompetitionInviteEmailInput): Promise<void> {
+  const brevo = getClient();
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the competition invite link instead of emailing it.\nTo: ${to}\nCompetition: ${competitionName}\nTeam: ${teamName}\nLink: ${url}`,
+    );
+    return;
+  }
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: {
+      name: process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool',
+      email: process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com',
+    },
+    to: [{ email: to }],
+    subject: 'You have been invited to coach a competition team',
+    htmlContent: `
+      <p>Hi,</p>
+      <p>You have been invited to coach ${escapeHtml(teamName)} in ${escapeHtml(competitionName)} on Gaffer.</p>
+      <p><a href="${escapeHtml(url)}">Join the competition</a></p>
+      <p>This invite expires in 72 hours, can only be used once, and must be accepted using this email address.</p>
+      <p>If you were not expecting this invitation, you can safely ignore this email.</p>
+    `,
+  });
+}
+
 /** Test-only hook to reset the memoized client between specs. */
 export function __resetEmailClientForTests(): void {
   client = undefined;

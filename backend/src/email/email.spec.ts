@@ -1,6 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { BrevoClient } from '@getbrevo/brevo';
-import { __resetEmailClientForTests, sendVerificationEmail } from './email';
+import {
+  __resetEmailClientForTests,
+  sendVerificationEmail,
+  sendCompetitionInviteEmail,
+} from './email';
 
 interface SendTransacEmailCall {
   sender: { name: string; email: string };
@@ -20,6 +24,54 @@ jest.mock('@getbrevo/brevo', () => ({
 }));
 
 const MockedBrevoClient = BrevoClient as unknown as jest.Mock;
+
+describe('sendCompetitionInviteEmail', () => {
+  const originalEnv = { ...process.env };
+  beforeEach(() => {
+    __resetEmailClientForTests();
+    MockedBrevoClient.mockClear();
+    mockSendTransacEmail.mockClear();
+  });
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    jest.restoreAllMocks();
+  });
+
+  it('logs the invite URL when email credentials are absent', async () => {
+    delete process.env.BREVO_API_KEY;
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    await sendCompetitionInviteEmail({
+      to: 'coach@example.com',
+      competitionName: 'Cup',
+      teamName: 'XI',
+      url: 'https://app.test/join-competition/token',
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('https://app.test/join-competition/token'),
+    );
+    expect(MockedBrevoClient).not.toHaveBeenCalled();
+  });
+
+  it('sends competition and participant names, escaping HTML and the URL', async () => {
+    process.env.BREVO_API_KEY = 'test-key';
+    await sendCompetitionInviteEmail({
+      to: 'coach@example.com',
+      competitionName: '<Cup>',
+      teamName: 'A & B',
+      url: 'https://app.test/join-competition/token?a=1&b=2',
+    });
+    const [call] = mockSendTransacEmail.mock.calls[0];
+    expect(call.to).toEqual([{ email: 'coach@example.com' }]);
+    expect(call.htmlContent).toContain('&lt;Cup&gt;');
+    expect(call.htmlContent).toContain('A &amp; B');
+    expect(call.htmlContent).toContain(
+      'https://app.test/join-competition/token?a=1&amp;b=2',
+    );
+    expect(call.htmlContent).toContain('72 hours');
+  });
+});
 
 describe('sendVerificationEmail', () => {
   const originalEnv = { ...process.env };

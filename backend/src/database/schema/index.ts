@@ -518,6 +518,41 @@ export const competitionTeams = pgTable(
   ],
 );
 
+export const competitionInviteStatus = pgEnum('competition_invite_status', [
+  'pending',
+  'used',
+  'revoked',
+]);
+
+export const competitionInvites = pgTable(
+  'competition_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    competitionTeamId: uuid('competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: competitionInviteStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByUserId: text('used_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('competition_invites_competition_id_index').on(table.competitionId),
+    uniqueIndex('competition_invites_pending_slot_unique')
+      .on(table.competitionTeamId)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
+
 // One row per event of type 'match'. Populated by the (future) live match
 // logger; this feature only reads from it.
 export const matches = pgTable(
