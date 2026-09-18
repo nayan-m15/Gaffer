@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, isNull, ne, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
@@ -16,7 +16,7 @@ import { TeamsService } from '../teams/teams.service';
  * Aggregates dashboard summary data for a coach's team.
  *
  * Returns active athlete count, total event count, the next five
- * upcoming events, the five most recent completed match results, the
+ * upcoming events, the ten most recent completed match results, the
  * current season's win/draw/loss record, and a handful of rate stats
  * over those same recent matches — all scoped to the team. When the
  * user has no team, all values return as empty/zero so the frontend
@@ -38,6 +38,7 @@ export class DashboardService {
         activeAthletesCount: 0,
         totalEventsCount: 0,
         upcomingEvents: [],
+        liveMatch: null,
         recentForm: [],
         seasonSummary: null,
         recentStats: [],
@@ -48,6 +49,7 @@ export class DashboardService {
       [{ value: activeAthletesCount }],
       [{ value: totalEventsCount }],
       upcomingEvents,
+      activeMatches,
       recentMatches,
       currentSeason,
     ] = await Promise.all([
@@ -77,6 +79,34 @@ export class DashboardService {
         .orderBy(asc(events.scheduledAt))
         .limit(5),
 
+      // Treat a recently scheduled match with a started, unfinished clock as
+      // active. The recency guard prevents abandoned clocks from appearing as
+      // live on the dashboard indefinitely.
+      this.databaseService.database
+        .select({
+          id: matches.id,
+          eventTitle: events.title,
+          opponent: matches.opponentName,
+          isHome: matches.isHome,
+          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal'), 0)`,
+          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal'), 0)`,
+          clockElapsedMs: matches.clockElapsedMs,
+          clockStartedAt: matches.clockStartedAt,
+        })
+        .from(matches)
+        .innerJoin(events, eq(matches.eventId, events.id))
+        .where(
+          and(
+            eq(events.teamId, team.id),
+            eq(events.status, 'scheduled'),
+            gte(events.scheduledAt, sql<Date>`now() - interval '24 hours'`),
+            ne(matches.clockPeriod, 'not_started'),
+            ne(matches.clockPeriod, 'full_time'),
+          ),
+        )
+        .orderBy(desc(matches.updatedAt))
+        .limit(1),
+
       // Recent completed matches
       this.databaseService.database
         .select({
@@ -91,7 +121,7 @@ export class DashboardService {
         .innerJoin(events, eq(matches.eventId, events.id))
         .where(and(eq(events.teamId, team.id), eq(events.status, 'completed')))
         .orderBy(desc(events.scheduledAt))
-        .limit(5),
+        .limit(10),
 
       // The team's current season, if one is flagged. Falls back to the
       // team's whole history below when there isn't one yet.
@@ -101,6 +131,29 @@ export class DashboardService {
         .where(and(eq(seasons.teamId, team.id), eq(seasons.isCurrent, true)))
         .limit(1),
     ]);
+
+    const activeMatch = activeMatches[0];
+    const liveMatch = activeMatch
+      ? {
+          id: activeMatch.id,
+          eventTitle: activeMatch.eventTitle,
+          homeTeam: activeMatch.isHome ? team.name : activeMatch.opponent,
+          awayTeam: activeMatch.isHome ? activeMatch.opponent : team.name,
+          homeScore: activeMatch.isHome
+            ? activeMatch.teamScore
+            : activeMatch.opponentScore,
+          awayScore: activeMatch.isHome
+            ? activeMatch.opponentScore
+            : activeMatch.teamScore,
+          elapsedMinutes: Math.floor(
+            (activeMatch.clockElapsedMs +
+              (activeMatch.clockStartedAt
+                ? Math.max(0, Date.now() - activeMatch.clockStartedAt.getTime())
+                : 0)) /
+              60_000,
+          ),
+        }
+      : null;
 
     const recentForm = recentMatches.map((match) => {
       // Shared with the statistics module so the two never disagree on what
@@ -175,6 +228,7 @@ export class DashboardService {
       activeAthletesCount,
       totalEventsCount,
       upcomingEvents,
+      liveMatch,
       recentForm,
       seasonSummary,
       recentStats,

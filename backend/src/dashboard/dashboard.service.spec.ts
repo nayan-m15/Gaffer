@@ -6,6 +6,7 @@ import { DashboardService } from './dashboard.service';
 
 describe('DashboardService', () => {
   let service: DashboardService;
+  const queryLimits: number[] = [];
 
   const mockTeamsService = {
     findTeamForUser: jest.fn(),
@@ -26,7 +27,10 @@ describe('DashboardService', () => {
     obj.innerJoin = jest.fn(() => obj);
     obj.where = jest.fn(() => obj);
     obj.orderBy = jest.fn(() => obj);
-    obj.limit = jest.fn(() => obj);
+    obj.limit = jest.fn((value: number) => {
+      queryLimits.push(value);
+      return obj;
+    });
     obj.then = (resolve: (v: unknown) => unknown) =>
       Promise.resolve(result).then(resolve);
     return obj;
@@ -50,6 +54,7 @@ describe('DashboardService', () => {
 
     service = module.get<DashboardService>(DashboardService);
     jest.clearAllMocks();
+    queryLimits.length = 0;
     mockDatabaseService.database.select.mockImplementation(() => thenable([]));
   });
 
@@ -62,6 +67,7 @@ describe('DashboardService', () => {
       activeAthletesCount: 0,
       totalEventsCount: 0,
       upcomingEvents: [],
+      liveMatch: null,
       recentForm: [],
       seasonSummary: null,
       recentStats: [],
@@ -71,16 +77,33 @@ describe('DashboardService', () => {
   });
 
   it("computes the current season's summary and recent-match rate stats", async () => {
-    mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
+    mockTeamsService.findTeamForUser.mockResolvedValue({
+      id: 'team-1',
+      name: 'Rovers',
+    });
 
     // Queries fire in the fixed order the Promise.all in getSummary lists
-    // them: active athletes, total events, upcoming events, recent matches,
-    // current season.
+    // them: active athletes, total events, upcoming events, active match,
+    // recent matches, current season.
     mockDatabaseService.database.select
       .mockImplementationOnce(() => thenable([{ value: 3 }]))
       .mockImplementationOnce(() => thenable([{ value: 5 }]))
       .mockImplementationOnce(() =>
         thenable([{ id: 'event-1', title: 'Training' }]),
+      )
+      .mockImplementationOnce(() =>
+        thenable([
+          {
+            id: 'live-match-1',
+            eventTitle: 'Rovers vs United',
+            opponent: 'United',
+            isHome: true,
+            teamScore: 1,
+            opponentScore: 0,
+            clockElapsedMs: 30 * 60 * 1000,
+            clockStartedAt: null,
+          },
+        ]),
       )
       .mockImplementationOnce(() =>
         thenable([
@@ -120,6 +143,15 @@ describe('DashboardService', () => {
     expect(summary.upcomingEvents).toEqual([
       { id: 'event-1', title: 'Training' },
     ]);
+    expect(summary.liveMatch).toEqual({
+      id: 'live-match-1',
+      eventTitle: 'Rovers vs United',
+      homeTeam: 'Rovers',
+      awayTeam: 'United',
+      homeScore: 1,
+      awayScore: 0,
+      elapsedMinutes: 30,
+    });
     expect(summary.recentForm).toEqual([
       {
         id: 'match-1',
@@ -138,6 +170,7 @@ describe('DashboardService', () => {
         date: '2024-01-05T00:00:00.000Z',
       },
     ]);
+    expect(queryLimits).toEqual([5, 1, 10, 1]);
 
     // Resolved from the current season, not recomputed by hand — shared with
     // StatisticsService so the two never disagree.
@@ -167,6 +200,7 @@ describe('DashboardService', () => {
     mockDatabaseService.database.select
       .mockImplementationOnce(() => thenable([{ value: 0 }]))
       .mockImplementationOnce(() => thenable([{ value: 0 }]))
+      .mockImplementationOnce(() => thenable([]))
       .mockImplementationOnce(() => thenable([]))
       .mockImplementationOnce(() => thenable([]))
       .mockImplementationOnce(() => thenable([])); // no current season row

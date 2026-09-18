@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { ApiError } from "@/lib/api";
 
@@ -131,9 +132,14 @@ export function SaveGamePlanDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save game plan"}
-            </Button>
+            <StatefulButton
+              type="submit"
+              status={isSubmitting ? "loading" : "idle"}
+              loadingText="Saving..."
+              disabled={isSubmitting}
+            >
+              Save game plan
+            </StatefulButton>
           </DialogFooter>
         </form>
       </DialogContent>

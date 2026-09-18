@@ -27,7 +27,7 @@ export function SeasonsSection({
   onSelect: (seasonId: string) => void;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
+    <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiUrl } from "@/lib/api-url";
 
 /** Thrown when the backend responds with a non-2xx status. */
 export class ApiError extends Error {
@@ -22,11 +22,7 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = API_URL
-    ? `${API_URL}${path}`
-    : path.startsWith("/auth")
-      ? path
-      : `/api${path}`;
+  const url = apiUrl(path);
 
   const response = await fetch(url, {
     ...options,

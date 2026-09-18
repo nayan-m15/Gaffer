@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { FRONTEND_URL } from './utils/auth';
 
 const PASSWORD = 'password123';
 
@@ -56,7 +57,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       // marks the address verified, auto-signs-in (session cookie), and 302s
       // to the login page with the verified notice.
       const callbackURL = encodeURIComponent(
-        'http://localhost:5173/login?verified=1',
+        `${FRONTEND_URL}/login?verified=1`,
       );
       await page.goto(
         `/auth/verify-email?token=${token}&callbackURL=${callbackURL}`,

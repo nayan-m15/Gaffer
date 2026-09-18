@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatefulButton } from "@/components/ui/stateful-button";
+import { motion, useReducedMotion } from "motion/react";
 import type { AthleteFormValues } from "@/services/athletes";
 
 interface AthleteFormDialogProps {
@@ -15,6 +17,7 @@ interface AthleteFormDialogProps {
   initialValues: AthleteFormValues | null;
   /** Called with the submitted form values. */
   onSubmit: (values: AthleteFormValues) => void;
+  isSubmitting?: boolean;
 }
 
 const POSITIONS = ["GK", "CB", "LB", "RB", "DM", "CM", "AM", "LW", "RW", "ST"] as const;
@@ -45,11 +48,13 @@ export function AthleteFormDialog({
   onClose,
   initialValues,
   onSubmit,
+  isSubmitting = false,
 }: AthleteFormDialogProps) {
   const isEditing = initialValues !== null;
   const title = isEditing ? "Edit Athlete" : "Add Athlete";
 
   const [values, setValues] = useState<AthleteFormValues>(DEFAULT_VALUES);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -83,11 +88,14 @@ export function AthleteFormDialog({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div
+      <motion.div
         role="dialog"
         aria-modal="true"
         aria-labelledby="athlete-form-title"
         className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
+        initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 280, damping: 24 }}
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 id="athlete-form-title" className="text-lg font-bold text-foreground">
@@ -189,10 +197,17 @@ export function AthleteFormDialog({
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">{isEditing ? "Save Changes" : "Add Athlete"}</Button>
+            <StatefulButton
+              type="submit"
+              status={isSubmitting ? "loading" : "idle"}
+              loadingText={isEditing ? "Saving..." : "Adding..."}
+              disabled={isSubmitting}
+            >
+              {isEditing ? "Save Changes" : "Add Athlete"}
+            </StatefulButton>
           </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

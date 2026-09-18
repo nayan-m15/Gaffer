@@ -8,6 +8,7 @@
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PlayerCard } from "./PlayerCard";
+import { AnimatedTooltip } from "@/components/ui/animated-tooltip";
 import type { BackendAthlete } from "@/services/athletes";
 import type { FormationPosition, DragItem, DragPayload } from "./types";
 
@@ -188,25 +189,25 @@ export function PitchPlayer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <PlayerCard
-        initials={initials}
-        name={name}
-        position={athlete.position ?? position.label}
-        squadNumber={athlete.squadNumber}
-        status={athlete.status}
-        appearances={athlete.appearances}
-        goals={athlete.goals}
-        assists={athlete.assists}
-        yellowCards={athlete.yellowCards}
-        redCards={athlete.redCards}
-        variant="pitch"
-        isDragging={isDragging}
-        isDropTarget={isDragOver && isValidDrop}
-        isInvalid={isDragOver && isInvalid}
-        readOnly={readOnly}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      />
+      <AnimatedTooltip
+        label={name}
+        description={`${athlete.position ?? position.label}${athlete.squadNumber != null ? ` · #${athlete.squadNumber}` : ""} · ${athlete.status}`}
+      >
+        <PlayerCard
+          initials={initials}
+          name={name}
+          position={athlete.position ?? position.label}
+          squadNumber={athlete.squadNumber}
+          status={athlete.status}
+          variant="pitch"
+          isDragging={isDragging}
+          isDropTarget={isDragOver && isValidDrop}
+          isInvalid={isDragOver && isInvalid}
+          readOnly={readOnly}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        />
+      </AnimatedTooltip>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
@@ -7,29 +7,42 @@ import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
 import { PlayerShell } from '@/layouts/PlayerShell'
-import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
 import ClaimPage from '@/pages/ClaimPage'
 import JoinTeamPage from '@/pages/JoinTeamPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
-import AthletesPage from '@/pages/AthletesPage'
-import EventsPage from '@/pages/EventsPage'
-import ConfirmSquadPage from '@/pages/ConfirmSquadPage'
-import OpponentSquadSetupPage from '@/pages/OpponentSquadSetupPage'
-import LiveLoggerPage from '@/pages/LiveLoggerPage'
-import LiveMatchPage from '@/pages/LiveMatchPage'
-import MatchReportPage from '@/pages/MatchReportPage'
-import StatisticsPage from '@/pages/StatisticsPage'
-import TeamManagementPage from '@/features/team-management/TeamManagementPage'
-import PlayerDashboardPage from '@/features/player/PlayerDashboardPage'
-import PlayerTeamPage from '@/features/player/PlayerTeamPage'
-import PlayerEventsPage from '@/features/player/PlayerEventsPage'
-import PlayerStandingsPage from '@/features/player/PlayerStandingsPage'
 import LandingPage from '@/pages/LandingPage'
 import PublicDashboard from '@/pages/PublicDashboard'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
+import { Loader2 } from 'lucide-react'
+
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
+const AthletesPage = lazy(() => import('@/pages/AthletesPage'))
+const EventsPage = lazy(() => import('@/pages/EventsPage'))
+const ConfirmSquadPage = lazy(() => import('@/pages/ConfirmSquadPage'))
+const OpponentSquadSetupPage = lazy(() => import('@/pages/OpponentSquadSetupPage'))
+const LiveLoggerPage = lazy(() => import('@/pages/LiveLoggerPage'))
+const LiveMatchPage = lazy(() => import('@/pages/LiveMatchPage'))
+const MatchReportPage = lazy(() => import('@/pages/MatchReportPage'))
+const StatisticsPage = lazy(() => import('@/pages/StatisticsPage'))
+const TeamManagementPage = lazy(() => import('@/features/team-management/TeamManagementPage'))
+const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
+const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
+const PlayerEventsPage = lazy(() => import('@/features/player/PlayerEventsPage'))
+const PlayerStandingsPage = lazy(() => import('@/features/player/PlayerStandingsPage'))
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[45vh] items-center justify-center" role="status">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+        Loading workspace...
+      </div>
+    </div>
+  )
+}
 
 /**
  * App — Root application component.
@@ -75,6 +88,7 @@ function App() {
       <BrowserRouter useTransitions={false}>
       <ClaimResumer />
       <TeamInviteResumer />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/public-dashboard" element={<PublicDashboard />} />
@@ -188,6 +202,7 @@ function App() {
           <Route path="/player/standings" element={<PlayerStandingsPage />} />
         </Route>
       </Routes>
+      </Suspense>
       </BrowserRouter>
     </>
   )
