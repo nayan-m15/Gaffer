@@ -1,8 +1,10 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -50,7 +52,18 @@ const selectClassName =
 
 type PositionCategory = "ALL" | "FWD" | "MID" | "DEF" | "GK";
 
+const dashboardSections = [
+  { id: "players", label: "Squad Showcase" },
+  { id: "matches", label: "Match Center" },
+  {
+    id: "team-statistics",
+    label: "League Standings",
+  },
+] as const;
+
 export default function PublicDashboard() {
+  const mainRef = useRef<HTMLElement>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
   const [teamId, setTeamId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
@@ -221,12 +234,36 @@ export default function PublicDashboard() {
     };
   }, [statisticsQuery.data, matchesQuery.data]);
 
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    const filterBar = filterBarRef.current;
+    if (!main || !filterBar) return;
+
+    const updateSectionOffset = () => {
+      // The sticky bar starts below the 4rem site navbar. Keep an extra 1rem
+      // breathing room between it and a section heading after navigation.
+      const offset = Math.ceil(filterBar.getBoundingClientRect().height + 80);
+      main.style.setProperty("--public-dashboard-section-offset", `${offset}px`);
+    };
+    const observer = new ResizeObserver(updateSectionOffset);
+
+    updateSectionOffset();
+    observer.observe(filterBar);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="public-dashboard-page relative isolate flex min-h-screen flex-col overflow-x-clip text-foreground selection:bg-brand/20 selection:text-brand">
       <div className="public-dashboard-backdrop" aria-hidden="true" />
       <Navbar />
 
-      <main className="relative z-10 flex-1 pb-16 sm:pb-20">
+      <main
+        ref={mainRef}
+        className="relative z-10 flex-1 pb-16 sm:pb-20"
+        style={
+          { "--public-dashboard-section-offset": "18rem" } as CSSProperties
+        }
+      >
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
         <section className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
           <div
@@ -250,7 +287,10 @@ export default function PublicDashboard() {
         </section>
 
         {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
-        <div className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div
+          ref={filterBarRef}
+          className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
+        >
           <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:p-4 dark:bg-card/70">
               <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -289,6 +329,8 @@ export default function PublicDashboard() {
                 onCompetitionChange={setCompetitionId}
                 onStatusChange={setMatchStatus}
               />
+
+              <PublicDashboardSectionNav sections={dashboardSections} />
           </div>
         </div>
 
@@ -437,11 +479,13 @@ export default function PublicDashboard() {
             {statisticsQuery.isError ? (
               <ErrorState />
             ) : (
-              <div className="grid gap-8 lg:grid-cols-12 items-start">
+              <div className="grid items-start gap-5 sm:gap-8 lg:grid-cols-12">
                 {/* Left (65%): Standings Table */}
-                <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-md sm:p-5 lg:col-span-8 dark:bg-card/70">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-bold">Competition Table</h3>
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card/80 p-2.5 shadow-sm backdrop-blur-md sm:p-5 lg:col-span-8 dark:bg-card/70">
+                  <div className="mb-3 flex flex-col items-center gap-1 text-center sm:mb-4 sm:flex-row sm:justify-between sm:text-left">
+                    <h3 className="text-base font-bold sm:text-lg">
+                      Competition Table
+                    </h3>
                     <span className="text-xs text-muted-foreground">Live Season Rankings</span>
                   </div>
                   <StandingsDisplay
@@ -450,18 +494,19 @@ export default function PublicDashboard() {
                     )}
                     isLoading={statisticsQuery.isLoading}
                     emptyMessage="No team statistics are available for these filters."
+                    compactOnMobile
                   />
                 </div>
 
                 {/* Right (35%): Performance Telemetry Cards */}
-                <div className="lg:col-span-4 flex flex-col gap-4">
-                  <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/70">
-                    <h3 className="mb-4 text-base font-bold text-foreground flex items-center gap-2">
+                <div className="flex min-w-0 flex-col gap-3 sm:gap-4 lg:col-span-4">
+                  <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/70">
+                    <h3 className="mb-3 flex items-center justify-center gap-2 text-base font-bold text-foreground sm:mb-4 sm:justify-start">
                       <BarChart3 className="size-4 text-brand" />
                       Season Overview
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-2">
                       <MetricCard
                         icon={<Award className="size-4 text-brand" />}
                         label="Win Rate"
@@ -489,7 +534,7 @@ export default function PublicDashboard() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-brand/25 bg-card/65 p-4 text-xs text-muted-foreground shadow-sm backdrop-blur-md dark:bg-card/55">
+                  <div className="rounded-2xl border border-brand/25 bg-card/65 p-3 text-xs leading-relaxed text-muted-foreground shadow-sm backdrop-blur-md sm:p-4 dark:bg-card/55">
                     <strong className="block font-bold text-brand">Portal Data Notice:</strong>
                     Statistics update automatically following completed match report validation by team head coaches.
                   </div>
@@ -558,12 +603,12 @@ function MetricCard({
   subtext: string;
 }) {
   return (
-    <div className="flex flex-col rounded-xl border border-border/60 bg-card/85 p-3.5 shadow-sm backdrop-blur-sm transition-all hover:border-brand/30 dark:bg-card/75">
-      <div className="flex items-center justify-between mb-2">
+    <div className="flex min-w-0 flex-col rounded-xl border border-border/60 bg-card/85 p-3 shadow-sm backdrop-blur-sm transition-all hover:border-brand/30 sm:p-3.5 dark:bg-card/75">
+      <div className="mb-1.5 flex items-center justify-between sm:mb-2">
         <span className="text-xs font-semibold text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className="text-2xl font-extrabold tracking-tight text-foreground tabular-nums">
+      <div className="text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-2xl">
         {value}
       </div>
       <div className="mt-1 text-[11px] text-muted-foreground/80">{subtext}</div>
@@ -674,6 +719,160 @@ function FilterField({ label, children }: { label: string; children: ReactNode }
   );
 }
 
+function PublicDashboardSectionNav({
+  sections,
+}: {
+  sections: ReadonlyArray<{ id: string; label: string }>;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
+  const pendingSectionRef = useRef<string | null>(null);
+  const pendingTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const visibleSections = new Map<string, IntersectionObserverEntry>();
+    const sectionElements = sections
+      .map(({ id }) => document.getElementById(id))
+      .filter((section): section is HTMLElement => Boolean(section));
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visibleSections.set(entry.target.id, entry);
+          else visibleSections.delete(entry.target.id);
+        }
+
+        const pendingSection = pendingSectionRef.current;
+        if (pendingSection) {
+          if (!visibleSections.has(pendingSection)) return;
+          pendingSectionRef.current = null;
+          if (pendingTimeoutRef.current !== null) {
+            window.clearTimeout(pendingTimeoutRef.current);
+            pendingTimeoutRef.current = null;
+          }
+        }
+
+        const nextSection = [...visibleSections.values()].sort(
+          (a, b) =>
+            Math.abs(a.boundingClientRect.top - window.innerHeight * 0.35) -
+            Math.abs(b.boundingClientRect.top - window.innerHeight * 0.35),
+        )[0]?.target.id;
+
+        if (nextSection) {
+          setActiveSection((current) =>
+            current === nextSection ? current : nextSection,
+          );
+        }
+      },
+      {
+        // A narrow band around the upper-middle viewport prevents adjacent
+        // sections from rapidly competing for the active state.
+        rootMargin: "-30% 0px -55% 0px",
+        threshold: 0,
+      },
+    );
+
+    sectionElements.forEach((section) => observer.observe(section));
+    return () => {
+      observer.disconnect();
+      if (pendingTimeoutRef.current !== null) {
+        window.clearTimeout(pendingTimeoutRef.current);
+      }
+    };
+  }, [sections]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const activeItem = scroller?.querySelector<HTMLElement>(
+      `[data-section-id="${activeSection}"]`,
+    );
+    if (!scroller || !activeItem) return;
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const left =
+      activeItem.offsetLeft - scroller.clientWidth / 2 + activeItem.clientWidth / 2;
+    scroller.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
+  }, [activeSection]);
+
+  function navigateToSection(id: string) {
+    const section = document.getElementById(id);
+    if (!section) return;
+
+    setActiveSection(id);
+    pendingSectionRef.current = id;
+    if (pendingTimeoutRef.current !== null) {
+      window.clearTimeout(pendingTimeoutRef.current);
+    }
+    pendingTimeoutRef.current = window.setTimeout(() => {
+      pendingSectionRef.current = null;
+      pendingTimeoutRef.current = null;
+    }, 1400);
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    section.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  return (
+    <nav
+      className="mt-3 border-t border-border/60 pt-3"
+      aria-label="Public dashboard sections"
+    >
+      <div
+        ref={scrollerRef}
+        className="touch-pan-x overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <ul className="mx-auto flex w-max min-w-full justify-center gap-2">
+          {sections.map((section) => {
+            const isActive = activeSection === section.id;
+
+            return (
+              <li key={section.id} className="shrink-0">
+                <a
+                  href={`#${section.id}`}
+                  data-section-id={section.id}
+                  aria-current={isActive ? "location" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigateToSection(section.id);
+                  }}
+                  className={`group relative isolate flex min-h-10 items-center overflow-hidden rounded-full border px-4 text-xs font-bold outline-none transition-[color,background-color,border-color,box-shadow] duration-300 focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none sm:text-sm ${
+                    isActive
+                      ? "border-brand bg-brand text-brand-foreground shadow-md shadow-brand/20"
+                      : "border-border/80 bg-background/65 text-muted-foreground hover:border-brand/60 hover:text-brand-foreground dark:bg-background/50"
+                  }`}
+                >
+                  {!isActive && (
+                    <span
+                      className="absolute left-1/2 top-full -z-10 size-3 -translate-x-1/2 rounded-full bg-brand transition-transform duration-500 ease-out group-hover:scale-[24] group-focus-visible:scale-[24] motion-reduce:transition-none"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="relative h-4 overflow-hidden leading-4">
+                    <span className="flex flex-col transition-transform duration-300 ease-out group-hover:-translate-y-1/2 group-focus-visible:-translate-y-1/2 motion-reduce:transform-none motion-reduce:transition-none">
+                      <span>{section.label}</span>
+                      <span aria-hidden="true">{section.label}</span>
+                    </span>
+                  </span>
+                  {isActive && (
+                    <span
+                      className="ml-2 size-1.5 rounded-full bg-brand-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--brand-foreground)_20%,transparent)]"
+                      aria-hidden="true"
+                    />
+                  )}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </nav>
+  );
+}
+
 function DashboardSection({
   id,
   title,
@@ -691,7 +890,9 @@ function DashboardSection({
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className="scroll-mt-64 lg:scroll-mt-44"
+      style={{
+        scrollMarginTop: "var(--public-dashboard-section-offset, 18rem)",
+      }}
     >
       <div className="mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand shadow-sm">
