@@ -33,14 +33,8 @@ export function Hero({ sceneReady = false }: { sceneReady?: boolean }) {
       {/* ── Content grid ──────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          {/* Eyebrow */}
-          <span
-            className="mb-5 inline-flex items-center justify-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-xs font-medium tracking-wide text-muted-foreground animate-fade-in"
-          >
-            <span className="size-1.5 rounded-full bg-brand animate-pulse-subtle" />
-            For Amateur Football Coaches
-          </span>
-
+          
+            
           {/* Headline — exact wording from the product spec */}
           <h1
             id="hero-heading"
