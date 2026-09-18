@@ -98,7 +98,11 @@ function wallClock(frame: THREE.Material, face: THREE.Material, ink: THREE.Mater
   for (let i = 0; i < 12; i += 1) { const a = i * Math.PI / 6; dummy.position.set(Math.sin(a) * .49, Math.cos(a) * .49, .085); dummy.rotation.z = -a; dummy.updateMatrix(); marks.setMatrixAt(i, dummy.matrix); }
   const hour = box([.055, .34, .035], [.1, .12, .1], ink); hour.rotation.z = -.55;
   const minute = box([.045, .48, .035], [-.13, .17, .105], ink); minute.rotation.z = .65;
-  group.add(marks, hour, minute); group.position.set(-70.5, 2.85, -8.74);
+  group.add(marks, hour, minute);
+  // Mount on the end wall, facing back toward the approaching camera.
+  group.position.set(-61.22, 2.82, -5.65);
+  group.rotation.y = -Math.PI / 2;
+  group.scale.setScalar(1.12);
   return group;
 }
 
@@ -114,6 +118,22 @@ function stadiumStand(side: "east" | "west" | "north" | "south", lowPower: boole
     else if (alongZ) group.add(box([3.1, .92, length], [sign * out, y, 0], material));
     else group.add(box([length + row * 2.4, .92, 3.1], [0, y, sign * out], material));
   }
+  // A seat is two very low-poly pieces, instanced across the most visible rows.
+  const seatRows = lowPower ? 3 : 6, seatsPerRow = Math.floor(length / (lowPower ? 2.1 : 1.35));
+  const seatBases = new THREE.InstancedMesh(new THREE.BoxGeometry(.64, .13, .54), kit.seat, seatRows * seatsPerRow);
+  const seatBacks = new THREE.InstancedMesh(new THREE.BoxGeometry(.64, .62, .11), kit.seat, seatRows * seatsPerRow);
+  const seatPart = new THREE.Object3D();
+  let seatIndex = 0;
+  for (let row = 0; row < seatRows; row += 1) for (let column = 0; column < seatsPerRow; column += 1) {
+    const along = -length / 2 + (column + .5) * length / seatsPerRow, out = near + .62 + row * depth;
+    const hiddenByWestAccess = side === "west" && along > -8 && along < 22;
+    const scale = hiddenByWestAccess ? 0 : 1;
+    seatPart.position.set(alongZ ? sign * out : along, 1.16 + row * 1.08, alongZ ? along : sign * out);
+    seatPart.scale.setScalar(scale); seatPart.updateMatrix(); seatBases.setMatrixAt(seatIndex, seatPart.matrix);
+    seatPart.position.set(alongZ ? sign * (out + .27) : along, 1.48 + row * 1.08, alongZ ? along : sign * (out + .27));
+    seatPart.updateMatrix(); seatBacks.setMatrixAt(seatIndex, seatPart.matrix); seatIndex += 1;
+  }
+  group.add(seatBases, seatBacks);
   const back = near + rows * depth + 2.2, upper = rows * 1.08 + 5.4;
   if (alongZ) group.add(box([6.4, 1.05, length + 2], [sign * back, upper, 0], kit.concrete), box([1.4, 7.2, length + 4], [sign * (back + 3.4), upper + 3.1, 0], kit.structure), box([15, .65, length + 8], [sign * (back - 1.2), upper + 9.7, 0], kit.metal, !lowPower));
   else group.add(box([length + 8, 1.05, 6.4], [0, upper, sign * back], kit.concrete), box([length + 10, 7.2, 1.4], [0, upper + 3.1, sign * (back + 3.4)], kit.structure), box([length + 16, .65, 15], [0, upper + 9.7, sign * (back - 1.2)], kit.metal, !lowPower));
@@ -141,6 +161,33 @@ function stadiumStand(side: "east" | "west" | "north" | "south", lowPower: boole
 
 function smooth(edge0: number, edge1: number, value: number) { const t = THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1); return t * t * (3 - 2 * t); }
 
+function footballGoal(end: number, frame: THREE.Material, net: THREE.Material) {
+  const group = new THREE.Group(), depth = end * 2.15, width = 7.32, height = 2.44;
+  group.position.set(0, 0, end * 52.4);
+  group.add(
+    box([width, .12, .12], [0, height, 0], frame),
+    box([.12, height, .12], [-width / 2, height / 2, 0], frame),
+    box([.12, height, .12], [width / 2, height / 2, 0], frame),
+    box([width, .09, .09], [0, .05, depth], frame),
+    box([.09, .09, Math.abs(depth)], [-width / 2, .05, depth / 2], frame),
+    box([.09, .09, Math.abs(depth)], [width / 2, .05, depth / 2], frame),
+  );
+  const points: number[] = [];
+  const segment = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => points.push(ax, ay, az, bx, by, bz);
+  // Back grid, roof grid and both side grids form one inexpensive line mesh.
+  for (let x = -width / 2; x <= width / 2 + .01; x += .46) segment(x, 0, depth, x, height, depth);
+  for (let y = 0; y <= height + .01; y += .35) segment(-width / 2, y, depth, width / 2, y, depth);
+  for (let x = -width / 2; x <= width / 2 + .01; x += .46) segment(x, height, 0, x, height, depth);
+  for (let z = 0; Math.abs(z) <= Math.abs(depth) + .01; z += end * .36) segment(-width / 2, height, z, width / 2, height, z);
+  for (const side of [-1, 1]) {
+    for (let y = 0; y <= height + .01; y += .35) segment(side * width / 2, y, 0, side * width / 2, y, depth);
+    for (let z = 0; Math.abs(z) <= Math.abs(depth) + .01; z += end * .36) segment(side * width / 2, 0, z, side * width / 2, height, z);
+  }
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  group.add(new THREE.LineSegments(geometry, net));
+  return group;
+}
+
 export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -155,7 +202,8 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const concrete = new THREE.MeshStandardMaterial({ color: 0x565d5a, roughness: .93 }), dark = new THREE.MeshStandardMaterial({ color: 0x252d2b, roughness: .9 });
   const floor = new THREE.MeshStandardMaterial({ color: 0x777c78, roughness: .88 }), metal = new THREE.MeshStandardMaterial({ color: 0x252c2b, roughness: .64, metalness: .38 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x70482e, roughness: .78 }), green = new THREE.MeshStandardMaterial({ color: 0x08754d, roughness: .8 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xe8ece8, roughness: .83 }), black = new THREE.MeshStandardMaterial({ color: 0x121716, roughness: .8 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xe8ece8, roughness: .83 });
+  const clockFace = new THREE.MeshBasicMaterial({ color: 0xf4f6f1 }), clockInk = new THREE.MeshBasicMaterial({ color: 0x101514 });
   const light = new THREE.MeshStandardMaterial({ color: 0xfff4d5, emissive: 0xffd98a, emissiveIntensity: 1.05, roughness: .48 });
   const dummy = new THREE.Object3D();
 
@@ -168,9 +216,10 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   for(let i=0;i<shirts.count;i+=1){const side=i%2?-1:1;dummy.position.set(-76+Math.floor(i/2)*3.1,2.45,side*7.91);dummy.rotation.y=side<0?0:Math.PI;dummy.updateMatrix();shirts.setMatrixAt(i,dummy.matrix);} scene.add(shirts);
   const bottleMat=new THREE.MeshStandardMaterial({color:0x4fb9a8,roughness:.35,transparent:true,opacity:.82}), bottles=new THREE.InstancedMesh(new THREE.CylinderGeometry(.075,.085,.32,8),bottleMat,lowPower?4:8);
   for(let i=0;i<bottles.count;i+=1){const side=i%2?-1:1;dummy.position.set(-74.5+Math.floor(i/2)*1.8,.91,side*6.65);dummy.rotation.y=0;dummy.updateMatrix();bottles.setMatrixAt(i,dummy.matrix);} scene.add(bottles);
-  scene.add(box([15.5,.12,.18],[-70,1.06,-8.72],wood),box([15.5,.12,.18],[-70,1.06,8.72],wood),box([3.8,2.25,.12],[-74.8,2.55,8.76],white),wallClock(metal,white,black));
-  const scoreTexture=labelTexture("0 - 0",512,224), scoreMat=new THREE.MeshStandardMaterial({map:scoreTexture,emissiveMap:scoreTexture,emissive:0x143325,emissiveIntensity:.42,roughness:.72});
-  const scoreboard=box([3.9,1.7,.14],[-68.5,2.65,8.76],scoreMat);scoreboard.rotation.y=Math.PI;scene.add(scoreboard);
+  scene.add(box([15.5,.12,.18],[-70,1.06,-8.72],wood),box([15.5,.12,.18],[-70,1.06,8.72],wood),box([3.8,2.25,.12],[-74.8,2.55,8.76],white),wallClock(metal,clockFace,clockInk));
+  const scoreTexture=labelTexture("0 - 0",512,224), scoreMat=new THREE.MeshBasicMaterial({map:scoreTexture});
+  const scoreboardFrame=box([.18,1.65,3.6],[-61.2,2.68,5.55],metal);
+  const scoreboard=new THREE.Mesh(new THREE.PlaneGeometry(3.3,1.38),scoreMat);scoreboard.position.set(-61.305,2.68,5.55);scoreboard.rotation.y=-Math.PI/2;scene.add(scoreboardFrame,scoreboard);
   const roomFixtures=new THREE.InstancedMesh(new THREE.BoxGeometry(2.4,.08,.4),light,3);
   for(let i=0;i<3;i+=1){dummy.position.set(-75+i*5,4.12,0);dummy.rotation.y=0;dummy.updateMatrix();roomFixtures.setMatrixAt(i,dummy.matrix);}scene.add(roomFixtures);
 
@@ -189,18 +238,24 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const ads=new THREE.InstancedMesh(new THREE.BoxGeometry(5.8,1.1,.35),bannerMat,adTransforms.length);adTransforms.forEach(([x,y,z,r],i)=>{dummy.position.set(x,y,z);dummy.rotation.y=r;dummy.updateMatrix();ads.setMatrixAt(i,dummy.matrix);});scene.add(ads);
   const stand=new THREE.MeshStandardMaterial({color:0x17201e,roughness:.91}),standConcrete=new THREE.MeshStandardMaterial({color:0x59615e,roughness:.96}),crowd=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.94,vertexColors:true});
   const kit={structure:stand,concrete:standConcrete,seat:green,crowd,metal,light};scene.add(stadiumStand("west",lowPower,kit),stadiumStand("east",lowPower,kit),stadiumStand("north",lowPower,kit),stadiumStand("south",lowPower,kit));
-  const goalMat=new THREE.MeshStandardMaterial({color:0xe8efeb,roughness:.62,metalness:.18});for(const end of [-1,1]){const goal=new THREE.Group();goal.position.z=end*52.4;goal.add(box([7.32,.12,.12],[0,2.44,0],goalMat),box([.12,2.44,.12],[-3.66,1.22,0],goalMat),box([.12,2.44,.12],[3.66,1.22,0],goalMat));scene.add(goal);}
+  const goalMat=new THREE.MeshStandardMaterial({color:0xe8efeb,roughness:.62,metalness:.18});
+  const netMat=new THREE.LineBasicMaterial({color:0xdce8e2,transparent:true,opacity:.48});
+  scene.add(footballGoal(-1,goalMat,netMat),footballGoal(1,goalMat,netMat));
   const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(0x07131c)},bottomColor:{value:new THREE.Color(0x354c40)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);gl_FragColor=vec4(mix(bottomColor,topColor,pow(h,.7)),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(210,lowPower?16:24,lowPower?10:16),skyMat));
   scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.66));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1536,lowPower?512:1536);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);const roomLight=new THREE.PointLight(0xffdfaa,.48,23,2);roomLight.position.set(-69,3.4,0);const exitLight=new THREE.PointLight(0xcaf2df,.78,22,2);exitLight.position.set(TUNNEL_EXIT+1.5,3.6,0);scene.add(roomLight,exitLight);
 
   const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
-  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);const left=smooth(.62,.72,progress)*(1-smooth(.74,.82,progress)),right=smooth(.78,.88,progress)*(1-smooth(.91,.98,progress));const yaw=reducedMotion?0:left*.42-right*.48;direction.set(Math.cos(yaw),smooth(.58,.78,progress)*.08,Math.sin(yaw));target.copy(position).addScaledVector(direction,12);camera.lookAt(target);};
+  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);
+    // Once fully outside, pan across the complete right side, then finish on the left stand.
+    const rightSweep=smooth(.58,.73,progress),leftSweep=smooth(.76,.98,progress);
+    const yaw=reducedMotion?0:rightSweep*1.12-leftSweep*2.18;
+    direction.set(Math.cos(yaw),smooth(.58,.78,progress)*.06,Math.sin(yaw));target.copy(position).addScaledVector(direction,18);camera.lookAt(target);};
   const render=()=>{if(disposed)return;renderer.render(scene,camera);if(!readySent){readySent=true;onReadyChange(true);}};
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
   const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(difference)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();bannerTexture.dispose();scoreTexture.dispose();ballTexture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();bannerTexture.dispose();scoreTexture.dispose();ballTexture.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
