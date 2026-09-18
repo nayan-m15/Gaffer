@@ -9,13 +9,16 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const [pending, setPending] = useState(0);
   const [rejected, setRejected] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(() =>
+    localStorage.getItem("gaffer-last-successful-sync"),
+  );
 
   useEffect(() => {
     let active = true;
     const refresh = async () => {
       const rows = await listQueuedEvents(matchId);
       if (!active) return;
-      setPending(rows.filter((row) => row.state === "queued").length);
+      setPending(rows.filter((row) => row.state !== "rejected").length);
       setRejected(rows.filter((row) => row.state === "rejected").length);
     };
     const reconnect = async () => {
@@ -27,6 +30,12 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
           queryClient.invalidateQueries({ queryKey: ["matches", matchId, "events"] }),
           queryClient.invalidateQueries({ queryKey: ["matches", matchId] }),
         ]);
+        const remaining = await listQueuedEvents(matchId);
+        if (!remaining.some((row) => row.state !== "rejected")) {
+          const syncedAt = new Date().toISOString();
+          localStorage.setItem("gaffer-last-successful-sync", syncedAt);
+          if (active) setLastSync(syncedAt);
+        }
       } finally {
         if (active) setSyncing(false);
         await refresh();
@@ -60,6 +69,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     <span
       role="status"
       title="Offline event synchronisation status"
+      aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
       className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#101920] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c5ced6]"
     >
       <span

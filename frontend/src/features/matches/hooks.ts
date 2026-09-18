@@ -13,6 +13,8 @@ import {
   fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
+  finaliseMatchProjection,
+  reopenMatchProjection,
   updateMatchLogEvent,
   updateMatchClock,
 } from "./api";
@@ -533,5 +535,24 @@ export function useUpdateMatchClock(matchId: string) {
     scope: { id: `match-clock-${matchId}` },
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
       updateMatchClock(matchId, input),
+  });
+}
+
+export function useFinaliseMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (expectedRevision: number) =>
+      finaliseMatchProjection(matchId, expectedRevision),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
+  });
+}
+
+export function useReopenMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => reopenMatchProjection(matchId, reason),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
   });
 }

@@ -68,6 +68,23 @@ async function database() {
           created_at: column.text,
           updated_at: column.text,
         }),
+        match_projection_state: new Table({
+          revision: column.integer,
+          input_digest: column.text,
+          rules_version: column.integer,
+          confirmed_team_score: column.integer,
+          confirmed_opponent_score: column.integer,
+          provisional_team_score: column.integer,
+          provisional_opponent_score: column.integer,
+          possible_effects: column.text,
+          disciplinary_projection: column.text,
+          unresolved_review_count: column.integer,
+          finalisation_state: column.text,
+          finalised_by_user_id: column.text,
+          finalised_at: column.text,
+          created_at: column.text,
+          updated_at: column.text,
+        }),
       });
       const db = new PowerSyncDatabase({
         schema,
@@ -141,6 +158,17 @@ export async function completeQueuedEvent(id: string) {
   await db.execute("DELETE FROM offline_event_queue WHERE id = ?", [id]);
 }
 
+export async function setQueuedEventState(
+  id: string,
+  state: "queued" | "uploading",
+) {
+  const db = await database();
+  await db.execute(
+    "UPDATE offline_event_queue SET state = ?, error = NULL WHERE id = ?",
+    [state, id],
+  );
+}
+
 export async function rejectQueuedEvent(id: string, message: string) {
   const db = await database();
   await db.execute(
@@ -153,7 +181,7 @@ export interface QueuedEventRow {
   id: string;
   match_id: string;
   payload: string;
-  state: "queued" | "rejected";
+  state: "queued" | "uploading" | "rejected";
   error: string | null;
   created_at: string;
 }
@@ -208,7 +236,7 @@ export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
     updatedAt: now,
     athlete: null,
     opponentPlayer: null,
-    pending: row.state === "queued",
+    pending: row.state === "queued" || row.state === "uploading",
     syncStatus: row.state,
     syncError: row.error,
   };
@@ -269,12 +297,112 @@ export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEv
   }));
 }
 
+export interface OfflineReadiness {
+  matchCached: boolean;
+  squadCached: boolean;
+  eventsCached: boolean;
+  appShellCached: boolean;
+  localDatabaseWritable: boolean;
+  persistentStorage: boolean;
+  usageBytes: number | null;
+  quotaBytes: number | null;
+}
+
+export async function checkOfflineReadiness(
+  matchId: string,
+): Promise<OfflineReadiness> {
+  const db = await database();
+  const probeId = `readiness:${crypto.randomUUID()}`;
+  let localDatabaseWritable = false;
+  try {
+    await db.execute(
+      `INSERT INTO offline_response_cache (id, payload, updated_at)
+       VALUES (?, ?, ?)`,
+      [probeId, JSON.stringify({ ok: true }), new Date().toISOString()],
+    );
+    const probe = await db.getOptional<{ payload: string }>(
+      "SELECT payload FROM offline_response_cache WHERE id = ?",
+      [probeId],
+    );
+    localDatabaseWritable = probe?.payload === JSON.stringify({ ok: true });
+  } finally {
+    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [probeId]);
+  }
+  const [match, squad, events, registration, persisted, estimate] =
+    await Promise.all([
+      readCachedResponse(`match:${matchId}`),
+      readCachedResponse(`squad:${matchId}`),
+      readCachedResponse(`events:${matchId}`),
+      navigator.serviceWorker?.getRegistration(),
+      navigator.storage?.persisted?.() ?? Promise.resolve(false),
+      navigator.storage?.estimate?.() ?? Promise.resolve({}),
+    ]);
+  return {
+    matchCached: match !== null,
+    squadCached: squad !== null,
+    eventsCached: events !== null,
+    appShellCached: Boolean(registration?.active),
+    localDatabaseWritable,
+    persistentStorage: persisted,
+    usageBytes: estimate.usage ?? null,
+    quotaBytes: estimate.quota ?? null,
+  };
+}
+
+export async function exportUnsentObservations() {
+  const rows = await listQueuedEvents();
+  return {
+    format: "gaffer-offline-observations",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    userScope,
+    observations: rows.map((row) => ({
+      id: row.id,
+      matchId: row.match_id,
+      state: row.state,
+      error: row.error,
+      createdAt: row.created_at,
+      payload: JSON.parse(row.payload) as CreateMatchLogEventInput,
+    })),
+  };
+}
+
 export async function subscribeToSyncedMatchEventChanges(
   onChange: () => void,
 ): Promise<() => void> {
   const db = await database();
   return db.onChange(
     { onChange },
-    { tables: ["match_events"] },
+    { tables: ["match_events", "match_projection_state"] },
   );
+}
+
+export async function readSyncedMatchProjection(
+  matchId: string,
+): Promise<import("@/features/matches/types").MatchRecord["projection"] | null> {
+  const db = await database();
+  const row = await db.getOptional<{
+    revision: number;
+    confirmed_team_score: number;
+    confirmed_opponent_score: number;
+    provisional_team_score: number;
+    provisional_opponent_score: number;
+    possible_effects: string | Record<string, unknown>;
+    unresolved_review_count: number;
+    finalisation_state: "open" | "finalised" | "amendment_required";
+  }>("SELECT * FROM match_projection_state WHERE id = ?", [matchId]);
+  if (!row) return null;
+  return {
+    revision: row.revision,
+    confirmedTeamScore: row.confirmed_team_score,
+    confirmedOpponentScore: row.confirmed_opponent_score,
+    provisionalTeamScore: row.provisional_team_score,
+    provisionalOpponentScore: row.provisional_opponent_score,
+    possibleEffects:
+      typeof row.possible_effects === "string"
+        ? JSON.parse(row.possible_effects)
+        : row.possible_effects,
+    unresolvedReviewCount: row.unresolved_review_count,
+    finalisationState: row.finalisation_state,
+  };
 }
