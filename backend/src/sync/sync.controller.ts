@@ -56,10 +56,7 @@ export class SyncController {
     const unsigned = `${header}.${payload}`;
     const signature = privateKey
       ? createSign('RSA-SHA256').update(unsigned).sign(privateKey, 'base64url')
-      : createHmac(
-          'sha256',
-          Buffer.from(encodedSecret!, 'base64url'),
-        )
+      : createHmac('sha256', Buffer.from(encodedSecret!, 'base64url'))
           .update(unsigned)
           .digest('base64url');
     const token = `${header}.${payload}.${signature}`;
@@ -86,7 +83,8 @@ export class SyncController {
   }
 
   private async processUploadItem(userId: string, item: SyncUploadItem) {
-    const id = item.kind === 'observation' ? item.payload.clientRequestId : item.id;
+    const id =
+      item.kind === 'observation' ? item.payload.clientRequestId : item.id;
     const payloadHash = createHash('sha256')
       .update(JSON.stringify(item))
       .digest('hex');

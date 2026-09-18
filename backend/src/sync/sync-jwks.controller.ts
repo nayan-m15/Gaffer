@@ -9,7 +9,9 @@ export class SyncJwksController {
     const kid = process.env.POWERSYNC_KID;
     const privatePem = process.env.POWERSYNC_PRIVATE_KEY?.replace(/\\n/g, '\n');
     if (!kid || !privatePem) {
-      throw new ServiceUnavailableException('PowerSync JWKS is not configured.');
+      throw new ServiceUnavailableException(
+        'PowerSync JWKS is not configured.',
+      );
     }
     const privateKey = createPrivateKey(privatePem);
     const publicKey = createPublicKey(privateKey).export({ format: 'jwk' });

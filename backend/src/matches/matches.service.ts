@@ -600,8 +600,7 @@ export class MatchesService {
       id: randomUUID(),
       matchId,
       actorUserId: userId,
-      operationType:
-        dto.resolution === 'same_event' ? 'merge' : 'separate',
+      operationType: dto.resolution === 'same_event' ? 'merge' : 'separate',
       canonicalEventId: review.canonicalEventId,
       targetObservationIds: await this.observationIdsForCanonical(
         review.canonicalEventId,
@@ -911,9 +910,8 @@ export class MatchesService {
       (event) => event.lifecycleStatus === 'confirmed',
     );
     const goals = (rows: typeof eventRows, team: 'own' | 'opponent') =>
-      rows.filter(
-        (event) => event.team === team && event.eventType === 'goal',
-      ).length;
+      rows.filter((event) => event.team === team && event.eventType === 'goal')
+        .length;
     const ambiguous = effective.filter(
       (event) => event.lifecycleStatus === 'needs_review',
     );

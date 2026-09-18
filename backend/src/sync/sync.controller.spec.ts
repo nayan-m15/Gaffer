@@ -16,7 +16,11 @@ describe('SyncController', () => {
     delete process.env.POWERSYNC_SHARED_SECRET;
     delete process.env.POWERSYNC_PRIVATE_KEY;
     delete process.env.POWERSYNC_KID;
-    const controller = new SyncController({} as never, {} as never, {} as never);
+    const controller = new SyncController(
+      {} as never,
+      {} as never,
+      {} as never,
+    );
     await expect(
       controller.token({ id: 'user-1' } as never),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
