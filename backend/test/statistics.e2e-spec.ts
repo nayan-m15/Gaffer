@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -711,7 +712,9 @@ describe('Statistics integrity (e2e)', () => {
 
     const competition = await agent
       .post('/statistics/competitions')
-      .send({ name: 'Premier League', type: 'league' })
+      // Globally unique competition names: suffix a uuid so repeated runs
+      // against the persistent test database never collide.
+      .send({ name: `Premier League ${randomUUID()}`, type: 'league' })
       .expect(201);
     const competitionId = (competition.body as { id: string }).id;
     const standing = await agent

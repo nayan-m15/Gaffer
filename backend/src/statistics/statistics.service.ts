@@ -11,6 +11,7 @@ import {
   athletes,
   athleteMatchStats,
   competitions,
+  competitionTeams,
   events,
   matchEvents,
   matches,
@@ -42,11 +43,15 @@ export interface OverviewFilters {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
+  // Drizzle wraps driver errors in a DrizzleQueryError, so the 23505 code may
+  // sit on `cause` rather than on the error itself.
+  const candidates = [error, (error as { cause?: unknown })?.cause];
+  return candidates.some(
+    (candidate) =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      'code' in candidate &&
+      (candidate as { code?: unknown }).code === '23505',
   );
 }
 
@@ -590,10 +595,40 @@ export class StatisticsService {
   async createCompetition(userId: string, dto: CreateCompetitionDto) {
     const team = await this.requireTeam(userId);
 
-    const [competition] = await this.databaseService.database
-      .insert(competitions)
-      .values({ teamId: team.id, ...dto })
-      .returning();
+    // Legacy create path (competition management is moving to the dedicated
+    // /competitions module). New shared-competition invariants still hold:
+    // the creating user becomes the admin, the team is inserted as the first
+    // participant, and the global case-insensitive name uniqueness maps to
+    // the same friendly conflict the /competitions module returns.
+    let competition: typeof competitions.$inferSelect | undefined;
+    try {
+      [competition] = await this.databaseService.database
+        .insert(competitions)
+        .values({ teamId: team.id, adminUserId: userId, ...dto })
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A competition with this name already exists.',
+        );
+      }
+      throw error;
+    }
+
+    try {
+      await this.databaseService.database.insert(competitionTeams).values({
+        competitionId: competition.id,
+        teamId: team.id,
+        displayName: team.name,
+      });
+    } catch (error) {
+      // Mirror the new module's cleanup: never leave a competition without
+      // its founding participant row.
+      await this.databaseService.database
+        .delete(competitions)
+        .where(eq(competitions.id, competition.id));
+      throw error;
+    }
 
     return competition;
   }
@@ -606,16 +641,26 @@ export class StatisticsService {
     const team = await this.requireTeam(userId);
     await this.requireCompetition(team.id, competitionId);
 
-    const [competition] = await this.databaseService.database
-      .update(competitions)
-      .set({ ...dto, updatedAt: new Date() })
-      .where(
-        and(
-          eq(competitions.id, competitionId),
-          eq(competitions.teamId, team.id),
-        ),
-      )
-      .returning();
+    let competition: typeof competitions.$inferSelect | undefined;
+    try {
+      [competition] = await this.databaseService.database
+        .update(competitions)
+        .set({ ...dto, updatedAt: new Date() })
+        .where(
+          and(
+            eq(competitions.id, competitionId),
+            eq(competitions.teamId, team.id),
+          ),
+        )
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          'A competition with this name already exists.',
+        );
+      }
+      throw error;
+    }
 
     return competition;
   }

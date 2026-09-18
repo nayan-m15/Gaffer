@@ -162,6 +162,13 @@
       "when": 1789661739020,
       "tag": "0021_swift_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790180000000,
+      "tag": "0022_shared_competition_teams",
+      "breakpoints": true
     }
   ]
 }

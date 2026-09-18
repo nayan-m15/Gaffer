@@ -1,0 +1,56 @@
+import { z } from 'zod';
+import { competitionType } from '../database/schema';
+
+export const competitionTypeSchema = z.enum(competitionType.enumValues);
+
+const competitionNameField = z
+  .string()
+  .trim()
+  .min(1, 'Competition name is required.')
+  .max(100, 'Competition name must be 100 characters or fewer.');
+
+const seasonLabelField = z
+  .string()
+  .trim()
+  .max(20, 'Season must be 20 characters or fewer.')
+  .optional();
+
+export const createCompetitionSchema = z.object({
+  name: competitionNameField,
+  type: competitionTypeSchema,
+  season: seasonLabelField,
+});
+export type CreateCompetitionDto = z.infer<typeof createCompetitionSchema>;
+
+export const updateCompetitionSchema = createCompetitionSchema
+  .partial()
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    {
+      message: 'At least one field is required.',
+    },
+  );
+export type UpdateCompetitionDto = z.infer<typeof updateCompetitionSchema>;
+
+export const competitionSearchSchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .min(1, 'Enter a search term.')
+    .max(100, 'Search term must be 100 characters or fewer.'),
+});
+export type CompetitionSearchDto = z.infer<typeof competitionSearchSchema>;
+
+// A participant slot added by the competition admin. Only the display name is
+// supplied at this stage — the slot stays unlinked until an invitation is
+// accepted (Stage 2).
+export const createCompetitionTeamSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'Team name is required.')
+    .max(100, 'Team name must be 100 characters or fewer.'),
+});
+export type CreateCompetitionTeamDto = z.infer<
+  typeof createCompetitionTeamSchema
+>;

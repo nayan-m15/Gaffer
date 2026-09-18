@@ -463,11 +463,58 @@ export const competitions = pgTable(
     // @deprecated — free-text label superseded by seasonId. Still read by the
     // competition form and standings display; dropped in a follow-up.
     season: text('season'), // e.g. "2025/26" — optional
+    // The user who administers this shared competition — normally the coach
+    // who created it. Membership editing is gated on this, not teamId.
+    // Nullable: legacy rows whose owning team has no coach member (and rows
+    // written by older code paths) keep being managed through the team-scoped
+    // statistics endpoints until those are retired.
+    adminUserId: text('admin_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [
     index('competitions_team_id_index').on(table.teamId),
     index('competitions_season_id_index').on(table.seasonId),
+    index('competitions_admin_user_id_index').on(table.adminUserId),
+    // Competition names are globally unique, case-insensitively. The service
+    // checks first with a friendly message; this index is the race backstop.
+    uniqueIndex('competitions_name_lower_unique').on(sql`lower(${table.name})`),
+  ],
+);
+
+// One participating team slot in a shared competition. A linked participant
+// carries the real application team in `teamId`; a slot the admin added ahead
+// of an invitation keeps it null and is known only by its display name. The
+// creator's team is inserted automatically when the competition is created.
+export const competitionTeams = pgTable(
+  'competition_teams',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    // Nullable until an invited coach accepts and their team is linked.
+    teamId: uuid('team_id').references(() => teams.id, {
+      onDelete: 'set null',
+    }),
+    displayName: text('display_name').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('competition_teams_competition_id_index').on(table.competitionId),
+    index('competition_teams_team_id_index').on(table.teamId),
+    // A linked team can only occupy one slot per competition. Unlinked slots
+    // (teamId null) never collide because the partial index skips them.
+    uniqueIndex('competition_teams_competition_team_unique')
+      .on(table.competitionId, table.teamId)
+      .where(sql`${table.teamId} is not null`),
+    // Display names are unique per competition, case-insensitively, so two
+    // slots can never render the same team name.
+    uniqueIndex('competition_teams_competition_display_name_unique').on(
+      table.competitionId,
+      sql`lower(${table.displayName})`,
+    ),
   ],
 );
 
