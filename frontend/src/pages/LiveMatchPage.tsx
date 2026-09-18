@@ -24,6 +24,8 @@ import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
+import { EventReviewPanel } from "@/offline/EventReviewPanel";
 import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useDeleteMatchEvent,
@@ -316,6 +318,7 @@ export default function LiveMatchPage() {
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [endOpen, setEndOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [toast, setToast] = useState<{
     id?: string;
     label: string;
@@ -732,6 +735,9 @@ export default function LiveMatchPage() {
         } else {
           const created = await logEvent.mutateAsync({
             clientRequestId: crypto.randomUUID(),
+            clientCreatedAt: new Date().toISOString(),
+            period,
+            matchElapsedMs: elapsedRef.current,
             team: input.team,
             eventType,
             minute: input.minute ?? currentMinute,
@@ -812,6 +818,7 @@ export default function LiveMatchPage() {
     [
       matchId,
       currentMinute,
+      period,
       timeline,
       dismissedOwnIds,
       dismissedOppIds,
@@ -1289,6 +1296,7 @@ export default function LiveMatchPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
           <div className="relative">
             <button
               type="button"
@@ -1300,6 +1308,16 @@ export default function LiveMatchPage() {
             </button>
             {settingsOpen && (
               <div className="absolute right-0 z-30 mt-1 w-52 rounded-xl border border-[#1c2b36] bg-[#101920] p-2 shadow-xl">
+                {team?.role === "coach" ? (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setReviewOpen(true);
+                    }}
+                  >
+                    Review duplicates
+                  </SettingsItem>
+                ) : null}
                 {period === "not_started" && (
                   <SettingsItem
                     onClick={() => {
@@ -1396,6 +1414,10 @@ export default function LiveMatchPage() {
           </button>
         </div>
       </header>
+
+      {reviewOpen && matchId ? (
+        <EventReviewPanel matchId={matchId} onClose={() => setReviewOpen(false)} />
+      ) : null}
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
         <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
@@ -1704,6 +1726,19 @@ export default function LiveMatchPage() {
                             {assistWho ? `, Assist: ${assistWho}` : ""}
                             {substitutionIncoming(event, squad, opponentSquad)}
                           </p>
+                          {event.lifecycleStatus === "needs_review" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              Possible duplicate · coach review needed
+                            </p>
+                          ) : event.syncStatus === "queued" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              Saved on this device
+                            </p>
+                          ) : event.syncStatus === "rejected" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                              Sync rejected · {event.syncError}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                       {period !== "full_time" && !event.pending && (

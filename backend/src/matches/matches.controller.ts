@@ -16,6 +16,7 @@ import {
   createMatchLogEventSchema,
   updateMatchLogEventSchema,
   updateMatchClockSchema,
+  resolveMatchEventReviewSchema,
 } from './matches.schemas';
 import { MatchesService } from './matches.service';
 
@@ -56,6 +57,29 @@ export class MatchesController {
   ) {
     const dto = zodValidate(createMatchLogEventSchema, body);
     return this.matchesService.logEvent(user.id, matchId, dto);
+  }
+
+  @Get(':matchId/event-reviews')
+  async listEventReviews(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.listEventReviews(user.id, matchId);
+  }
+
+  @Post(':matchId/event-reviews/:reviewId/resolve')
+  async resolveEventReview(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @Body() body: unknown,
+  ) {
+    return this.matchesService.resolveEventReview(
+      user.id,
+      matchId,
+      reviewId,
+      zodValidate(resolveMatchEventReviewSchema, body),
+    );
   }
 
   @Patch(':matchId/events/:eventId')

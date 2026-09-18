@@ -73,6 +73,9 @@ export interface MatchLogEvent {
   loggedByUserId: string;
   manuallyAdjusted: boolean;
   clientRequestId?: string | null;
+  period?: MatchClockPeriod;
+  matchElapsedMs?: number | null;
+  lifecycleStatus?: "provisional" | "confirmed" | "needs_review" | "voided";
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;
@@ -81,10 +84,16 @@ export interface MatchLogEvent {
   pending?: boolean;
   /** Client-only: stable list key so confirming a log does not remount the row. */
   optimisticKey?: string;
+  syncStatus?: "queued" | "rejected" | "synced";
+  syncError?: string | null;
 }
 
 export interface CreateMatchLogEventInput {
   clientRequestId: string;
+  deviceId?: string;
+  clientCreatedAt?: string;
+  period?: MatchClockPeriod;
+  matchElapsedMs?: number;
   team: MatchEventTeam;
   eventType: MatchEventType;
   athleteId?: string;

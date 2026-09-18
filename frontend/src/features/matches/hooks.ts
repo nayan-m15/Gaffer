@@ -172,7 +172,9 @@ function mergeServerEvent(
     athlete:
       server.athlete ??
       resolveAthlete(athleteId, squad, previous.athlete),
-    pending: false,
+    pending: server.pending ?? false,
+    syncStatus: server.syncStatus ?? "synced",
+    syncError: server.syncError ?? null,
     createdAt: asIso(server.createdAt, previous.createdAt),
     updatedAt: asIso(server.updatedAt, previous.updatedAt),
     optimisticKey: previous.optimisticKey,

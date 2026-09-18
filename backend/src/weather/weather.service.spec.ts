@@ -66,13 +66,19 @@ describe('WeatherService', () => {
   });
 
   it('selects the correct UTC hour across a venue timezone boundary', async () => {
-    const scheduledAt = new Date('2026-09-12T00:30:00+02:00');
+    const venueDate = new Date();
+    venueDate.setUTCDate(venueDate.getUTCDate() + 2);
+    const scheduledAt = new Date(
+      `${venueDate.toISOString().slice(0, 10)}T00:30:00+02:00`,
+    );
+    const forecastHour = new Date(scheduledAt);
+    forecastHour.setUTCMinutes(0, 0, 0);
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve({
           hourly: {
-            time: ['2026-09-11T22:00'],
+            time: [forecastHour.toISOString().slice(0, 16)],
             temperature_2m: [17],
             precipitation_probability: [5],
             wind_speed_10m: [8],
@@ -90,7 +96,7 @@ describe('WeatherService', () => {
 
     expect(result).toMatchObject({
       status: 'available',
-      forecastAt: '2026-09-11T22:00:00.000Z',
+      forecastAt: forecastHour.toISOString(),
       temperatureC: 17,
     });
   });

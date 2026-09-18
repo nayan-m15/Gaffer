@@ -663,6 +663,12 @@ export const matchEvents = pgTable(
       .references(() => user.id),
     manuallyAdjusted: boolean('manually_adjusted').default(false).notNull(),
     clientRequestId: uuid('client_request_id'),
+    period: text('period').default('not_started').notNull(),
+    matchElapsedMs: integer('match_elapsed_ms'),
+    structuredPayload:
+      jsonb('structured_payload').$type<Record<string, unknown>>(),
+    lifecycleStatus: text('lifecycle_status').default('provisional').notNull(),
+    rulesVersion: integer('rules_version').default(1).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -678,5 +684,97 @@ export const matchEvents = pgTable(
     uniqueIndex('match_events_match_request_unique')
       .on(table.matchId, table.clientRequestId)
       .where(sql`${table.clientRequestId} is not null`),
+  ],
+);
+
+/** Immutable evidence captured by one match-day device. The canonical
+ * `match_events` ledger is derived from these rows; observations are never
+ * edited or deleted by the application. */
+export const matchEventObservations = pgTable(
+  'match_event_observations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    deviceId: uuid('device_id').notNull(),
+    loggedByUserId: text('logged_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    schemaVersion: integer('schema_version').default(1).notNull(),
+    eventType: matchEventType('event_type').notNull(),
+    team: matchEventTeam('team').notNull(),
+    athleteId: uuid('athlete_id').references(() => athletes.id, {
+      onDelete: 'set null',
+    }),
+    opponentLabel: text('opponent_label'),
+    opponentPlayerId: uuid('opponent_player_id').references(
+      () => opponentMatchPlayers.id,
+      { onDelete: 'set null' },
+    ),
+    period: text('period').notNull(),
+    matchElapsedMs: integer('match_elapsed_ms').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    clientCreatedAt: timestamp('client_created_at', {
+      withTimezone: true,
+    }).notNull(),
+    serverReceivedAt: timestamp('server_received_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_event_observations_match_index').on(
+      table.matchId,
+      table.period,
+      table.matchElapsedMs,
+    ),
+    index('match_event_observations_actor_index').on(table.loggedByUserId),
+  ],
+);
+
+export const matchEventMemberships = pgTable(
+  'match_event_memberships',
+  {
+    observationId: uuid('observation_id')
+      .primaryKey()
+      .references(() => matchEventObservations.id, { onDelete: 'cascade' }),
+    canonicalEventId: uuid('canonical_event_id')
+      .notNull()
+      .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_event_memberships_canonical_index').on(table.canonicalEventId),
+  ],
+);
+
+export const matchEventReviews = pgTable(
+  'match_event_reviews',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    canonicalEventId: uuid('canonical_event_id')
+      .notNull()
+      .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    status: text('status').default('open').notNull(),
+    resolution: text('resolution'),
+    resolvedByUserId: text('resolved_by_user_id').references(() => user.id),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('match_event_reviews_match_status_index').on(
+      table.matchId,
+      table.status,
+    ),
+    uniqueIndex('match_event_reviews_open_canonical_unique')
+      .on(table.canonicalEventId)
+      .where(sql`${table.status} = 'open'`),
   ],
 );

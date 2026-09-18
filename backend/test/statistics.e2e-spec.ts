@@ -567,6 +567,55 @@ describe('Statistics and seasons (e2e)', () => {
         expect(playmaker.goalContributions).toBe(5);
       });
 
+      it('does not count an unused substitute as an appearance', async () => {
+        const { agent: substituteAgent } = await newCoach();
+        const startingIds = await createSquad(substituteAgent);
+        const substitute = await substituteAgent
+          .post('/athletes')
+          .send({ firstName: 'Unused', lastName: 'Substitute' })
+          .expect(201);
+        const substituteId = (substitute.body as { id: string }).id;
+        const event = await substituteAgent
+          .post('/events')
+          .send({
+            title: 'vs Bench Test FC',
+            type: 'match',
+            scheduledAt: pastIso(1),
+            location: 'Main field',
+          })
+          .expect(201);
+        const eventId = (event.body as { id: string }).id;
+        const started = await substituteAgent
+          .post(`/events/${eventId}/start-match`)
+          .send({
+            opponentName: 'Bench Test FC',
+            isHome: true,
+            startingAthleteIds: startingIds,
+            benchAthleteIds: [substituteId],
+          })
+          .expect(201);
+        const matchId = (started.body as { id: string }).id;
+
+        await substituteAgent.post(`/matches/${matchId}/finish`).expect(201);
+
+        const comparison = (
+          await substituteAgent
+            .get(
+              `/statistics/compare?athleteIds=${startingIds[0]},${substituteId}`,
+            )
+            .expect(200)
+        ).body as ComparisonBody;
+        const starter = comparison.athletes.find(
+          (athlete) => athlete.athleteId === startingIds[0],
+        );
+        const unusedSubstitute = comparison.athletes.find(
+          (athlete) => athlete.athleteId === substituteId,
+        );
+
+        expect(starter?.appearances).toBe(1);
+        expect(unusedSubstitute?.appearances).toBe(0);
+      });
+
       it('returns a null per-90 because minutes are never recorded', async () => {
         const comparison = (
           await agent

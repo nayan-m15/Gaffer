@@ -60,6 +60,7 @@ function loggedEventCount(
       and ${matchEvents.athleteId} = ${athleteMatchStats.athleteId}
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = ${eventType}
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   ), 0)`;
 }
 
@@ -69,6 +70,7 @@ function matchGoalCount(team: 'own' | 'opponent') {
     where ${matchEvents.matchId} = ${matches.id}
       and ${matchEvents.team} = ${team}
       and ${matchEvents.eventType} = 'goal'
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   ), 0)`;
 }
 
@@ -79,6 +81,7 @@ function appearedInMatch() {
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = 'substitution'
       and ${matchEvents.detail} = ${athleteMatchStats.athleteId}::text
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   )`;
 }
 
@@ -96,7 +99,8 @@ function countEvents(
     : sql``;
 
   return sql<number>`count(*) filter (
-    where ${matchEvents.eventType} = ${eventType}${minutesClause}
+    where ${matchEvents.eventType} = ${eventType}
+      and ${matchEvents.lifecycleStatus} <> 'voided'${minutesClause}
   )::int`;
 }
 
@@ -324,7 +328,7 @@ export class StatisticsService {
     const appearanceRows = await this.databaseService.database
       .select({
         athleteId: athleteMatchStats.athleteId,
-        appearances: sql<number>`count(*)::int`,
+        appearances: sql<number>`count(*) filter (where ${appearedInMatch()})::int`,
         starts: sql<number>`count(*) filter (where ${athleteMatchStats.started})::int`,
         minutesPlayed: sql<number>`coalesce(sum(${athleteMatchStats.minutesPlayed}), 0)::int`,
         matchesWithMinutes: sql<number>`count(*) filter (where ${athleteMatchStats.minutesPlayed} is not null)::int`,
