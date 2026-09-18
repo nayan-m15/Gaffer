@@ -66,14 +66,20 @@ export function Navbar() {
   }, [mobileOpen]);
 
   const toggleMobile = useCallback(() => setMobileOpen((o) => !o), []);
+  const sceneLinkClass = scrolled
+    ? "text-muted-foreground hover:text-foreground"
+    : "text-[var(--landing-scene-secondary)] hover:text-[var(--landing-scene-foreground)] [text-shadow:0_1px_8px_rgb(0_0_0/0.75)]";
+  const sceneIconClass = scrolled
+    ? "text-foreground"
+    : "text-[var(--landing-scene-foreground)] hover:bg-black/30 hover:text-white";
 
   return (
     <header
       className={cn(
         "sticky top-0 z-50 w-full transition-colors duration-200",
         scrolled
-          ? "border-b border-border bg-background/80 backdrop-blur-md"
-          : "bg-transparent",
+          ? "border-b border-border bg-background/95 text-foreground shadow-sm backdrop-blur-md"
+          : "bg-transparent text-[var(--landing-scene-foreground)]",
       )}
     >
       <nav
@@ -83,7 +89,7 @@ export function Navbar() {
         {/* ── Logo + wordmark ──────────────────────────────────────────── */}
         <a
           href="/"
-          className="flex items-center gap-2.5 text-foreground transition-opacity hover:opacity-80"
+          className="flex items-center gap-2.5 text-current transition-opacity hover:opacity-80 [text-shadow:0_1px_8px_rgb(0_0_0/0.75)]"
         >
           <SportLogo size={30} className="rounded" />
           <span className="text-sm font-semibold tracking-tight sm:text-base">
@@ -95,7 +101,7 @@ export function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <a
             href="/public-dashboard"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className={cn("rounded-md px-3 py-2 text-sm font-medium transition-colors", sceneLinkClass)}
           >
             Public Dashboard
           </a>
@@ -107,6 +113,7 @@ export function Navbar() {
             type="button"
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            className={sceneIconClass}
           >
             {theme === "dark" ? (
               <Sun className="size-4" />
@@ -117,7 +124,7 @@ export function Navbar() {
 
           <a
             href="/login"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className={cn("rounded-md px-3 py-2 text-sm font-medium transition-colors", sceneLinkClass)}
           >
             Log In
           </a>
@@ -135,6 +142,7 @@ export function Navbar() {
             type="button"
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            className={sceneIconClass}
           >
             {theme === "dark" ? (
               <Sun className="size-4" />
@@ -150,6 +158,7 @@ export function Navbar() {
             onClick={toggleMobile}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
+            className={sceneIconClass}
           >
             {mobileOpen ? (
               <X className="size-5" />
@@ -169,7 +178,7 @@ export function Navbar() {
             : "max-h-0 opacity-0",
         )}
       >
-        <div className="border-t border-border bg-background px-4 pb-6 pt-4">
+        <div className="border-t border-border bg-background px-4 pb-6 pt-4 text-foreground shadow-xl">
           {/* Navigation links */}
           <ul className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
