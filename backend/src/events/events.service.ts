@@ -5,13 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
   competitions,
+  competitionTeams,
   eventRsvps,
   events,
   gamePlans,
@@ -200,7 +201,10 @@ export class EventsService {
           ? dto.competitionId
           : existingEvent.competitionId
         : null;
-    if (competitionId) {
+    const competitionChanged =
+      dto.competitionId !== undefined ||
+      (dto.type === 'match' && existingEvent.type !== 'match');
+    if (competitionId && competitionChanged) {
       await this.requireTeamCompetition(team.id, competitionId);
     }
 
@@ -466,11 +470,16 @@ export class EventsService {
   private async requireTeamCompetition(teamId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
       .select({ id: competitions.id })
-      .from(competitions)
+      .from(competitionTeams)
+      .innerJoin(
+        competitions,
+        eq(competitionTeams.competitionId, competitions.id),
+      )
       .where(
         and(
+          eq(competitionTeams.teamId, teamId),
           eq(competitions.id, competitionId),
-          eq(competitions.teamId, teamId),
+          ne(competitions.type, 'friendly'),
         ),
       )
       .limit(1);

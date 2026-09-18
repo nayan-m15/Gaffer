@@ -511,12 +511,18 @@ export function EventFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No competition</SelectItem>
-                  {(competitionsQuery.data ?? []).map((competition) => (
-                    <SelectItem key={competition.id} value={competition.id}>
-                      {competition.name}
-                      {competition.season ? ` (${competition.season})` : ""}
-                    </SelectItem>
-                  ))}
+                  {(competitionsQuery.data ?? [])
+                    .filter(
+                      (competition) =>
+                        competition.type !== "friendly" ||
+                        competition.id === event?.competitionId,
+                    )
+                    .map((competition) => (
+                      <SelectItem key={competition.id} value={competition.id}>
+                        {competition.name}
+                        {competition.season ? ` (${competition.season})` : ""}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </Field>

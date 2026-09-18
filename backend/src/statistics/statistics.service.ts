@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -556,44 +557,77 @@ export class StatisticsService {
   /** All competitions for the team, each with its standings rows attached. */
   async getCompetitions(userId: string) {
     const team = await this.requireTeam(userId);
-    return this.getCompetitionsForTeam(team.id);
+    return this.getCompetitionsForTeam(
+      team.id,
+      team.role === 'coach' ? userId : undefined,
+    );
   }
 
   /**
    * Competitions and their standings for an already-resolved team — shared
    * with the player module, which scopes by the claimed athlete's team
    * instead of a coach's owned team.
+   *
+   * `competition_teams` is the membership source of truth. `isOwnTeam` is
+   * derived per viewer from the participant display name because the stored
+   * legacy boolean cannot represent multiple teams viewing one shared table.
    */
-  async getCompetitionsForTeam(teamId: string) {
+  async getCompetitionsForTeam(teamId: string, userId?: string) {
     const teamCompetitions = await this.databaseService.database
-      .select()
-      .from(competitions)
-      .where(eq(competitions.teamId, teamId))
+      .select({
+        competition: competitions,
+        participantDisplayName: competitionTeams.displayName,
+      })
+      .from(competitionTeams)
+      .innerJoin(
+        competitions,
+        eq(competitionTeams.competitionId, competitions.id),
+      )
+      .where(eq(competitionTeams.teamId, teamId))
       .orderBy(asc(competitions.name));
 
     if (teamCompetitions.length === 0) {
       return [];
     }
 
-    const competitionIds = teamCompetitions.map((c) => c.id);
+    const competitionIds = teamCompetitions.map((row) => row.competition.id);
     const teamStandings = await this.databaseService.database
       .select()
       .from(standings)
       .where(inArray(standings.competitionId, competitionIds))
       .orderBy(asc(standings.position));
 
-    return teamCompetitions.map((competition) => ({
-      ...competition,
-      standings: teamStandings.filter(
-        (s) => s.competitionId === competition.id,
-      ),
-    }));
+    return teamCompetitions.map(({ competition, participantDisplayName }) => {
+      const normalizedOwnName = participantDisplayName.trim().toLocaleLowerCase();
+
+      return {
+        ...competition,
+        isAdmin:
+          competition.type !== 'friendly' &&
+          userId !== undefined &&
+          (competition.adminUserId === userId ||
+            (competition.adminUserId === null &&
+              competition.teamId === teamId)),
+        standings: teamStandings
+          .filter((s) => s.competitionId === competition.id)
+          .map((standing) => ({
+            ...standing,
+            isOwnTeam:
+              standing.teamName.trim().toLocaleLowerCase() === normalizedOwnName,
+          })),
+      };
+    });
   }
 
   /* ── Standings / competitions CRUD ──────────────────────────────────────── */
 
   async createCompetition(userId: string, dto: CreateCompetitionDto) {
     const team = await this.requireTeam(userId);
+    if (dto.type === 'friendly') {
+      throw new BadRequestException(
+        'Friendly matches should be created without a competition.',
+      );
+    }
 
     // Legacy create path (competition management is moving to the dedicated
     // /competitions module). New shared-competition invariants still hold:
@@ -639,19 +673,19 @@ export class StatisticsService {
     dto: UpdateCompetitionDto,
   ) {
     const team = await this.requireTeam(userId);
-    await this.requireCompetition(team.id, competitionId);
+    await this.requireCompetitionAdmin(userId, team.id, competitionId);
+    if (dto.type === 'friendly') {
+      throw new BadRequestException(
+        'Friendly matches should be created without a competition.',
+      );
+    }
 
     let competition: typeof competitions.$inferSelect | undefined;
     try {
       [competition] = await this.databaseService.database
         .update(competitions)
         .set({ ...dto, updatedAt: new Date() })
-        .where(
-          and(
-            eq(competitions.id, competitionId),
-            eq(competitions.teamId, team.id),
-          ),
-        )
+        .where(eq(competitions.id, competitionId))
         .returning();
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -667,16 +701,11 @@ export class StatisticsService {
 
   async deleteCompetition(userId: string, competitionId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireCompetition(team.id, competitionId);
+    await this.requireCompetitionAdmin(userId, team.id, competitionId);
 
     await this.databaseService.database
       .delete(competitions)
-      .where(
-        and(
-          eq(competitions.id, competitionId),
-          eq(competitions.teamId, team.id),
-        ),
-      );
+      .where(eq(competitions.id, competitionId));
 
     return { success: true };
   }
@@ -687,7 +716,7 @@ export class StatisticsService {
     dto: CreateStandingDto,
   ) {
     const team = await this.requireTeam(userId);
-    await this.requireCompetition(team.id, competitionId);
+    await this.requireCompetitionAdmin(userId, team.id, competitionId);
 
     const existingConflict = await this.databaseService.database
       .select({
@@ -717,7 +746,7 @@ export class StatisticsService {
     try {
       const [standing] = await this.databaseService.database
         .insert(standings)
-        .values({ competitionId, ...dto })
+        .values({ competitionId, ...dto, isOwnTeam: false })
         .returning();
 
       return standing;
@@ -737,7 +766,7 @@ export class StatisticsService {
     dto: UpdateStandingDto,
   ) {
     const team = await this.requireTeam(userId);
-    const existing = await this.requireStanding(team.id, standingId);
+    const existing = await this.requireStandingAdmin(userId, team.id, standingId);
 
     zodValidate(createStandingSchema, {
       teamName: dto.teamName ?? existing.teamName,
@@ -789,7 +818,7 @@ export class StatisticsService {
     try {
       const [standing] = await this.databaseService.database
         .update(standings)
-        .set({ ...dto, updatedAt: new Date() })
+        .set({ ...dto, isOwnTeam: false, updatedAt: new Date() })
         .where(eq(standings.id, standingId))
         .returning();
 
@@ -806,7 +835,7 @@ export class StatisticsService {
 
   async deleteStanding(userId: string, standingId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireStanding(team.id, standingId);
+    await this.requireStandingAdmin(userId, team.id, standingId);
 
     await this.databaseService.database
       .delete(standings)
@@ -825,14 +854,21 @@ export class StatisticsService {
     return team;
   }
 
-  private async requireCompetition(teamId: string, competitionId: string) {
+  private async requireCompetitionMember(
+    teamId: string,
+    competitionId: string,
+  ) {
     const [competition] = await this.databaseService.database
-      .select()
-      .from(competitions)
+      .select({ competition: competitions })
+      .from(competitionTeams)
+      .innerJoin(
+        competitions,
+        eq(competitionTeams.competitionId, competitions.id),
+      )
       .where(
         and(
+          eq(competitionTeams.teamId, teamId),
           eq(competitions.id, competitionId),
-          eq(competitions.teamId, teamId),
         ),
       )
       .limit(1);
@@ -841,15 +877,41 @@ export class StatisticsService {
       throw new NotFoundException('Competition not found.');
     }
 
-    return competition;
+    return competition.competition;
   }
 
   /**
-   * Verifies a standing belongs to a competition owned by the coach's team
-   * before any update or delete. Returns silently — callers re-query by ID
-   * for the actual mutation so the team check is enforced once here.
+   * Shared competition mutations are controlled by `adminUserId`, not by the
+   * legacy creator-team foreign key. Legacy rows whose admin could not be
+   * backfilled remain manageable by the founding team coach.
    */
-  private async requireStanding(teamId: string, standingId: string) {
+  private async requireCompetitionAdmin(
+    userId: string,
+    teamId: string,
+    competitionId: string,
+  ) {
+    const competition = await this.requireCompetitionMember(
+      teamId,
+      competitionId,
+    );
+
+    const isLegacyOwner =
+      competition.adminUserId === null && competition.teamId === teamId;
+
+    if (competition.adminUserId !== userId && !isLegacyOwner) {
+      throw new ForbiddenException(
+        'Only the competition admin can perform this action.',
+      );
+    }
+
+    return competition;
+  }
+
+  private async requireStandingAdmin(
+    userId: string,
+    teamId: string,
+    standingId: string,
+  ) {
     const [row] = await this.databaseService.database
       .select({
         id: standings.id,
@@ -864,16 +926,37 @@ export class StatisticsService {
         goalsAgainst: standings.goalsAgainst,
         points: standings.points,
         isOwnTeam: standings.isOwnTeam,
+        competitionAdminUserId: competitions.adminUserId,
+        legacyOwnerTeamId: competitions.teamId,
       })
       .from(standings)
       .innerJoin(competitions, eq(standings.competitionId, competitions.id))
-      .where(and(eq(standings.id, standingId), eq(competitions.teamId, teamId)))
+      .innerJoin(
+        competitionTeams,
+        eq(competitionTeams.competitionId, competitions.id),
+      )
+      .where(
+        and(
+          eq(standings.id, standingId),
+          eq(competitionTeams.teamId, teamId),
+        ),
+      )
       .limit(1);
 
     if (!row) {
       throw new NotFoundException('Standing not found.');
     }
 
+    const isLegacyOwner =
+      row.competitionAdminUserId === null && row.legacyOwnerTeamId === teamId;
+
+    if (row.competitionAdminUserId !== userId && !isLegacyOwner) {
+      throw new ForbiddenException(
+        'Only the competition admin can perform this action.',
+      );
+    }
+
     return row;
   }
+
 }

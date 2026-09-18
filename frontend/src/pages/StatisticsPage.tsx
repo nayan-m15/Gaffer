@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Loader2, Plus, RefreshCw } from "lucide-react";
+import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { useAuth } from "@/hooks/useAuth";
 import { AthleteComparisonSection } from "@/features/statistics/AthleteComparisonSection";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
-import { CompetitionFormDialog } from "@/features/statistics/CompetitionFormDialog";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { PlayerStatsTable } from "@/features/statistics/PlayerStatsTable";
 import { RecentFormSection } from "@/features/statistics/RecentFormSection";
@@ -22,30 +21,23 @@ import { formatSeasonRange } from "@/features/statistics/season-trends-model";
 import {
   useAthleteStatistics,
   useCompetitions,
-  useCreateCompetition,
   useCreateSeason,
   useCreateStanding,
-  useDeleteCompetition,
   useDeleteSeason,
   useDeleteStanding,
   useSeasons,
   useStatistics,
-  useUpdateCompetition,
   useUpdateSeason,
   useUpdateStanding,
 } from "@/features/statistics/hooks";
 import type {
-  CompetitionFormValues,
   CompetitionWithStandings,
   Season,
   SeasonFormValues,
   StandingFormValues,
 } from "@/features/statistics/types";
 import { ApiError } from "@/lib/api";
-import {
-  toCompetitionFormValues,
-  toStandingFormValues,
-} from "@/services/statistics";
+import { toStandingFormValues } from "@/services/statistics";
 import { emptySeasonFormValues, toSeasonFormValues } from "@/services/seasons";
 import { cn } from "@/lib/utils";
 
@@ -54,24 +46,22 @@ import { cn } from "@/lib/utils";
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const DELETE_TITLES = {
-  competition: "Delete Competition",
   standing: "Delete Standing",
   season: "Delete Season",
 } as const;
 
 const DELETE_MESSAGES = {
-  competition: "Are you sure you want to delete the competition",
   standing: "Are you sure you want to delete the standing for",
   season: "Are you sure you want to delete the season",
 } as const;
 
 /**
  * StatisticsPage — team-wide season analytics, player breakdowns, and
- * manually-managed competition standings (S1-06).
+ * shared competition standings.
  *
- * Read-only match statistics come from GET /statistics (optionally scoped
- * to a single competition). Standings are CRUD-managed by the coach since
- * the app doesn't track other teams' results.
+ * Competition membership and management live in Leagues & Competitions.
+ * Standings remain visible here; only the shared competition admin receives
+ * standings mutation controls.
  */
 export default function StatisticsPage() {
   const { team } = useAuth();
@@ -97,11 +87,6 @@ export default function StatisticsPage() {
   // so a fresh object each render would loop.
   const newSeasonDefaults = useMemo(() => emptySeasonFormValues(), []);
 
-  const [compForm, setCompForm] = useState<{
-    open: boolean;
-    editing: CompetitionWithStandings | null;
-  }>({ open: false, editing: null });
-
   const [standingForm, setStandingForm] = useState<{
     open: boolean;
     competition: CompetitionWithStandings | null;
@@ -109,7 +94,7 @@ export default function StatisticsPage() {
   }>({ open: false, competition: null, standingId: null });
 
   const [deleteTarget, setDeleteTarget] = useState<{
-    kind: "competition" | "standing" | "season";
+    kind: "standing" | "season";
     id: string;
     name: string;
     /** Extra warning shown in the confirm dialog, e.g. unlinked competitions. */
@@ -122,9 +107,6 @@ export default function StatisticsPage() {
   const athleteQuery = useAthleteStatistics(athleteId ?? null);
 
   // Mutations
-  const createCompMut = useCreateCompetition();
-  const updateCompMut = useUpdateCompetition();
-  const deleteCompMut = useDeleteCompetition();
   const createStandMut = useCreateStanding();
   const updateStandMut = useUpdateStanding();
   const deleteStandMut = useDeleteStanding();
@@ -163,30 +145,6 @@ export default function StatisticsPage() {
   const subtitle = overview
     ? `${scopeLabel} — ${overview.matchesPlayed} matches — ${overview.wins}W / ${overview.draws}D / ${overview.losses}L — ${overview.goalsFor} GF / ${overview.goalsAgainst} GA`
     : "Team performance, player statistics, and standings.";
-
-  /* ── Competition form handlers ────────────────────────────────────────── */
-  const openAddCompetition = () =>
-    setCompForm({ open: true, editing: null });
-  const openEditCompetition = (c: CompetitionWithStandings) =>
-    setCompForm({ open: true, editing: c });
-  const closeCompForm = () => {
-    setCompForm({ open: false, editing: null });
-    createCompMut.reset();
-    updateCompMut.reset();
-  };
-  const handleCompSubmit = (values: CompetitionFormValues) => {
-    const input = {
-      name: values.name,
-      type: values.type,
-      season: values.season || undefined,
-    };
-    if (compForm.editing) {
-      updateCompMut.mutate({ id: compForm.editing.id, input });
-    } else {
-      createCompMut.mutate(input);
-    }
-    closeCompForm();
-  };
 
   /* ── Standing form handlers ───────────────────────────────────────────── */
   const openAddStanding = (c: CompetitionWithStandings) =>
@@ -273,9 +231,7 @@ export default function StatisticsPage() {
 
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
-    if (deleteTarget.kind === "competition") {
-      deleteCompMut.mutate(deleteTarget.id);
-    } else if (deleteTarget.kind === "season") {
+    if (deleteTarget.kind === "season") {
       deleteSeasonMut.mutate(deleteTarget.id);
       // The filter would otherwise point at a season that no longer exists.
       if (seasonId === deleteTarget.id) setSeasonId(undefined);
@@ -338,13 +294,6 @@ export default function StatisticsPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Match statistics will appear here once results are logged.
             </p>
-            <Button
-              className="mt-6 font-semibold tracking-wide"
-              onClick={openAddCompetition}
-            >
-              <Plus className="size-4" />
-              Add Competition
-            </Button>
           </div>
         )}
 
@@ -420,15 +369,6 @@ export default function StatisticsPage() {
         <StandingsSection
           competitions={competitions}
           isLoading={competitionsQuery.isLoading}
-          onAddCompetition={openAddCompetition}
-          onEditCompetition={openEditCompetition}
-          onDeleteCompetition={(c) =>
-            setDeleteTarget({
-              kind: "competition",
-              id: c.id,
-              name: c.name,
-            })
-          }
           onAddStanding={openAddStanding}
           onEditStanding={openEditStanding}
           onDeleteStanding={(_, s) =>
@@ -442,17 +382,6 @@ export default function StatisticsPage() {
       </div>
 
       {/* Dialogs */}
-      <CompetitionFormDialog
-        isOpen={compForm.open}
-        onClose={closeCompForm}
-        initialValues={
-          compForm.editing
-            ? toCompetitionFormValues(compForm.editing)
-            : null
-        }
-        onSubmit={handleCompSubmit}
-      />
-
       <StandingFormDialog
         isOpen={standingForm.open}
         onClose={closeStandingForm}

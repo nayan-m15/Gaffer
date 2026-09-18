@@ -426,12 +426,129 @@ describe('StatisticsService', () => {
     );
   });
 
+
+  it('loads competitions through shared competition-team membership and derives own-team highlighting', async () => {
+    mockTeamsService.findTeamForUser.mockResolvedValue({
+      id: 'team-2',
+      name: 'Riverside App Team',
+      role: 'coach',
+    });
+
+    mockDatabaseService.database.select
+      .mockImplementationOnce(() =>
+        thenable([
+          {
+            competition: {
+              id: 'comp-1',
+              teamId: 'team-1',
+              adminUserId: 'user-1',
+              name: 'Shared League',
+              type: 'league',
+              seasonId: null,
+              season: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            participantDisplayName: 'Riverside FC',
+          },
+        ]),
+      )
+      .mockImplementationOnce(() =>
+        thenable([
+          {
+            id: 'standing-1',
+            competitionId: 'comp-1',
+            teamName: 'Riverside FC',
+            position: 1,
+            played: 1,
+            won: 1,
+            drawn: 0,
+            lost: 0,
+            goalsFor: 2,
+            goalsAgainst: 0,
+            points: 3,
+            isOwnTeam: false,
+          },
+          {
+            id: 'standing-2',
+            competitionId: 'comp-1',
+            teamName: 'Founders FC',
+            position: 2,
+            played: 1,
+            won: 0,
+            drawn: 0,
+            lost: 1,
+            goalsFor: 0,
+            goalsAgainst: 2,
+            points: 0,
+            isOwnTeam: true,
+          },
+        ]),
+      );
+
+    const [competition] = await service.getCompetitions('user-2');
+
+    expect(competition.id).toBe('comp-1');
+    expect(competition.isAdmin).toBe(false);
+    expect(competition.standings.map((row) => row.isOwnTeam)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it('rejects standings mutation for a non-admin participant', async () => {
+    mockTeamsService.findTeamForUser.mockResolvedValue({
+      id: 'team-2',
+      role: 'coach',
+    });
+    mockDatabaseService.database.select.mockImplementationOnce(() =>
+      thenable([
+        {
+          competition: {
+            id: 'comp-1',
+            adminUserId: 'user-1',
+            teamId: 'team-1',
+          },
+        },
+      ]),
+    );
+
+    await expect(
+      service.createStanding('user-2', 'comp-1', {
+        teamName: 'Riverside FC',
+        position: 1,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        points: 0,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('rejects creating a friendly competition through the legacy statistics API', async () => {
+    mockTeamsService.findTeamForUser.mockResolvedValue({
+      id: 'team-1',
+      role: 'coach',
+    });
+
+    await expect(
+      service.createCompetition('user-1', {
+        name: 'Legacy Friendly',
+        type: 'friendly',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(mockDatabaseService.database.insert).not.toHaveBeenCalled();
+  });
+
   describe('createStanding uniqueness', () => {
     it('throws ConflictException when a standing with the same position exists', async () => {
       mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
 
       mockDatabaseService.database.select.mockImplementationOnce(() =>
-        thenable([{ id: 'comp-1' }]),
+        thenable([{ competition: { id: 'comp-1', adminUserId: 'user-1', teamId: 'team-1' } }]),
       );
       mockDatabaseService.database.select.mockImplementationOnce(() =>
         thenable([{ position: 1, teamName: 'Other FC' }]),
@@ -456,7 +573,7 @@ describe('StatisticsService', () => {
       mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
 
       mockDatabaseService.database.select.mockImplementationOnce(() =>
-        thenable([{ id: 'comp-1' }]),
+        thenable([{ competition: { id: 'comp-1', adminUserId: 'user-1', teamId: 'team-1' } }]),
       );
       mockDatabaseService.database.select.mockImplementationOnce(() =>
         thenable([{ position: 2, teamName: 'My Team' }]),
@@ -496,6 +613,8 @@ describe('StatisticsService', () => {
             goalsAgainst: 0,
             points: 3,
             isOwnTeam: true,
+            competitionAdminUserId: 'user-1',
+            legacyOwnerTeamId: 'team-1',
           },
         ]),
       );

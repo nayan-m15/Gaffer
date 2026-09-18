@@ -43,6 +43,7 @@ export class CompetitionInvitesService {
       .select({
         teamId: competitionTeams.teamId,
         adminUserId: competitions.adminUserId,
+        competitionType: competitions.type,
       })
       .from(competitionTeams)
       .innerJoin(
@@ -51,7 +52,11 @@ export class CompetitionInvitesService {
       )
       .where(eq(competitionTeams.id, competitionTeamId))
       .limit(1);
-    if (!slot || slot.adminUserId !== createdByUserId)
+    if (
+      !slot ||
+      slot.adminUserId !== createdByUserId ||
+      slot.competitionType === 'friendly'
+    )
       throw new NotFoundException('Participant not found.');
     if (slot.teamId)
       throw new ConflictException(
@@ -159,6 +164,7 @@ export class CompetitionInvitesService {
         teamId: competitionTeams.teamId,
         teamName: competitionTeams.displayName,
         competitionName: competitions.name,
+        competitionType: competitions.type,
       })
       .from(competitionInvites)
       .innerJoin(
@@ -173,6 +179,7 @@ export class CompetitionInvitesService {
       .limit(1);
     if (
       !row ||
+      row.competitionType === 'friendly' ||
       row.invite.status !== 'pending' ||
       row.invite.expiresAt.getTime() <= Date.now()
     )

@@ -8,25 +8,20 @@ import {
   Trash2,
   Trophy,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CompetitionWithStandings } from "./types";
 
 export function StandingsSection({
   competitions,
   isLoading,
-  onAddCompetition,
-  onEditCompetition,
-  onDeleteCompetition,
   onAddStanding,
   onEditStanding,
   onDeleteStanding,
 }: {
   competitions: CompetitionWithStandings[];
   isLoading: boolean;
-  onAddCompetition: () => void;
-  onEditCompetition: (c: CompetitionWithStandings) => void;
-  onDeleteCompetition: (c: CompetitionWithStandings) => void;
   onAddStanding: (c: CompetitionWithStandings) => void;
   onEditStanding: (
     c: CompetitionWithStandings,
@@ -39,17 +34,19 @@ export function StandingsSection({
 }) {
   return (
     <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Trophy className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
             Competitions & Standings
           </h2>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={onAddCompetition}>
-          <Plus className="size-4" />
-          Add Competition
-        </Button>
+        <Link
+          to="/competitions"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Manage competitions
+        </Link>
       </div>
 
       {isLoading ? (
@@ -64,7 +61,7 @@ export function StandingsSection({
             No competitions yet
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Add a competition to start tracking standings.
+            Join or create a league or cup from Leagues & Competitions.
           </p>
         </div>
       ) : (
@@ -73,8 +70,6 @@ export function StandingsSection({
             <CompetitionCard
               key={c.id}
               competition={c}
-              onEdit={() => onEditCompetition(c)}
-              onDelete={() => onDeleteCompetition(c)}
               onAddStanding={() => onAddStanding(c)}
               onEditStanding={(id) => onEditStanding(c, id)}
               onDeleteStanding={(s) => onDeleteStanding(c, s)}
@@ -88,15 +83,11 @@ export function StandingsSection({
 
 function CompetitionCard({
   competition,
-  onEdit,
-  onDelete,
   onAddStanding,
   onEditStanding,
   onDeleteStanding,
 }: {
   competition: CompetitionWithStandings;
-  onEdit: () => void;
-  onDelete: () => void;
   onAddStanding: () => void;
   onEditStanding: (standingId: string) => void;
   onDeleteStanding: (standing: {
@@ -111,7 +102,6 @@ function CompetitionCard({
 
   return (
     <div className="rounded-xl border border-border bg-background">
-      {/* Header */}
       <div className="flex items-center justify-between gap-2 p-4">
         <button
           type="button"
@@ -134,35 +124,19 @@ function CompetitionCard({
               {competition.season}
             </span>
           )}
+          {competition.isAdmin && (
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Admin
+            </span>
+          )}
         </button>
-
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={onEdit}
-            aria-label="Edit competition"
-            title="Edit"
-          >
-            <Pencil className="size-3.5 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={onDelete}
-            aria-label="Delete competition"
-            title="Delete"
-          >
-            <Trash2 className="size-3.5 text-destructive" />
-          </Button>
-        </div>
       </div>
 
-      {/* Standings table */}
       {expanded && (
         <div className="border-t border-border">
           <StandingsTable
             standings={competition.standings}
+            canManage={competition.isAdmin}
             onAdd={onAddStanding}
             onEdit={onEditStanding}
             onDelete={onDeleteStanding}
@@ -175,11 +149,13 @@ function CompetitionCard({
 
 function StandingsTable({
   standings,
+  canManage,
   onAdd,
   onEdit,
   onDelete,
 }: {
   standings: CompetitionWithStandings["standings"];
+  canManage: boolean;
   onAdd: () => void;
   onEdit: (standingId: string) => void;
   onDelete: (standing: {
@@ -199,6 +175,8 @@ function StandingsTable({
     { key: "pts", label: "PTS", className: "w-10 text-center" },
   ] as const;
 
+  const colSpan = COLUMNS.length + (canManage ? 1 : 0);
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full caption-bottom text-sm">
@@ -208,32 +186,36 @@ function StandingsTable({
               <th
                 key={col.key}
                 scope="col"
-                className={cn("py-2.5 px-3", col.className)}
+                className={cn("px-3 py-2.5", col.className)}
               >
                 {col.label}
               </th>
             ))}
-            <th scope="col" className="w-16 px-3 py-2.5 text-right">
-              Actions
-            </th>
+            {canManage && (
+              <th scope="col" className="w-16 px-3 py-2.5 text-right">
+                Actions
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
           {standings.length === 0 ? (
             <tr>
-              <td colSpan={COLUMNS.length + 1} className="py-6 text-center">
+              <td colSpan={colSpan} className="py-6 text-center">
                 <p className="text-sm text-muted-foreground">
                   No standings rows yet.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 gap-1.5"
-                  onClick={onAdd}
-                >
-                  <Plus className="size-3.5" />
-                  Add Standing
-                </Button>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 gap-1.5"
+                    onClick={onAdd}
+                  >
+                    <Plus className="size-3.5" />
+                    Add Standing
+                  </Button>
+                )}
               </td>
             </tr>
           ) : (
@@ -259,70 +241,49 @@ function StandingsTable({
                       {s.teamName}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
-                    {s.played}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">
-                    {s.won}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
-                    {s.drawn}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
-                    {s.lost}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">
-                    {s.goalsFor}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
-                    {s.goalsAgainst}
-                  </td>
-                  <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">
-                    {s.points}
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <div
-                      className="flex items-center justify-end gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                      role="group"
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => onEdit(s.id)}
-                        aria-label="Edit standing"
-                        title="Edit"
-                      >
-                        <Pencil className="size-3.5 text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() =>
-                          onDelete({ id: s.id, teamName: s.teamName })
-                        }
-                        aria-label="Delete standing"
-                        title="Delete"
-                      >
-                        <Trash2 className="size-3.5 text-destructive" />
-                      </Button>
-                    </div>
-                  </td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.played}</td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{s.won}</td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.drawn}</td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.lost}</td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{s.goalsFor}</td>
+                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.goalsAgainst}</td>
+                  <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">{s.points}</td>
+                  {canManage && (
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1" role="group">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onEdit(s.id)}
+                          aria-label="Edit standing"
+                          title="Edit"
+                        >
+                          <Pencil className="size-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onDelete({ id: s.id, teamName: s.teamName })}
+                          aria-label="Delete standing"
+                          title="Delete"
+                        >
+                          <Trash2 className="size-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
-              <tr>
-                <td colSpan={COLUMNS.length + 1} className="py-2 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={onAdd}
-                  >
-                    <Plus className="size-3.5" />
-                    Add Standing
-                  </Button>
-                </td>
-              </tr>
+              {canManage && (
+                <tr>
+                  <td colSpan={colSpan} className="py-2 text-right">
+                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={onAdd}>
+                      <Plus className="size-3.5" />
+                      Add Standing
+                    </Button>
+                  </td>
+                </tr>
+              )}
             </>
           )}
         </tbody>

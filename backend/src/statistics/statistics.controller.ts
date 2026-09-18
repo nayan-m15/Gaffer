@@ -29,8 +29,8 @@ import { StatisticsService } from './statistics.service';
  * through and the service resolves the team internally.
  *
  * Reads are open to every team member so assistants can view statistics.
- * Competition and standings mutations are coach-only, using the same
- * `requireCoachTeam` gate as the events and athletes controllers.
+ * Mutation routes remain coach-gated at the controller; the service applies
+ * the stronger shared-competition admin check for competitions/standings.
  */
 @Controller('statistics')
 @UseGuards(AuthGuard)

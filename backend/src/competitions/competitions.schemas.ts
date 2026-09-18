@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { competitionType } from '../database/schema';
 
 export const competitionTypeSchema = z.enum(competitionType.enumValues);
+export const sharedCompetitionTypeSchema = z.enum(['league', 'cup']);
 
 const competitionNameField = z
   .string()
@@ -17,7 +18,7 @@ const seasonLabelField = z
 
 export const createCompetitionSchema = z.object({
   name: competitionNameField,
-  type: competitionTypeSchema,
+  type: sharedCompetitionTypeSchema,
   season: seasonLabelField,
 });
 export type CreateCompetitionDto = z.infer<typeof createCompetitionSchema>;

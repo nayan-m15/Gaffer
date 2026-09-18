@@ -8,13 +8,9 @@ export const fetchCompetition = (id: string) =>
   apiFetch<CompetitionDetail>(`/competitions/${encodeURIComponent(id)}`);
 
 export async function fetchMyCompetitions() {
-  const rows = sharedOnly(await apiFetch<CompetitionSummary[]>("/competitions/mine"));
-  // The current mine endpoint counts the membership-filtered join (one row).
-  // Detail supplies the complete participant list without altering Stage 1.
-  return Promise.all(rows.map(async (row) => ({
-    ...row,
-    participantCount: (await fetchCompetition(row.id)).participants.length,
-  })));
+  return sharedOnly(
+    await apiFetch<CompetitionSummary[]>("/competitions/mine"),
+  );
 }
 
 export async function searchCompetitions(term: string) {

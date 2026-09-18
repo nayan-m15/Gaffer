@@ -49,16 +49,33 @@ describe('PublicDashboardService', () => {
   it('returns dynamic public filter catalogs', async () => {
     const teamRows = [{ id: 'team-1', name: 'Gaffer FC' }];
     const seasonRows = [{ id: 'season-1', name: '2026/27' }];
-    const competitionRows = [{ id: 'competition-1', name: 'League' }];
+    const competitionRows = [
+      {
+        id: 'competition-1',
+        name: 'League',
+        teamId: 'team-1',
+        seasonId: 'season-1',
+      },
+    ];
+    const participantRows = [
+      { competitionId: 'competition-1', teamId: 'team-1' },
+      { competitionId: 'competition-1', teamId: 'team-2' },
+    ];
     select
       .mockReturnValueOnce(queryResult(teamRows))
       .mockReturnValueOnce(queryResult(seasonRows))
-      .mockReturnValueOnce(queryResult(competitionRows));
+      .mockReturnValueOnce(queryResult(competitionRows))
+      .mockReturnValueOnce(queryResult(participantRows));
 
     await expect(service.getFilters()).resolves.toEqual({
       teams: teamRows,
       seasons: seasonRows,
-      competitions: competitionRows,
+      competitions: [
+        {
+          ...competitionRows[0],
+          teamIds: ['team-1', 'team-2'],
+        },
+      ],
     });
   });
 

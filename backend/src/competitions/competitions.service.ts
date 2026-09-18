@@ -88,7 +88,7 @@ export class CompetitionsService {
         competitionTeams,
         eq(competitionTeams.competitionId, competitions.id),
       )
-      .where(ilike(competitions.name, `%${term}%`))
+      .where(and(ne(competitions.type, 'friendly'), ilike(competitions.name, `%${term}%`)))
       .groupBy(competitions.id)
       .orderBy(asc(competitions.name))
       .limit(25);
@@ -114,15 +114,23 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
-        participantCount: count(competitionTeams.id),
+        participantCount: sql<number>`(
+          select count(*)::int
+          from competition_teams all_participants
+          where all_participants.competition_id = ${competitions.id}
+        )`,
       })
       .from(competitions)
       .innerJoin(
         competitionTeams,
         eq(competitionTeams.competitionId, competitions.id),
       )
-      .where(eq(competitionTeams.teamId, team.id))
-      .groupBy(competitions.id)
+      .where(
+        and(
+          eq(competitionTeams.teamId, team.id),
+          ne(competitions.type, 'friendly'),
+        ),
+      )
       .orderBy(asc(competitions.name));
 
     return rows;
