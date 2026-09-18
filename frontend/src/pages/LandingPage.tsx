@@ -59,7 +59,7 @@ export default function LandingPage() {
       {/* Sticky Navbar */}
       <Navbar />
 
-      {/* Right-Hand Scroll Tab Menu (Chapter Rail) */}
+      {/* Desktop section navigation */}
       <ChapterRail />
 
       <main className="relative z-10 flex flex-1 flex-col">
@@ -68,23 +68,25 @@ export default function LandingPage() {
           <Hero sceneReady={sceneReady} />
         </section>
 
-        {/* ── Section 1: Philosophy & Quick Workflow ────────────────────── */}
-        <PhilosophySection />
+        <div className="xl:pl-48">
+          {/* ── Section 1: Philosophy & Quick Workflow ──────────────────── */}
+          <PhilosophySection />
 
-        {/* ── Section 2: Squad Roster Management ────────────────────────── */}
-        <RosterSection />
+          {/* ── Section 2: Squad Roster Management ──────────────────────── */}
+          <RosterSection />
 
-        {/* ── Section 3: Tactical Pitch & Starting XI ───────────────────── */}
-        <TacticsSection />
+          {/* ── Section 3: Tactical Pitch & Starting XI ─────────────────── */}
+          <TacticsSection />
 
-        {/* ── Section 4: Live Sideline Match Tracking & Sync ────────────── */}
-        <MatchdaySection />
+          {/* ── Section 4: Live Sideline Match Tracking & Sync ──────────── */}
+          <MatchdaySection />
 
-        {/* ── Section 5: Performance Analytics & League ─────────────────── */}
-        <AnalyticsSection />
+          {/* ── Section 5: Performance Analytics & League ───────────────── */}
+          <AnalyticsSection />
 
-        {/* ── Section 6: Final Single CTA ───────────────────────────────── */}
-        <FinalCtaSection />
+          {/* ── Section 6: Final Single CTA ─────────────────────────────── */}
+          <FinalCtaSection />
+        </div>
       </main>
 
       {/* Global Footer */}

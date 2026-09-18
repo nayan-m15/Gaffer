@@ -269,6 +269,20 @@ body {
   );
 }
 
+/* Keep the selected dark-scene palette, with stronger neutral contrast in
+ * light mode so the floating labels remain readable over the WebGL scene. */
+.landing-section-nav {
+  --line-sidebar-readable-text: #525252;
+  max-width: calc(100vw - 1rem);
+  filter: drop-shadow(
+    0 1px 8px color-mix(in srgb, var(--background) 82%, transparent)
+  );
+}
+
+.dark .landing-section-nav {
+  --line-sidebar-readable-text: #c4c4c4;
+}
+
 @media (max-width: 767px) {
   .landing-scene[data-ready="true"] .landing-scene__canvas {
     opacity: 0.78;
