@@ -1,24 +1,22 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Award,
   BarChart3,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Filter as FilterIcon,
   MapPin,
   RotateCcw,
   ShieldCheck,
-  Sparkles,
   Target,
   Trophy,
   Users,
 } from "lucide-react";
 import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
+import { DepthCarousel } from "@/components/ui/DepthCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
@@ -446,45 +444,13 @@ export default function PublicDashboard() {
 
 {/* ─── Component: Interactive Player Carousel ───────────────────────────── */}
 function PlayerCarousel({ players }: { players: PublicPlayer[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  function scroll(direction: "left" | "right") {
-    if (!scrollRef.current) return;
-    const offset = direction === "left" ? -320 : 320;
-    scrollRef.current.scrollBy({ left: offset, behavior: "smooth" });
-  }
-
   return (
-    <div className="relative group mt-4">
-      {/* Floating Prev Button */}
-      <button
-        onClick={() => scroll("left")}
-        aria-label="Scroll left"
-        className="absolute left-2 top-1/2 z-20 -translate-y-1/2 flex size-10 items-center justify-center rounded-full border border-border bg-card/90 text-foreground shadow-md backdrop-blur-sm transition-all hover:bg-brand hover:text-brand-foreground opacity-90 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
-      >
-        <ChevronLeft className="size-5" />
-      </button>
-
-      {/* Floating Next Button */}
-      <button
-        onClick={() => scroll("right")}
-        aria-label="Scroll right"
-        className="absolute right-2 top-1/2 z-20 -translate-y-1/2 flex size-10 items-center justify-center rounded-full border border-border bg-card/90 text-foreground shadow-md backdrop-blur-sm transition-all hover:bg-brand hover:text-brand-foreground opacity-90 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
-      >
-        <ChevronRight className="size-5" />
-      </button>
-
-      {/* Snap Scroll Container */}
-      <div
-        ref={scrollRef}
-        className="flex gap-5 overflow-x-auto py-4 px-1 scroll-smooth snap-x snap-mandatory scrollbar-none"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {players.map((player) => (
-          <div
-            key={player.id}
-            className="w-[260px] shrink-0 snap-start transition-transform hover:-translate-y-1 duration-200"
-          >
+    <div className="mt-4">
+      <DepthCarousel
+        items={players.map((player) => ({
+          id: player.id,
+          label: `${player.firstName} ${player.lastName}`,
+          content: (
             <PlayerCard
               initials={`${player.firstName[0] ?? ""}${player.lastName[0] ?? ""}`}
               name={`${player.firstName} ${player.lastName}`}
@@ -500,9 +466,17 @@ function PlayerCarousel({ players }: { players: PublicPlayer[] }) {
               readOnly
               publicView
             />
-          </div>
-        ))}
-      </div>
+          ),
+        }))}
+        depth={110}
+        spread={115}
+        tilt={22}
+        perspective={1600}
+        visibleCards={5}
+        falloff={0.2}
+        blur={1}
+        autoplay
+      />
     </div>
   );
 }
