@@ -67,12 +67,14 @@ describe('CompetitionInvitesService (PostgreSQL)', () => {
     await pg.exec(`
       create table "user" (id text primary key, email text not null);
       create type team_role as enum ('coach', 'assistant');
+      create type competition_type as enum ('league', 'cup', 'friendly');
       create table teams (id uuid primary key default gen_random_uuid(), name text not null, primary_color text,
         created_at timestamptz not null default now(), updated_at timestamptz not null default now());
       create table team_members (id uuid primary key default gen_random_uuid(), team_id uuid not null references teams(id),
         user_id text not null unique references "user"(id), role team_role not null default 'assistant',
         created_at timestamptz not null default now(), updated_at timestamptz not null default now());
-      create table competitions (id uuid primary key default gen_random_uuid(), name text not null, admin_user_id text references "user"(id));
+      create table competitions (id uuid primary key default gen_random_uuid(), name text not null,
+        type competition_type not null default 'league', admin_user_id text references "user"(id));
       create table competition_teams (id uuid primary key default gen_random_uuid(), competition_id uuid not null references competitions(id),
         team_id uuid references teams(id), display_name text not null,
         created_at timestamptz not null default now(), updated_at timestamptz not null default now());
