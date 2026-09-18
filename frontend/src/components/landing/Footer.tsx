@@ -41,7 +41,7 @@ const itemVariants: Variants = {
 /** Animated marketing footer shared by GAFFER's public pages. */
 export function Footer() {
   return (
-    <footer className="relative z-10 w-full overflow-hidden border-t border-border/40 bg-background/50 text-foreground backdrop-blur-xl">
+    <footer className="relative z-10 w-full overflow-hidden border-t border-border bg-background/95 text-foreground shadow-[0_-12px_40px_rgb(0_0_0/0.18)] backdrop-blur-xl">
       <motion.div
         className="mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 py-12 text-center sm:px-6 sm:py-14 lg:px-8"
         initial="hidden"

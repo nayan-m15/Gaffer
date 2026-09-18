@@ -3,7 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 async function openLandingPage(page: Page) {
   await page.route("**/auth/session", (route) => route.fulfill({ status: 401, body: "{}" }));
   await page.goto("/");
-  await expect(page.locator(".loading-overlay")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator("#root .loading-overlay")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator("#preloader")).toHaveCount(0, { timeout: 10_000 });
 }
 
 test.describe("landing-page tactical background", () => {

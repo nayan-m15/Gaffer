@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { Pause, Play } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LandingSceneController } from "./landing-scene";
 
 interface LandingSceneProps {
@@ -10,6 +11,10 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
   const controllerRef = useRef<LandingSceneController | null>(null);
   const readyCallbackRef = useRef(onReadyChange);
   const [ready, setReady] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [reduceMotion] = useState(() =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
 
   useEffect(() => {
     readyCallbackRef.current = onReadyChange;
@@ -18,6 +23,11 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) {
+      setReady(false);
+      readyCallbackRef.current(false);
+      return;
+    }
+    if (reduceMotion) {
       setReady(false);
       readyCallbackRef.current(false);
       return;
@@ -77,14 +87,35 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
       controllerRef.current?.dispose();
       controllerRef.current = null;
     };
+  }, [reduceMotion]);
+
+  const togglePaused = useCallback(() => {
+    setPaused((current) => {
+      const next = !current;
+      controllerRef.current?.setPaused(next);
+      return next;
+    });
   }, []);
 
   return (
-    <div
-      ref={hostRef}
-      aria-hidden="true"
-      className="landing-scene"
-      data-ready={ready ? "true" : "false"}
-    />
+    <>
+      <div
+        ref={hostRef}
+        aria-hidden="true"
+        className="landing-scene"
+        data-ready={ready ? "true" : "false"}
+      />
+      {!reduceMotion && ready && (
+        <button
+          type="button"
+          onClick={togglePaused}
+          aria-label={paused ? "Resume background" : "Pause background"}
+          aria-pressed={paused}
+          className="fixed bottom-5 right-5 z-40 hidden size-10 items-center justify-center rounded-full border border-[var(--landing-scene-border)] bg-black/55 text-[var(--landing-scene-foreground)] shadow-lg backdrop-blur-md transition-colors hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-scene-accent)] md:flex"
+        >
+          {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+        </button>
+      )}
+    </>
   );
 }

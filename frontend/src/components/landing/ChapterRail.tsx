@@ -132,7 +132,7 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
   return (
     <div
       className={cn(
-        "landing-section-nav fixed left-4 top-1/2 z-40 hidden -translate-y-1/2 select-none rounded-2xl border border-border/40 bg-background/35 px-3 py-1 shadow-lg backdrop-blur-md transition-[opacity,transform] duration-300 xl:block 2xl:left-6",
+        "landing-section-nav fixed left-4 top-1/2 z-40 hidden -translate-y-1/2 select-none rounded-2xl border border-[var(--landing-scene-border)] bg-black/45 px-3 py-1 shadow-lg backdrop-blur-md transition-[opacity,transform] duration-300 xl:block 2xl:left-6",
         footerVisible
           ? "pointer-events-none -translate-x-3 opacity-0"
           : "pointer-events-auto translate-x-0 opacity-100",
@@ -142,9 +142,9 @@ export function ChapterRail({ items = CHAPTERS }: { items?: ChapterItem[] }) {
     >
       <LineSidebar
         items={items.map((item) => item.label)}
-        accentColor="#059669"
-        textColor="#c4c4c4"
-        markerColor="#6c6c6c"
+        accentColor="var(--landing-scene-accent)"
+        textColor="var(--landing-scene-secondary)"
+        markerColor="var(--landing-scene-muted)"
         showIndex={false}
         showMarker
         proximityRadius={100}
