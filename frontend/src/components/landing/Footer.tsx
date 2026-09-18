@@ -43,7 +43,7 @@ export function Footer() {
   return (
     <footer className="relative z-10 w-full overflow-hidden border-t border-border bg-background/95 text-foreground shadow-[0_-12px_40px_rgb(0_0_0/0.18)] backdrop-blur-xl">
       <motion.div
-        className="mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 py-12 text-center sm:px-6 sm:py-14 lg:px-8"
+        className="mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 pb-3 pt-12 text-center sm:px-6 sm:pb-4 sm:pt-14 lg:px-8"
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: "0px 0px -80px 0px" }}
@@ -93,7 +93,7 @@ export function Footer() {
 
       <motion.nav
         aria-label="Legal navigation"
-        className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8"
+        className="mx-auto max-w-7xl px-4 pb-6 pt-0 sm:px-6 lg:px-8"
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true }}
