@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   useMutation,
   useQuery,
@@ -15,6 +16,7 @@ import {
   updateMatchLogEvent,
   updateMatchClock,
 } from "./api";
+import { subscribeToSyncedMatchEventChanges } from "@/offline/match-store";
 import type {
   CreateMatchLogEventInput,
   MatchEventTeam,
@@ -55,6 +57,34 @@ export function useMatchSquad(matchId: string | undefined) {
 }
 
 export function useMatchEvents(matchId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!matchId) return;
+
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void subscribeToSyncedMatchEventChanges(() => {
+      void queryClient.invalidateQueries({
+        queryKey: matchEventsQueryKey(matchId),
+      });
+      void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
+    })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unsubscribe = dispose;
+      })
+      .catch((error: unknown) => {
+        console.warn("Could not subscribe to synced match events.", error);
+      });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [matchId, queryClient]);
+
   return useQuery({
     queryKey: matchEventsQueryKey(matchId ?? ""),
     queryFn: () => fetchMatchEvents(matchId!),

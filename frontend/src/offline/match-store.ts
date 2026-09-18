@@ -268,3 +268,13 @@ export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEv
     syncStatus: "synced",
   }));
 }
+
+export async function subscribeToSyncedMatchEventChanges(
+  onChange: () => void,
+): Promise<() => void> {
+  const db = await database();
+  return db.onChange(
+    { onChange },
+    { tables: ["match_events"] },
+  );
+}
