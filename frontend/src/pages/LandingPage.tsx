@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -24,46 +24,15 @@ import { cn } from "@/lib/utils";
  *  SCROLL-REVEAL HOOK
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function useScrollReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-
-  useEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-
-    const targets = root.querySelectorAll<HTMLElement>(".animate-on-scroll");
-    if (targets.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            observer.unobserve(entry.target);
-          }
-        }
-      },
-      { threshold: 0.12 },
-    );
-
-    targets.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
-
-  return ref;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
  *  LANDING PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function LandingPage() {
-  const pageRef = useScrollReveal<HTMLDivElement>();
   const [sceneReady, setSceneReady] = useState(false);
 
   return (
     <div
-      ref={pageRef}
       className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
     >
       {/* One persistent environmental background for the complete page. */}
@@ -157,7 +126,7 @@ function PhilosophySection() {
   return (
     <section
       id="philosophy"
-      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
+      className="scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
@@ -316,7 +285,7 @@ function FinalCtaSection() {
   return (
     <section
       id="cta"
-      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-20 sm:py-28"
+      className="scroll-mt-20 border-t border-border/50 py-20 sm:py-28"
     >
       <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
@@ -389,7 +358,7 @@ function SectionLayout({
   return (
     <section
       id={id}
-      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
+      className="scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div
