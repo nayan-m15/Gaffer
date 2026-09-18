@@ -1,9 +1,7 @@
-import { useCallback, useState } from "react";
 import { ArrowRight, BarChart3, LogIn } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
-import { LandingScene } from "@/components/landing/LandingScene";
 
 /**
  * Hero — The primary marketing section at the top of the landing page.
@@ -21,22 +19,16 @@ import { LandingScene } from "@/components/landing/LandingScene";
  * markings, a subtle grass tint and floodlight gradients to evoke a matchday
  * atmosphere without competing with the headline or CTA buttons.
  */
-export function Hero() {
-  const [sceneReady, setSceneReady] = useState(false);
-  const handleSceneReadyChange = useCallback((ready: boolean) => setSceneReady(ready), []);
-
+export function Hero({ sceneReady = false }: { sceneReady?: boolean }) {
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col justify-center items-center overflow-hidden bg-background pb-12"
+      className="relative isolate flex min-h-[calc(100svh-4rem)] flex-col items-center justify-center overflow-hidden bg-transparent pb-12"
     >
       {/* ── Atmospheric background layer ──────────────────────────────── */}
       <HeroBackground sceneReady={sceneReady} />
-      <LandingScene onReadyChange={handleSceneReadyChange} />
-
       {/* Protect the reading area while leaving the pitch visible at its edges. */}
       <div aria-hidden="true" className="landing-scene__readability" />
-      <div aria-hidden="true" className="landing-scene__bottom-fade" />
 
       {/* ── Content grid ──────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-16 lg:px-8">

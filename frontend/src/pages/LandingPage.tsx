@@ -15,6 +15,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Footer } from "@/components/landing/Footer";
 import { ChapterRail } from "@/components/landing/ChapterRail";
+import { LandingScene } from "@/components/landing/LandingScene";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -58,21 +59,32 @@ function useScrollReveal<T extends HTMLElement>() {
 
 export default function LandingPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
+  const [sceneReady, setSceneReady] = useState(false);
 
   return (
     <div
       ref={pageRef}
       className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
     >
-      {/* Background Stadium Atmosphere */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0">
+      {/* One persistent environmental background for the complete page. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <img
           src="/hero-stadium-bg.png"
           alt=""
-          className="size-full object-cover object-center opacity-20 dark:opacity-30"
+          className={cn(
+            "absolute inset-0 size-full object-cover object-center transition-opacity duration-700",
+            sceneReady ? "opacity-0" : "opacity-20 dark:opacity-30",
+          )}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/85 to-background" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,var(--background)_100%)]" />
+      </div>
+      <LandingScene onReadyChange={setSceneReady} />
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[1]">
+        <div
+          className="absolute inset-0 bg-gradient-to-b from-background/55 via-background/25 to-background/55"
+        />
+        <div
+          className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,color-mix(in_srgb,var(--background)_45%,transparent)_100%)]"
+        />
       </div>
 
       {/* Sticky Navbar */}
@@ -84,7 +96,7 @@ export default function LandingPage() {
       <main className="relative z-10 flex flex-1 flex-col">
         {/* ── Top Hero Section ───────────────────────────────────────────── */}
         <section id="home" className="min-h-[calc(100svh-4rem)] flex flex-col justify-center scroll-mt-16">
-          <Hero />
+          <Hero sceneReady={sceneReady} />
         </section>
 
         {/* ── Section 1: Philosophy & Quick Workflow ────────────────────── */}
@@ -145,7 +157,7 @@ function PhilosophySection() {
   return (
     <section
       id="philosophy"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/60 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/35 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
@@ -304,7 +316,7 @@ function FinalCtaSection() {
   return (
     <section
       id="cta"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-gradient-to-b from-background via-muted/30 to-background py-20 sm:py-28"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-gradient-to-b from-background/45 via-muted/20 to-background/45 py-20 backdrop-blur-sm sm:py-28"
     >
       <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
@@ -377,7 +389,7 @@ function SectionLayout({
   return (
     <section
       id={id}
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/45 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/30 py-16 backdrop-blur-sm sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div

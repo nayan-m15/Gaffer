@@ -74,7 +74,7 @@ function createBallTexture() {
   }
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.encoding = THREE.sRGBEncoding;
   return texture;
 }
 
@@ -92,7 +92,7 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     antialias: width >= 1024,
     powerPreference: "low-power",
   });
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.setClearColor(0x000000, 0);
   renderer.domElement.className = "landing-scene__canvas";
   renderer.domElement.setAttribute("aria-hidden", "true");

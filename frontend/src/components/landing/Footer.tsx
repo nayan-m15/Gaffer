@@ -33,7 +33,7 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="animate-on-scroll relative z-10 border-t border-border bg-background">
+    <footer className="animate-on-scroll relative z-10 border-t border-border bg-background/55 backdrop-blur-sm">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between lg:gap-16">
           {/* ── Brand block ─────────────────────────────────────────────── */}
