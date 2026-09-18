@@ -45,6 +45,15 @@
   transition: box-shadow 150ms ease, transform 150ms ease, opacity 150ms ease;
 }
 
+/* Keep horizontal bench scrolling, while allowing an upward touch drag. */
+.player-card--sub.player-card--draggable { touch-action: pan-x; }
+.player-card--pitch.player-card--draggable { touch-action: none; }
+
+[data-lineup-drop-target][data-pointer-drag-over="true"] {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+
 .player-card--draggable:hover {
   box-shadow: 0 18px 34px -18px rgba(0, 0, 0, 0.95);
   transform: translateY(-2px);

@@ -109,6 +109,10 @@ interface PlayerCardProps {
   publicView?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: (e: React.DragEvent) => void;
+  onPointerDown?: React.PointerEventHandler<HTMLElement>;
+  onPointerMove?: React.PointerEventHandler<HTMLElement>;
+  onPointerUp?: React.PointerEventHandler<HTMLElement>;
+  onPointerCancel?: React.PointerEventHandler<HTMLElement>;
   className?: string;
 }
 
@@ -133,6 +137,10 @@ export function PlayerCard({
   publicView = false,
   onDragStart,
   onDragEnd,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
   className,
 }: PlayerCardProps) {
   const pathId = `player-card-arc-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -152,6 +160,10 @@ export function PlayerCard({
         draggable={!readOnly}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         className={cn(
           "player-card player-card--pitch",
           !readOnly && "player-card--draggable",
@@ -187,6 +199,10 @@ export function PlayerCard({
       draggable={!readOnly}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       className={cn(
         "player-card player-card--sub",
         !readOnly && "player-card--draggable",
