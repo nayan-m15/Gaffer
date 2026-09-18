@@ -252,7 +252,7 @@ body {
 }
 
 .landing-scene[data-ready="true"] .landing-scene__canvas {
-  opacity: 0.78;
+  opacity: 0.9;
 }
 
 .landing-scene__readability {
@@ -262,9 +262,9 @@ body {
   pointer-events: none;
   background: radial-gradient(
     ellipse 48% 48% at 50% 47%,
-    color-mix(in srgb, var(--background) 96%, transparent) 0%,
-    color-mix(in srgb, var(--background) 88%, transparent) 42%,
-    color-mix(in srgb, var(--background) 22%, transparent) 78%,
+    color-mix(in srgb, var(--background) 82%, transparent) 0%,
+    color-mix(in srgb, var(--background) 68%, transparent) 42%,
+    color-mix(in srgb, var(--background) 16%, transparent) 78%,
     transparent 100%
   );
 }
@@ -315,15 +315,15 @@ body {
 
 @media (max-width: 767px) {
   .landing-scene[data-ready="true"] .landing-scene__canvas {
-    opacity: 0.62;
+    opacity: 0.78;
   }
 
   .landing-scene__readability {
     background: radial-gradient(
       ellipse 72% 48% at 50% 45%,
-      color-mix(in srgb, var(--background) 98%, transparent) 0%,
-      color-mix(in srgb, var(--background) 92%, transparent) 52%,
-      color-mix(in srgb, var(--background) 28%, transparent) 86%,
+      color-mix(in srgb, var(--background) 88%, transparent) 0%,
+      color-mix(in srgb, var(--background) 78%, transparent) 52%,
+      color-mix(in srgb, var(--background) 22%, transparent) 86%,
       transparent 100%
     );
   }

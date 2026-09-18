@@ -13,37 +13,26 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
   const pausedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
 
   useEffect(() => {
     readyCallbackRef.current = onReadyChange;
   }, [onReadyChange]);
 
   useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduceMotion(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-
-  useEffect(() => {
     const host = hostRef.current;
-    if (!host || reduceMotion) {
+    if (!host) {
       setReady(false);
       readyCallbackRef.current(false);
       return;
     }
 
     let cancelled = false;
-    let heroVisible = true;
     let documentVisible = !document.hidden;
     let idleHandle = 0;
     let timeoutHandle = 0;
 
     const updateActivity = () => {
-      controllerRef.current?.setActive(heroVisible && documentVisible);
+      controllerRef.current?.setActive(documentVisible);
     };
 
     const initialise = async () => {
@@ -73,12 +62,6 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
     const resizeObserver = new ResizeObserver(() => controllerRef.current?.resize());
     resizeObserver.observe(host);
 
-    const intersectionObserver = new IntersectionObserver(([entry]) => {
-      heroVisible = entry?.isIntersecting ?? true;
-      updateActivity();
-    }, { rootMargin: "100px" });
-    intersectionObserver.observe(host);
-
     const themeObserver = new MutationObserver(() => controllerRef.current?.updateTheme());
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
@@ -93,13 +76,12 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
       if (idleHandle) window.cancelIdleCallback(idleHandle);
       if (timeoutHandle) window.clearTimeout(timeoutHandle);
       resizeObserver.disconnect();
-      intersectionObserver.disconnect();
       themeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibility);
       controllerRef.current?.dispose();
       controllerRef.current = null;
     };
-  }, [reduceMotion]);
+  }, []);
 
   useEffect(() => {
     pausedRef.current = paused;
