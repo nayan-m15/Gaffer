@@ -262,55 +262,11 @@ body {
   pointer-events: none;
   background: radial-gradient(
     ellipse 48% 48% at 50% 47%,
-    color-mix(in srgb, var(--background) 82%, transparent) 0%,
-    color-mix(in srgb, var(--background) 68%, transparent) 42%,
-    color-mix(in srgb, var(--background) 16%, transparent) 78%,
+    color-mix(in srgb, var(--background) 48%, transparent) 0%,
+    color-mix(in srgb, var(--background) 30%, transparent) 42%,
+    color-mix(in srgb, var(--background) 8%, transparent) 78%,
     transparent 100%
   );
-}
-
-.landing-scene__motion-control {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 30;
-  display: none;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 9999px;
-  padding: 0.4rem 0.65rem;
-  color: var(--muted-foreground);
-  background: color-mix(in srgb, var(--background) 84%, transparent);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-  pointer-events: auto;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.landing-scene__motion-control:hover,
-.landing-scene__motion-control:focus-visible {
-  color: var(--foreground);
-  border-color: var(--brand);
-  background: var(--background);
-}
-
-.landing-scene__motion-control:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.landing-scene__motion-control svg {
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-@media (min-width: 768px) {
-  .landing-scene__motion-control {
-    display: inline-flex;
-  }
 }
 
 @media (max-width: 767px) {
@@ -321,9 +277,9 @@ body {
   .landing-scene__readability {
     background: radial-gradient(
       ellipse 72% 48% at 50% 45%,
-      color-mix(in srgb, var(--background) 88%, transparent) 0%,
-      color-mix(in srgb, var(--background) 78%, transparent) 52%,
-      color-mix(in srgb, var(--background) 22%, transparent) 86%,
+      color-mix(in srgb, var(--background) 58%, transparent) 0%,
+      color-mix(in srgb, var(--background) 42%, transparent) 52%,
+      color-mix(in srgb, var(--background) 12%, transparent) 86%,
       transparent 100%
     );
   }

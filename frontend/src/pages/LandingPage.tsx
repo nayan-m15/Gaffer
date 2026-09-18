@@ -80,7 +80,7 @@ export default function LandingPage() {
       <LandingScene onReadyChange={setSceneReady} />
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[1]">
         <div
-          className="absolute inset-0 bg-gradient-to-b from-background/55 via-background/25 to-background/55"
+          className="absolute inset-0 bg-gradient-to-b from-background/25 via-transparent to-background/20"
         />
         <div
           className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,color-mix(in_srgb,var(--background)_45%,transparent)_100%)]"
@@ -157,7 +157,7 @@ function PhilosophySection() {
   return (
     <section
       id="philosophy"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/35 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
@@ -316,7 +316,7 @@ function FinalCtaSection() {
   return (
     <section
       id="cta"
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-gradient-to-b from-background/45 via-muted/20 to-background/45 py-20 backdrop-blur-sm sm:py-28"
+      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-20 sm:py-28"
     >
       <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
@@ -389,7 +389,7 @@ function SectionLayout({
   return (
     <section
       id={id}
-      className="animate-on-scroll scroll-mt-20 border-t border-border bg-background/30 py-16 backdrop-blur-sm sm:py-24"
+      className="animate-on-scroll scroll-mt-20 border-t border-border/50 py-16 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div

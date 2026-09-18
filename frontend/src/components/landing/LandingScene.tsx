@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
 import type { LandingSceneController } from "./landing-scene";
 
 interface LandingSceneProps {
@@ -10,9 +9,7 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<LandingSceneController | null>(null);
   const readyCallbackRef = useRef(onReadyChange);
-  const pausedRef = useRef(false);
   const [ready, setReady] = useState(false);
-  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     readyCallbackRef.current = onReadyChange;
@@ -47,7 +44,6 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
             readyCallbackRef.current(nextReady);
           },
         });
-        controllerRef.current.setPaused(pausedRef.current);
         updateActivity();
       } catch {
         setReady(false);
@@ -83,30 +79,12 @@ export function LandingScene({ onReadyChange }: LandingSceneProps) {
     };
   }, []);
 
-  useEffect(() => {
-    pausedRef.current = paused;
-    controllerRef.current?.setPaused(paused);
-  }, [paused]);
-
   return (
-    <>
-      <div
-        ref={hostRef}
-        aria-hidden="true"
-        className="landing-scene"
-        data-ready={ready ? "true" : "false"}
-      />
-      {ready && (
-        <button
-          type="button"
-          className="landing-scene__motion-control"
-          aria-pressed={paused}
-          onClick={() => setPaused((value) => !value)}
-        >
-          {paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
-          <span>{paused ? "Resume background" : "Pause background"}</span>
-        </button>
-      )}
-    </>
+    <div
+      ref={hostRef}
+      aria-hidden="true"
+      className="landing-scene"
+      data-ready={ready ? "true" : "false"}
+    />
   );
 }
