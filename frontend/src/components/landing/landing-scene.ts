@@ -169,12 +169,12 @@ const LOCKER_CONFIG = { count: 7, startX: -77.8, endX: -63.1, width: 1.82, depth
 function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
   const group = new THREE.Group();
   const jersey = new THREE.MeshStandardMaterial({ color: 0x171d1b, roughness: .92 });
-  const body = box([.76, .96, .065], [0, -.12, 0], jersey);
+  const body = box([.76, 1.14, .065], [0, -.21, 0], jersey);
   const leftSleeve = box([.3, .5, .06], [-.48, .04, 0], jersey); leftSleeve.rotation.z = -.32;
   const rightSleeve = box([.3, .5, .06], [.48, .04, 0], jersey); rightSleeve.rotation.z = .32;
   const collar = new THREE.Mesh(new THREE.TorusGeometry(.14, .025, 6, 16, Math.PI), kit.green); collar.position.set(0, .38, .042); collar.rotation.z = Math.PI;
   const numberMat = new THREE.MeshBasicMaterial({ map: numberMap, transparent: true, depthWrite: false });
-  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.43, .54), numberMat); digits.position.set(0, -.12, .04);
+  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.43, .54), numberMat); digits.position.set(0, -.18, .04);
   const rail = box([.76, .035, .035], [0, .72, 0], kit.metal);
   const hook = new THREE.Mesh(new THREE.TorusGeometry(.075, .014, 5, 12, Math.PI * 1.4), kit.metal); hook.position.y = .79; hook.rotation.z = -.7;
   group.add(body, leftSleeve, rightSleeve, collar, digits, rail, hook);
