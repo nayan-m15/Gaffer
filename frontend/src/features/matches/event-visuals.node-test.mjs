@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  displayedGoalScore,
   linkedAssistsForGoal,
   uniqueTimelineEvents,
 } from "./event-visuals.ts";
@@ -64,6 +65,10 @@ const twoGoals = uniqueTimelineEvents([
   },
 ]);
 assert.equal(twoGoals.filter((event) => event.eventType === "goal").length, 2);
+assert.equal(displayedGoalScore(1, twoGoals, "own"), 2);
+assert.equal(displayedGoalScore(2, twoGoals, "own"), 2);
+assert.equal(displayedGoalScore(3, twoGoals, "own"), 3);
+assert.equal(displayedGoalScore(0, twoGoals, "opponent"), 0);
 
 const goal = {
   ...sub({ id: "goal-1", eventType: "goal", detail: null, minute: 20 }),
@@ -119,5 +124,6 @@ console.log("[event-visuals:uniqueTimelineEvents] passed", {
   keptDistinctSubs: distinct.length,
   collapsedSameId: sameId.length,
   keptTwoGoalsSameMinute: twoGoals.length,
+  offlineReloadScore: displayedGoalScore(1, twoGoals, "own"),
   linkedAssistCascade: cascade.length,
 });

@@ -26,16 +26,19 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
+import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
 import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useDeleteMatchEvent,
   useFinishMatch,
+  useFinaliseMatchProjection,
   useLogMatchEvent,
   useMatch,
   useMatchEvents,
   useMatchSquad,
   useUpdateMatchEvent,
   useUpdateMatchClock,
+  useReopenMatchProjection,
 } from "@/features/matches/hooks";
 import type {
   MatchEventTeam,
@@ -48,6 +51,7 @@ import {
   PENALTY_MISSED_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
+  displayedGoalScore,
   eventDisplayLabel,
   hasPriorYellow,
   isPairedAssistEvent,
@@ -288,6 +292,8 @@ export default function LiveMatchPage() {
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");
+  const finaliseProjection = useFinaliseMatchProjection(matchId ?? "");
+  const reopenProjection = useReopenMatchProjection(matchId ?? "");
   const updateClock = useUpdateMatchClock(matchId ?? "");
 
   const [period, setPeriod] = useState<Period>("not_started");
@@ -319,6 +325,7 @@ export default function LiveMatchPage() {
   const [endOpen, setEndOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [offlineReadinessOpen, setOfflineReadinessOpen] = useState(false);
   const [toast, setToast] = useState<{
     id?: string;
     label: string;
@@ -395,6 +402,12 @@ export default function LiveMatchPage() {
     () => eventsQuery.data ?? [],
     [eventsQuery.data],
   );
+  const loggedGoalsOwn = timeline.filter(
+    (event) => event.eventType === "goal" && event.team === "own",
+  ).length;
+  const loggedGoalsOpp = timeline.filter(
+    (event) => event.eventType === "goal" && event.team === "opponent",
+  ).length;
   const dismissedOwnIds = useMemo(
     () =>
       new Set(
@@ -470,12 +483,33 @@ export default function LiveMatchPage() {
   const awayColor = isHome ? oppColor : ownColor;
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = matchQuery.data?.teamScore ?? 0;
-  const oppScore = matchQuery.data?.opponentScore ?? 0;
+  // A reloaded offline page restores the last server score and the queued
+  // timeline independently. Include locally queued goals without adding them
+  // twice when the optimistic match cache already contains the same score.
+  const teamScore = displayedGoalScore(
+    matchQuery.data?.teamScore ?? 0,
+    timeline,
+    "own",
+  );
+  const oppScore = displayedGoalScore(
+    matchQuery.data?.opponentScore ?? 0,
+    timeline,
+    "opponent",
+  );
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
   const awayScore = isHome ? oppScore : teamScore;
+  const projection = matchQuery.data?.projection;
+  const confirmedHomeScore = isHome
+    ? projection?.confirmedTeamScore
+    : projection?.confirmedOpponentScore;
+  const confirmedAwayScore = isHome
+    ? projection?.confirmedOpponentScore
+    : projection?.confirmedTeamScore;
+  const possibleGoalEffect =
+    (projection?.possibleEffects.teamGoals ?? 0) +
+    (projection?.possibleEffects.opponentGoals ?? 0);
   const homeAbbrev = teamAbbrev(homeName);
   const awayAbbrev = teamAbbrev(awayName);
   const ownAbbrev = teamAbbrev(ownName);
@@ -527,13 +561,6 @@ export default function LiveMatchPage() {
     () => runningScoreByEvent(timeline, isHome),
     [timeline, isHome],
   );
-
-  const loggedGoalsOwn = timeline.filter(
-    (event) => event.eventType === "goal" && event.team === "own",
-  ).length;
-  const loggedGoalsOpp = timeline.filter(
-    (event) => event.eventType === "goal" && event.team === "opponent",
-  ).length;
 
   const persistClock = useCallback(
     (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
@@ -750,9 +777,13 @@ export default function LiveMatchPage() {
               : {}),
             ...(detail ? { detail } : {}),
           });
+          const label = eventDisplayLabel({ eventType, detail: detail ?? null });
           setToast({
             id: created.id,
-            label: `${eventDisplayLabel({ eventType, detail: detail ?? null })} logged`,
+            label:
+              created.syncStatus === "queued"
+                ? `${label} saved on this device`
+                : `${label} logged`,
           });
           window.setTimeout(() => setToast(null), 5000);
           if (eventType === "injury") {
@@ -1318,7 +1349,62 @@ export default function LiveMatchPage() {
                     Review duplicates
                   </SettingsItem>
                 ) : null}
-                {period === "not_started" && (
+                <SettingsItem
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    setOfflineReadinessOpen(true);
+                  }}
+                >
+                  Prepare for offline use
+                </SettingsItem>
+                {team?.role === "coach" &&
+                period === "full_time" &&
+                matchQuery.data?.projection?.finalisationState === "open" ? (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      const projection = matchQuery.data?.projection;
+                      if (!projection) return;
+                      finaliseProjection.mutate(projection.revision, {
+                        onSuccess: () =>
+                          setToast({ label: "Result finalised" }),
+                        onError: (error) =>
+                          setActionError(
+                            error instanceof Error
+                              ? error.message
+                              : "Could not finalise the result.",
+                          ),
+                      });
+                    }}
+                  >
+                    Finalise result
+                  </SettingsItem>
+                ) : null}
+                {team?.role === "coach" &&
+                matchQuery.data?.projection &&
+                matchQuery.data.projection.finalisationState !== "open" ? (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      reopenProjection.mutate(
+                        "Coach reopened the published result for amendment.",
+                        {
+                          onSuccess: () =>
+                            setToast({ label: "Result reopened" }),
+                          onError: (error) =>
+                            setActionError(
+                              error instanceof Error
+                                ? error.message
+                                : "Could not reopen the result.",
+                            ),
+                        },
+                      );
+                    }}
+                  >
+                    Reopen result
+                  </SettingsItem>
+                ) : null}
+                {team?.role === "coach" && period === "not_started" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1328,7 +1414,7 @@ export default function LiveMatchPage() {
                     Start game
                   </SettingsItem>
                 )}
-                {liveLogging && !checkIn && (
+                {team?.role === "coach" && liveLogging && !checkIn && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1338,7 +1424,7 @@ export default function LiveMatchPage() {
                     {running ? "Pause time" : "Resume time"}
                   </SettingsItem>
                 )}
-                {period === "first_half" && (
+                {team?.role === "coach" && period === "first_half" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1348,7 +1434,7 @@ export default function LiveMatchPage() {
                     Half time
                   </SettingsItem>
                 )}
-                {period === "half_time" && (
+                {team?.role === "coach" && period === "half_time" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1358,7 +1444,7 @@ export default function LiveMatchPage() {
                     Start 2nd half
                   </SettingsItem>
                 )}
-                {period === "second_half" && (
+                {team?.role === "coach" && period === "second_half" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1371,7 +1457,7 @@ export default function LiveMatchPage() {
               </div>
             )}
           </div>
-          {liveLogging && !checkIn && (
+          {team?.role === "coach" && liveLogging && !checkIn && (
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#1c2b36] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1391,7 +1477,7 @@ export default function LiveMatchPage() {
               {running ? "Pause" : "Resume"}
             </button>
           )}
-          {liveLogging && period === "first_half" && (
+          {team?.role === "coach" && liveLogging && period === "first_half" && (
             <button
               type="button"
               className="rounded-md bg-[#3b82f6] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1400,7 +1486,7 @@ export default function LiveMatchPage() {
               Half Time
             </button>
           )}
-          <button
+          {team?.role === "coach" ? <button
             type="button"
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
             onClick={() => {
@@ -1411,12 +1497,18 @@ export default function LiveMatchPage() {
             }}
           >
             End Match
-          </button>
+          </button> : null}
         </div>
       </header>
 
       {reviewOpen && matchId ? (
         <EventReviewPanel matchId={matchId} onClose={() => setReviewOpen(false)} />
+      ) : null}
+      {offlineReadinessOpen && matchId ? (
+        <OfflineReadinessPanel
+          matchId={matchId}
+          onClose={() => setOfflineReadinessOpen(false)}
+        />
       ) : null}
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
@@ -1446,6 +1538,29 @@ export default function LiveMatchPage() {
               />
             </div>
           </div>
+          {projection ? (
+            <div className="mt-1 flex justify-center">
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
+                  projection.finalisationState === "finalised"
+                    ? "bg-[#00d99a]/12 text-[#00d99a]"
+                    : projection.unresolvedReviewCount > 0 ||
+                        projection.finalisationState === "amendment_required"
+                      ? "bg-[#ffbe2e]/12 text-[#ffbe2e]"
+                      : "bg-[#5d6b76]/15 text-[#9fadb8]",
+                )}
+              >
+                {projection.finalisationState === "finalised"
+                  ? `Final result · revision ${projection.revision}`
+                  : projection.finalisationState === "amendment_required"
+                    ? "Result changed · amendment review required"
+                    : projection.unresolvedReviewCount > 0
+                      ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+                      : `Live provisional · revision ${projection.revision}`}
+              </span>
+            </div>
+          ) : null}
           <div className="mt-1.5 flex justify-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#1c2b36] bg-[#0c1218] px-3 py-0.5">
               <span

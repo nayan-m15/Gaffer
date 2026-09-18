@@ -669,6 +669,7 @@ export const matchEvents = pgTable(
       jsonb('structured_payload').$type<Record<string, unknown>>(),
     lifecycleStatus: text('lifecycle_status').default('provisional').notNull(),
     rulesVersion: integer('rules_version').default(1).notNull(),
+    projectionRevision: integer('projection_revision').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -742,12 +743,55 @@ export const matchEventMemberships = pgTable(
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    projectionRevision: integer('projection_revision').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
     index('match_event_memberships_canonical_index').on(table.canonicalEventId),
+  ],
+);
+
+/** Immutable commands which explain every correction, void, merge, split and
+ * conflict decision. Materialised match_events rows may change, but this
+ * command history is append-only. */
+export const matchEventOperations = pgTable(
+  'match_event_operations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    operationType: text('operation_type').notNull(),
+    targetObservationIds: jsonb('target_observation_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    canonicalEventId: uuid('canonical_event_id').references(
+      () => matchEvents.id,
+      { onDelete: 'set null' },
+    ),
+    causalParentIds: jsonb('causal_parent_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    decision: jsonb('decision').$type<Record<string, unknown>>().notNull(),
+    reason: text('reason'),
+    schemaVersion: integer('schema_version').default(1).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_event_operations_match_index').on(
+      table.matchId,
+      table.createdAt,
+    ),
+    index('match_event_operations_actor_index').on(table.actorUserId),
   ],
 );
 
@@ -776,5 +820,67 @@ export const matchEventReviews = pgTable(
     uniqueIndex('match_event_reviews_open_canonical_unique')
       .on(table.canonicalEventId)
       .where(sql`${table.status} = 'open'`),
+  ],
+);
+
+/** One authoritative projection revision for every consumer of a match. */
+export const matchProjectionState = pgTable('match_projection_state', {
+  matchId: uuid('match_id')
+    .primaryKey()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  revision: integer('revision').default(0).notNull(),
+  inputDigest: text('input_digest').notNull(),
+  rulesVersion: integer('rules_version').default(1).notNull(),
+  confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
+  confirmedOpponentScore: integer('confirmed_opponent_score')
+    .default(0)
+    .notNull(),
+  provisionalTeamScore: integer('provisional_team_score').default(0).notNull(),
+  provisionalOpponentScore: integer('provisional_opponent_score')
+    .default(0)
+    .notNull(),
+  possibleEffects: jsonb('possible_effects')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  disciplinaryProjection: jsonb('disciplinary_projection')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  unresolvedReviewCount: integer('unresolved_review_count')
+    .default(0)
+    .notNull(),
+  finalisationState: text('finalisation_state').default('open').notNull(),
+  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
+  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Durable acknowledgement for each submitted observation or operation. */
+export const syncUploadReceipts = pgTable(
+  'sync_upload_receipts',
+  {
+    id: uuid('id').primaryKey(),
+    submittedByUserId: text('submitted_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    itemType: text('item_type').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    outcome: text('outcome').notNull(),
+    safeErrorCode: text('safe_error_code'),
+    canonicalEventId: uuid('canonical_event_id').references(
+      () => matchEvents.id,
+      { onDelete: 'set null' },
+    ),
+    ...timestamps,
+  },
+  (table) => [
+    index('sync_upload_receipts_user_index').on(
+      table.submittedByUserId,
+      table.createdAt,
+    ),
   ],
 );
