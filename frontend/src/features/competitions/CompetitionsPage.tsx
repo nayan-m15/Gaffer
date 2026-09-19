@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trophy, ArrowLeft, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -40,6 +40,18 @@ function CompetitionWorkspace() {
   const [term, setTerm] = useState("");
   const search = useCompetitionSearch(term);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const nextTerm = input.trim();
+
+    if (nextTerm.length < 2) {
+      setTerm("");
+      return;
+    }
+
+    const timer = window.setTimeout(() => setTerm(nextTerm), 300);
+    return () => window.clearTimeout(timer);
+  }, [input]);
   return <>
     <PageHeader title="Leagues & Competitions" subtitle="Find competitions and manage the ones your team participates in."
       actions={<Button onClick={() => setCreating(true)}><Plus className="size-4" />Create a League or Competition</Button>} />
@@ -52,15 +64,18 @@ function CompetitionWorkspace() {
         {mine.data && <CompetitionList rows={mine.data} empty="Your team has no leagues or cups yet. Create one, or accept a coach invitation to participate." />}
       </AppCard>
       <AppCard className="space-y-5">
-        <div><h2 className="text-lg font-semibold">Find a League or Competition</h2><p className="mt-1 text-sm text-muted-foreground">Search by name to view participating teams. Membership is by invitation.</p></div>
+        <div><h2 className="text-lg font-semibold">Find a League or Competition</h2><p className="mt-1 text-sm text-muted-foreground">Search by name to view participating teams. Results update as you type. Membership is by invitation.</p></div>
         <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => {
           event.preventDefault();
-          if (input.trim() === term) void search.refetch();
-          else setTerm(input.trim());
+          const nextTerm = input.trim();
+          if (nextTerm.length < 2) return;
+          if (nextTerm === term) void search.refetch();
+          else setTerm(nextTerm);
         }}>
-          <input className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" aria-label="Competition name to search" placeholder="Search by competition name" required maxLength={100} value={input} onChange={(e) => setInput(e.target.value)} />
-          <Button type="submit" variant="outline" disabled={!input.trim() || search.isFetching}><Search className="size-4" />Search</Button>
+          <input className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" aria-label="Competition name to search" placeholder="Search by competition name" maxLength={100} value={input} onChange={(e) => setInput(e.target.value)} />
+          <Button type="submit" variant="outline" disabled={input.trim().length < 2 || search.isFetching}><Search className="size-4" />Search</Button>
         </form>
+        {input.trim().length === 1 && <p className="text-xs text-muted-foreground">Type at least 2 characters to search.</p>}
         {search.isFetching && <p role="status" className="text-sm text-muted-foreground">Searching...</p>}
         <RequestError error={search.error} />
         {term && search.data && <><p className="text-xs text-muted-foreground">Results for “{term}” (up to 25). Refine your search if needed.</p><CompetitionList rows={search.data} empty="No leagues or cups found. Try another name." /></>}

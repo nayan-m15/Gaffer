@@ -15,7 +15,7 @@ export function useCompetitionSearch(term: string) {
   return useQuery({
     queryKey: [...useCompetitionKey(), "search", term],
     queryFn: () => api.searchCompetitions(term),
-    enabled: !!term,
+    enabled: term.trim().length >= 2,
   });
 }
 
