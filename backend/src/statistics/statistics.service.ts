@@ -568,16 +568,14 @@ export class StatisticsService {
    * with the player module, which scopes by the claimed athlete's team
    * instead of a coach's owned team.
    *
-   * `competition_teams` is the membership source of truth. `isOwnTeam` is
-   * derived per viewer from the participant display name because the stored
-   * legacy boolean cannot represent multiple teams viewing one shared table.
+   * `competition_teams` is the membership source of truth for both which
+   * competitions appear and which rows belong in each table. Missing manual
+   * standings rows are synthesized with zero stats, matching the dedicated
+   * Leagues & Competitions detail view.
    */
   async getCompetitionsForTeam(teamId: string, userId?: string) {
     const teamCompetitions = await this.databaseService.database
-      .select({
-        competition: competitions,
-        participantDisplayName: competitionTeams.displayName,
-      })
+      .select({ competition: competitions })
       .from(competitionTeams)
       .innerJoin(
         competitions,
@@ -591,14 +589,81 @@ export class StatisticsService {
     }
 
     const competitionIds = teamCompetitions.map((row) => row.competition.id);
+    const participants = await this.databaseService.database
+      .select({
+        id: competitionTeams.id,
+        competitionId: competitionTeams.competitionId,
+        teamId: competitionTeams.teamId,
+        displayName: competitionTeams.displayName,
+      })
+      .from(competitionTeams)
+      .where(inArray(competitionTeams.competitionId, competitionIds));
+
     const teamStandings = await this.databaseService.database
       .select()
       .from(standings)
-      .where(inArray(standings.competitionId, competitionIds))
-      .orderBy(asc(standings.position));
+      .where(inArray(standings.competitionId, competitionIds));
 
-    return teamCompetitions.map(({ competition, participantDisplayName }) => {
-      const normalizedOwnName = participantDisplayName.trim().toLocaleLowerCase();
+    return teamCompetitions.map(({ competition }) => {
+      const competitionParticipants = participants.filter(
+        (participant) => participant.competitionId === competition.id,
+      );
+      const storedStandings = teamStandings.filter(
+        (standing) => standing.competitionId === competition.id,
+      );
+      const byTeamName = new Map(
+        storedStandings.map((standing) => [
+          standing.teamName.trim().toLocaleLowerCase(),
+          standing,
+        ]),
+      );
+
+      const mergedStandings = competitionParticipants.map((participant) => {
+        const stored = byTeamName.get(
+          participant.displayName.trim().toLocaleLowerCase(),
+        );
+        const isOwnTeam = participant.teamId === teamId;
+
+        if (stored) {
+          return { ...stored, isOwnTeam };
+        }
+
+        return {
+          id: `participant:${participant.id}`,
+          competitionId: competition.id,
+          teamName: participant.displayName,
+          position: 0,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+          isOwnTeam,
+        };
+      });
+
+      const orderedStandings = mergedStandings.sort((a, b) => {
+        if (a.position === 0 && b.position === 0) {
+          return a.teamName.localeCompare(b.teamName, undefined, {
+            sensitivity: 'base',
+          });
+        }
+        if (a.position === 0) return 1;
+        if (b.position === 0) return -1;
+        const positionDifference = a.position - b.position;
+        if (positionDifference !== 0) return positionDifference;
+        return a.teamName.localeCompare(b.teamName, undefined, {
+          sensitivity: 'base',
+        });
+      });
+
+      let nextFallbackPosition =
+        orderedStandings.reduce(
+          (max, standing) => Math.max(max, standing.position),
+          0,
+        ) + 1;
 
       return {
         ...competition,
@@ -608,13 +673,10 @@ export class StatisticsService {
           (competition.adminUserId === userId ||
             (competition.adminUserId === null &&
               competition.teamId === teamId)),
-        standings: teamStandings
-          .filter((s) => s.competitionId === competition.id)
-          .map((standing) => ({
-            ...standing,
-            isOwnTeam:
-              standing.teamName.trim().toLocaleLowerCase() === normalizedOwnName,
-          })),
+        standings: orderedStandings.map((standing) => {
+          if (standing.position !== 0) return standing;
+          return { ...standing, position: nextFallbackPosition++ };
+        }),
       };
     });
   }

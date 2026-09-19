@@ -250,26 +250,28 @@ function StandingsTable({
                   <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">{s.points}</td>
                   {canManage && (
                     <td className="px-3 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1" role="group">
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => onEdit(s.id)}
-                          aria-label="Edit standing"
-                          title="Edit"
-                        >
-                          <Pencil className="size-3.5 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => onDelete({ id: s.id, teamName: s.teamName })}
-                          aria-label="Delete standing"
-                          title="Delete"
-                        >
-                          <Trash2 className="size-3.5 text-destructive" />
-                        </Button>
-                      </div>
+                      {!s.id.startsWith("participant:") && (
+                        <div className="flex items-center justify-end gap-1" role="group">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => onEdit(s.id)}
+                            aria-label="Edit standing"
+                            title="Edit"
+                          >
+                            <Pencil className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => onDelete({ id: s.id, teamName: s.teamName })}
+                            aria-label="Delete standing"
+                            title="Delete"
+                          >
+                            <Trash2 className="size-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>

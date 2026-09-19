@@ -427,7 +427,7 @@ describe('StatisticsService', () => {
   });
 
 
-  it('loads competitions through shared competition-team membership and derives own-team highlighting', async () => {
+  it('loads member competitions and fills missing participant standings with zeroes', async () => {
     mockTeamsService.findTeamForUser.mockResolvedValue({
       id: 'team-2',
       name: 'Riverside App Team',
@@ -449,7 +449,28 @@ describe('StatisticsService', () => {
               createdAt: new Date(),
               updatedAt: new Date(),
             },
-            participantDisplayName: 'Riverside FC',
+          },
+        ]),
+      )
+      .mockImplementationOnce(() =>
+        thenable([
+          {
+            id: 'participant-1',
+            competitionId: 'comp-1',
+            teamId: 'team-1',
+            displayName: 'Founders FC',
+          },
+          {
+            id: 'participant-2',
+            competitionId: 'comp-1',
+            teamId: 'team-2',
+            displayName: 'Riverside FC',
+          },
+          {
+            id: 'participant-3',
+            competitionId: 'comp-1',
+            teamId: null,
+            displayName: 'Albion FC',
           },
         ]),
       )
@@ -458,7 +479,7 @@ describe('StatisticsService', () => {
           {
             id: 'standing-1',
             competitionId: 'comp-1',
-            teamName: 'Riverside FC',
+            teamName: 'Founders FC',
             position: 1,
             played: 1,
             won: 1,
@@ -467,20 +488,6 @@ describe('StatisticsService', () => {
             goalsFor: 2,
             goalsAgainst: 0,
             points: 3,
-            isOwnTeam: false,
-          },
-          {
-            id: 'standing-2',
-            competitionId: 'comp-1',
-            teamName: 'Founders FC',
-            position: 2,
-            played: 1,
-            won: 0,
-            drawn: 0,
-            lost: 1,
-            goalsFor: 0,
-            goalsAgainst: 2,
-            points: 0,
             isOwnTeam: true,
           },
         ]),
@@ -490,9 +497,39 @@ describe('StatisticsService', () => {
 
     expect(competition.id).toBe('comp-1');
     expect(competition.isAdmin).toBe(false);
-    expect(competition.standings.map((row) => row.isOwnTeam)).toEqual([
-      true,
-      false,
+    expect(competition.standings).toEqual([
+      expect.objectContaining({
+        id: 'standing-1',
+        teamName: 'Founders FC',
+        position: 1,
+        isOwnTeam: false,
+      }),
+      expect.objectContaining({
+        id: 'participant:participant-3',
+        teamName: 'Albion FC',
+        position: 2,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        points: 0,
+        isOwnTeam: false,
+      }),
+      expect.objectContaining({
+        id: 'participant:participant-2',
+        teamName: 'Riverside FC',
+        position: 3,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        points: 0,
+        isOwnTeam: true,
+      }),
     ]);
   });
 
