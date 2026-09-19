@@ -201,9 +201,19 @@ export class EventsService {
           ? dto.competitionId
           : existingEvent.competitionId
         : null;
-    const competitionChanged =
-      dto.competitionId !== undefined ||
-      (dto.type === 'match' && existingEvent.type !== 'match');
+    const competitionChanged = competitionId !== existingEvent.competitionId;
+    if (competitionChanged) {
+      const [startedMatch] = await this.databaseService.database
+        .select({ id: matches.id })
+        .from(matches)
+        .where(eq(matches.eventId, eventId))
+        .limit(1);
+      if (startedMatch) {
+        throw new BadRequestException(
+          'The competition cannot be changed after the match has started.',
+        );
+      }
+    }
     if (competitionId && competitionChanged) {
       await this.requireTeamCompetition(team.id, competitionId);
     }
@@ -284,6 +294,15 @@ export class EventsService {
       );
     }
 
+    const competitionOpponent = event.competitionId
+      ? await this.requireCompetitionOpponent(
+          team.id,
+          event.competitionId,
+          dto.opponentCompetitionTeamId,
+        )
+      : null;
+    const opponentName = competitionOpponent?.displayName ?? dto.opponentName;
+
     const gamePlan = dto.gamePlanId
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
       : null;
@@ -319,7 +338,8 @@ export class EventsService {
     const startingIds = new Set(dto.startingAthleteIds);
     const teamColor = dto.teamColor ?? team.primaryColor ?? null;
     const matchValues = {
-      opponentName: dto.opponentName,
+      opponentName,
+      opponentCompetitionTeamId: competitionOpponent?.id ?? null,
       isHome: dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
       gamePlanSnapshot: gamePlan
@@ -363,6 +383,7 @@ export class EventsService {
       .values({
         eventId: event.id,
         competitionId: event.competitionId,
+        opponentCompetitionTeamId: matchValues.opponentCompetitionTeamId,
         opponentName: matchValues.opponentName,
         isHome: matchValues.isHome,
         gamePlanId: matchValues.gamePlanId,
@@ -451,6 +472,43 @@ export class EventsService {
         position: player.position ?? null,
       })),
     );
+  }
+
+  private async requireCompetitionOpponent(
+    teamId: string,
+    competitionId: string,
+    opponentCompetitionTeamId: string | null | undefined,
+  ) {
+    if (!opponentCompetitionTeamId) {
+      throw new BadRequestException(
+        'Choose an opponent from the participating teams in this competition.',
+      );
+    }
+
+    await this.requireTeamCompetition(teamId, competitionId);
+
+    const [participant] = await this.databaseService.database
+      .select({
+        id: competitionTeams.id,
+        teamId: competitionTeams.teamId,
+        displayName: competitionTeams.displayName,
+      })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.id, opponentCompetitionTeamId),
+          eq(competitionTeams.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
+
+    if (!participant || participant.teamId === teamId) {
+      throw new BadRequestException(
+        'Choose another participating team as the opponent.',
+      );
+    }
+
+    return participant;
   }
 
   private async requireTeamGamePlan(teamId: string, gamePlanId: string) {

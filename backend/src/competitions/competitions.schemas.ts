@@ -55,3 +55,36 @@ export const createCompetitionTeamSchema = z.object({
 export type CreateCompetitionTeamDto = z.infer<
   typeof createCompetitionTeamSchema
 >;
+
+const competitionScoreField = z
+  .number()
+  .int('Score must be a whole number.')
+  .min(0, 'Score cannot be negative.')
+  .max(99, 'Score must be 99 or less.');
+
+export const createCompetitionResultSchema = z
+  .object({
+    homeCompetitionTeamId: z.uuid(),
+    awayCompetitionTeamId: z.uuid(),
+    homeScore: competitionScoreField,
+    awayScore: competitionScoreField,
+    playedAt: z.iso.datetime({
+      offset: true,
+      error: 'Enter a valid match date and time.',
+    }),
+  })
+  .refine(
+    (value) => value.homeCompetitionTeamId !== value.awayCompetitionTeamId,
+    {
+      message: 'Home and away teams must be different.',
+      path: ['awayCompetitionTeamId'],
+    },
+  );
+export type CreateCompetitionResultDto = z.infer<
+  typeof createCompetitionResultSchema
+>;
+
+export const updateCompetitionResultSchema = createCompetitionResultSchema;
+export type UpdateCompetitionResultDto = z.infer<
+  typeof updateCompetitionResultSchema
+>;

@@ -12,7 +12,6 @@ import { RecentFormSection } from "@/features/statistics/RecentFormSection";
 import { SeasonFormDialog } from "@/features/statistics/SeasonFormDialog";
 import { SeasonsSection } from "@/features/statistics/SeasonsSection";
 import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
-import { StandingFormDialog } from "@/features/statistics/StandingFormDialog";
 import { StandingsSection } from "@/features/statistics/StandingsSection";
 import { StatCardsGrid } from "@/features/statistics/StatCardsGrid";
 import { StatisticsFilters } from "@/features/statistics/StatisticsFilters";
@@ -22,22 +21,16 @@ import {
   useAthleteStatistics,
   useCompetitions,
   useCreateSeason,
-  useCreateStanding,
   useDeleteSeason,
-  useDeleteStanding,
   useSeasons,
   useStatistics,
   useUpdateSeason,
-  useUpdateStanding,
 } from "@/features/statistics/hooks";
 import type {
-  CompetitionWithStandings,
   Season,
   SeasonFormValues,
-  StandingFormValues,
 } from "@/features/statistics/types";
 import { ApiError } from "@/lib/api";
-import { toStandingFormValues } from "@/services/statistics";
 import { emptySeasonFormValues, toSeasonFormValues } from "@/services/seasons";
 import { cn } from "@/lib/utils";
 
@@ -45,23 +38,13 @@ import { cn } from "@/lib/utils";
  *  MAIN PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const DELETE_TITLES = {
-  standing: "Delete Standing",
-  season: "Delete Season",
-} as const;
-
-const DELETE_MESSAGES = {
-  standing: "Are you sure you want to delete the standing for",
-  season: "Are you sure you want to delete the season",
-} as const;
-
 /**
  * StatisticsPage — team-wide season analytics, player breakdowns, and
  * shared competition standings.
  *
- * Competition membership and management live in Leagues & Competitions.
- * Standings remain visible here; only the shared competition admin receives
- * standings mutation controls.
+ * Competition membership and result management live in Leagues & Competitions.
+ * Standings remain visible here; competition admins get a link to manage
+ * results rather than a second standings editor.
  */
 export default function StatisticsPage() {
   const { team } = useAuth();
@@ -87,14 +70,7 @@ export default function StatisticsPage() {
   // so a fresh object each render would loop.
   const newSeasonDefaults = useMemo(() => emptySeasonFormValues(), []);
 
-  const [standingForm, setStandingForm] = useState<{
-    open: boolean;
-    competition: CompetitionWithStandings | null;
-    standingId: string | null;
-  }>({ open: false, competition: null, standingId: null });
-
   const [deleteTarget, setDeleteTarget] = useState<{
-    kind: "standing" | "season";
     id: string;
     name: string;
     /** Extra warning shown in the confirm dialog, e.g. unlinked competitions. */
@@ -107,9 +83,6 @@ export default function StatisticsPage() {
   const athleteQuery = useAthleteStatistics(athleteId ?? null);
 
   // Mutations
-  const createStandMut = useCreateStanding();
-  const updateStandMut = useUpdateStanding();
-  const deleteStandMut = useDeleteStanding();
   const createSeasonMut = useCreateSeason();
   const updateSeasonMut = useUpdateSeason();
   const deleteSeasonMut = useDeleteSeason();
@@ -145,34 +118,6 @@ export default function StatisticsPage() {
   const subtitle = overview
     ? `${scopeLabel} — ${overview.matchesPlayed} matches — ${overview.wins}W / ${overview.draws}D / ${overview.losses}L — ${overview.goalsFor} GF / ${overview.goalsAgainst} GA`
     : "Team performance, player statistics, and standings.";
-
-  /* ── Standing form handlers ───────────────────────────────────────────── */
-  const openAddStanding = (c: CompetitionWithStandings) =>
-    setStandingForm({ open: true, competition: c, standingId: null });
-  const openEditStanding = (
-    c: CompetitionWithStandings,
-    standingId: string,
-  ) => setStandingForm({ open: true, competition: c, standingId });
-  const closeStandingForm = () => {
-    setStandingForm({ open: false, competition: null, standingId: null });
-    createStandMut.reset();
-    updateStandMut.reset();
-  };
-  const handleStandingSubmit = (values: StandingFormValues) => {
-    if (!standingForm.competition) return;
-    if (standingForm.standingId) {
-      updateStandMut.mutate({
-        id: standingForm.standingId,
-        input: values,
-      });
-    } else {
-      createStandMut.mutate({
-        competitionId: standingForm.competition.id,
-        input: values,
-      });
-    }
-    closeStandingForm();
-  };
 
   /* ── Season form handlers ─────────────────────────────────────────────── */
   const openAddSeason = () => setSeasonForm({ open: true, editing: null });
@@ -219,7 +164,6 @@ export default function StatisticsPage() {
   const requestDeleteSeason = (season: Season) => {
     const linked = competitions.filter((c) => c.seasonId === season.id).length;
     setDeleteTarget({
-      kind: "season",
       id: season.id,
       name: season.name,
       note:
@@ -231,13 +175,9 @@ export default function StatisticsPage() {
 
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
-    if (deleteTarget.kind === "season") {
-      deleteSeasonMut.mutate(deleteTarget.id);
-      // The filter would otherwise point at a season that no longer exists.
-      if (seasonId === deleteTarget.id) setSeasonId(undefined);
-    } else {
-      deleteStandMut.mutate(deleteTarget.id);
-    }
+    deleteSeasonMut.mutate(deleteTarget.id);
+    // The filter would otherwise point at a season that no longer exists.
+    if (seasonId === deleteTarget.id) setSeasonId(undefined);
     setDeleteTarget(null);
   };
 
@@ -369,33 +309,10 @@ export default function StatisticsPage() {
         <StandingsSection
           competitions={competitions}
           isLoading={competitionsQuery.isLoading}
-          onAddStanding={openAddStanding}
-          onEditStanding={openEditStanding}
-          onDeleteStanding={(_, s) =>
-            setDeleteTarget({
-              kind: "standing",
-              id: s.id,
-              name: s.teamName,
-            })
-          }
         />
       </div>
 
       {/* Dialogs */}
-      <StandingFormDialog
-        isOpen={standingForm.open}
-        onClose={closeStandingForm}
-        initialValues={
-          standingForm.competition && standingForm.standingId
-            ? toStandingFormValues(
-                standingForm.competition,
-                standingForm.standingId,
-              )
-            : null
-        }
-        onSubmit={handleStandingSubmit}
-      />
-
       <SeasonFormDialog
         isOpen={seasonForm.open}
         onClose={closeSeasonForm}
@@ -413,8 +330,8 @@ export default function StatisticsPage() {
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
-        title={DELETE_TITLES[deleteTarget?.kind ?? "standing"]}
-        message={DELETE_MESSAGES[deleteTarget?.kind ?? "standing"]}
+        title="Delete Season"
+        message="Are you sure you want to delete the season"
         itemName={deleteTarget?.name ?? ""}
         note={deleteTarget?.note}
       />

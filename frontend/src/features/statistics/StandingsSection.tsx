@@ -1,36 +1,16 @@
 import { useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Pencil,
-  Plus,
-  Trash2,
-  Trophy,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CompetitionWithStandings } from "./types";
 
 export function StandingsSection({
   competitions,
   isLoading,
-  onAddStanding,
-  onEditStanding,
-  onDeleteStanding,
 }: {
   competitions: CompetitionWithStandings[];
   isLoading: boolean;
-  onAddStanding: (c: CompetitionWithStandings) => void;
-  onEditStanding: (
-    c: CompetitionWithStandings,
-    standingId: string,
-  ) => void;
-  onDeleteStanding: (
-    c: CompetitionWithStandings,
-    standing: { id: string; teamName: string },
-  ) => void;
 }) {
   return (
     <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
@@ -66,14 +46,8 @@ export function StandingsSection({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {competitions.map((c) => (
-            <CompetitionCard
-              key={c.id}
-              competition={c}
-              onAddStanding={() => onAddStanding(c)}
-              onEditStanding={(id) => onEditStanding(c, id)}
-              onDeleteStanding={(s) => onDeleteStanding(c, s)}
-            />
+          {competitions.map((competition) => (
+            <CompetitionCard key={competition.id} competition={competition} />
           ))}
         </div>
       )}
@@ -83,29 +57,19 @@ export function StandingsSection({
 
 function CompetitionCard({
   competition,
-  onAddStanding,
-  onEditStanding,
-  onDeleteStanding,
 }: {
   competition: CompetitionWithStandings;
-  onAddStanding: () => void;
-  onEditStanding: (standingId: string) => void;
-  onDeleteStanding: (standing: {
-    id: string;
-    teamName: string;
-  }) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-
   const typeLabel =
     competition.type.charAt(0).toUpperCase() + competition.type.slice(1);
 
   return (
     <div className="rounded-xl border border-border bg-background">
-      <div className="flex items-center justify-between gap-2 p-4">
+      <div className="flex items-center justify-between gap-3 p-4">
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpanded((value) => !value)}
           className="flex min-w-0 items-center gap-2 text-left"
         >
           {expanded ? (
@@ -130,17 +94,19 @@ function CompetitionCard({
             </span>
           )}
         </button>
+        {competition.isAdmin && competition.type !== "friendly" && (
+          <Link
+            to={`/competitions/${competition.id}#results`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Manage results
+          </Link>
+        )}
       </div>
 
       {expanded && (
         <div className="border-t border-border">
-          <StandingsTable
-            standings={competition.standings}
-            canManage={competition.isAdmin}
-            onAdd={onAddStanding}
-            onEdit={onEditStanding}
-            onDelete={onDeleteStanding}
-          />
+          <StandingsTable standings={competition.standings} />
         </div>
       )}
     </div>
@@ -149,21 +115,10 @@ function CompetitionCard({
 
 function StandingsTable({
   standings,
-  canManage,
-  onAdd,
-  onEdit,
-  onDelete,
 }: {
   standings: CompetitionWithStandings["standings"];
-  canManage: boolean;
-  onAdd: () => void;
-  onEdit: (standingId: string) => void;
-  onDelete: (standing: {
-    id: string;
-    teamName: string;
-  }) => void;
 }) {
-  const COLUMNS = [
+  const columns = [
     { key: "pos", label: "POS", className: "w-12 text-center" },
     { key: "team", label: "TEAM", className: "min-w-[100px]" },
     { key: "p", label: "P", className: "w-10 text-center" },
@@ -175,119 +130,53 @@ function StandingsTable({
     { key: "pts", label: "PTS", className: "w-10 text-center" },
   ] as const;
 
-  const colSpan = COLUMNS.length + (canManage ? 1 : 0);
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full caption-bottom text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {COLUMNS.map((col) => (
+            {columns.map((column) => (
               <th
-                key={col.key}
+                key={column.key}
                 scope="col"
-                className={cn("px-3 py-2.5", col.className)}
+                className={cn("px-3 py-2.5", column.className)}
               >
-                {col.label}
+                {column.label}
               </th>
             ))}
-            {canManage && (
-              <th scope="col" className="w-16 px-3 py-2.5 text-right">
-                Actions
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
-          {standings.length === 0 ? (
-            <tr>
-              <td colSpan={colSpan} className="py-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No standings rows yet.
-                </p>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 gap-1.5"
-                    onClick={onAdd}
-                  >
-                    <Plus className="size-3.5" />
-                    Add Standing
-                  </Button>
-                )}
+          {standings.map((standing) => (
+            <tr
+              key={standing.id}
+              className={cn(
+                "border-b border-border last:border-b-0",
+                standing.isOwnTeam ? "bg-primary/10" : "hover:bg-muted/30",
+              )}
+            >
+              <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">
+                {standing.position}
               </td>
-            </tr>
-          ) : (
-            <>
-              {standings.map((s) => (
-                <tr
-                  key={s.id}
+              <td className="px-3 py-2.5">
+                <span
                   className={cn(
-                    "border-b border-border last:border-b-0",
-                    s.isOwnTeam ? "bg-primary/10" : "hover:bg-muted/30",
+                    "font-semibold",
+                    standing.isOwnTeam ? "text-primary" : "text-foreground",
                   )}
                 >
-                  <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">
-                    {s.position}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span
-                      className={cn(
-                        "font-semibold",
-                        s.isOwnTeam ? "text-primary" : "text-foreground",
-                      )}
-                    >
-                      {s.teamName}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.played}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{s.won}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.drawn}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.lost}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{s.goalsFor}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{s.goalsAgainst}</td>
-                  <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">{s.points}</td>
-                  {canManage && (
-                    <td className="px-3 py-2.5 text-right">
-                      {!s.id.startsWith("participant:") && (
-                        <div className="flex items-center justify-end gap-1" role="group">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => onEdit(s.id)}
-                            aria-label="Edit standing"
-                            title="Edit"
-                          >
-                            <Pencil className="size-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => onDelete({ id: s.id, teamName: s.teamName })}
-                            aria-label="Delete standing"
-                            title="Delete"
-                          >
-                            <Trash2 className="size-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {canManage && (
-                <tr>
-                  <td colSpan={colSpan} className="py-2 text-right">
-                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={onAdd}>
-                      <Plus className="size-3.5" />
-                      Add Standing
-                    </Button>
-                  </td>
-                </tr>
-              )}
-            </>
-          )}
+                  {standing.teamName}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{standing.played}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{standing.won}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{standing.drawn}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{standing.lost}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{standing.goalsFor}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{standing.goalsAgainst}</td>
+              <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">{standing.points}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

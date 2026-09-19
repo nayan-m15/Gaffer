@@ -30,7 +30,9 @@ describe('StatisticsService', () => {
     const obj: Record<string, unknown> = {};
     obj.from = jest.fn(() => obj);
     obj.innerJoin = jest.fn(() => obj);
+    obj.leftJoin = jest.fn(() => obj);
     obj.where = jest.fn(() => obj);
+    obj.groupBy = jest.fn(() => obj);
     obj.orderBy = jest.fn(() => obj);
     obj.limit = jest.fn(() => obj);
     obj.then = (resolve: (v: unknown) => unknown) =>

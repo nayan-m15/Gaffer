@@ -27,6 +27,7 @@ import {
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
+import { useCompetition } from "@/features/competitions/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -370,6 +371,7 @@ export default function ConfirmSquadPage() {
   const opponentOutlet = useOutlet();
   const { team } = useAuth();
   const eventQuery = useEvent(eventId);
+  const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
@@ -381,6 +383,7 @@ export default function ConfirmSquadPage() {
     () => new Set(),
   );
   const [opponentName, setOpponentName] = useState("");
+  const [opponentCompetitionTeamId, setOpponentCompetitionTeamId] = useState<string | null>(null);
   const [isHome, setIsHome] = useState(true);
   const [venuePulse, setVenuePulse] = useState(0);
   const [opponentSquadVisibility, setOpponentSquadVisibility] =
@@ -447,9 +450,46 @@ export default function ConfirmSquadPage() {
     });
   }, [selectableRosterIds]);
 
+  const competitionParticipants = useMemo(
+    () =>
+      (competitionQuery.data?.participants ?? []).filter(
+        (participant) => participant.teamId !== eventQuery.data?.teamId,
+      ),
+    [competitionQuery.data?.participants, eventQuery.data?.teamId],
+  );
+  const selectedCompetitionOpponent = useMemo(
+    () =>
+      competitionParticipants.find(
+        (participant) => participant.id === opponentCompetitionTeamId,
+      ) ?? null,
+    [competitionParticipants, opponentCompetitionTeamId],
+  );
+
+  useEffect(() => {
+    if (!eventQuery.data?.competitionId) {
+      setOpponentCompetitionTeamId(null);
+      return;
+    }
+    if (
+      opponentCompetitionTeamId &&
+      !competitionParticipants.some(
+        (participant) => participant.id === opponentCompetitionTeamId,
+      )
+    ) {
+      setOpponentCompetitionTeamId(null);
+      setOpponentName("");
+    }
+  }, [
+    competitionParticipants,
+    eventQuery.data?.competitionId,
+    opponentCompetitionTeamId,
+  ]);
+
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
-  const opponentReady = opponentName.trim().length > 0;
+  const opponentReady = eventQuery.data?.competitionId
+    ? selectedCompetitionOpponent !== null
+    : opponentName.trim().length > 0;
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
@@ -458,6 +498,8 @@ export default function ConfirmSquadPage() {
     opponentReady &&
     !beforeMatchDay &&
     !startMatch.isPending &&
+    !(eventQuery.data?.competitionId &&
+      (competitionQuery.isFetching || competitionQuery.isError)) &&
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
 
   const detailsComplete = opponentReady;
@@ -590,7 +632,10 @@ export default function ConfirmSquadPage() {
     setOpponentSquadError(null);
     try {
       const match = await startMatch.mutateAsync({
-        opponentName: opponentName.trim(),
+        opponentName: selectedCompetitionOpponent?.displayName ?? opponentName.trim(),
+        ...(eventQuery.data?.competitionId
+          ? { opponentCompetitionTeamId: selectedCompetitionOpponent!.id }
+          : {}),
         isHome,
         startingAthleteIds: [...startingIds],
         benchAthleteIds: benchIdsFromRoster(
@@ -733,8 +778,10 @@ export default function ConfirmSquadPage() {
   }
 
   const ownName = team?.name ?? "Your team";
-  const oppName = opponentName.trim() || "Opponent";
-  const oppEmpty = !opponentName.trim();
+  const resolvedOpponentName =
+    selectedCompetitionOpponent?.displayName ?? opponentName.trim();
+  const oppName = resolvedOpponentName || "Opponent";
+  const oppEmpty = !resolvedOpponentName;
   const homeClub = isHome
     ? {
         name: ownName,
@@ -850,16 +897,53 @@ export default function ConfirmSquadPage() {
           <h2 className={sectionLabelClassName}>Match details</h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="opponent-name">Opponent name</Label>
-              <input
-                id="opponent-name"
-                className={inputClassName}
-                value={opponentName}
-                onChange={(event) => setOpponentName(event.target.value)}
-                placeholder="Opponent name"
-                autoComplete="off"
-                maxLength={100}
-              />
+              <Label htmlFor="opponent-name">Opponent</Label>
+              {event.competitionId ? (
+                <>
+                  <select
+                    id="opponent-name"
+                    className={inputClassName}
+                    value={opponentCompetitionTeamId ?? ""}
+                    disabled={competitionQuery.isFetching || competitionQuery.isError}
+                    onChange={(changeEvent) => {
+                      const participant = competitionParticipants.find(
+                        (item) => item.id === changeEvent.target.value,
+                      );
+                      setOpponentCompetitionTeamId(participant?.id ?? null);
+                      setOpponentName(participant?.displayName ?? "");
+                    }}
+                  >
+                    <option value="" disabled>
+                      {competitionQuery.isFetching
+                        ? "Loading participating teams…"
+                        : "Choose an opponent"}
+                    </option>
+                    {competitionParticipants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Opponents are limited to teams participating in {competitionQuery.data?.name ?? "this competition"}.
+                  </p>
+                  {competitionQuery.isError && (
+                    <p className="text-xs text-destructive">
+                      Could not load the competition teams. Please retry.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <input
+                  id="opponent-name"
+                  className={inputClassName}
+                  value={opponentName}
+                  onChange={(changeEvent) => setOpponentName(changeEvent.target.value)}
+                  placeholder="Opponent name"
+                  autoComplete="off"
+                  maxLength={100}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Venue</p>

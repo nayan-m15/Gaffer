@@ -1,22 +1,30 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, count, eq, ilike, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm';
+import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
+  competitionMatches,
   competitions,
   competitionTeams,
+  events,
+  matchEvents,
+  matches,
   standings,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import type {
   CreateCompetitionDto,
+  CreateCompetitionResultDto,
   CreateCompetitionTeamDto,
   UpdateCompetitionDto,
+  UpdateCompetitionResultDto,
 } from './competitions.schemas';
 
 /** Postgres unique-constraint violation — the race backstop when two creates
@@ -67,6 +75,21 @@ export interface CompetitionStandingView {
   goalsAgainst: number;
   points: number;
   isOwnTeam: boolean;
+}
+
+export interface CompetitionResultView {
+  id: string;
+  competitionId: string;
+  homeCompetitionTeamId: string;
+  awayCompetitionTeamId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number;
+  awayScore: number;
+  playedAt: Date;
+  source: 'live_logged' | 'manual';
+  linkedMatchId: string | null;
+  createdAt: Date;
 }
 
 /**
@@ -171,6 +194,7 @@ export class CompetitionsService {
     CompetitionView & {
       participants: CompetitionTeamView[];
       standings: CompetitionStandingView[];
+      results: CompetitionResultView[];
     }
   > {
     const [competition] = await this.databaseService.database
@@ -195,13 +219,17 @@ export class CompetitionsService {
       this.listParticipants(competitionId),
       this.findViewerTeamId(userId),
     ]);
-    const competitionStandings = await this.listStandings(
-      competitionId,
-      participants,
-      viewerTeamId,
-    );
+    const [competitionStandings, results] = await Promise.all([
+      this.listStandings(competitionId, participants, viewerTeamId),
+      this.listResults(competitionId, participants),
+    ]);
 
-    return { ...competition, participants, standings: competitionStandings };
+    return {
+      ...competition,
+      participants,
+      standings: competitionStandings,
+      results,
+    };
   }
 
   /* ── Competition CRUD ───────────────────────────────────────────────────── */
@@ -375,6 +403,96 @@ export class CompetitionsService {
       .where(eq(competitionTeams.id, competitionTeamId));
   }
 
+  /* ── Results ───────────────────────────────────────────────────────────── */
+
+  async createManualResult(
+    userId: string,
+    competitionId: string,
+    dto: CreateCompetitionResultDto,
+  ): Promise<CompetitionResultView> {
+    await this.requireAdmin(userId, competitionId);
+    await this.requireResultParticipants(competitionId, dto);
+
+    const [created] = await this.databaseService.database
+      .insert(competitionMatches)
+      .values({
+        competitionId,
+        homeCompetitionTeamId: dto.homeCompetitionTeamId,
+        awayCompetitionTeamId: dto.awayCompetitionTeamId,
+        homeScore: dto.homeScore,
+        awayScore: dto.awayScore,
+        playedAt: new Date(dto.playedAt),
+        createdByUserId: userId,
+      })
+      .returning();
+
+    return this.requireResultView(competitionId, created.id);
+  }
+
+  async updateManualResult(
+    userId: string,
+    competitionId: string,
+    resultId: string,
+    dto: UpdateCompetitionResultDto,
+  ): Promise<CompetitionResultView> {
+    await this.requireAdmin(userId, competitionId);
+    await this.requireResultParticipants(competitionId, dto);
+
+    const [existing] = await this.databaseService.database
+      .select({ id: competitionMatches.id })
+      .from(competitionMatches)
+      .where(
+        and(
+          eq(competitionMatches.id, resultId),
+          eq(competitionMatches.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException('Competition result not found.');
+    }
+    await this.databaseService.database
+      .update(competitionMatches)
+      .set({
+        homeCompetitionTeamId: dto.homeCompetitionTeamId,
+        awayCompetitionTeamId: dto.awayCompetitionTeamId,
+        homeScore: dto.homeScore,
+        awayScore: dto.awayScore,
+        playedAt: new Date(dto.playedAt),
+        updatedAt: new Date(),
+      })
+      .where(eq(competitionMatches.id, resultId));
+
+    return this.requireResultView(competitionId, resultId);
+  }
+
+  async removeManualResult(
+    userId: string,
+    competitionId: string,
+    resultId: string,
+  ): Promise<void> {
+    await this.requireAdmin(userId, competitionId);
+
+    const [existing] = await this.databaseService.database
+      .select({ id: competitionMatches.id })
+      .from(competitionMatches)
+      .where(
+        and(
+          eq(competitionMatches.id, resultId),
+          eq(competitionMatches.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException('Competition result not found.');
+    }
+    await this.databaseService.database
+      .delete(competitionMatches)
+      .where(eq(competitionMatches.id, resultId));
+  }
+
   /* ── Internals ──────────────────────────────────────────────────────────── */
 
   /**
@@ -399,98 +517,200 @@ export class CompetitionsService {
   }
 
   /**
-   * Merges stored manual standings with participant membership. Missing rows
-   * are deliberately represented by zeroes so newly-created competitions and
-   * newly-added teams are visible immediately.
+   * Shared standings are calculated from two kinds of completed results:
+   * app matches completed through the live logger, plus admin-entered manual
+   * results for fixtures that were not logged in the app. Existing manual
+   * standings rows remain as a legacy baseline so deployment does not erase
+   * historical values already entered before result tracking existed.
    */
   private async listStandings(
     competitionId: string,
     participants: CompetitionTeamView[],
     viewerTeamId: string | null,
   ): Promise<CompetitionStandingView[]> {
-    const stored = await this.databaseService.database
-      .select({
-        id: standings.id,
-        competitionId: standings.competitionId,
-        teamName: standings.teamName,
-        position: standings.position,
-        played: standings.played,
-        won: standings.won,
-        drawn: standings.drawn,
-        lost: standings.lost,
-        goalsFor: standings.goalsFor,
-        goalsAgainst: standings.goalsAgainst,
-        points: standings.points,
-      })
-      .from(standings)
-      .where(eq(standings.competitionId, competitionId));
+    const [baseline, results] = await Promise.all([
+      this.databaseService.database
+        .select({
+          id: standings.id,
+          teamName: standings.teamName,
+          played: standings.played,
+          won: standings.won,
+          drawn: standings.drawn,
+          lost: standings.lost,
+          goalsFor: standings.goalsFor,
+          goalsAgainst: standings.goalsAgainst,
+          points: standings.points,
+        })
+        .from(standings)
+        .where(eq(standings.competitionId, competitionId)),
+      this.loadCompetitionResults(competitionId),
+    ]);
 
-    const byTeamName = new Map(
-      stored.map((row) => [row.teamName.trim().toLocaleLowerCase(), row]),
+    return calculateCompetitionStandings(
+      competitionId,
+      participants,
+      results.map((row) => ({
+        homeCompetitionTeamId: row.homeCompetitionTeamId,
+        awayCompetitionTeamId: row.awayCompetitionTeamId,
+        homeScore: row.homeScore,
+        awayScore: row.awayScore,
+      })),
+      viewerTeamId,
+      baseline,
+    );
+  }
+
+  private async listResults(
+    competitionId: string,
+    participants: CompetitionTeamView[],
+  ): Promise<CompetitionResultView[]> {
+    const rows = await this.loadCompetitionResults(competitionId);
+    const names = new Map(
+      participants.map((participant) => [participant.id, participant.displayName]),
     );
 
-    const rows = participants.map((participant) => {
-      const existing = byTeamName.get(
-        participant.displayName.trim().toLocaleLowerCase(),
+    return rows.map((row) => ({
+      id: row.id,
+      competitionId,
+      homeCompetitionTeamId: row.homeCompetitionTeamId,
+      awayCompetitionTeamId: row.awayCompetitionTeamId,
+      homeTeamName: names.get(row.homeCompetitionTeamId) ?? 'Unknown team',
+      awayTeamName: names.get(row.awayCompetitionTeamId) ?? 'Unknown team',
+      homeScore: row.homeScore,
+      awayScore: row.awayScore,
+      playedAt: row.playedAt,
+      source: row.source,
+      linkedMatchId: row.linkedMatchId,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  private async loadCompetitionResults(competitionId: string) {
+    const [manualRows, liveRows] = await Promise.all([
+      this.databaseService.database
+        .select()
+        .from(competitionMatches)
+        .where(eq(competitionMatches.competitionId, competitionId)),
+      this.databaseService.database
+        .select({
+          matchId: matches.id,
+          ownCompetitionTeamId: competitionTeams.id,
+          opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
+          isHome: matches.isHome,
+          playedAt: events.scheduledAt,
+          createdAt: matches.createdAt,
+          teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+        })
+        .from(matches)
+        .innerJoin(events, eq(matches.eventId, events.id))
+        .innerJoin(competitions, eq(matches.competitionId, competitions.id))
+        .innerJoin(
+          competitionTeams,
+          and(
+            eq(competitionTeams.competitionId, matches.competitionId),
+            eq(competitionTeams.teamId, events.teamId),
+          ),
+        )
+        .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
+        .where(
+          and(
+            eq(matches.competitionId, competitionId),
+            eq(events.status, 'completed'),
+            gte(matches.createdAt, competitions.resultTrackingStartedAt),
+            sql`${matches.opponentCompetitionTeamId} is not null`,
+          ),
+        )
+        .groupBy(
+          matches.id,
+          competitionTeams.id,
+          events.scheduledAt,
+          matches.createdAt,
+        ),
+    ]);
+
+    const manual = manualRows.map((row) => ({
+      id: row.id,
+      homeCompetitionTeamId: row.homeCompetitionTeamId,
+      awayCompetitionTeamId: row.awayCompetitionTeamId,
+      homeScore: row.homeScore,
+      awayScore: row.awayScore,
+      playedAt: row.playedAt,
+      source: 'manual' as const,
+      linkedMatchId: null,
+      createdAt: row.createdAt,
+    }));
+
+    const live = liveRows
+      .filter(
+        (row): row is typeof row & { opponentCompetitionTeamId: string } =>
+          row.opponentCompetitionTeamId !== null,
+      )
+      .map((row) => ({
+        id: `match:${row.matchId}`,
+        homeCompetitionTeamId: row.isHome
+          ? row.ownCompetitionTeamId
+          : row.opponentCompetitionTeamId,
+        awayCompetitionTeamId: row.isHome
+          ? row.opponentCompetitionTeamId
+          : row.ownCompetitionTeamId,
+        homeScore: row.isHome ? row.teamScore : row.opponentScore,
+        awayScore: row.isHome ? row.opponentScore : row.teamScore,
+        playedAt: row.playedAt,
+        source: 'live_logged' as const,
+        linkedMatchId: row.matchId,
+        createdAt: row.createdAt,
+      }));
+
+    return [...manual, ...live].sort((a, b) => {
+      const dateDifference = a.playedAt.getTime() - b.playedAt.getTime();
+      if (dateDifference !== 0) return dateDifference;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+  }
+
+  private async requireResultParticipants(
+    competitionId: string,
+    dto: {
+      homeCompetitionTeamId: string;
+      awayCompetitionTeamId: string;
+    },
+  ): Promise<void> {
+    if (dto.homeCompetitionTeamId === dto.awayCompetitionTeamId) {
+      throw new BadRequestException('Home and away teams must be different.');
+    }
+
+    const rows = await this.databaseService.database
+      .select({ id: competitionTeams.id })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.competitionId, competitionId),
+          inArray(competitionTeams.id, [
+            dto.homeCompetitionTeamId,
+            dto.awayCompetitionTeamId,
+          ]),
+        ),
       );
-      const isOwnTeam =
-        viewerTeamId !== null && participant.teamId === viewerTeamId;
 
-      if (existing) {
-        return {
-          id: existing.id,
-          competitionId: existing.competitionId,
-          teamName: existing.teamName,
-          position: existing.position,
-          played: existing.played,
-          won: existing.won,
-          drawn: existing.drawn,
-          lost: existing.lost,
-          goalsFor: existing.goalsFor,
-          goalsAgainst: existing.goalsAgainst,
-          points: existing.points,
-          isOwnTeam,
-        };
-      }
+    if (rows.length !== 2) {
+      throw new BadRequestException(
+        'Both teams must participate in this competition.',
+      );
+    }
+  }
 
-      return {
-        id: `participant:${participant.id}`,
-        competitionId,
-        teamName: participant.displayName,
-        position: 0,
-        played: 0,
-        won: 0,
-        drawn: 0,
-        lost: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        points: 0,
-        isOwnTeam,
-      };
-    });
-
-    const ordered = rows.sort((a, b) => {
-      if (a.position === 0 && b.position === 0) {
-        return a.teamName.localeCompare(b.teamName, undefined, {
-          sensitivity: 'base',
-        });
-      }
-      if (a.position === 0) return 1;
-      if (b.position === 0) return -1;
-      const positionDifference = a.position - b.position;
-      if (positionDifference !== 0) return positionDifference;
-      return a.teamName.localeCompare(b.teamName, undefined, {
-        sensitivity: 'base',
-      });
-    });
-
-    let nextFallbackPosition =
-      ordered.reduce((max, row) => Math.max(max, row.position), 0) + 1;
-
-    return ordered.map((row) => {
-      if (row.position !== 0) return row;
-      return { ...row, position: nextFallbackPosition++ };
-    });
+  private async requireResultView(
+    competitionId: string,
+    resultId: string,
+  ): Promise<CompetitionResultView> {
+    const participants = await this.listParticipants(competitionId);
+    const results = await this.listResults(competitionId, participants);
+    const result = results.find((row) => row.id === resultId);
+    if (!result) {
+      throw new NotFoundException('Competition result not found.');
+    }
+    return result;
   }
 
   /** Coach-only gate — only a team's coach may create competitions. */

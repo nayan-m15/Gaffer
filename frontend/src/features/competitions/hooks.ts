@@ -19,8 +19,12 @@ export function useCompetitionSearch(term: string) {
   });
 }
 
-export function useCompetition(id: string) {
-  return useQuery({ queryKey: [...useCompetitionKey(), "detail", id], queryFn: () => api.fetchCompetition(id) });
+export function useCompetition(id: string | null | undefined) {
+  return useQuery({
+    queryKey: [...useCompetitionKey(), "detail", id ?? ""],
+    queryFn: () => api.fetchCompetition(id!),
+    enabled: Boolean(id),
+  });
 }
 
 export function useCompetitionInvites(id: string, isAdmin: boolean) {
@@ -38,6 +42,11 @@ export function useCompetitionMutation<T, R>(mutationFn: (input: T) => Promise<R
   return useMutation({
     mutationFn,
     // An email delivery failure can revoke the previous pending invite too.
-    onSettled: () => client.invalidateQueries({ queryKey }),
+    onSettled: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey }),
+        client.invalidateQueries({ queryKey: ["statistics"] }),
+      ]);
+    },
   });
 }

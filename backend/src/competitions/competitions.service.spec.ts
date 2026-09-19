@@ -468,7 +468,13 @@ describe('CompetitionsService', () => {
           .fn()
           .mockReturnValueOnce(competition)
           .mockReturnValueOnce(participants)
-          .mockReturnValueOnce(storedStandings),
+          // listStandings: legacy baseline + manual/live result sources.
+          .mockReturnValueOnce(storedStandings)
+          .mockReturnValueOnce(selectChain([]))
+          .mockReturnValueOnce(selectChain([]))
+          // listResults: manual/live result sources for the detail feed.
+          .mockReturnValueOnce(selectChain([]))
+          .mockReturnValueOnce(selectChain([])),
       };
 
       const result = await service.findOne('assistant-user-id', 'comp-1');

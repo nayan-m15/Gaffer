@@ -42,9 +42,33 @@ export interface CompetitionStanding {
   isOwnTeam: boolean;
 }
 
+export interface CompetitionResult {
+  id: string;
+  competitionId: string;
+  homeCompetitionTeamId: string;
+  awayCompetitionTeamId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number;
+  awayScore: number;
+  playedAt: string;
+  source: "live_logged" | "manual";
+  linkedMatchId: string | null;
+  createdAt: string;
+}
+
+export interface CompetitionResultInput {
+  homeCompetitionTeamId: string;
+  awayCompetitionTeamId: string;
+  homeScore: number;
+  awayScore: number;
+  playedAt: string;
+}
+
 export interface CompetitionDetail extends Competition {
   participants: Participant[];
   standings: CompetitionStanding[];
+  results: CompetitionResult[];
 }
 
 // The admin list endpoint returns pending records, including expired ones.

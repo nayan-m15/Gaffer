@@ -471,6 +471,14 @@ export const competitions = pgTable(
     adminUserId: text('admin_user_id').references(() => user.id, {
       onDelete: 'set null',
     }),
+    // Marks when result-based standings became authoritative for this
+    // competition. Existing aggregate standings rows act as the baseline;
+    // only matches started after this point are added on top.
+    resultTrackingStartedAt: timestamp('result_tracking_started_at', {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
     ...timestamps,
   },
   (table) => [
@@ -566,6 +574,12 @@ export const matches = pgTable(
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
+    // For shared leagues/cups, identifies the selected competition participant.
+    // Null for friendlies and legacy matches created before participant selection.
+    opponentCompetitionTeamId: uuid('opponent_competition_team_id').references(
+      () => competitionTeams.id,
+      { onDelete: 'set null' },
+    ),
     opponentName: text('opponent_name').notNull(),
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
@@ -590,9 +604,49 @@ export const matches = pgTable(
   },
   (table) => [
     index('matches_competition_id_index').on(table.competitionId),
+    index('matches_opponent_competition_team_id_index').on(
+      table.opponentCompetitionTeamId,
+    ),
     index('matches_game_plan_id_index').on(table.gamePlanId),
   ],
 );
+
+
+// Manually entered shared competition results for fixtures that were not
+// completed through the live logger. Live-logged matches stay authoritative
+// in `matches` + `match_events`; standings combine both sources at read time.
+export const competitionMatches = pgTable(
+  'competition_matches',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    homeCompetitionTeamId: uuid('home_competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    awayCompetitionTeamId: uuid('away_competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    homeScore: integer('home_score').default(0).notNull(),
+    awayScore: integer('away_score').default(0).notNull(),
+    playedAt: timestamp('played_at', { withTimezone: true }).notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('competition_matches_competition_id_index').on(table.competitionId),
+    index('competition_matches_home_team_id_index').on(
+      table.homeCompetitionTeamId,
+    ),
+    index('competition_matches_away_team_id_index').on(
+      table.awayCompetitionTeamId,
+    ),
+  ],
+);
+
 
 /**
  * Shirt-position abbreviations stored on own athletes and opponent players.
@@ -675,8 +729,9 @@ export const athleteMatchStats = pgTable(
   ],
 );
 
-// Manually entered/updated by the coach — the app has no way to calculate
-// standings since it doesn't track other teams' results.
+// Legacy manual standings baseline. Shared competitions now calculate future
+// movement from live-logged and admin-entered competition results. Kept for
+// backwards compatibility with standings entered before result tracking.
 export const standings = pgTable(
   'standings',
   {

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { Competition, CompetitionDetail, CompetitionInput, CompetitionInvite, CompetitionSummary, Participant } from "./types";
+import type { Competition, CompetitionDetail, CompetitionInput, CompetitionInvite, CompetitionResult, CompetitionResultInput, CompetitionSummary, Participant } from "./types";
 
 const sharedOnly = (rows: CompetitionSummary[]) =>
   rows.filter((row) => row.type === "league" || row.type === "cup");
@@ -42,3 +42,20 @@ export const inviteCoach = (competitionTeamId: string, email: string) =>
 
 export const revokeInvite = (id: string) =>
   apiFetch<{ revoked: boolean }>(`/competition-invites/${id}`, { method: "DELETE" });
+
+export const createCompetitionResult = (id: string, input: CompetitionResultInput) =>
+  apiFetch<CompetitionResult>(`/competitions/${id}/results`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const updateCompetitionResult = (id: string, resultId: string, input: CompetitionResultInput) =>
+  apiFetch<CompetitionResult>(`/competitions/${id}/results/${resultId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+
+export const deleteCompetitionResult = (id: string, resultId: string) =>
+  apiFetch<{ success: boolean }>(`/competitions/${id}/results/${resultId}`, {
+    method: "DELETE",
+  });

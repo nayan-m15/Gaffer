@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Trophy, ArrowLeft, Plus, Search } from "lucide-react";
+import { Trophy, ArrowLeft, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { StandingsDisplay } from "@/components/standings/StandingsDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useCompetition, useCompetitionInvites, useCompetitionSearch, useMyCompetitions } from "./hooks";
-import { addParticipant, deleteCompetition, inviteCoach, removeParticipant, revokeInvite } from "./api";
+import { addParticipant, deleteCompetition, deleteCompetitionResult, inviteCoach, removeParticipant, revokeInvite } from "./api";
 import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type ActionDialogConfig } from "./CompetitionDialogs";
-import type { CompetitionSummary, Participant } from "./types";
+import { CompetitionResultDialog } from "./CompetitionResultDialog";
+import type { CompetitionResult, CompetitionSummary, Participant } from "./types";
 
 const contentClass = "mx-auto w-full max-w-[1600px] space-y-6 px-6 pb-10 sm:px-8 lg:px-10";
 const badgeClass = "rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary";
@@ -99,6 +100,7 @@ function CompetitionDetails({ id }: { id: string }) {
   const isShared = competition?.type === "league" || competition?.type === "cup";
   const invites = useCompetitionInvites(id, !!competition?.isAdmin && isShared);
   const [editing, setEditing] = useState(false);
+  const [editingResult, setEditingResult] = useState<CompetitionResult | "new" | null>(null);
   const [action, setAction] = useState<ActionDialogConfig | null>(null);
   const [notice, setNotice] = useState("");
   const openInvite = (participant: Participant, email?: string) => setAction({
@@ -132,6 +134,68 @@ function CompetitionDetails({ id }: { id: string }) {
           showCompetitionHeaders={false}
           compactOnMobile
         />
+
+        <AppCard id="results" className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Fixtures & Results</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Live-logged match reports and admin-entered results both feed the standings above.
+              </p>
+            </div>
+            {competition.isAdmin && (
+              <Button
+                onClick={() => setEditingResult("new")}
+                disabled={competition.participants.length < 2}
+              >
+                <Plus className="size-4" />Record result
+              </Button>
+            )}
+          </div>
+          {competition.results.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+              No competition results have been recorded yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {competition.results.map((result) => (
+                <li key={result.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(result.playedAt).toLocaleString()} · {result.source === "live_logged" ? "Live logged" : "Manual result"}
+                    </p>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {result.homeTeamName} <span className="tabular-nums">{result.homeScore} – {result.awayScore}</span> {result.awayTeamName}
+                    </p>
+                  </div>
+                  {competition.isAdmin && result.source === "manual" && (
+                    <div className="flex shrink-0 gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditingResult(result)}>
+                        <Pencil className="size-3.5" />Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAction({
+                          title: "Delete result",
+                          description: `Delete ${result.homeTeamName} ${result.homeScore}–${result.awayScore} ${result.awayTeamName}? The standings will be recalculated.`,
+                          confirm: "Delete result",
+                          destructive: true,
+                          action: () => deleteCompetitionResult(id, result.id),
+                        })}
+                      >
+                        <Trash2 className="size-3.5 text-destructive" />Delete
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {competition.isAdmin && competition.participants.length < 2 && (
+            <p className="text-sm text-muted-foreground">Add at least two participating teams before recording a result.</p>
+          )}
+        </AppCard>
 
         <AppCard className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -186,6 +250,14 @@ function CompetitionDetails({ id }: { id: string }) {
           {!competition.participants.length && <p className="text-sm text-muted-foreground">No participating teams yet.</p>}
         </AppCard>
         {editing && competition.isAdmin && <CompetitionFormDialog competition={competition} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />}
+        {editingResult && competition.isAdmin && (
+          <CompetitionResultDialog
+            competitionId={competition.id}
+            participants={competition.participants}
+            result={editingResult === "new" ? undefined : editingResult}
+            onClose={() => setEditingResult(null)}
+          />
+        )}
         {action && competition.isAdmin && <CompetitionActionDialog config={action} onClose={() => setAction(null)} />}
       </>}
     </div>

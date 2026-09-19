@@ -92,6 +92,7 @@ export interface OpponentMatchPlayer {
 
 export interface StartMatchInput {
   opponentName: string;
+  opponentCompetitionTeamId?: string | null;
   isHome: boolean;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
@@ -107,6 +108,7 @@ export interface MatchRecord {
   id: string;
   eventId: string;
   competitionId: string | null;
+  opponentCompetitionTeamId: string | null;
   opponentName: string;
   isHome: boolean;
   teamScore: number;

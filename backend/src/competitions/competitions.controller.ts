@@ -16,8 +16,10 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import {
   competitionSearchSchema,
+  createCompetitionResultSchema,
   createCompetitionSchema,
   createCompetitionTeamSchema,
+  updateCompetitionResultSchema,
   updateCompetitionSchema,
 } from './competitions.schemas';
 import { CompetitionsService } from './competitions.service';
@@ -79,6 +81,43 @@ export class CompetitionsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     await this.competitionsService.remove(user.id, id);
+    return { success: true };
+  }
+
+  @Post(':id/results')
+  async createResult(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(createCompetitionResultSchema, body);
+    return this.competitionsService.createManualResult(user.id, id, dto);
+  }
+
+  @Patch(':id/results/:resultId')
+  async updateResult(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('resultId', ParseUUIDPipe) resultId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(updateCompetitionResultSchema, body);
+    return this.competitionsService.updateManualResult(
+      user.id,
+      id,
+      resultId,
+      dto,
+    );
+  }
+
+  @Delete(':id/results/:resultId')
+  @HttpCode(200)
+  async removeResult(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('resultId', ParseUUIDPipe) resultId: string,
+  ) {
+    await this.competitionsService.removeManualResult(user.id, id, resultId);
     return { success: true };
   }
 

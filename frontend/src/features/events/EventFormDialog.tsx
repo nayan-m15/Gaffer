@@ -105,6 +105,24 @@ export function EventFormDialog({
   const [error, setError] = useState<string | null>(null);
   const locationSearchIdRef = useRef(0);
 
+  const competitionOptions = (competitionsQuery.data ?? []).filter(
+    (competition) =>
+      competition.type !== "friendly" || competition.id === event?.competitionId,
+  );
+  const selectedCompetition = competitionOptions.find(
+    (competition) => competition.id === competitionId,
+  );
+  const selectedCompetitionLabel =
+    competitionId === "none"
+      ? "No competition (Friendly)"
+      : selectedCompetition
+        ? `${selectedCompetition.name}${
+            selectedCompetition.season ? ` (${selectedCompetition.season})` : ""
+          }`
+        : competitionsQuery.isLoading
+          ? "Loading competition..."
+          : "Competition unavailable";
+
   useEffect(() => {
     if (!open) {
       return;
@@ -507,22 +525,16 @@ export function EventFormDialog({
                 modal={false}
               >
                 <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
-                  <SelectValue placeholder="No competition" />
+                  <SelectValue>{selectedCompetitionLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No competition</SelectItem>
-                  {(competitionsQuery.data ?? [])
-                    .filter(
-                      (competition) =>
-                        competition.type !== "friendly" ||
-                        competition.id === event?.competitionId,
-                    )
-                    .map((competition) => (
-                      <SelectItem key={competition.id} value={competition.id}>
-                        {competition.name}
-                        {competition.season ? ` (${competition.season})` : ""}
-                      </SelectItem>
-                    ))}
+                  <SelectItem value="none">No competition (Friendly)</SelectItem>
+                  {competitionOptions.map((competition) => (
+                    <SelectItem key={competition.id} value={competition.id}>
+                      {competition.name}
+                      {competition.season ? ` (${competition.season})` : ""}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
