@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
 import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
+import { readClockAnchor, saveClockAnchor } from "@/offline/match-store";
 import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useDeleteMatchEvent,
@@ -346,35 +347,47 @@ export default function LiveMatchPage() {
     const match = matchQuery.data;
     if (!match || clockHydratedRef.current) return;
     clockHydratedRef.current = true;
-    if (match.eventStatus === "completed") {
-      setPeriod("full_time");
-      setRunning(false);
-      return;
-    }
-    const elapsed = Math.max(
-      0,
-      match.clockElapsedMs +
-        (match.clockStartedAt
-          ? Date.now() - new Date(match.clockStartedAt).getTime()
-          : 0),
-    );
-    baseRef.current = elapsed;
-    elapsedRef.current = elapsed;
-    setElapsedMs(elapsed);
-    setPeriod(match.clockPeriod);
-    const livePeriod =
-      match.clockPeriod === "first_half" ||
-      match.clockPeriod === "second_half";
-    const regulation =
-      match.clockPeriod === "second_half" ? SECOND_HALF_MS : FIRST_HALF_MS;
-    // Resuming already past the mark means the check-in either happened or was
-    // missed on the previous session. Treat it as spent rather than risk
-    // auto-ending a half the coach is still managing.
-    if (livePeriod && elapsed >= regulation) {
-      checkedMarksRef.current.add(match.clockPeriod);
-    }
-    setRunning(Boolean(match.clockStartedAt));
-  }, [matchQuery.data]);
+    void (async () => {
+      const local = matchId ? await readClockAnchor(matchId) : null;
+      if (match.eventStatus === "completed") {
+        setPeriod("full_time");
+        setRunning(false);
+        return;
+      }
+      const serverElapsed = Math.max(
+        0,
+        match.clockElapsedMs +
+          (match.clockStartedAt
+            ? Date.now() - new Date(match.clockStartedAt).getTime()
+            : 0),
+      );
+      const useLocal = Boolean(
+        local &&
+          new Date(local.updatedAt).getTime() > new Date(match.updatedAt).getTime(),
+      );
+      const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
+      const nextPeriod = useLocal && local ? local.period : match.clockPeriod;
+      const nextRunning =
+        useLocal && local ? local.running : Boolean(match.clockStartedAt);
+      if (local?.uncertain) {
+        setActionError(
+          "The offline match clock changed unexpectedly and was paused. Confirm the time before continuing.",
+        );
+      }
+      baseRef.current = elapsed;
+      elapsedRef.current = elapsed;
+      setElapsedMs(elapsed);
+      setPeriod(nextPeriod);
+      const livePeriod =
+        nextPeriod === "first_half" || nextPeriod === "second_half";
+      const regulation =
+        nextPeriod === "second_half" ? SECOND_HALF_MS : FIRST_HALF_MS;
+      if (livePeriod && elapsed >= regulation) {
+        checkedMarksRef.current.add(nextPeriod);
+      }
+      setRunning(nextRunning);
+    })();
+  }, [matchId, matchQuery.data]);
 
   useEffect(() => {
     if (!running) {
@@ -564,6 +577,14 @@ export default function LiveMatchPage() {
 
   const persistClock = useCallback(
     (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
+      if (matchId) {
+        void saveClockAnchor(matchId, {
+          period: nextPeriod,
+          running: nextRunning,
+          elapsedMs: elapsed,
+          authorityRevision: matchQuery.data?.updatedAt ?? "offline",
+        });
+      }
       updateClock.mutate(
         { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
         {
@@ -574,7 +595,7 @@ export default function LiveMatchPage() {
         },
       );
     },
-    [updateClock],
+    [matchId, matchQuery.data?.updatedAt, updateClock],
   );
 
   const startClock = () => {
@@ -781,7 +802,7 @@ export default function LiveMatchPage() {
           setToast({
             id: created.id,
             label:
-              created.syncStatus === "queued"
+              created.syncStatus && created.syncStatus !== "synced"
                 ? `${label} saved on this device`
                 : `${label} logged`,
           });
@@ -835,7 +856,9 @@ export default function LiveMatchPage() {
         const message =
           err instanceof ApiError
             ? err.message
-            : "Could not save this event. Please try again.";
+            : err instanceof Error
+              ? err.message
+              : "Could not save this event. Please try again.";
         setActionError(message);
         setToast({ label: message });
         window.setTimeout(() => setToast(null), 5000);
@@ -1848,6 +1871,26 @@ export default function LiveMatchPage() {
                           ) : event.syncStatus === "queued" ? (
                             <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
                               Saved on this device
+                            </p>
+                          ) : event.syncStatus === "uploading" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              Uploading
+                            </p>
+                          ) : event.syncStatus === "accepted" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6fb6ff]">
+                              Accepted · awaiting reconciliation
+                            </p>
+                          ) : event.syncStatus === "dependency_pending" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              Waiting for an earlier change
+                            </p>
+                          ) : event.syncStatus === "quarantined" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                              Access changed · retained on this device
+                            </p>
+                          ) : event.syncStatus === "reconciled" ? (
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#00d99a]">
+                              Reconciled
                             </p>
                           ) : event.syncStatus === "rejected" ? (
                             <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">

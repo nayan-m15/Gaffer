@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   checkOfflineReadiness,
   exportUnsentObservations,
+  importUnsentObservations,
   requestPersistentStorage,
   type OfflineReadiness,
 } from "./match-store";
@@ -18,6 +19,8 @@ export function OfflineReadinessPanel({
 }) {
   const [readiness, setReadiness] = useState<OfflineReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const runCheck = useCallback(async () => {
     setError(null);
@@ -45,6 +48,20 @@ export function OfflineReadinessPanel({
     URL.revokeObjectURL(url);
   };
 
+  const importExport = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const count = await importUnsentObservations(await file.text());
+      setMessage(`${count} offline item${count === 1 ? "" : "s"} imported.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Import failed.");
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
   const checks = readiness
     ? [
         ["Match downloaded", readiness.matchCached],
@@ -67,6 +84,7 @@ export function OfflineReadinessPanel({
           Run this while online before leaving for the match.
         </p>
         {error ? <p className="mt-3 text-sm text-[#ff7377]">{error}</p> : null}
+        {message ? <p className="mt-3 text-sm text-[#00d99a]">{message}</p> : null}
         <div className="mt-4 space-y-2">
           {readiness ? checks.map(([label, passed]) => (
             <div key={label} className="flex items-center justify-between rounded-lg bg-[#0c1218] px-3 py-2 text-sm">
@@ -83,6 +101,8 @@ export function OfflineReadinessPanel({
         <div className="mt-5 flex flex-wrap gap-2">
           <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-[#00d99a] px-3 py-2 text-sm font-semibold text-[#05130f]">Check again</button>
           <button type="button" onClick={() => void downloadExport()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Export unsent events</button>
+          <button type="button" onClick={() => importRef.current?.click()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Import unsent events</button>
+          <input ref={importRef} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void importExport(event.target.files?.[0])} />
         </div>
       </div>
     </div>

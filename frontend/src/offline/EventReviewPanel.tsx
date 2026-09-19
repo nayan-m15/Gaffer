@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { flushOfflineMatchEvents } from "@/features/matches/api";
+import { enqueueOperation } from "./match-store";
 
 interface Observation {
   id: string;
@@ -42,11 +44,20 @@ export function EventReviewPanel({
   const resolve = async (reviewId: string, resolution: "same_event" | "separate_events") => {
     setBusy(reviewId);
     try {
-      await apiFetch(`/matches/${matchId}/event-reviews/${reviewId}/resolve`, {
-        method: "POST",
-        body: JSON.stringify({ resolution }),
+      await enqueueOperation({
+        kind: "operation",
+        id: crypto.randomUUID(),
+        matchId,
+        operationType: "resolve_review",
+        reviewId,
+        resolution,
+        causalParentIds: [],
       });
-      await load();
+      setReviews((current) => current.filter((review) => review.id !== reviewId));
+      if (navigator.onLine) {
+        await flushOfflineMatchEvents();
+        await load();
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not resolve review.");
     } finally {

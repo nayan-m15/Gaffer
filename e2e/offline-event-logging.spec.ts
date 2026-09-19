@@ -185,3 +185,75 @@ test("all live event workflows remain usable and visible offline", async ({
 
   await expect(page.getByText("9 waiting", { exact: true })).toBeVisible();
 });
+
+test("storage exhaustion fails visibly without claiming an event was saved", async ({
+  page,
+  context,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("gaffer-simulate-storage-full", "1"),
+  );
+  await mockLiveMatch(page);
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await context.setOffline(true);
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.getByRole("alert")).toContainText("Offline storage is full.");
+  await expect(page.getByText(/Goal saved on this device/i)).toHaveCount(0);
+});
+
+test("expired sessions retain queued work for a later retry", async ({ page }) => {
+  await mockLiveMatch(page);
+  await page.route("**/api/sync/upload", (route) =>
+    json(route, { message: "Sign in required." }, 401),
+  );
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.getByText(/Goal saved on this device/i)).toBeVisible();
+  await expect(page.getByText("1 waiting", { exact: true })).toBeVisible();
+});
+
+test("membership revocation quarantines work instead of deleting it", async ({
+  page,
+}) => {
+  await mockLiveMatch(page);
+  await page.route("**/api/sync/upload", async (route) => {
+    const body = route.request().postDataJSON() as {
+      items: Array<{ payload?: { clientRequestId?: string }; id?: string }>;
+    };
+    const item = body.items[0];
+    await json(route, {
+      receipts: [
+        {
+          id: item.id ?? item.payload?.clientRequestId,
+          outcome: "rejected",
+          safeErrorCode: "MEMBERSHIP_REVOKED_OR_FORBIDDEN",
+        },
+      ],
+    });
+  });
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.getByText("1 access blocked", { exact: true })).toBeVisible();
+  await expect(page.getByText(/retained on this device/i)).toBeVisible();
+});
+
+test("two tabs observe the same durable pending queue", async ({ page, context }) => {
+  const second = await context.newPage();
+  await Promise.all([mockLiveMatch(page), mockLiveMatch(second)]);
+  await Promise.all([
+    page.goto(`/matches/${MATCH_ID}/live`),
+    second.goto(`/matches/${MATCH_ID}/live`),
+  ]);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await context.setOffline(true);
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.getByText("1 waiting", { exact: true })).toBeVisible();
+  await expect(second.getByText("1 waiting", { exact: true })).toBeVisible();
+});

@@ -1,0 +1,11 @@
+{
+  "name": "@gaffer/match-domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node index.test.cjs"
+  }
+}

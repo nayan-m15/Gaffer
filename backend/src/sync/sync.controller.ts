@@ -2,8 +2,10 @@ import {
   Controller,
   Body,
   Get,
+  Logger,
   Post,
   ServiceUnavailableException,
+  ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
 import { createHash, createHmac, createSign } from 'node:crypto';
@@ -12,14 +14,16 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { MatchesService } from '../matches/matches.service';
 import { DatabaseService } from '../database/database.service';
-import { syncUploadReceipts } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { matchEventOperations, syncUploadReceipts } from '../database/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { zodValidate } from '../common/zod-validate';
 import { syncUploadSchema, type SyncUploadItem } from './sync.schemas';
 
 @Controller('sync')
 @UseGuards(AuthGuard)
 export class SyncController {
+  private readonly logger = new Logger(SyncController.name);
+
   constructor(
     private readonly teamsService: TeamsService,
     private readonly matchesService: MatchesService,
@@ -100,20 +104,50 @@ export class SyncController {
       ) {
         return { id, outcome: 'rejected', safeErrorCode: 'ID_REUSED' };
       }
-      return existing;
+      if (existing.outcome !== 'dependency_pending') return existing;
+    }
+
+    if (item.kind === 'operation' && item.causalParentIds.length > 0) {
+      const parents = await this.databaseService.database
+        .select({ id: matchEventOperations.id })
+        .from(matchEventOperations)
+        .where(inArray(matchEventOperations.id, item.causalParentIds));
+      if (parents.length !== new Set(item.causalParentIds).size) {
+        const [receipt] = await this.databaseService.database
+          .insert(syncUploadReceipts)
+          .values({
+            id,
+            submittedByUserId: userId,
+            matchId: item.matchId,
+            itemType: item.kind,
+            payloadHash,
+            outcome: 'dependency_pending',
+            safeErrorCode: 'MISSING_CAUSAL_PARENT',
+          })
+          .onConflictDoUpdate({
+            target: syncUploadReceipts.id,
+            set: {
+              outcome: 'dependency_pending',
+              safeErrorCode: 'MISSING_CAUSAL_PARENT',
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        return receipt;
+      }
     }
 
     try {
       let canonicalEventId: string | null = null;
       if (item.kind === 'observation') {
-        const event = await this.matchesService.logEvent(
-          userId,
-          item.matchId,
-          item.payload,
-        );
-        canonicalEventId = event.id;
+        await this.matchesService.logEvent(userId, item.matchId, item.payload);
+        canonicalEventId =
+          await this.matchesService.canonicalEventIdForObservation(
+            item.matchId,
+            item.payload.clientRequestId,
+          );
       } else if (item.operationType === 'correct') {
-        const event = await this.matchesService.updateEvent(
+        const event = await this.matchesService.submitCorrectionOperation(
           userId,
           item.matchId,
           item.canonicalEventId,
@@ -122,7 +156,7 @@ export class SyncController {
           item.causalParentIds,
         );
         canonicalEventId = event.id;
-      } else {
+      } else if (item.operationType === 'void') {
         const event = await this.matchesService.deleteEvent(
           userId,
           item.matchId,
@@ -132,27 +166,84 @@ export class SyncController {
           item.reason,
         );
         canonicalEventId = event.id;
+      } else {
+        const review = await this.matchesService.resolveEventReview(
+          userId,
+          item.matchId,
+          item.reviewId,
+          { resolution: item.resolution },
+          item.id,
+          item.causalParentIds,
+        );
+        canonicalEventId = review.canonicalEventId;
       }
-      const [receipt] = await this.databaseService.database
-        .insert(syncUploadReceipts)
-        .values({
-          id,
-          submittedByUserId: userId,
-          matchId: item.matchId,
-          itemType: item.kind,
-          payloadHash,
-          outcome: 'accepted',
-          canonicalEventId,
-        })
-        .returning();
+      let receipt: typeof syncUploadReceipts.$inferSelect | undefined;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (item.kind === 'observation') {
+          canonicalEventId =
+            await this.matchesService.canonicalEventIdForObservation(
+              item.matchId,
+              item.payload.clientRequestId,
+            );
+        }
+        try {
+          [receipt] = await this.databaseService.database
+            .insert(syncUploadReceipts)
+            .values({
+              id,
+              submittedByUserId: userId,
+              matchId: item.matchId,
+              itemType: item.kind,
+              payloadHash,
+              outcome: 'accepted',
+              canonicalEventId,
+            })
+            .onConflictDoUpdate({
+              target: syncUploadReceipts.id,
+              set: {
+                payloadHash,
+                outcome: 'accepted',
+                safeErrorCode: null,
+                canonicalEventId,
+                updatedAt: new Date(),
+              },
+            })
+            .returning();
+          break;
+        } catch (error) {
+          if (item.kind !== 'observation' || attempt === 1) throw error;
+        }
+      }
+      if (!receipt) throw new Error('Could not commit the upload receipt.');
       return receipt;
-    } catch {
+    } catch (error) {
+      this.logger.error(
+        `Upload item ${id} failed`,
+        error instanceof Error ? error.stack : String(error),
+      );
       const fallback = {
         id,
         outcome: 'rejected',
-        safeErrorCode: 'INVALID_OR_UNAUTHORISED',
+        safeErrorCode:
+          error instanceof ForbiddenException
+            ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
+            : 'INVALID_OR_UNAUTHORISED',
       };
       try {
+        const [committed] = await this.databaseService.database
+          .select()
+          .from(syncUploadReceipts)
+          .where(eq(syncUploadReceipts.id, id))
+          .limit(1);
+        if (committed) {
+          if (
+            committed.payloadHash !== payloadHash ||
+            committed.submittedByUserId !== userId
+          ) {
+            return { id, outcome: 'rejected', safeErrorCode: 'ID_REUSED' };
+          }
+          if (committed.outcome !== 'dependency_pending') return committed;
+        }
         const [receipt] = await this.databaseService.database
           .insert(syncUploadReceipts)
           .values({
@@ -164,7 +255,14 @@ export class SyncController {
             outcome: 'rejected',
             safeErrorCode: fallback.safeErrorCode,
           })
-          .onConflictDoNothing({ target: syncUploadReceipts.id })
+          .onConflictDoUpdate({
+            target: syncUploadReceipts.id,
+            set: {
+              outcome: 'rejected',
+              safeErrorCode: fallback.safeErrorCode,
+              updatedAt: new Date(),
+            },
+          })
           .returning();
         return receipt ?? fallback;
       } catch {
