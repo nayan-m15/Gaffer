@@ -118,6 +118,7 @@ describe('CompetitionsService', () => {
     service = module.get<CompetitionsService>(CompetitionsService);
 
     mockTeamsService.requireCoachTeam.mockResolvedValue(team);
+    mockTeamsService.findTeamForUser.mockResolvedValue(team);
   });
 
   describe('create', () => {
@@ -419,6 +420,98 @@ describe('CompetitionsService', () => {
     });
   });
 
+  describe('findOne', () => {
+    it('returns participant-backed standings with alphabetical fallback positions', async () => {
+      const competition = selectChain([
+        {
+          id: 'comp-1',
+          name: 'Durban Sunday League',
+          type: 'league',
+          season: null,
+          seasonId: null,
+          isAdmin: false,
+          createdAt: competitionRow.createdAt,
+        },
+      ]);
+      const participants = selectChain([
+        participantRow,
+        {
+          ...participantRow,
+          id: 'participant-2',
+          teamId: 'team-2',
+          displayName: 'Riverside FC',
+        },
+        {
+          ...participantRow,
+          id: 'participant-3',
+          teamId: 'team-3',
+          displayName: 'Albion FC',
+        },
+      ]);
+      const storedStandings = selectChain([
+        {
+          id: 'standing-1',
+          competitionId: 'comp-1',
+          teamName: 'Team One',
+          position: 1,
+          played: 2,
+          won: 2,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 5,
+          goalsAgainst: 1,
+          points: 6,
+        },
+      ]);
+      mockDatabaseService.database = {
+        select: jest
+          .fn()
+          .mockReturnValueOnce(competition)
+          .mockReturnValueOnce(participants)
+          .mockReturnValueOnce(storedStandings),
+      };
+
+      const result = await service.findOne('assistant-user-id', 'comp-1');
+
+      expect(result.standings).toEqual([
+        expect.objectContaining({
+          teamName: 'Team One',
+          position: 1,
+          played: 2,
+          points: 6,
+          isOwnTeam: true,
+        }),
+        expect.objectContaining({
+          id: 'participant:participant-3',
+          teamName: 'Albion FC',
+          position: 2,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+          isOwnTeam: false,
+        }),
+        expect.objectContaining({
+          id: 'participant:participant-2',
+          teamName: 'Riverside FC',
+          position: 3,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+          isOwnTeam: false,
+        }),
+      ]);
+      expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listMine', () => {
     it('is scoped by the caller team participant membership', async () => {
       const mineChain = selectChain([
@@ -440,11 +533,12 @@ describe('CompetitionsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].participantCount).toBe(2);
-      // The membership join runs against the caller's own team, resolved by
-      // requireCoachTeam.
-      expect(mockTeamsService.requireCoachTeam).toHaveBeenCalledWith(
+      // Read access resolves any team member (coach or assistant) without
+      // applying the coach-only mutation gate.
+      expect(mockTeamsService.findTeamForUser).toHaveBeenCalledWith(
         'coach-user-id',
       );
+      expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
     });
   });
 });

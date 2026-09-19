@@ -27,8 +27,24 @@ export interface CompetitionSummary extends Competition {
   participantCount: number;
 }
 
+export interface CompetitionStanding {
+  id: string;
+  competitionId: string;
+  teamName: string;
+  position: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
+  isOwnTeam: boolean;
+}
+
 export interface CompetitionDetail extends Competition {
   participants: Participant[];
+  standings: CompetitionStanding[];
 }
 
 // The admin list endpoint returns pending records, including expired ones.

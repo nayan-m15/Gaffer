@@ -18,7 +18,7 @@ export async function searchCompetitions(term: string) {
 }
 
 export const createCompetition = (input: CompetitionInput) =>
-  apiFetch<CompetitionDetail>("/competitions", { method: "POST", body: JSON.stringify(input) });
+  apiFetch<Competition>("/competitions", { method: "POST", body: JSON.stringify(input) });
 
 export const updateCompetition = (id: string, input: CompetitionInput) =>
   apiFetch<Competition>(`/competitions/${id}`, { method: "PATCH", body: JSON.stringify(input) });

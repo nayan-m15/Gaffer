@@ -34,7 +34,6 @@ const TeamManagementPage = lazy(() => import('@/features/team-management/TeamMan
 const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
 const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
 const PlayerEventsPage = lazy(() => import('@/features/player/PlayerEventsPage'))
-const PlayerStandingsPage = lazy(() => import('@/features/player/PlayerStandingsPage'))
 
 function RouteFallback() {
   return (
@@ -206,7 +205,9 @@ function App() {
           <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
           <Route path="/player/team" element={<PlayerTeamPage />} />
           <Route path="/player/events" element={<PlayerEventsPage />} />
-          <Route path="/player/standings" element={<PlayerStandingsPage />} />
+          <Route path="/player/competitions" element={<CompetitionsPage />} />
+          <Route path="/player/competitions/:id" element={<CompetitionsPage />} />
+          <Route path="/player/standings" element={<Navigate to="/player/competitions" replace />} />
         </Route>
       </Routes>
       </Suspense>

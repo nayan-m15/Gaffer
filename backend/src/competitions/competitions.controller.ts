@@ -24,10 +24,10 @@ import { CompetitionsService } from './competitions.service';
 
 /**
  * Shared league/competition workspace. Every route requires a session; the
- * service resolves the caller's team and enforces coach-only creation plus
- * admin-only mutation internally. Search and detail reads are open to any
- * signed-in coach but never grant membership and never expose private user
- * emails.
+ * service resolves the caller's viewer/team context for reads and enforces
+ * coach-only creation plus admin-only mutation internally. Search and detail
+ * reads are open to any signed-in user but never grant membership and never
+ * expose private user emails.
  */
 @Controller('competitions')
 @UseGuards(AuthGuard)

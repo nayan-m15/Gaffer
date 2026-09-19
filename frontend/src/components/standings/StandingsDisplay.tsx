@@ -18,6 +18,10 @@ interface StandingsDisplayProps {
   emptyMessage?: string;
   /** Use a four-column table with inline secondary stats below `sm`. */
   compactOnMobile?: boolean;
+  /** Section heading. */
+  title?: string;
+  /** Hide per-competition cards when rendering a single competition detail view. */
+  showCompetitionHeaders?: boolean;
 }
 
 export interface ReadOnlyStanding {
@@ -47,6 +51,8 @@ export function StandingsDisplay({
   isLoading = false,
   emptyMessage = "No competitions yet.",
   compactOnMobile = false,
+  title = "Competitions & Standings",
+  showCompetitionHeaders = true,
 }: StandingsDisplayProps) {
   if (isLoading) {
     return (
@@ -82,17 +88,26 @@ export function StandingsDisplay({
       <div className="mb-4 flex items-center gap-2">
         <Trophy className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
-          Competitions &amp; Standings
+          {title}
         </h2>
       </div>
       <div className="flex flex-col gap-3">
-        {competitions.map((c) => (
-          <ReadOnlyCompetitionCard
-            key={c.id}
-            competition={c}
-            compactOnMobile={compactOnMobile}
-          />
-        ))}
+        {competitions.map((c) =>
+          showCompetitionHeaders ? (
+            <ReadOnlyCompetitionCard
+              key={c.id}
+              competition={c}
+              compactOnMobile={compactOnMobile}
+            />
+          ) : (
+            <div key={c.id} className="overflow-hidden rounded-xl border border-border bg-background">
+              <ReadOnlyStandingsTable
+                standings={c.standings}
+                compactOnMobile={compactOnMobile}
+              />
+            </div>
+          ),
+        )}
       </div>
     </section>
   );
