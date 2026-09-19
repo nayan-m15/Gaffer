@@ -98,7 +98,15 @@ export interface MatchLogEvent {
   pending?: boolean;
   /** Client-only: stable list key so confirming a log does not remount the row. */
   optimisticKey?: string;
-  syncStatus?: "queued" | "uploading" | "rejected" | "synced";
+  syncStatus?:
+    | "queued"
+    | "uploading"
+    | "accepted"
+    | "reconciled"
+    | "dependency_pending"
+    | "quarantined"
+    | "rejected"
+    | "synced";
   syncError?: string | null;
 }
 

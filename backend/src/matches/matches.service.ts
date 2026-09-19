@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
+import { projectCanonicalEvents } from '@gaffer/match-domain';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -265,7 +266,10 @@ export class MatchesService {
           'Could not persist the match observation.',
         );
       }
-      return this.requireMatchEvent(match.id, persisted.canonical_event_id);
+      return this.requireCanonicalEventForObservation(
+        match.id,
+        dto.clientRequestId,
+      );
     }
 
     const [insertedObservation] = await this.databaseService.database
@@ -523,6 +527,8 @@ export class MatchesService {
     matchId: string,
     reviewId: string,
     dto: ResolveMatchEventReviewDto,
+    operationId: string = randomUUID(),
+    causalParentIds: string[] = [],
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     await this.requireMatch(team.id, matchId);
@@ -538,6 +544,9 @@ export class MatchesService {
       )
       .limit(1);
     if (!review) throw new NotFoundException('Open event review not found.');
+    const targetObservationIds = await this.observationIdsForCanonical(
+      review.canonicalEventId,
+    );
 
     if (dto.resolution === 'separate_events') {
       const observations = await this.databaseService.database
@@ -597,15 +606,14 @@ export class MatchesService {
       .where(eq(matchEventReviews.id, review.id))
       .returning();
     await this.recordOperation({
-      id: randomUUID(),
+      id: operationId,
       matchId,
       actorUserId: userId,
       operationType: dto.resolution === 'same_event' ? 'merge' : 'separate',
       canonicalEventId: review.canonicalEventId,
-      targetObservationIds: await this.observationIdsForCanonical(
-        review.canonicalEventId,
-      ),
+      targetObservationIds,
       decision: { reviewId, resolution: dto.resolution },
+      causalParentIds,
     });
     await this.refreshProjection(matchId);
     return resolved;
@@ -689,6 +697,56 @@ export class MatchesService {
     await this.refreshProjection(matchId);
 
     return updated;
+  }
+
+  async submitCorrectionOperation(
+    userId: string,
+    matchId: string,
+    eventId: string,
+    dto: UpdateMatchLogEventDto,
+    operationId: string,
+    causalParentIds: string[] = [],
+  ) {
+    const team = await this.requireTeam(userId);
+    if (team.role === 'coach') {
+      return this.updateEvent(
+        userId,
+        matchId,
+        eventId,
+        dto,
+        operationId,
+        causalParentIds,
+      );
+    }
+    const { event } = await this.requireMatch(team.id, matchId);
+    this.assertEditable(event.status);
+    const canonical = await this.requireMatchEvent(matchId, eventId);
+    await this.recordOperation({
+      id: operationId,
+      matchId,
+      actorUserId: userId,
+      operationType: 'propose_correction',
+      canonicalEventId: eventId,
+      targetObservationIds: await this.observationIdsForCanonical(eventId),
+      decision: { replacement: dto },
+      causalParentIds,
+    });
+    await this.databaseService.database
+      .insert(matchEventReviews)
+      .values({
+        matchId,
+        canonicalEventId: eventId,
+        reason: 'assistant_proposed_correction',
+      })
+      .onConflictDoNothing();
+    await this.databaseService.database
+      .update(matchEvents)
+      .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
+      .where(
+        and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)),
+      );
+    await this.refreshProjection(matchId);
+    return canonical;
   }
 
   async deleteEvent(
@@ -858,6 +916,38 @@ export class MatchesService {
     return rows.map((row) => row.id);
   }
 
+  async canonicalEventIdForObservation(matchId: string, observationId: string) {
+    const [membership] = await this.databaseService.database
+      .select({ canonicalEventId: matchEventMemberships.canonicalEventId })
+      .from(matchEventMemberships)
+      .innerJoin(
+        matchEvents,
+        eq(matchEvents.id, matchEventMemberships.canonicalEventId),
+      )
+      .where(
+        and(
+          eq(matchEventMemberships.observationId, observationId),
+          eq(matchEvents.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    if (!membership) {
+      throw new NotFoundException('Canonical event membership not found.');
+    }
+    return membership.canonicalEventId;
+  }
+
+  private async requireCanonicalEventForObservation(
+    matchId: string,
+    observationId: string,
+  ) {
+    const canonicalEventId = await this.canonicalEventIdForObservation(
+      matchId,
+      observationId,
+    );
+    return this.requireMatchEvent(matchId, canonicalEventId);
+  }
+
   private async recordOperation(input: {
     id: string;
     matchId: string;
@@ -903,18 +993,7 @@ export class MatchesService {
         ),
       )
       .orderBy(asc(matchEventReviews.id));
-    const effective = eventRows.filter(
-      (event) => event.lifecycleStatus !== 'voided',
-    );
-    const confirmed = effective.filter(
-      (event) => event.lifecycleStatus === 'confirmed',
-    );
-    const goals = (rows: typeof eventRows, team: 'own' | 'opponent') =>
-      rows.filter((event) => event.team === team && event.eventType === 'goal')
-        .length;
-    const ambiguous = effective.filter(
-      (event) => event.lifecycleStatus === 'needs_review',
-    );
+    const domainProjection = projectCanonicalEvents(eventRows);
     const digestInput = {
       events: eventRows.map((event) => ({
         id: event.id,
@@ -942,33 +1021,7 @@ export class MatchesService {
       revision,
       inputDigest,
       rulesVersion: 1,
-      confirmedTeamScore: goals(confirmed, 'own'),
-      confirmedOpponentScore: goals(confirmed, 'opponent'),
-      provisionalTeamScore: goals(effective, 'own'),
-      provisionalOpponentScore: goals(effective, 'opponent'),
-      possibleEffects: {
-        teamGoals: goals(ambiguous, 'own'),
-        opponentGoals: goals(ambiguous, 'opponent'),
-        disciplinaryEvents: ambiguous.filter((event) =>
-          ['yellow_card', 'red_card'].includes(event.eventType),
-        ).length,
-      },
-      disciplinaryProjection: {
-        ownYellowCards: effective.filter(
-          (event) => event.team === 'own' && event.eventType === 'yellow_card',
-        ).length,
-        ownRedCards: effective.filter(
-          (event) => event.team === 'own' && event.eventType === 'red_card',
-        ).length,
-        opponentYellowCards: effective.filter(
-          (event) =>
-            event.team === 'opponent' && event.eventType === 'yellow_card',
-        ).length,
-        opponentRedCards: effective.filter(
-          (event) =>
-            event.team === 'opponent' && event.eventType === 'red_card',
-        ).length,
-      },
+      ...domainProjection,
       unresolvedReviewCount: openReviews.length,
       finalisationState:
         existing?.finalisationState === 'finalised'

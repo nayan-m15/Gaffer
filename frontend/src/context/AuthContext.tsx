@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearPendingClaimToken } from "@/services/claims";
-import { setOfflineUserScope } from "@/offline/match-store";
+import { discardQueuedItems, setOfflineUserScope } from "@/offline/match-store";
 
 export interface SessionUser {
   id: string;
@@ -95,7 +95,7 @@ interface AuthContextValue {
   signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (options?: { pendingData?: "retain" | "discard" }) => Promise<void>;
   refreshSession: () => Promise<SessionPayload | null>;
   resendVerificationEmail: (
     email: string,
@@ -234,7 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (options?: {
+    pendingData?: "retain" | "discard";
+  }) => {
     try {
       await apiFetch("/auth/sign-out", { method: "POST" });
     } catch {
@@ -243,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.cancelQueries();
     queryClient.clear();
     activeUserIdRef.current = null;
+    if (options?.pendingData === "discard") await discardQueuedItems();
     await setOfflineUserScope(null);
     clearPendingClaimToken();
     localStorage.removeItem(cachedSessionKey);

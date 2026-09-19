@@ -11,7 +11,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Keep a new worker waiting until open capture tabs close so an app/schema
+      // update cannot reload a match with pending local work.
+      registerType: 'prompt',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'Gaffer Sport Coaching',
