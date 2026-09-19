@@ -8,6 +8,35 @@ import { apiUrl } from "@/lib/api-url";
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
 let userScope = localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
 
+const deploymentScope = (
+  import.meta.env.VITE_DEPLOYMENT_ENV || window.location.hostname || "local"
+)
+  .replace(/[^a-zA-Z0-9]/g, "")
+  .slice(0, 24);
+const queueChannel =
+  typeof BroadcastChannel === "undefined"
+    ? null
+    : new BroadcastChannel(`gaffer-offline-queue-${deploymentScope}`);
+
+function announceQueueChange() {
+  queueChannel?.postMessage({ userScope, changedAt: Date.now() });
+}
+
+function assertStorageWritable() {
+  if (localStorage.getItem("gaffer-simulate-storage-full") === "1") {
+    throw new DOMException("Offline storage is full.", "QuotaExceededError");
+  }
+}
+
+export function subscribeToOfflineQueueChanges(onChange: () => void) {
+  if (!queueChannel) return () => undefined;
+  const listener = (event: MessageEvent<{ userScope?: string }>) => {
+    if (event.data.userScope === userScope) onChange();
+  };
+  queueChannel.addEventListener("message", listener);
+  return () => queueChannel.removeEventListener("message", listener);
+}
+
 export async function setOfflineUserScope(userId: string | null) {
   const next = userId ?? "anonymous";
   if (next === userScope) return;
@@ -32,13 +61,24 @@ async function database() {
       const schema = new Schema({
         offline_event_queue: Table.createLocalOnly({
           match_id: column.text,
+          kind: column.text,
           payload: column.text,
           state: column.text,
           error: column.text,
+          canonical_event_id: column.text,
           created_at: column.text,
         }),
         offline_response_cache: Table.createLocalOnly({
           payload: column.text,
+          updated_at: column.text,
+        }),
+        offline_clock_anchors: Table.createLocalOnly({
+          period: column.text,
+          elapsed_ms: column.integer,
+          running: column.integer,
+          authority_revision: column.text,
+          wall_clock_ms: column.integer,
+          uncertain: column.integer,
           updated_at: column.text,
         }),
         match_events: new Table({
@@ -94,10 +134,89 @@ async function database() {
       const db = new PowerSyncDatabase({
         schema,
         database: {
-          dbFilename: `gaffer-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
+          dbFilename: `gaffer-${deploymentScope}-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
         },
       });
       await db.init();
+      const safeUserScope = userScope
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .slice(0, 24);
+      const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
+      if (safeUserScope && !localStorage.getItem(migrationKey)) {
+        const legacy = new PowerSyncDatabase({
+          schema,
+          database: { dbFilename: `gaffer-${safeUserScope}.db` },
+        });
+        try {
+          await legacy.init();
+          const [queued, cached, clocks] = await Promise.all([
+            legacy.getAll<QueuedEventRow>("SELECT * FROM offline_event_queue"),
+            legacy.getAll<{
+              id: string;
+              payload: string;
+              updated_at: string;
+            }>("SELECT * FROM offline_response_cache"),
+            legacy.getAll<{
+              id: string;
+              period: string;
+              elapsed_ms: number;
+              running: number;
+              authority_revision: string;
+              wall_clock_ms: number;
+              uncertain: number;
+              updated_at: string;
+            }>("SELECT * FROM offline_clock_anchors"),
+          ]);
+          await db.writeTransaction(async (tx) => {
+            for (const row of queued) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_event_queue
+                  (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  row.id,
+                  row.match_id,
+                  row.kind ?? "observation",
+                  row.payload,
+                  row.state,
+                  row.error,
+                  row.canonical_event_id,
+                  row.created_at,
+                ],
+              );
+            }
+            for (const row of cached) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_response_cache
+                  (id, payload, updated_at) VALUES (?, ?, ?)`,
+                [row.id, row.payload, row.updated_at],
+              );
+            }
+            for (const row of clocks) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_clock_anchors
+                  (id, period, elapsed_ms, running, authority_revision, wall_clock_ms, uncertain, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  row.id,
+                  row.period,
+                  row.elapsed_ms,
+                  row.running,
+                  row.authority_revision,
+                  row.wall_clock_ms,
+                  row.uncertain,
+                  row.updated_at,
+                ],
+              );
+            }
+          });
+          localStorage.setItem(migrationKey, new Date().toISOString());
+        } catch (error) {
+          console.warn("Could not migrate the legacy offline workspace.", error);
+        } finally {
+          await legacy.close();
+        }
+      }
       if (import.meta.env.VITE_POWERSYNC_URL) {
         // Local queue access must never wait for the remote sync connection.
         // PowerSync can remain pending while a device is offline; awaiting it
@@ -149,18 +268,52 @@ export async function enqueueEvent(
   matchId: string,
   input: CreateMatchLogEventInput,
 ) {
+  assertStorageWritable();
   const db = await database();
   await db.execute(
     `INSERT OR REPLACE INTO offline_event_queue
-      (id, match_id, payload, state, error, created_at)
-     VALUES (?, ?, ?, 'queued', NULL, ?)`,
+      (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+     VALUES (?, ?, 'observation', ?, 'queued', NULL, NULL, ?)`,
     [input.clientRequestId, matchId, JSON.stringify(input), new Date().toISOString()],
   );
+  announceQueueChange();
+}
+
+export interface OfflineOperationInput {
+  kind: "operation";
+  id: string;
+  matchId: string;
+  operationType: "correct" | "void" | "resolve_review";
+  canonicalEventId?: string;
+  replacement?: import("@/features/matches/types").UpdateMatchLogEventInput;
+  reason?: string;
+  reviewId?: string;
+  resolution?: "same_event" | "separate_events";
+  causalParentIds: string[];
+}
+
+export async function enqueueOperation(input: OfflineOperationInput) {
+  assertStorageWritable();
+  const db = await database();
+  await db.execute(
+    `INSERT OR REPLACE INTO offline_event_queue
+      (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+     VALUES (?, ?, 'operation', ?, 'queued', NULL, ?, ?)`,
+    [
+      input.id,
+      input.matchId,
+      JSON.stringify(input),
+      input.canonicalEventId ?? null,
+      new Date().toISOString(),
+    ],
+  );
+  announceQueueChange();
 }
 
 export async function completeQueuedEvent(id: string) {
   const db = await database();
   await db.execute("DELETE FROM offline_event_queue WHERE id = ?", [id]);
+  announceQueueChange();
 }
 
 export async function setQueuedEventState(
@@ -172,6 +325,7 @@ export async function setQueuedEventState(
     "UPDATE offline_event_queue SET state = ?, error = NULL WHERE id = ?",
     [state, id],
   );
+  announceQueueChange();
 }
 
 export async function rejectQueuedEvent(id: string, message: string) {
@@ -180,14 +334,45 @@ export async function rejectQueuedEvent(id: string, message: string) {
     "UPDATE offline_event_queue SET state = 'rejected', error = ? WHERE id = ?",
     [message, id],
   );
+  announceQueueChange();
+}
+
+export async function setQueuedItemOutcome(
+  id: string,
+  outcome: "accepted" | "dependency_pending" | "quarantined",
+  canonicalEventId?: string | null,
+  message?: string | null,
+) {
+  const db = await database();
+  await db.execute(
+    `UPDATE offline_event_queue
+       SET state = ?, canonical_event_id = ?, error = ?
+     WHERE id = ?`,
+    [outcome, canonicalEventId ?? null, message ?? null, id],
+  );
+  announceQueueChange();
+}
+
+export async function discardQueuedItems() {
+  const db = await database();
+  await db.execute("DELETE FROM offline_event_queue");
+  announceQueueChange();
 }
 
 export interface QueuedEventRow {
   id: string;
   match_id: string;
+  kind: "observation" | "operation" | null;
   payload: string;
-  state: "queued" | "uploading" | "rejected";
+  state:
+    | "queued"
+    | "uploading"
+    | "accepted"
+    | "dependency_pending"
+    | "quarantined"
+    | "rejected";
   error: string | null;
+  canonical_event_id: string | null;
   created_at: string;
 }
 
@@ -219,6 +404,66 @@ export async function readCachedResponse<T>(key: string): Promise<T | null> {
   return row ? (JSON.parse(row.payload) as T) : null;
 }
 
+export interface OfflineClockAnchor {
+  period: import("@/features/matches/types").MatchClockPeriod;
+  elapsedMs: number;
+  running: boolean;
+  authorityRevision: string;
+  wallClockMs: number;
+  uncertain: boolean;
+  updatedAt: string;
+}
+
+export async function saveClockAnchor(
+  matchId: string,
+  anchor: Omit<OfflineClockAnchor, "wallClockMs" | "uncertain" | "updatedAt">,
+) {
+  const db = await database();
+  const now = Date.now();
+  await db.execute(
+    `INSERT OR REPLACE INTO offline_clock_anchors
+      (id, period, elapsed_ms, running, authority_revision, wall_clock_ms, uncertain, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+    [
+      matchId,
+      anchor.period,
+      anchor.elapsedMs,
+      anchor.running ? 1 : 0,
+      anchor.authorityRevision,
+      now,
+      new Date(now).toISOString(),
+    ],
+  );
+}
+
+export async function readClockAnchor(
+  matchId: string,
+): Promise<OfflineClockAnchor | null> {
+  const db = await database();
+  const row = await db.getOptional<{
+    period: OfflineClockAnchor["period"];
+    elapsed_ms: number;
+    running: number;
+    authority_revision: string;
+    wall_clock_ms: number;
+    uncertain: number;
+    updated_at: string;
+  }>("SELECT * FROM offline_clock_anchors WHERE id = ?", [matchId]);
+  if (!row) return null;
+  const wallDelta = Date.now() - row.wall_clock_ms;
+  const uncertain =
+    Boolean(row.uncertain) || wallDelta < 0 || wallDelta > 6 * 60 * 60 * 1000;
+  return {
+    period: row.period,
+    elapsedMs: row.elapsed_ms + (row.running && !uncertain ? wallDelta : 0),
+    running: Boolean(row.running) && !uncertain,
+    authorityRevision: row.authority_revision,
+    wallClockMs: row.wall_clock_ms,
+    uncertain,
+    updatedAt: row.updated_at,
+  };
+}
+
 export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
   const input = JSON.parse(row.payload) as CreateMatchLogEventInput;
   const now = row.created_at;
@@ -241,7 +486,7 @@ export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
     updatedAt: now,
     athlete: null,
     opponentPlayer: null,
-    pending: row.state === "queued" || row.state === "uploading",
+    pending: !["accepted"].includes(row.state),
     syncStatus: row.state,
     syncError: row.error,
   };
@@ -298,7 +543,7 @@ export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEv
     updatedAt: row.updated_at,
     athlete: null,
     opponentPlayer: null,
-    syncStatus: "synced",
+    syncStatus: "reconciled",
   }));
 }
 
@@ -361,15 +606,92 @@ export async function exportUnsentObservations() {
     version: 1,
     exportedAt: new Date().toISOString(),
     userScope,
-    observations: rows.map((row) => ({
+    items: rows.map((row) => ({
       id: row.id,
       matchId: row.match_id,
+      kind: row.kind ?? "observation",
       state: row.state,
       error: row.error,
       createdAt: row.created_at,
       payload: JSON.parse(row.payload) as CreateMatchLogEventInput,
     })),
   };
+}
+
+export async function importUnsentObservations(raw: string) {
+  assertStorageWritable();
+  const parsed = JSON.parse(raw) as {
+    format?: string;
+    version?: number;
+    userScope?: string;
+    items?: Array<{
+      id?: string;
+      matchId?: string;
+      kind?: "observation" | "operation";
+      payload?: unknown;
+      createdAt?: string;
+    }>;
+    observations?: Array<{
+      id?: string;
+      matchId?: string;
+      payload?: unknown;
+      createdAt?: string;
+    }>;
+  };
+  if (
+    parsed.format !== "gaffer-offline-observations" ||
+    parsed.version !== 1 ||
+    parsed.userScope !== userScope
+  ) {
+    throw new Error("This export belongs to a different account or format.");
+  }
+  const items: Array<{
+    id?: string;
+    matchId?: string;
+    kind?: "observation" | "operation";
+    payload?: unknown;
+    createdAt?: string;
+  }> = parsed.items ?? parsed.observations ?? [];
+  const db = await database();
+  let imported = 0;
+  await db.writeTransaction(async (tx) => {
+    for (const item of items) {
+      if (
+        typeof item.id !== "string" ||
+        typeof item.matchId !== "string" ||
+        !item.payload ||
+        typeof item.payload !== "object"
+      ) {
+        throw new Error("The export contains an invalid queued item.");
+      }
+      const kind = item.kind ?? "observation";
+      const payload = JSON.stringify(item.payload);
+      const existing = await tx.getOptional<{ payload: string }>(
+        "SELECT payload FROM offline_event_queue WHERE id = ?",
+        [item.id],
+      );
+      if (existing && existing.payload !== payload) {
+        throw new Error(`Queued item ${item.id} already exists with different data.`);
+      }
+      if (!existing) {
+        await tx.execute(
+          `INSERT INTO offline_event_queue
+            (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+           VALUES (?, ?, ?, ?, 'queued', NULL, NULL, ?)`,
+          [
+            item.id,
+            item.matchId,
+            kind,
+            payload,
+            item.createdAt ?? new Date().toISOString(),
+          ],
+        );
+        imported += 1;
+      }
+    }
+  });
+  announceQueueChange();
+  return imported;
 }
 
 export async function subscribeToSyncedMatchEventChanges(

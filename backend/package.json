@@ -26,6 +26,7 @@
     "test:integration": "jest --config ./test/jest-e2e.json --runInBand"
   },
   "dependencies": {
+    "@gaffer/match-domain": "file:../packages/match-domain",
     "@getbrevo/brevo": "^6.0.3",
     "@neondatabase/serverless": "^1.1.0",
     "@nestjs/common": "^11.0.1",

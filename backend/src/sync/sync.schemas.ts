@@ -30,6 +30,16 @@ const voidOperationSchema = z.object({
   causalParentIds: z.array(z.uuid()).max(50).default([]),
 });
 
+const reviewResolutionOperationSchema = z.object({
+  kind: z.literal('operation'),
+  id: z.uuid(),
+  matchId: z.uuid(),
+  operationType: z.literal('resolve_review'),
+  reviewId: z.uuid(),
+  resolution: z.enum(['same_event', 'separate_events']),
+  causalParentIds: z.array(z.uuid()).max(50).default([]),
+});
+
 export const syncUploadSchema = z.object({
   items: z
     .array(
@@ -37,6 +47,7 @@ export const syncUploadSchema = z.object({
         observationItemSchema,
         correctionOperationSchema,
         voidOperationSchema,
+        reviewResolutionOperationSchema,
       ]),
     )
     .min(1)
