@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api";
 import { getAthletes } from "@/services/athletes";
 import { cn } from "@/lib/utils";
 import { BodyModelViewer } from "./BodyModelViewer";
+import { CloseInjuryDialog } from "./CloseInjuryDialog";
 import { InjuryDetailCard } from "./InjuryDetailCard";
 import { InjuryHistoryTab } from "./InjuryHistoryTab";
 import { InjuryTimeline } from "./InjuryTimeline";
@@ -17,6 +18,7 @@ import { LogInjuryDialog } from "./LogInjuryDialog";
 import { MuscleRecoveryStrip } from "./MuscleRecoveryStrip";
 import { injuryTitle } from "./body-regions";
 import {
+  useCloseInjury,
   useCreateInjury,
   useInjuries,
   useInjury,
@@ -29,7 +31,12 @@ import {
   sortForAttention,
   todayIso,
 } from "./injury-model";
-import type { BodyRegion, CreateInjuryInput, InjuryListItem } from "./types";
+import type {
+  BodyRegion,
+  CloseInjuryInput,
+  CreateInjuryInput,
+  InjuryListItem,
+} from "./types";
 
 type TabValue = "overview" | "history";
 
@@ -83,11 +90,14 @@ export default function InjuryRecoveryPage() {
   const [tab, setTab] = useState<TabValue>("overview");
   const [isLogOpen, setLogOpen] = useState(false);
   const [logError, setLogError] = useState<string | undefined>();
+  const [isCloseOpen, setCloseOpen] = useState(false);
+  const [closeError, setCloseError] = useState<string | undefined>();
   const [selectedRegion, setSelectedRegion] = useState<BodyRegion | null>(null);
 
   const today = todayIso();
   const injuriesQuery = useInjuries();
   const createInjury = useCreateInjury();
+  const closeInjury = useCloseInjury();
 
   const athletesQuery = useQuery({
     queryKey: ["athletes", "active"],
@@ -193,6 +203,28 @@ export default function InjuryRecoveryPage() {
         );
       },
     });
+  };
+
+  const handleCloseSubmit = (input: CloseInjuryInput) => {
+    if (!focused) {
+      return;
+    }
+    setCloseError(undefined);
+    closeInjury.mutate(
+      { injuryId: focused.id, input },
+      {
+        onSuccess: () => {
+          setCloseOpen(false);
+        },
+        onError: (error) => {
+          setCloseError(
+            error instanceof ApiError
+              ? error.message
+              : "Could not mark this injury as returned. Please try again.",
+          );
+        },
+      },
+    );
   };
 
   const summary = useMemo(
@@ -359,7 +391,11 @@ export default function InjuryRecoveryPage() {
                 <div className="space-y-5">
                   {detail ? (
                     <>
-                      <InjuryDetailCard injury={detail} today={today} />
+                      <InjuryDetailCard
+                        injury={detail}
+                        today={today}
+                        onMarkReturned={() => setCloseOpen(true)}
+                      />
                       <InjuryTimeline
                         entries={detail.timeline}
                         today={today}
@@ -367,7 +403,11 @@ export default function InjuryRecoveryPage() {
                       />
                     </>
                   ) : focused ? (
-                    <InjuryDetailCard injury={focused} today={today} />
+                    <InjuryDetailCard
+                      injury={focused}
+                      today={today}
+                      onMarkReturned={() => setCloseOpen(true)}
+                    />
                   ) : null}
 
                   {recoveryQuery.data && (
@@ -391,6 +431,21 @@ export default function InjuryRecoveryPage() {
         isSubmitting={createInjury.isPending}
         errorMessage={logError}
       />
+
+      {focused && (
+        <CloseInjuryDialog
+          isOpen={isCloseOpen}
+          onClose={() => {
+            setCloseOpen(false);
+            setCloseError(undefined);
+          }}
+          injuryTitle={injuryTitle(focused)}
+          occurredOn={focused.occurredOn}
+          onSubmit={handleCloseSubmit}
+          isSubmitting={closeInjury.isPending}
+          errorMessage={closeError}
+        />
+      )}
     </>
   );
 }

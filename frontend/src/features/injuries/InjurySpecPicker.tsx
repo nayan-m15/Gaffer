@@ -1,6 +1,13 @@
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   BODY_REGIONS,
   COMMON_BODY_REGIONS,
   INJURY_TYPE_LABELS,
@@ -17,6 +24,11 @@ import type {
   InjurySeverity,
   InjuryType,
 } from "./types";
+
+/** Static — computed once, not per render, since `BODY_REGIONS` never changes. */
+const BODY_REGION_ITEMS: Record<string, string> = Object.fromEntries(
+  BODY_REGIONS.map((region) => [region, bodyRegionLabel(region)]),
+);
 
 export interface InjurySpec {
   bodyRegion: BodyRegion | null;
@@ -105,30 +117,30 @@ export function InjurySpecPicker({
             </ChoiceButton>
           ))}
         </div>
-        <label className="mt-2 block">
-          <span className="sr-only">Body region</span>
-          <select
-            value={
-              value.bodyRegion &&
-              !COMMON_BODY_REGIONS.includes(value.bodyRegion)
-                ? value.bodyRegion
-                : ""
-            }
-            onChange={(event) =>
-              selectRegion(event.target.value as BodyRegion)
-            }
-            className="h-9 w-full rounded-lg border border-border/70 bg-card/70 px-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+        <Select
+          items={BODY_REGION_ITEMS}
+          value={
+            value.bodyRegion &&
+            !COMMON_BODY_REGIONS.includes(value.bodyRegion)
+              ? value.bodyRegion
+              : null
+          }
+          onValueChange={(region) => region && selectRegion(region as BodyRegion)}
+        >
+          <SelectTrigger
+            aria-label="Body region"
+            className="mt-2 h-9 w-full justify-between rounded-lg border-border/70 bg-card/70 px-2 text-sm text-foreground"
           >
-            <option value="" disabled>
-              Another region&hellip;
-            </option>
+            <SelectValue placeholder="Another region…" />
+          </SelectTrigger>
+          <SelectContent>
             {BODY_REGIONS.map((region) => (
-              <option key={region} value={region}>
+              <SelectItem key={region} value={region}>
                 {bodyRegionLabel(region)}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-        </label>
+          </SelectContent>
+        </Select>
       </fieldset>
 
       <fieldset disabled={!value.bodyRegion} className="disabled:opacity-45">

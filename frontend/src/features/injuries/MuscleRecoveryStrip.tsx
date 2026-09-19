@@ -1,40 +1,45 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Info } from "lucide-react";
 import { AppCard } from "@/components/app/AppCard";
 import { cn } from "@/lib/utils";
 import { bodyRegionLabel } from "./body-regions";
 import { recoveryTone } from "./injury-model";
+import { getSmoothPlayerSnapshot } from "./smooth-player-snapshot";
 import type { RecoveryGroup, RecoveryReading } from "./types";
 
 /**
- * A minimal front-facing body glyph, filled in proportion to the group's
- * recovery.
- *
- * Deliberately schematic rather than a second 3D canvas: seven live WebGL
- * contexts on one page would cost far more than these read-at-a-glance
- * silhouettes are worth.
+ * Where each group's recovery fill sits, layered over the real mannequin
+ * snapshot below rather than a hand-drawn outline of its own.
  */
 const GROUP_SHAPES: Record<RecoveryGroup, string> = {
-  // Paths are drawn in a 40 × 72 viewBox so every glyph lines up.
-  head_neck: "M20 4a5 5 0 110 10 5 5 0 010-10zm-2 11h4v4h-4z",
-  shoulders: "M11 21a5 4 0 018 0l-1 5-7-1zm18 0a5 4 0 00-8 0l1 5 7-1z",
-  arms: "M9 22l3 1-2 16-3-1zm22 0l-3 1 2 16 3-1z",
-  chest: "M13 21h14l-1 11H14z",
-  core: "M14 33h12l-1 10H15z",
-  back: "M13 21h14l-1 11H14zM14 33h12l-1 9H15z",
-  legs: "M15 44h4l-1 24h-4zm6 0h4l1 24h-4z",
+  // Paths are drawn in a 40 × 72 viewBox so every glyph lines up — calibrated
+  // against the actual rendered mannequin's proportions (head top ≈ y2,
+  // shoulders ≈ y14, arms/hips ≈ y43, feet ≈ y70), not a generic figure.
+  head_neck: "M20 2a4 4 0 110 8 4 4 0 010-8zm-2.5 8h5v4h-5z",
+  shoulders: "M8 13h8v6H8zM24 13h8v6h-8z",
+  arms: "M7 14l3 1-2 27-3-1zM33 14l-3 1 2 27 3-1z",
+  chest: "M13 19h14l-1 10H14z",
+  core: "M14 29h12l-1 9H15z",
+  // A front view can't distinguish the back from the chest/core it's
+  // layered over, so it reuses their combined outline.
+  back: "M13 19h14l-1 10H14zM14 29h12l-1 9H15z",
+  legs: "M14 43h5l-1 26h-5zM21 43h5l1 26h-5z",
 };
 
-/** The body outline every glyph is drawn inside. */
+/** The flat fallback outline shown until the mannequin snapshot is ready. */
 const BODY_OUTLINE =
   "M20 3a5.5 5.5 0 015.5 5.5A5.5 5.5 0 0120 14a5.5 5.5 0 01-5.5-5.5A5.5 5.5 0 0120 3zm-7 17a7 5 0 0114 0v14l-1 10 1 24h-5l-2-22-2 22h-5l1-24-1-10z";
 
 function RecoveryGlyph({
   group,
   percent,
+  snapshotUrl,
 }: {
   group: RecoveryGroup;
   percent: number;
+  /** The shared smooth_player.glb render, once available (see
+   * `smooth-player-snapshot.ts`) — null while it's still loading. */
+  snapshotUrl: string | null;
 }) {
   const clipId = useId();
   // The glyph fills from the bottom up, so a 61% reading is visibly emptier
@@ -51,16 +56,19 @@ function RecoveryGlyph({
       <clipPath id={clipId}>
         <rect x="0" y={72 - fillHeight} width="40" height={fillHeight} />
       </clipPath>
-      <path d={BODY_OUTLINE} className="fill-border/50" />
-      <path d={GROUP_SHAPES[group]} className="fill-muted-foreground/35" />
+      {snapshotUrl ? (
+        <image href={snapshotUrl} x="0" y="0" width="40" height="72" opacity="0.9" />
+      ) : (
+        <path d={BODY_OUTLINE} className="fill-white/20" />
+      )}
+      <path d={GROUP_SHAPES[group]} className="fill-white/35" />
       <path
         d={GROUP_SHAPES[group]}
         clipPath={`url(#${clipId})`}
-        className={cn(
-          percent >= 90 && "fill-emerald-400",
-          percent >= 70 && percent < 90 && "fill-amber-400",
-          percent < 70 && "fill-red-500",
-        )}
+        // Same two-tone language as the 3D model: a near-white body at rest,
+        // and its dark-red hover colour once a region needs attention —
+        // no traffic-light amber tier here.
+        className={percent >= 90 ? "fill-white/90" : "fill-red-700"}
       />
     </svg>
   );
@@ -85,6 +93,23 @@ export function MuscleRecoveryStrip({
   className,
 }: MuscleRecoveryStripProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSmoothPlayerSnapshot()
+      .then((url) => {
+        if (!cancelled) {
+          setSnapshotUrl(url);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to render the mannequin snapshot.", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AppCard className={className}>
@@ -128,6 +153,7 @@ export function MuscleRecoveryStrip({
               <RecoveryGlyph
                 group={reading.group}
                 percent={reading.percent}
+                snapshotUrl={snapshotUrl}
               />
               <p className="text-[11px] font-medium text-muted-foreground">
                 {reading.label}

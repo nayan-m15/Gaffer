@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useInjuryProtocol } from "./hooks";
 import { InjurySpecPicker, type InjurySpec } from "./InjurySpecPicker";
 import { todayIso } from "./injury-model";
@@ -31,6 +38,11 @@ const EMPTY_SPEC: InjurySpec = {
   severity: null,
 };
 
+function athleteLabel(athlete: InjuryAthleteOption): string {
+  const name = `${athlete.firstName} ${athlete.lastName}`.trim();
+  return athlete.squadNumber != null ? `#${athlete.squadNumber} ${name}` : name;
+}
+
 interface LogInjuryDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,6 +70,14 @@ export function LogInjuryDialog({
   isSubmitting = false,
   errorMessage,
 }: LogInjuryDialogProps) {
+  const playerSelectId = useId();
+  const playerItems = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const athlete of athletes) {
+      map[athlete.id] = athleteLabel(athlete);
+    }
+    return map;
+  }, [athletes]);
   const [athleteId, setAthleteId] = useState("");
   const [spec, setSpec] = useState<InjurySpec>(EMPTY_SPEC);
   const [context, setContext] = useState<InjuryContext>("training");
@@ -124,7 +144,7 @@ export function LogInjuryDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="log-injury-title"
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl"
+        className="themed-scrollbar relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl"
       >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
@@ -150,27 +170,34 @@ export function LogInjuryDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Player
-            </span>
-            <select
-              value={athleteId}
-              onChange={(event) => setAthleteId(event.target.value)}
-              required
-              className="mt-1.5 h-9 w-full rounded-lg border border-border/70 bg-card/70 px-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          <div className="flex flex-col">
+            <label
+              htmlFor={playerSelectId}
+              className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
             >
-              <option value="" disabled>
-                Select a player&hellip;
-              </option>
-              {athletes.map((athlete) => (
-                <option key={athlete.id} value={athlete.id}>
-                  {athlete.squadNumber != null && `#${athlete.squadNumber} `}
-                  {athlete.firstName} {athlete.lastName}
-                </option>
-              ))}
-            </select>
-          </label>
+              Player
+            </label>
+            <Select
+              items={playerItems}
+              value={athleteId || null}
+              onValueChange={(value) => value && setAthleteId(value)}
+              required
+            >
+              <SelectTrigger
+                id={playerSelectId}
+                className="mt-1.5 h-9 w-full justify-between rounded-lg border-border/70 bg-card/70 px-2 text-sm text-foreground"
+              >
+                <SelectValue placeholder="Select a player…" />
+              </SelectTrigger>
+              <SelectContent>
+                {athletes.map((athlete) => (
+                  <SelectItem key={athlete.id} value={athlete.id}>
+                    {athleteLabel(athlete)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <InjurySpecPicker
             value={spec}

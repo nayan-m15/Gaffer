@@ -1,12 +1,14 @@
 import {
   Activity,
   CalendarDays,
+  CheckCircle2,
   Clock,
   Dumbbell,
   Repeat,
   Stethoscope,
 } from "lucide-react";
 import { AppCard } from "@/components/app/AppCard";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SEVERITY_GRADES, SEVERITY_LABELS, injuryTitle } from "./body-regions";
 import {
@@ -52,6 +54,8 @@ function Field({
 interface InjuryDetailCardProps {
   injury: InjuryDetail | InjuryListItem;
   today: string;
+  /** Omitted (or the injury already closed) hides the action entirely. */
+  onMarkReturned?: () => void;
   className?: string;
 }
 
@@ -66,6 +70,7 @@ interface InjuryDetailCardProps {
 export function InjuryDetailCard({
   injury,
   today,
+  onMarkReturned,
   className,
 }: InjuryDetailCardProps) {
   const progress = recoveryProgress(injury, today);
@@ -75,28 +80,41 @@ export function InjuryDetailCard({
   return (
     <AppCard className={cn("space-y-5", className)}>
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "rounded-md border px-2 py-0.5 text-[11px] font-semibold",
-              SEVERITY_TONES[injury.severity],
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                "rounded-md border px-2 py-0.5 text-[11px] font-semibold",
+                SEVERITY_TONES[injury.severity],
+              )}
+            >
+              {SEVERITY_LABELS[injury.severity]}
+            </span>
+            <span className="rounded-md border border-border/60 bg-card/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {SEVERITY_GRADES[injury.severity]}
+            </span>
+            {isRecurrence && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                <Repeat className="size-3" aria-hidden="true" />
+                Recurrence
+              </span>
             )}
-          >
-            {SEVERITY_LABELS[injury.severity]}
-          </span>
-          <span className="rounded-md border border-border/60 bg-card/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-            {SEVERITY_GRADES[injury.severity]}
-          </span>
-          {isRecurrence && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-              <Repeat className="size-3" aria-hidden="true" />
-              Recurrence
-            </span>
-          )}
-          {!injury.isOpen && (
-            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-              Returned
-            </span>
+            {!injury.isOpen && (
+              <span className="rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                Returned
+              </span>
+            )}
+          </div>
+          {injury.isOpen && onMarkReturned && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onMarkReturned}
+            >
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+              Mark as returned
+            </Button>
           )}
         </div>
 

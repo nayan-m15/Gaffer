@@ -33,17 +33,18 @@ import type { BodyRegion } from "./types";
 
 /* Flat hex literals, not sRGB texture data — see the renderer setup below for
  * why that keeps colour management off. */
-const SMOOTH_BODY_COLOR = 0xcccfd2;
-const INJURED_COLOR = 0xef4444;
-const INJURED_EMISSIVE = 0xb91c1c;
-const MARKER_IDLE_COLOR = 0xef4444;
+const BODY_COLOR = 0xe8e8e8;
+/** The hovered region's own base colour, not just an emissive tint over
+ * white — emissive alone read as a light pink wash rather than a clear red. */
+const HOVER_COLOR = 0xb91c1c;
+const INJURED_EMISSIVE = 0xef4444;
+const MARKER_IDLE_COLOR = 0x991b1b;
 const MARKER_ACTIVE_DOT_COLOR = 0xffffff;
 /** Radians per second the camera tweens toward a preset view. */
 const TWEEN_SPEED = 7;
 const DRAG_SENSITIVITY = 0.0075;
 
 /** Served from `frontend/public/models`, so these are plain URLs, not imports. */
-const SMOOTH_BODY_MODEL_URL = "/models/smooth_player.glb";
 const ANATOMY_MODEL_URL = "/models/anatomy.glb";
 const HEAD_MODEL_URL = "/models/head.glb";
 /** Matches body-model.ts's frame: feet at y = 0, crown at y ≈ 1.80. */
@@ -55,31 +56,8 @@ const FIGURE_HEIGHT = 1.8;
  * if a loaded figure turns out to be facing away from the camera on the
  * "front" preset.
  */
-const SMOOTH_BODY_ROTATION_Y = 0;
 const ANATOMY_ROTATION_Y = 0;
 const HEAD_MODEL_ROTATION_Y = 0;
-/**
- * The anatomy figure and the smooth mannequin are independently authored
- * models with no guarantee their limb proportions match at any given point
- * — a revealed muscle can end up visibly wider than the mannequin's own
- * limb there. Shrinking each muscle/tendon toward its own centre by this
- * fraction is a cheap mitigation so it reads as sitting inside the body
- * rather than bulging out of it; it does not fix a genuine misalignment.
- */
-const ANATOMY_MESH_SHRINK = 0.4;
-/**
- * `smooth_player.glb`'s bind pose is a T-pose (no animation clip ships with
- * it to relax it, and — per the lesson learned with the anatomy rig's own
- * clips — playing an unfamiliar clip on a rig this app didn't author is as
- * likely to corrupt its orientation as fix its pose). Rotating just the
- * upper-arm bones down before the skin is baked gets a relaxed standing
- * pose without needing any animation data at all.
- */
-const RELAXED_ARM_ANGLE_FROM_DOWN_DEG = 15;
-const LEFT_UPPER_ARM_BONE = "mixamorig1LeftArm_09";
-const LEFT_FOREARM_BONE = "mixamorig1LeftForeArm_010";
-const RIGHT_UPPER_ARM_BONE = "mixamorig1RightArm_033";
-const RIGHT_FOREARM_BONE = "mixamorig1RightForeArm_034";
 
 interface CalloutContent {
   title: string;
@@ -99,7 +77,7 @@ export interface BodyModelViewerProps {
   className?: string;
 }
 
-/** One anatomy mesh, hidden until its region is revealed by hover/selection. */
+/** One anatomy mesh, always visible; glows for its region while hovered. */
 interface MeshEntry {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
@@ -160,185 +138,6 @@ function orientToYUp(root: THREE.Object3D): void {
   }
 }
 
-const SKIN_COMPONENT_GETTERS = [
-  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
-    attr.getX(i),
-  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
-    attr.getY(i),
-  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
-    attr.getZ(i),
-  (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) =>
-    attr.getW(i),
-];
-
-/**
- * Bakes a SkinnedMesh's current (bind) pose into a plain, static Mesh.
- *
- * Replicates three.js's own skinning shader math (see `skinning_vertex.glsl`
- * / `skinnormal_vertex.glsl`) on the CPU, once, rather than every frame on
- * the GPU. It sidesteps a real bug this app has hit twice now: this
- * renderer's uniform-array skinning path silently drops meshes whose rig has
- * "too many" bones for its vertex-uniform budget rather than drawing them —
- * and since this viewer only ever shows a single static pose, runtime
- * skinning was never needed in the first place.
- */
-function bakeSkinnedMesh(mesh: THREE.SkinnedMesh): THREE.Mesh {
-  mesh.skeleton.update();
-  const boneMatrices = mesh.skeleton.boneMatrices;
-
-  const sourceGeometry = mesh.geometry;
-  const positionAttr = sourceGeometry.attributes.position;
-  const normalAttr = sourceGeometry.attributes.normal;
-  const skinIndexAttr = sourceGeometry.attributes.skinIndex;
-  const skinWeightAttr = sourceGeometry.attributes.skinWeight;
-
-  const bakedPositions = new Float32Array(positionAttr.count * 3);
-  const bakedNormals = new Float32Array(positionAttr.count * 3);
-
-  const vertex = new THREE.Vector3();
-  const normal = new THREE.Vector3();
-  const skinMatrix = new THREE.Matrix4();
-  const vertexMatrix = new THREE.Matrix4();
-  const weightedSum = new Float32Array(16);
-
-  for (let i = 0; i < positionAttr.count; i++) {
-    vertex.fromBufferAttribute(positionAttr, i);
-    normal.fromBufferAttribute(normalAttr, i);
-
-    weightedSum.fill(0);
-    for (let influence = 0; influence < 4; influence++) {
-      const weight = SKIN_COMPONENT_GETTERS[influence](skinWeightAttr, i);
-      if (weight === 0) {
-        continue;
-      }
-      const boneOffset =
-        SKIN_COMPONENT_GETTERS[influence](skinIndexAttr, i) * 16;
-      for (let e = 0; e < 16; e++) {
-        weightedSum[e] += boneMatrices[boneOffset + e] * weight;
-      }
-    }
-    skinMatrix.fromArray(weightedSum);
-    vertexMatrix
-      .copy(mesh.bindMatrixInverse)
-      .multiply(skinMatrix)
-      .multiply(mesh.bindMatrix);
-
-    vertex.applyMatrix4(vertexMatrix);
-    normal.transformDirection(vertexMatrix);
-
-    bakedPositions[i * 3] = vertex.x;
-    bakedPositions[i * 3 + 1] = vertex.y;
-    bakedPositions[i * 3 + 2] = vertex.z;
-    bakedNormals[i * 3] = normal.x;
-    bakedNormals[i * 3 + 1] = normal.y;
-    bakedNormals[i * 3 + 2] = normal.z;
-  }
-
-  const bakedGeometry = new THREE.BufferGeometry();
-  bakedGeometry.setAttribute(
-    "position",
-    new THREE.BufferAttribute(bakedPositions, 3),
-  );
-  bakedGeometry.setAttribute(
-    "normal",
-    new THREE.BufferAttribute(bakedNormals, 3),
-  );
-  const uv = sourceGeometry.attributes.uv;
-  if (uv) {
-    bakedGeometry.setAttribute("uv", uv);
-  }
-  if (sourceGeometry.index) {
-    bakedGeometry.setIndex(sourceGeometry.index);
-  }
-
-  const baked = new THREE.Mesh(bakedGeometry, mesh.material);
-  baked.name = mesh.name;
-  return baked;
-}
-
-/**
- * Rotates one bone so the direction from it to `child` swings down toward
- * vertical, to `angleFromDownDeg` off straight down, while keeping whichever
- * side it was already leaning toward (T-pose arms point sideways, so this
- * just reduces that lean rather than needing to know which world axis is
- * "left" or "right" for this particular rig).
- *
- * Works in world space and converts back to the bone's local (parent-
- * relative) rotation, so it doesn't need to know the bone's own rest-pose
- * axis convention either — only the direction to its child, which is read
- * from the current pose.
- */
-function relaxArmBone(
-  bone: THREE.Object3D,
-  child: THREE.Object3D,
-  angleFromDownDeg: number,
-) {
-  bone.updateMatrixWorld(true);
-  const boneWorldPos = new THREE.Vector3();
-  bone.getWorldPosition(boneWorldPos);
-  const childWorldPos = new THREE.Vector3();
-  child.getWorldPosition(childWorldPos);
-  const currentDir = childWorldPos.sub(boneWorldPos).normalize();
-
-  const horizontal = new THREE.Vector3(currentDir.x, 0, currentDir.z);
-  if (horizontal.lengthSq() < 1e-6) {
-    // Already pointing straight down/up — no lean direction to preserve.
-    return;
-  }
-  horizontal.normalize();
-
-  const angleRad = THREE.MathUtils.degToRad(angleFromDownDeg);
-  const targetDir = new THREE.Vector3(
-    horizontal.x * Math.sin(angleRad),
-    -Math.cos(angleRad),
-    horizontal.z * Math.sin(angleRad),
-  ).normalize();
-
-  const rotationDelta = new THREE.Quaternion().setFromUnitVectors(
-    currentDir,
-    targetDir,
-  );
-  const boneWorldQuat = new THREE.Quaternion();
-  bone.getWorldQuaternion(boneWorldQuat);
-  const desiredWorldQuat = rotationDelta.multiply(boneWorldQuat);
-
-  const parentWorldQuat = new THREE.Quaternion();
-  bone.parent?.getWorldQuaternion(parentWorldQuat);
-  const localQuat = parentWorldQuat.invert().multiply(desiredWorldQuat);
-  bone.quaternion.copy(localQuat);
-  bone.updateMatrixWorld(true);
-}
-
-/** Finds a descendant by its (glTF-sanitized) name, if present. */
-function findByName(
-  root: THREE.Object3D,
-  name: string,
-): THREE.Object3D | null {
-  let found: THREE.Object3D | null = null;
-  root.traverse((child) => {
-    if (!found && child.name === name) {
-      found = child;
-    }
-  });
-  return found;
-}
-
-/** Shrinks a geometry toward its own bounding-box centre, in place. */
-function shrinkGeometryTowardCenter(
-  geometry: THREE.BufferGeometry,
-  factor: number,
-) {
-  geometry.computeBoundingBox();
-  const box = geometry.boundingBox;
-  if (!box) {
-    return;
-  }
-  const center = box.getCenter(new THREE.Vector3());
-  geometry.translate(-center.x, -center.y, -center.z);
-  geometry.scale(factor, factor, factor);
-  geometry.translate(center.x, center.y, center.z);
-}
-
 /** Auto-fits a loaded model onto the shared "feet at 0, crown at 1.80" frame. */
 function autoFit(root: THREE.Object3D, rotationY: number) {
   root.updateMatrixWorld(true);
@@ -356,28 +155,23 @@ function autoFit(root: THREE.Object3D, rotationY: number) {
 /**
  * Interactive 3D body model for the Injury & Recovery page.
  *
- * Three layers, all sharing the same "feet at y = 0, crown at y ≈ 1.80"
+ * Two layers, both sharing the same "feet at y = 0, crown at y ≈ 1.80"
  * frame so they line up despite coming from unrelated source files:
  *
- *  - a smooth, coach-friendly mannequin (`smooth_player.glb`), always
- *    visible — this is what a coach sees by default, never clinical;
  *  - a real anatomical atlas (`anatomy.glb` + `head.glb`, hundreds of named
- *    muscles/tendons — see `anatomy-regions.ts`), hidden entirely except for
- *    whichever region is actively hovered — it never turns red just from
- *    being selected, only from the pointer being over it right now;
+ *    muscles/tendons — see `anatomy-regions.ts`), always visible in a
+ *    neutral off-white so red stays reserved for the hover highlight below
+ *    — this is what a coach sees by default;
  *  - a small pulsing marker per injured region, so injuries are discoverable
- *    on the smooth body before a coach hovers anything; the selected (or
- *    hovered) region's marker and callout are emphasised regardless of
- *    whether its anatomy is currently revealed.
+ *    before a coach hovers anything; the selected (or hovered) region's
+ *    marker and callout are emphasised regardless of hover.
  *
  * Only regions with a recorded injury are interactive at all — hovering
- * elsewhere on the smooth body does nothing, matching how this viewer is
- * only ever used to browse an athlete's *existing* injuries (a new injury's
- * region is chosen elsewhere, in the log-injury dialog's region list).
- *
- * Revealed anatomy is drawn depth-test-disabled so it reads as "showing
- * through" the opaque mannequin at that spot without needing a real
- * per-pixel transparency mask — a deliberately simple stand-in for that.
+ * elsewhere on the body does nothing, matching how this viewer is only ever
+ * used to browse an athlete's *existing* injuries (a new injury's region is
+ * chosen elsewhere, in the log-injury dialog's region list). Hovering an
+ * injured region glows it red; it never turns red just from being selected,
+ * only from the pointer being over it right now.
  *
  * Falls back to an accessible region list whenever WebGL is unavailable — the
  * page must never depend on the canvas.
@@ -476,89 +270,11 @@ export function BodyModelViewer({
     const geometries: THREE.BufferGeometry[] = [];
     let disposed = false;
 
-    /* ── Smooth body (always visible, coach-friendly default) ────────────── */
-
-    let loadedSmoothRoot: THREE.Object3D | null = null;
-
-    new GLTFLoader().load(
-      SMOOTH_BODY_MODEL_URL,
-      (gltf) => {
-        if (disposed) {
-          return;
-        }
-
-        const root = gltf.scene;
-        orientToYUp(root);
-        root.updateMatrixWorld(true);
-
-        const leftUpperArm = findByName(root, LEFT_UPPER_ARM_BONE);
-        const leftForearm = findByName(root, LEFT_FOREARM_BONE);
-        const rightUpperArm = findByName(root, RIGHT_UPPER_ARM_BONE);
-        const rightForearm = findByName(root, RIGHT_FOREARM_BONE);
-        if (leftUpperArm && leftForearm) {
-          relaxArmBone(
-            leftUpperArm,
-            leftForearm,
-            RELAXED_ARM_ANGLE_FROM_DOWN_DEG,
-          );
-        }
-        if (rightUpperArm && rightForearm) {
-          relaxArmBone(
-            rightUpperArm,
-            rightForearm,
-            RELAXED_ARM_ANGLE_FROM_DOWN_DEG,
-          );
-        }
-
-        const skinnedReplacements: Array<{
-          parent: THREE.Object3D;
-          skinned: THREE.SkinnedMesh;
-          baked: THREE.Mesh;
-        }> = [];
-        root.traverse((child) => {
-          if ((child as THREE.SkinnedMesh).isSkinnedMesh && child.parent) {
-            const skinned = child as THREE.SkinnedMesh;
-            skinnedReplacements.push({
-              parent: child.parent,
-              skinned,
-              baked: bakeSkinnedMesh(skinned),
-            });
-          }
-        });
-        for (const { parent, skinned, baked } of skinnedReplacements) {
-          baked.position.copy(skinned.position);
-          baked.rotation.copy(skinned.rotation);
-          baked.scale.copy(skinned.scale);
-          parent.add(baked);
-          parent.remove(skinned);
-        }
-
-        const smoothMaterial = new THREE.MeshStandardMaterial({
-          color: SMOOTH_BODY_COLOR,
-          roughness: 0.78,
-          metalness: 0,
-        });
-        root.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.material = smoothMaterial;
-          }
-        });
-
-        autoFit(root, SMOOTH_BODY_ROTATION_Y);
-        loadedSmoothRoot = root;
-        scene.add(root);
-      },
-      undefined,
-      (error) => {
-        console.error("Failed to load the smooth body model.", error);
-      },
-    );
-
-    /* ── Anatomy + head (hidden; revealed per-region on hover/selection) ─── */
+    /* ── Anatomy + head (always visible; glows per-region on hover) ──────── */
     /* The anatomy figure. Auto-scaled and re-centred to the same "feet at
-     * y = 0, crown at y ≈ 1.80" frame the smooth body and hotspot math use,
-     * from its own bounding box rather than a hard-coded size, since
-     * nothing about the source file guarantees its authored scale. */
+     * y = 0, crown at y ≈ 1.80" frame the hotspot math uses, from its own
+     * bounding box rather than a hard-coded size, since nothing about the
+     * source file guarantees its authored scale. */
     let loadedAnatomyRoot: THREE.Object3D | null = null;
     let loadedHeadRoot: THREE.Object3D | null = null;
     let meshEntries: MeshEntry[] = [];
@@ -593,25 +309,17 @@ export function BodyModelViewer({
       regionHotspots = hotspots;
     }
 
-    /** Shared setup for every revealed anatomy/head mesh's material. */
-    function revealableMaterial(): THREE.MeshStandardMaterial {
+    /** Shared setup for every anatomy/head mesh's material: neutral off-white
+     * at rest, glowing red via emissive intensity while hovered. */
+    function anatomyMaterial(): THREE.MeshStandardMaterial {
       return new THREE.MeshStandardMaterial({
-        color: INJURED_COLOR,
+        color: BODY_COLOR,
         emissive: new THREE.Color(INJURED_EMISSIVE),
         emissiveIntensity: 0,
-        roughness: 0.6,
-        metalness: 0.03,
-        // Drawn after (and over) the opaque smooth body regardless of which
-        // is geometrically nearer the camera — a deliberately simple stand-in
-        // for a true local-transparency mask (see the component doc above).
-        depthTest: false,
-        depthWrite: false,
+        roughness: 0.7,
+        metalness: 0.02,
       });
     }
-
-    /* A single throwaway material for the invisible full-size pick meshes
-     * below — never rendered, just needed to satisfy the Mesh constructor. */
-    const pickOnlyMaterial = new THREE.MeshBasicMaterial();
 
     new GLTFLoader().load(
       ANATOMY_MODEL_URL,
@@ -639,25 +347,9 @@ export function BodyModelViewer({
             return;
           }
           const regions = MESH_NAME_TO_REGIONS.get(child.name) ?? [];
-          // Raycasting is done against a same-named, full-size, invisible
-          // sibling rather than the visual mesh below: shrinking the visual
-          // mesh so a revealed muscle doesn't bulge past the mannequin's
-          // skin would otherwise shrink its hoverable area by the same
-          // amount, making regions harder to hover the more they're shrunk.
-          const pickMesh = new THREE.Mesh(
-            child.geometry.clone(),
-            pickOnlyMaterial,
-          );
-          pickMesh.name = child.name;
-          pickMesh.visible = false;
-          child.parent!.add(pickMesh);
-          allMeshes.push(pickMesh);
-
-          shrinkGeometryTowardCenter(child.geometry, ANATOMY_MESH_SHRINK);
-          const material = revealableMaterial();
+          const material = anatomyMaterial();
           child.material = material;
-          child.visible = false;
-          child.renderOrder = 5;
+          allMeshes.push(child);
           entries.push({ mesh: child, material, regions });
         });
 
@@ -730,15 +422,12 @@ export function BodyModelViewer({
                 ? child.material[0]
                 : child.material;
               if (sourceMaterial?.name === "Eye_Ball") {
-                // Hidden along with the rest of the head — eyes have no
-                // "region" of their own to be revealed by.
+                // Hidden — eyes have no "region" of their own to hover.
                 child.visible = false;
                 return;
               }
-              const material = revealableMaterial();
+              const material = anatomyMaterial();
               child.material = material;
-              child.visible = false;
-              child.renderOrder = 5;
               allAnatomyMeshes.push(child);
               headEntries.push({ mesh: child, material, regions: ["head"] });
             });
@@ -776,12 +465,12 @@ export function BodyModelViewer({
     /* ── Injury markers ───────────────────────────────────────────────────
      * One dot+halo pair per currently-injured region, kept in sync with the
      * `injuredRegions` prop every frame (cheap: there are never more than a
-     * handful at once). Idle markers are small and faint so the smooth body
+     * handful at once). Idle markers are small and faint so the anatomy
      * stays the dominant visual; whichever region is hovered/selected gets a
-     * bigger, brighter pair instead. Drawn depth-test-disabled like the
-     * revealed anatomy, since their world position sits inside the body. */
-    const markerDotGeometry = new THREE.SphereGeometry(0.018, 16, 12);
-    const markerHaloGeometry = new THREE.SphereGeometry(0.036, 16, 12);
+     * bigger, brighter pair instead. Drawn depth-test-disabled so they stay
+     * visible at their hotspot regardless of what's nearer the camera there. */
+    const markerDotGeometry = new THREE.SphereGeometry(0.012, 16, 12);
+    const markerHaloGeometry = new THREE.SphereGeometry(0.022, 16, 12);
     geometries.push(markerDotGeometry, markerHaloGeometry);
     const markers = new Map<BodyRegion, MarkerEntry>();
 
@@ -990,20 +679,18 @@ export function BodyModelViewer({
       camera.position.set(x, y, z);
       camera.lookAt(target);
 
-      /* Anatomy only ever goes red while actively hovered — selecting a
+      /* Anatomy only ever glows red while actively hovered — selecting a
        * region (clicking it) keeps its marker/callout emphasised but does
-       * not, by itself, reveal anatomy. */
+       * not, by itself, highlight anatomy. */
       const hoveredNow = hoveredRegionRef.current;
       const activeRegion = hoveredNow ?? selectedRef.current;
       const pulse = reducedMotion ? 0.55 : 0.42 + Math.sin(now / 420) * 0.22;
 
       for (const entry of meshEntries) {
-        const revealed =
+        const highlighted =
           hoveredNow !== null && entry.regions.includes(hoveredNow);
-        entry.mesh.visible = revealed;
-        if (revealed) {
-          entry.material.emissiveIntensity = pulse;
-        }
+        entry.material.color.set(highlighted ? HOVER_COLOR : BODY_COLOR);
+        entry.material.emissiveIntensity = highlighted ? pulse : 0;
       }
 
       /* Injury markers: idle and faint by default, stronger for the active
@@ -1024,15 +711,15 @@ export function BodyModelViewer({
         marker.dot.visible = true;
         marker.halo.visible = true;
         if (region === activeRegion) {
-          marker.dotMaterial.opacity = 0.95;
-          marker.haloMaterial.opacity = 0.5;
-          marker.dot.scale.setScalar(1.4);
-          marker.halo.scale.setScalar(activePulse * 1.6);
+          marker.dotMaterial.opacity = 0.9;
+          marker.haloMaterial.opacity = 0.38;
+          marker.dot.scale.setScalar(1.15);
+          marker.halo.scale.setScalar(activePulse * 1.25);
         } else {
-          marker.dotMaterial.opacity = 0.5;
-          marker.haloMaterial.opacity = 0.22;
-          marker.dot.scale.setScalar(0.85);
-          marker.halo.scale.setScalar(idlePulse);
+          marker.dotMaterial.opacity = 0.45;
+          marker.haloMaterial.opacity = 0.14;
+          marker.dot.scale.setScalar(0.75);
+          marker.halo.scale.setScalar(idlePulse * 0.85);
         }
       }
 
@@ -1079,13 +766,9 @@ export function BodyModelViewer({
         geometry.dispose();
       }
       groundMaterial.dispose();
-      pickOnlyMaterial.dispose();
       for (const entry of markers.values()) {
         entry.dotMaterial.dispose();
         entry.haloMaterial.dispose();
-      }
-      if (loadedSmoothRoot) {
-        disposeObject3D(loadedSmoothRoot);
       }
       if (loadedAnatomyRoot) {
         disposeObject3D(loadedAnatomyRoot);
