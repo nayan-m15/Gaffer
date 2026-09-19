@@ -1,86 +1,117 @@
 import { SportLogo } from "@/components/brand/SportLogo";
 import { brand } from "@/data/brand";
+import { motion, type Variants } from "motion/react";
 
-/**
- * Landing-page footer navigation.
- *
- * Anchors to the three core chapters of the landing-page story.  The `href`
- * values are root-relative so the links also resolve when the footer is
- * rendered from another public route.
- */
-const FOOTER_LINKS = [
+const PRIMARY_LINKS = [
+  { label: "Public Dashboard", href: "/public-dashboard" },
   { label: "Philosophy", href: "/#philosophy" },
   { label: "Tactical Pitch", href: "/#tactics" },
   { label: "Analytics", href: "/#analytics" },
+] as const;
+
+const LEGAL_LINKS = [
   { label: "Terms of Service", href: "/terms-of-service.html" },
   { label: "Privacy Policy", href: "/privacy-policy.html" },
 ] as const;
 
-/**
- * Footer — custom marketing footer for the landing page.
- *
- * A brand block (logo, wordmark, tagline, copyright) on the left with a
- * chapter navigation column on the right.  Every colour goes through the
- * semantic theme tokens (`background`, `foreground`, `muted-foreground`,
- * `border`, `brand`) so the footer follows the navbar's light / dark toggle
- * driven by the `.dark` class on `<html>`.
- *
- * Rendered with `relative z-10` — the same layer as `<main>` — so it paints
- * above the fixed stadium backdrop behind the page.
- */
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      delayChildren: 0.1,
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 260,
+      damping: 20,
+    },
+  },
+};
+
+/** Animated marketing footer shared by GAFFER's public pages. */
 export function Footer() {
-  const year = new Date().getFullYear();
-
   return (
-    <footer className="animate-on-scroll relative z-10 border-t border-border bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between lg:gap-16">
-          {/* ── Brand block ─────────────────────────────────────────────── */}
-          <div className="max-w-sm">
-            <a
-              href="/#home"
-              className="inline-flex items-center gap-2.5 text-foreground transition-opacity hover:opacity-80"
-            >
-              <SportLogo size={32} className="rounded" />
-              <span className="font-display text-lg font-bold tracking-tight">
-                {brand.name}
-              </span>
-            </a>
+    <footer className="relative z-10 w-full overflow-hidden border-t border-border bg-background/95 text-foreground shadow-[0_-12px_40px_rgb(0_0_0/0.18)] backdrop-blur-xl">
+      <motion.div
+        className="mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 pb-3 pt-12 text-center sm:px-6 sm:pb-4 sm:pt-14 lg:px-8"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "0px 0px -80px 0px" }}
+        variants={containerVariants}
+      >
+        <motion.a
+          href="/#home"
+          variants={itemVariants}
+          className="group inline-flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <SportLogo size={40} className="rounded-md" />
+          <span className="font-display text-xl font-bold tracking-tight">
+            {brand.name}
+          </span>
+        </motion.a>
 
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              {brand.tagline}
-            </p>
+        <motion.nav aria-label="Footer navigation" variants={itemVariants}>
+          <ul className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 sm:gap-x-4">
+            {PRIMARY_LINKS.map((link) => (
+              <li key={link.href}>
+                <motion.a
+                  href={link.href}
+                  className="group relative block min-h-11 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  <motion.span
+                    aria-hidden="true"
+                    className="absolute inset-0 rounded-md bg-accent"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileHover={{ opacity: 1, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                  />
+                  <span className="relative z-10">{link.label}</span>
+                </motion.a>
+              </li>
+            ))}
+          </ul>
+        </motion.nav>
 
-            <p className="mt-6 text-xs text-muted-foreground">
-              &copy; {year} {brand.name}. All rights reserved.
-            </p>
-          </div>
+        <motion.p variants={itemVariants} className="text-sm text-muted-foreground">
+          © 2026 GAFFER. All rights reserved.
+        </motion.p>
+      </motion.div>      
 
-          {/* ── Chapter navigation ──────────────────────────────────────── */}
-          <nav aria-label="Footer navigation" className="shrink-0">
-            <p className="font-mono text-xs font-semibold uppercase tracking-wider text-brand">
-              Explore
-            </p>
-
-            <ul className="mt-4 space-y-3">
-              {FOOTER_LINKS.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="group inline-flex items-center gap-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="h-px w-3 rounded-full bg-border transition-all duration-200 group-hover:w-5 group-hover:bg-brand"
-                    />
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </div>
-      </div>
+      <motion.nav
+        aria-label="Legal navigation"
+        className="mx-auto max-w-7xl px-4 pb-6 pt-0 sm:px-6 lg:px-8"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={itemVariants}
+      >
+        <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+          {LEGAL_LINKS.map((link) => (
+            <li key={link.href}>
+              <a
+                href={link.href}
+                className="inline-flex min-h-11 items-center rounded-md px-2 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </motion.nav>
     </footer>
   );
 }

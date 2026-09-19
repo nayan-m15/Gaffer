@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearPendingClaimToken } from "@/services/claims";
+import { setOfflineUserScope } from "@/offline/match-store";
 
 export interface SessionUser {
   id: string;
@@ -46,6 +47,7 @@ export type AccountKind = "coach" | "player" | "new";
 export type AuthStatus =
   | "loading"
   | "authenticated"
+  | "offline"
   | "unauthenticated"
   | "unavailable";
 
@@ -118,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
   const activeUserIdRef = useRef<string | null>(null);
+  const cachedSessionKey = "gaffer-offline-session";
 
   const refresh = useCallback(async (): Promise<SessionPayload | null> => {
     try {
@@ -126,11 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear();
       }
       activeUserIdRef.current = data.user.id;
+      await setOfflineUserScope(data.user.id);
       setUser(data.user);
       setTeam(data.team);
       setClaimedAthletes(data.claimedAthletes ?? []);
       setSessionError(null);
       setStatus("authenticated");
+      localStorage.setItem(cachedSessionKey, JSON.stringify(data));
       return data;
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -139,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setClaimedAthletes([]);
         queryClient.clear();
         activeUserIdRef.current = null;
+        localStorage.removeItem(cachedSessionKey);
         setSessionError(null);
         setStatus("unauthenticated");
         return null;
@@ -148,6 +154,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // timeout, 503) from invalid credentials so users can retry without
       // falsely treating active sessions as signed out.
       console.error("Failed to load the current session:", error);
+      const cachedRaw = localStorage.getItem(cachedSessionKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as SessionPayload;
+          activeUserIdRef.current = cached.user.id;
+          await setOfflineUserScope(cached.user.id);
+          setUser(cached.user);
+          setTeam(cached.team);
+          setClaimedAthletes(cached.claimedAthletes ?? []);
+          setSessionError("Offline mode: server permissions will be checked when changes synchronise.");
+          setStatus("offline");
+          return cached;
+        } catch {
+          localStorage.removeItem(cachedSessionKey);
+        }
+      }
       setSessionError(
         error instanceof Error
           ? error.message
@@ -221,7 +243,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.cancelQueries();
     queryClient.clear();
     activeUserIdRef.current = null;
+    await setOfflineUserScope(null);
     clearPendingClaimToken();
+    localStorage.removeItem(cachedSessionKey);
     setUser(null);
     setTeam(null);
     setClaimedAthletes([]);

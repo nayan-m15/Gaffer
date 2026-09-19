@@ -101,8 +101,8 @@ test('account switching clears private dashboard cache', async ({ page }) => {
     page.getByText('Welcome back, Coach A · Alpha FC', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('region', { name: 'Active athletes count' }),
-  ).toContainText('11');
+    page.getByRole('link', { name: /11 Active Athletes/ }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Sign Out' }).click();
   await page.goto('/login');
@@ -115,8 +115,8 @@ test('account switching clears private dashboard cache', async ({ page }) => {
     page.getByText('Welcome back, Coach B · Beta FC', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('region', { name: 'Active athletes count' }),
-  ).toContainText('2');
+    page.getByRole('link', { name: /2 Active Athletes/ }),
+  ).toBeVisible();
 });
 
 test('authenticated sidebar navigates on mobile and preserves history', async ({ page }) => {

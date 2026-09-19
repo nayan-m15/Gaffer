@@ -6,6 +6,8 @@ describe('isPublicApiPath', () => {
     ['/v1/formations?id=4-3-3', true],
     ['/v1/tactics', true],
     ['/v1/tactics?id=possession', true],
+    ['/v1/public-dashboard/players', true],
+    ['/v1/public-dashboard/team-statistics?seasonId=123', true],
     ['/game-plans', false],
     ['/teams', false],
     ['/v1/formations-typo', true], // startsWith is intentionally prefix-based
@@ -34,6 +36,11 @@ describe('buildCorsOptionsDelegate', () => {
 
   it('allows any origin, without credentials, for public tactics routes', async () => {
     const options = await resolve('/v1/tactics');
+    expect(options).toEqual({ origin: '*', credentials: false });
+  });
+
+  it('allows any origin, without credentials, for public dashboard routes', async () => {
+    const options = await resolve('/v1/public-dashboard/matches');
     expect(options).toEqual({ origin: '*', credentials: false });
   });
 

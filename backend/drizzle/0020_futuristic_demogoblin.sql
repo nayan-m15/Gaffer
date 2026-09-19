@@ -1,1 +1,1 @@
-ALTER TABLE "player_claim_invites" ADD COLUMN "email" text NOT NULL;
+ALTER TABLE "player_claim_invites" ADD COLUMN IF NOT EXISTS "email" text NOT NULL;

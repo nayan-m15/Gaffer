@@ -159,8 +159,29 @@
     {
       "idx": 21,
       "version": "7",
-      "when": 1789676805996,
-      "tag": "0021_low_triathlon",
+      "when": 1789661739020,
+      "tag": "0021_swift_skullbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789749902618,
+      "tag": "0022_perpetual_jimmy_woo",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790180000002,
+      "tag": "0023_repair_projection_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790180000003,
+      "tag": "0024_injuries_and_recovery",
       "breakpoints": true
     }
   ]

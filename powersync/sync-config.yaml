@@ -1,0 +1,30 @@
+config:
+  edition: 3
+
+streams:
+  team_match_events:
+    auto_subscribe: true
+    query: |
+      SELECT match_events.*
+      FROM match_events
+      JOIN matches ON matches.id = match_events.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_reviews:
+    auto_subscribe: true
+    query: |
+      SELECT match_event_reviews.*
+      FROM match_event_reviews
+      JOIN matches ON matches.id = match_event_reviews.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_projections:
+    auto_subscribe: true
+    query: |
+      SELECT match_projection_state.*
+      FROM match_projection_state
+      JOIN matches ON matches.id = match_projection_state.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')

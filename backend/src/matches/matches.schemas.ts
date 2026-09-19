@@ -16,6 +16,23 @@ export const PENALTY_MISSED_DETAIL = 'Penalty missed';
 export const createMatchLogEventSchema = z
   .object({
     clientRequestId: z.uuid(),
+    deviceId: z.uuid().optional(),
+    clientCreatedAt: z.iso.datetime().optional(),
+    period: z
+      .enum([
+        'not_started',
+        'first_half',
+        'half_time',
+        'second_half',
+        'full_time',
+      ])
+      .optional(),
+    matchElapsedMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(3 * 60 * 60 * 1000)
+      .optional(),
     team: matchEventTeamSchema,
     eventType: matchEventTypeSchema,
     athleteId: z.uuid().optional(),
@@ -82,6 +99,21 @@ export const createMatchLogEventSchema = z
     }
   });
 export type CreateMatchLogEventDto = z.infer<typeof createMatchLogEventSchema>;
+
+export const resolveMatchEventReviewSchema = z.object({
+  resolution: z.enum(['same_event', 'separate_events']),
+});
+export type ResolveMatchEventReviewDto = z.infer<
+  typeof resolveMatchEventReviewSchema
+>;
+
+export const finaliseMatchProjectionSchema = z.object({
+  expectedRevision: z.number().int().min(1),
+});
+
+export const reopenMatchProjectionSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
 
 export const updateMatchLogEventSchema = z
   .object({

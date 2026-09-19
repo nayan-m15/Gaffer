@@ -147,6 +147,9 @@ jobs:
       - name: Migrate the test database
         run: npm --prefix backend run db:migrate
 
+      - name: Build backend for browser tests
+        run: npm --prefix backend run build
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 

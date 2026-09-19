@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { FRONTEND_URL } from './utils/auth';
 
 const PASSWORD = 'password123';
 
@@ -56,7 +57,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       // marks the address verified, auto-signs-in (session cookie), and 302s
       // to the login page with the verified notice.
       const callbackURL = encodeURIComponent(
-        'http://localhost:5173/login?verified=1',
+        `${FRONTEND_URL}/login?verified=1`,
       );
       await page.goto(
         `/auth/verify-email?token=${token}&callbackURL=${callbackURL}`,
@@ -115,7 +116,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       // All three start on the bench with their real status badges (the
       // badge text is the roster's display label inside the card).
       const domiCard = bench.getByRole('button', { name: /Domi Available —/ });
-      const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
+      const inesCard = bench.getByLabel(/Ines Injured —/);
       const suriCard = bench.getByRole('button', { name: /Suri Suspended —/ });
       await expect(domiCard).toBeVisible();
       await expect(inesCard).toBeVisible();
@@ -145,7 +146,7 @@ test('team management reflects athlete status badges and roster edits', async ({
 
       // Unavailable players stay badged on the bench.
       const bench = page.getByRole('region', { name: 'Substitute players' });
-      const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
+      const inesCard = bench.getByLabel(/Ines Injured —/);
       await expect(inesCard).toBeVisible();
       await expect(inesCard.getByText('Injured', { exact: true })).toBeVisible();
       await expect(
