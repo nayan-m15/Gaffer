@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import {
   competitionSearchSchema,
+  generateFixturesSchema,
   createCompetitionResultSchema,
   createCompetitionSchema,
   createCompetitionTeamSchema,
@@ -82,6 +83,28 @@ export class CompetitionsController {
   ) {
     await this.competitionsService.remove(user.id, id);
     return { success: true };
+  }
+
+  @Get(':id/fixtures')
+  async fixtures(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.competitionsService.listFixtures(user.id, id);
+  }
+
+  @Post(':id/fixtures/generate')
+  async generateFixtures(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(generateFixturesSchema, body ?? {});
+    return this.competitionsService.generateFixtures(
+      user.id,
+      id,
+      dto.regenerate,
+    );
   }
 
   @Post(':id/results')

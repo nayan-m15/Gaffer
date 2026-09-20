@@ -1,5 +1,15 @@
 import { apiFetch } from "@/lib/api";
-import type { Competition, CompetitionDetail, CompetitionInput, CompetitionInvite, CompetitionResult, CompetitionResultInput, CompetitionSummary, Participant } from "./types";
+import type {
+  Competition,
+  CompetitionDetail,
+  CompetitionFixture,
+  CompetitionInput,
+  CompetitionInvite,
+  CompetitionResult,
+  CompetitionResultInput,
+  CompetitionSummary,
+  Participant,
+} from "./types";
 
 const sharedOnly = (rows: CompetitionSummary[]) =>
   rows.filter((row) => row.type === "league" || row.type === "cup");
@@ -20,7 +30,7 @@ export async function searchCompetitions(term: string) {
 export const createCompetition = (input: CompetitionInput) =>
   apiFetch<Competition>("/competitions", { method: "POST", body: JSON.stringify(input) });
 
-export const updateCompetition = (id: string, input: CompetitionInput) =>
+export const updateCompetition = (id: string, input: Partial<CompetitionInput>) =>
   apiFetch<Competition>(`/competitions/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 
 export const deleteCompetition = (id: string) =>
@@ -58,4 +68,13 @@ export const updateCompetitionResult = (id: string, resultId: string, input: Com
 export const deleteCompetitionResult = (id: string, resultId: string) =>
   apiFetch<{ success: boolean }>(`/competitions/${id}/results/${resultId}`, {
     method: "DELETE",
+  });
+
+export const fetchCompetitionFixtures = (id: string) =>
+  apiFetch<CompetitionFixture[]>(`/competitions/${encodeURIComponent(id)}/fixtures`);
+
+export const generateCompetitionFixtures = (id: string, regenerate = false) =>
+  apiFetch<CompetitionFixture[]>(`/competitions/${encodeURIComponent(id)}/fixtures/generate`, {
+    method: "POST",
+    body: JSON.stringify({ regenerate }),
   });

@@ -13,6 +13,7 @@ import { useCompetitionMutation } from "./hooks";
 import type {
   CompetitionResult,
   CompetitionResultInput,
+  CompetitionFixture,
   Participant,
 } from "./types";
 
@@ -29,22 +30,24 @@ export function CompetitionResultDialog({
   competitionId,
   participants,
   result,
+  fixture,
   onClose,
 }: {
   competitionId: string;
   participants: Participant[];
   result?: CompetitionResult;
+  fixture?: CompetitionFixture;
   onClose: () => void;
 }) {
   const [homeId, setHomeId] = useState(
-    result?.homeCompetitionTeamId ?? participants[0]?.id ?? "",
+    result?.homeCompetitionTeamId ?? fixture?.homeCompetitionTeamId ?? participants[0]?.id ?? "",
   );
   const [awayId, setAwayId] = useState(
-    result?.awayCompetitionTeamId ?? participants[1]?.id ?? "",
+    result?.awayCompetitionTeamId ?? fixture?.awayCompetitionTeamId ?? participants[1]?.id ?? "",
   );
   const [homeScore, setHomeScore] = useState(String(result?.homeScore ?? 0));
   const [awayScore, setAwayScore] = useState(String(result?.awayScore ?? 0));
-  const [playedAt, setPlayedAt] = useState(toLocalDateTime(result?.playedAt));
+  const [playedAt, setPlayedAt] = useState(toLocalDateTime(result?.playedAt ?? fixture?.scheduledAt));
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useCompetitionMutation<CompetitionResultInput, CompetitionResult>(
@@ -53,6 +56,10 @@ export function CompetitionResultDialog({
         ? updateCompetitionResult(competitionId, result.id, input)
         : createCompetitionResult(competitionId, input),
   );
+
+  const knockoutDraw =
+    fixture?.stage === "knockout" &&
+    Number(homeScore) === Number(awayScore);
 
   const canSubmit = useMemo(() => {
     const home = Number(homeScore);
@@ -67,9 +74,10 @@ export function CompetitionResultDialog({
       away >= 0 &&
       home <= 99 &&
       away <= 99 &&
-      playedAt.length > 0
+      playedAt.length > 0 &&
+      !knockoutDraw
     );
-  }, [awayId, awayScore, homeId, homeScore, playedAt]);
+  }, [awayId, awayScore, homeId, homeScore, knockoutDraw, playedAt]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -99,8 +107,8 @@ export function CompetitionResultDialog({
         <DialogHeader>
           <DialogTitle>{result ? "Edit result" : "Record result"}</DialogTitle>
           <DialogDescription>
-            Use this for a competition match that was not completed through the live logger.
-            The standings will update automatically.
+            {fixture ? "Enter the final score for this generated fixture. " : "Use this for a competition match that was not completed through the live logger. "}
+            Standings and knockout progression update automatically.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
@@ -109,6 +117,7 @@ export function CompetitionResultDialog({
               Home team
               <select
                 className={inputClassName}
+                disabled={Boolean(fixture)}
                 value={homeId}
                 onChange={(event) => setHomeId(event.target.value)}
               >
@@ -123,6 +132,7 @@ export function CompetitionResultDialog({
               Away team
               <select
                 className={inputClassName}
+                disabled={Boolean(fixture)}
                 value={awayId}
                 onChange={(event) => setAwayId(event.target.value)}
               >
@@ -171,6 +181,9 @@ export function CompetitionResultDialog({
           </label>
           {homeId === awayId && (
             <p className="text-sm text-destructive">Choose two different teams.</p>
+          )}
+          {knockoutDraw && (
+            <p className="text-sm text-destructive">Knockout fixtures need a winner. Enter the final deciding score.</p>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">

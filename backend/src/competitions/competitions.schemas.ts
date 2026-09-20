@@ -20,6 +20,35 @@ export const createCompetitionSchema = z.object({
   name: competitionNameField,
   type: sharedCompetitionTypeSchema,
   season: seasonLabelField,
+  format: z.enum(['league', 'knockout', 'league_knockout']).optional(),
+  configuredTeamCount: z.number().int().min(2).max(128).optional(),
+  maxSubstitutes: z.number().int().min(0).max(99).optional(),
+  redCardSuspensionMatches: z.number().int().min(0).max(99).optional(),
+  accumulatedYellowThreshold: z.number().int().min(1).max(99).optional(),
+  yellowSuspensionMatches: z.number().int().min(0).max(99).optional(),
+  startDate: z.iso.date().optional(),
+  // Weekdays and kickoff use UTC, independent of the server's timezone.
+  allowedPlayingDays: z
+    .array(z.number().int().min(0).max(6))
+    .min(1)
+    .max(7)
+    .refine(
+      (days) => new Set(days).size === days.length,
+      'Playing days must be unique.',
+    )
+    .optional(),
+  defaultKickoffTime: z
+    .string()
+    .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)
+    .optional(),
+  fixturesPerOpponent: z.union([z.literal(1), z.literal(2)]).optional(),
+  pointsWin: z.number().int().min(0).max(99).optional(),
+  pointsDraw: z.number().int().min(0).max(99).optional(),
+  pointsLoss: z.number().int().min(0).max(99).optional(),
+  qualifierCount: z
+    .union([z.literal(4), z.literal(8), z.literal(16), z.literal(32)])
+    .nullable()
+    .optional(),
 });
 export type CreateCompetitionDto = z.infer<typeof createCompetitionSchema>;
 
@@ -88,3 +117,7 @@ export const updateCompetitionResultSchema = createCompetitionResultSchema;
 export type UpdateCompetitionResultDto = z.infer<
   typeof updateCompetitionResultSchema
 >;
+
+export const generateFixturesSchema = z.object({
+  regenerate: z.boolean().optional().default(false),
+});

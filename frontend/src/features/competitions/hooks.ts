@@ -27,6 +27,14 @@ export function useCompetition(id: string | null | undefined) {
   });
 }
 
+export function useCompetitionFixtures(id: string | null | undefined) {
+  return useQuery({
+    queryKey: [...useCompetitionKey(), "fixtures", id ?? ""],
+    queryFn: () => api.fetchCompetitionFixtures(id!),
+    enabled: Boolean(id),
+  });
+}
+
 export function useCompetitionInvites(id: string, isAdmin: boolean) {
   return useQuery({
     queryKey: [...useCompetitionKey(), "invites", id],

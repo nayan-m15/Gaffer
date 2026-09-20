@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
+  foreignKey,
   date,
   doublePrecision,
   index,
@@ -447,6 +449,22 @@ export const opponentSquadVisibility = pgEnum('opponent_squad_visibility', [
   'full',
 ]);
 
+export const competitionFormat = pgEnum('competition_format', [
+  'league',
+  'knockout',
+  'league_knockout',
+]);
+export const fixtureStage = pgEnum('competition_fixture_stage', [
+  'league',
+  'knockout',
+]);
+export const fixtureStatus = pgEnum('competition_fixture_status', [
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled',
+]);
+
 // A league or cup the team is competing in this season.
 export const competitions = pgTable(
   'competitions',
@@ -471,6 +489,31 @@ export const competitions = pgTable(
     adminUserId: text('admin_user_id').references(() => user.id, {
       onDelete: 'set null',
     }),
+    // Null configuration preserves competitions created by legacy callers.
+    format: competitionFormat('format'),
+    configuredTeamCount: integer('configured_team_count'),
+    maxSubstitutes: integer('max_substitutes').default(5).notNull(),
+    redCardSuspensionMatches: integer('red_card_suspension_matches')
+      .default(1)
+      .notNull(),
+    accumulatedYellowThreshold: integer('accumulated_yellow_threshold')
+      .default(5)
+      .notNull(),
+    yellowSuspensionMatches: integer('yellow_suspension_matches')
+      .default(1)
+      .notNull(),
+    startDate: date('start_date'),
+    // UTC weekdays: Sunday=0 ... Saturday=6; kickoff is explicitly UTC.
+    allowedPlayingDays: integer('allowed_playing_days')
+      .array()
+      .default(sql`ARRAY[6]::integer[]`)
+      .notNull(),
+    defaultKickoffTime: text('default_kickoff_time').default('15:00').notNull(),
+    fixturesPerOpponent: integer('fixtures_per_opponent').default(1).notNull(),
+    pointsWin: integer('points_win').default(3).notNull(),
+    pointsDraw: integer('points_draw').default(1).notNull(),
+    pointsLoss: integer('points_loss').default(0).notNull(),
+    qualifierCount: integer('qualifier_count'),
     // Marks when result-based standings became authoritative for this
     // competition. Existing aggregate standings rows act as the baseline;
     // only matches started after this point are added on top.
@@ -482,6 +525,25 @@ export const competitions = pgTable(
     ...timestamps,
   },
   (table) => [
+    check(
+      'competitions_settings_valid',
+      sql`
+      (${table.configuredTeamCount} is null or ${table.configuredTeamCount} between 2 and 128)
+      and ${table.maxSubstitutes} between 0 and 99
+      and ${table.redCardSuspensionMatches} between 0 and 99
+      and ${table.accumulatedYellowThreshold} between 1 and 99
+      and ${table.yellowSuspensionMatches} between 0 and 99
+      and cardinality(${table.allowedPlayingDays}) between 1 and 7
+      and ${table.allowedPlayingDays} <@ ARRAY[0,1,2,3,4,5,6]::integer[]
+      and array_position(${table.allowedPlayingDays}, null) is null
+      and ${table.defaultKickoffTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      and ${table.fixturesPerOpponent} in (1,2)
+      and ${table.pointsWin} between 0 and 99 and ${table.pointsDraw} between 0 and 99 and ${table.pointsLoss} between 0 and 99
+      and (${table.format} is null or (${table.type} = 'league' and ${table.format} = 'league') or (${table.type} = 'cup' and ${table.format} in ('knockout','league_knockout')))
+      and (${table.format} is distinct from 'knockout' or ${table.configuredTeamCount} is null or ${table.configuredTeamCount} in (4,8,16,32))
+      and (${table.qualifierCount} is null or (${table.format} is not null and ${table.format} = 'league_knockout' and ${table.qualifierCount} in (4,8,16,32) and ${table.configuredTeamCount} is not null and ${table.qualifierCount} <= ${table.configuredTeamCount}))
+    `,
+    ),
     index('competitions_team_id_index').on(table.teamId),
     index('competitions_season_id_index').on(table.seasonId),
     index('competitions_admin_user_id_index').on(table.adminUserId),
@@ -510,6 +572,10 @@ export const competitionTeams = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex('competition_teams_competition_id_id_unique').on(
+      table.competitionId,
+      table.id,
+    ),
     index('competition_teams_competition_id_index').on(table.competitionId),
     index('competition_teams_team_id_index').on(table.teamId),
     // A linked team can only occupy one slot per competition. Unlinked slots
@@ -611,7 +677,6 @@ export const matches = pgTable(
   ],
 );
 
-
 // Manually entered shared competition results for fixtures that were not
 // completed through the live logger. Live-logged matches stay authoritative
 // in `matches` + `match_events`; standings combine both sources at read time.
@@ -646,7 +711,6 @@ export const competitionMatches = pgTable(
     ),
   ],
 );
-
 
 /**
  * Shirt-position abbreviations stored on own athletes and opponent players.
@@ -913,5 +977,97 @@ export const matchEventReviews = pgTable(
     uniqueIndex('match_event_reviews_open_canonical_unique')
       .on(table.canonicalEventId)
       .where(sql`${table.status} = 'open'`),
+  ],
+);
+
+// One shared fixture per pairing. Later knockout rounds have empty participant
+// slots until winners advance through nextFixtureId + nextFixtureSlot.
+export const competitionFixtures = pgTable(
+  'competition_fixtures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    stage: fixtureStage('stage').notNull(),
+    round: integer('round').notNull(),
+    position: integer('position').notNull(),
+    homeCompetitionTeamId: uuid('home_competition_team_id'),
+    awayCompetitionTeamId: uuid('away_competition_team_id'),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    status: fixtureStatus('status').default('scheduled').notNull(),
+    homeScore: integer('home_score'),
+    awayScore: integer('away_score'),
+    homePenaltyScore: integer('home_penalty_score'),
+    awayPenaltyScore: integer('away_penalty_score'),
+    winnerCompetitionTeamId: uuid('winner_competition_team_id'),
+    nextFixtureId: uuid('next_fixture_id'),
+    nextFixtureSlot: text('next_fixture_slot'),
+    linkedMatchId: uuid('linked_match_id').references(() => matches.id),
+    legacyResultId: uuid('legacy_result_id').references(
+      () => competitionMatches.id,
+    ),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('competition_fixtures_competition_id_id_unique').on(
+      table.competitionId,
+      table.id,
+    ),
+    uniqueIndex('competition_fixtures_round_position_unique').on(
+      table.competitionId,
+      table.stage,
+      table.round,
+      table.position,
+    ),
+    uniqueIndex('competition_fixtures_pair_unique').on(
+      table.competitionId,
+      table.stage,
+      table.homeCompetitionTeamId,
+      table.awayCompetitionTeamId,
+    ),
+    uniqueIndex('competition_fixtures_next_slot_unique').on(
+      table.nextFixtureId,
+      table.nextFixtureSlot,
+    ),
+    uniqueIndex('competition_fixtures_linked_match_unique').on(
+      table.linkedMatchId,
+    ),
+    uniqueIndex('competition_fixtures_legacy_result_unique').on(
+      table.legacyResultId,
+    ),
+    foreignKey({
+      name: 'competition_fixtures_home_participant_fk',
+      columns: [table.competitionId, table.homeCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_away_participant_fk',
+      columns: [table.competitionId, table.awayCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_winner_participant_fk',
+      columns: [table.competitionId, table.winnerCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_next_fixture_fk',
+      columns: [table.competitionId, table.nextFixtureId],
+      foreignColumns: [table.competitionId, table.id],
+    }),
+    check(
+      'competition_fixtures_valid',
+      sql`
+    ${table.round} > 0 and ${table.position} > 0
+    and (${table.homeCompetitionTeamId} is null or ${table.awayCompetitionTeamId} is null or ${table.homeCompetitionTeamId} <> ${table.awayCompetitionTeamId})
+    and (${table.stage} = 'knockout' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.nextFixtureId} is null))
+    and ((${table.nextFixtureId} is null and ${table.nextFixtureSlot} is null) or (${table.nextFixtureId} is not null and ${table.nextFixtureId} <> ${table.id} and ${table.nextFixtureSlot} is not null and ${table.nextFixtureSlot} in ('home','away')))
+    and ((${table.homeScore} is null and ${table.awayScore} is null) or (${table.homeScore} between 0 and 99 and ${table.awayScore} between 0 and 99 and ${table.homeScore} is not null and ${table.awayScore} is not null))
+    and ((${table.homePenaltyScore} is null and ${table.awayPenaltyScore} is null) or (${table.stage} = 'knockout' and ${table.homePenaltyScore} between 0 and 99 and ${table.awayPenaltyScore} between 0 and 99 and ${table.homePenaltyScore} is not null and ${table.awayPenaltyScore} is not null))
+    and (${table.winnerCompetitionTeamId} is null or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.winnerCompetitionTeamId} in (${table.homeCompetitionTeamId}, ${table.awayCompetitionTeamId})))
+    and (${table.status} <> 'completed' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.homeScore} is not null and ${table.awayScore} is not null and (${table.stage} <> 'knockout' or ${table.winnerCompetitionTeamId} is not null)))
+  `,
+    ),
   ],
 );

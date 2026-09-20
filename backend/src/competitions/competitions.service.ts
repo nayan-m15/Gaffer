@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { and, asc, count, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
   competitionMatches,
+  competitionFixtures,
   competitions,
   competitionTeams,
   events,
@@ -18,7 +20,19 @@ import {
   matches,
   standings,
 } from '../database/schema';
+import {
+  planFixtures,
+  settingsView,
+  settingKeys,
+  settingsColumns,
+  validateSettings,
+} from './competition-fixtures';
 import { TeamsService } from '../teams/teams.service';
+import {
+  resetManualFixtureResult,
+  syncFixtureResult,
+  validateFixtureResult,
+} from './competition-fixture-results';
 import type {
   CreateCompetitionDto,
   CreateCompetitionResultDto,
@@ -48,7 +62,9 @@ export interface CompetitionTeamView {
   createdAt: Date;
 }
 
-export interface CompetitionView {
+export interface CompetitionView extends Partial<
+  Pick<typeof competitions.$inferSelect, (typeof settingKeys)[number]>
+> {
   id: string;
   name: string;
   type: (typeof competitions.type.enumValues)[number];
@@ -115,6 +131,7 @@ export class CompetitionsService {
   ): Promise<CompetitionSummaryView[]> {
     const rows = await this.databaseService.database
       .select({
+        ...settingsColumns,
         id: competitions.id,
         name: competitions.name,
         type: competitions.type,
@@ -129,7 +146,12 @@ export class CompetitionsService {
         competitionTeams,
         eq(competitionTeams.competitionId, competitions.id),
       )
-      .where(and(ne(competitions.type, 'friendly'), ilike(competitions.name, `%${term}%`)))
+      .where(
+        and(
+          ne(competitions.type, 'friendly'),
+          ilike(competitions.name, `%${term}%`),
+        ),
+      )
       .groupBy(competitions.id)
       .orderBy(asc(competitions.name))
       .limit(25);
@@ -151,6 +173,7 @@ export class CompetitionsService {
 
     const rows = await this.databaseService.database
       .select({
+        ...settingsColumns,
         id: competitions.id,
         name: competitions.name,
         type: competitions.type,
@@ -199,6 +222,7 @@ export class CompetitionsService {
   > {
     const [competition] = await this.databaseService.database
       .select({
+        ...settingsColumns,
         id: competitions.id,
         name: competitions.name,
         type: competitions.type,
@@ -220,7 +244,12 @@ export class CompetitionsService {
       this.findViewerTeamId(userId),
     ]);
     const [competitionStandings, results] = await Promise.all([
-      this.listStandings(competitionId, participants, viewerTeamId),
+      this.listStandings(
+        competitionId,
+        participants,
+        viewerTeamId,
+        competition,
+      ),
       this.listResults(competitionId, participants),
     ]);
 
@@ -244,6 +273,7 @@ export class CompetitionsService {
     dto: CreateCompetitionDto,
   ): Promise<CompetitionView & { participants: CompetitionTeamView[] }> {
     const team = await this.requireCoachTeam(userId);
+    validateSettings(dto);
 
     await this.assertNameAvailable(dto.name);
 
@@ -256,6 +286,8 @@ export class CompetitionsService {
       [competition] = await this.databaseService.database
         .insert(competitions)
         .values({
+          ...dto,
+          format: dto.format ?? (dto.type === 'cup' ? 'knockout' : 'league'),
           teamId: team.id,
           name: dto.name,
           type: dto.type,
@@ -269,6 +301,7 @@ export class CompetitionsService {
           'A competition with this name already exists.',
         );
       }
+      this.rethrowFixtureGuard(error);
       throw error;
     }
 
@@ -281,10 +314,12 @@ export class CompetitionsService {
       await this.databaseService.database
         .delete(competitions)
         .where(eq(competitions.id, competition.id));
+      this.rethrowFixtureGuard(error);
       throw error;
     }
 
     return {
+      ...settingsView(competition),
       id: competition.id,
       name: competition.name,
       type: competition.type,
@@ -301,7 +336,24 @@ export class CompetitionsService {
     competitionId: string,
     dto: UpdateCompetitionDto,
   ): Promise<CompetitionView> {
-    await this.requireAdmin(userId, competitionId);
+    const current = await this.requireAdmin(userId, competitionId);
+    const settingsChanged =
+      settingKeys.some((key) => dto[key] !== undefined) ||
+      dto.type !== undefined;
+    if (settingsChanged) {
+      if (
+        dto.type !== undefined &&
+        dto.type !== current.type &&
+        dto.format === undefined
+      ) {
+        dto = {
+          ...dto,
+          format: dto.type === 'cup' ? 'knockout' : 'league',
+          qualifierCount: null,
+        };
+      }
+      validateSettings({ ...current, ...dto });
+    }
 
     if (dto.name !== undefined) {
       await this.assertNameAvailable(dto.name, competitionId);
@@ -320,6 +372,7 @@ export class CompetitionsService {
           'A competition with this name already exists.',
         );
       }
+      this.rethrowFixtureGuard(error);
       throw error;
     }
 
@@ -328,6 +381,7 @@ export class CompetitionsService {
     }
 
     return {
+      ...settingsView(updated),
       id: updated.id,
       name: updated.name,
       type: updated.type,
@@ -398,9 +452,14 @@ export class CompetitionsService {
       );
     }
 
-    await this.databaseService.database
-      .delete(competitionTeams)
-      .where(eq(competitionTeams.id, competitionTeamId));
+    try {
+      await this.databaseService.database
+        .delete(competitionTeams)
+        .where(eq(competitionTeams.id, competitionTeamId));
+    } catch (error) {
+      this.rethrowFixtureGuard(error);
+      throw error;
+    }
   }
 
   /* ── Results ───────────────────────────────────────────────────────────── */
@@ -412,10 +471,18 @@ export class CompetitionsService {
   ): Promise<CompetitionResultView> {
     await this.requireAdmin(userId, competitionId);
     await this.requireResultParticipants(competitionId, dto);
+    const resultId = randomUUID();
+    await validateFixtureResult(
+      this.databaseService,
+      competitionId,
+      { kind: 'manual', id: resultId },
+      dto,
+    );
 
     const [created] = await this.databaseService.database
       .insert(competitionMatches)
       .values({
+        id: resultId,
         competitionId,
         homeCompetitionTeamId: dto.homeCompetitionTeamId,
         awayCompetitionTeamId: dto.awayCompetitionTeamId,
@@ -425,6 +492,20 @@ export class CompetitionsService {
         createdByUserId: userId,
       })
       .returning();
+
+    try {
+      await syncFixtureResult(
+        this.databaseService,
+        competitionId,
+        { kind: 'manual', id: created.id },
+        dto,
+      );
+    } catch (error) {
+      await this.databaseService.database
+        .delete(competitionMatches)
+        .where(eq(competitionMatches.id, created.id));
+      throw error;
+    }
 
     return this.requireResultView(competitionId, created.id);
   }
@@ -452,6 +533,12 @@ export class CompetitionsService {
     if (!existing) {
       throw new NotFoundException('Competition result not found.');
     }
+    await validateFixtureResult(
+      this.databaseService,
+      competitionId,
+      { kind: 'manual', id: resultId },
+      dto,
+    );
     await this.databaseService.database
       .update(competitionMatches)
       .set({
@@ -464,6 +551,12 @@ export class CompetitionsService {
       })
       .where(eq(competitionMatches.id, resultId));
 
+    await syncFixtureResult(
+      this.databaseService,
+      competitionId,
+      { kind: 'manual', id: resultId },
+      dto,
+    );
     return this.requireResultView(competitionId, resultId);
   }
 
@@ -488,6 +581,11 @@ export class CompetitionsService {
     if (!existing) {
       throw new NotFoundException('Competition result not found.');
     }
+    await resetManualFixtureResult(
+      this.databaseService,
+      competitionId,
+      resultId,
+    );
     await this.databaseService.database
       .delete(competitionMatches)
       .where(eq(competitionMatches.id, resultId));
@@ -527,6 +625,12 @@ export class CompetitionsService {
     competitionId: string,
     participants: CompetitionTeamView[],
     viewerTeamId: string | null,
+    scoring: {
+      pointsWin?: number;
+      pointsDraw?: number;
+      pointsLoss?: number;
+      format?: 'league' | 'knockout' | 'league_knockout' | null;
+    },
   ): Promise<CompetitionStandingView[]> {
     const [baseline, results] = await Promise.all([
       this.databaseService.database
@@ -546,10 +650,41 @@ export class CompetitionsService {
       this.loadCompetitionResults(competitionId),
     ]);
 
+    let standingsResults = results;
+    if (scoring.format === 'league_knockout') {
+      const fixtureLinks = await this.databaseService.database
+        .select({
+          stage: competitionFixtures.stage,
+          legacyResultId: competitionFixtures.legacyResultId,
+          linkedMatchId: competitionFixtures.linkedMatchId,
+        })
+        .from(competitionFixtures)
+        .where(eq(competitionFixtures.competitionId, competitionId));
+      if (fixtureLinks.some((fixture) => fixture.stage === 'knockout')) {
+        const leagueManualIds = new Set(
+          fixtureLinks
+            .filter((fixture) => fixture.stage === 'league')
+            .map((fixture) => fixture.legacyResultId)
+            .filter((id): id is string => id !== null),
+        );
+        const leagueMatchIds = new Set(
+          fixtureLinks
+            .filter((fixture) => fixture.stage === 'league')
+            .map((fixture) => fixture.linkedMatchId)
+            .filter((id): id is string => id !== null),
+        );
+        standingsResults = results.filter((row) =>
+          row.source === 'manual'
+            ? leagueManualIds.has(row.id)
+            : row.linkedMatchId !== null && leagueMatchIds.has(row.linkedMatchId),
+        );
+      }
+    }
+
     return calculateCompetitionStandings(
       competitionId,
       participants,
-      results.map((row) => ({
+      standingsResults.map((row) => ({
         homeCompetitionTeamId: row.homeCompetitionTeamId,
         awayCompetitionTeamId: row.awayCompetitionTeamId,
         homeScore: row.homeScore,
@@ -557,6 +692,7 @@ export class CompetitionsService {
       })),
       viewerTeamId,
       baseline,
+      scoring,
     );
   }
 
@@ -566,7 +702,10 @@ export class CompetitionsService {
   ): Promise<CompetitionResultView[]> {
     const rows = await this.loadCompetitionResults(competitionId);
     const names = new Map(
-      participants.map((participant) => [participant.id, participant.displayName]),
+      participants.map((participant) => [
+        participant.id,
+        participant.displayName,
+      ]),
     );
 
     return rows.map((row) => ({
@@ -723,6 +862,68 @@ export class CompetitionsService {
    * missing competition and a foreign competition produce the same 404 —
    * no existence leak.
    */
+  private rethrowFixtureGuard(error: unknown): void {
+    const cause = error as {
+      cause?: { code?: string; message?: string };
+      code?: string;
+      message?: string;
+    };
+    const detail = cause?.cause ?? cause;
+    if (detail?.code === 'P0001') throw new ConflictException(detail.message);
+  }
+
+  async listFixtures(userId: string, competitionId: string) {
+    const [competition] = await this.databaseService.database
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.id, competitionId))
+      .limit(1);
+    if (!competition) throw new NotFoundException('Competition not found.');
+    return this.databaseService.database
+      .select()
+      .from(competitionFixtures)
+      .where(eq(competitionFixtures.competitionId, competitionId))
+      .orderBy(
+        asc(competitionFixtures.stage),
+        asc(competitionFixtures.round),
+        asc(competitionFixtures.position),
+      );
+  }
+
+  async generateFixtures(
+    userId: string,
+    competitionId: string,
+    regenerate = false,
+  ) {
+    const competition = await this.requireAdmin(userId, competitionId);
+    const participants = await this.listParticipants(competitionId);
+    const plan = planFixtures(
+      competition,
+      participants.map((row) => row.id),
+    );
+    // The function locks the competition, rechecks the inputs and writes the
+    // whole plan atomically. This works with Neon's HTTP driver.
+    const expected = Object.fromEntries(
+      ['type', ...settingKeys].map((key) => [
+        key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+        competition[key as keyof typeof competition],
+      ]),
+    );
+    try {
+      await this.databaseService.database
+        .execute(sql`select generate_competition_fixtures(
+        ${competitionId}::uuid, ${userId}::text, ${JSON.stringify(expected)}::jsonb,
+        ${JSON.stringify(participants.map((row) => row.id))}::jsonb,
+        ${JSON.stringify(plan)}::jsonb, ${regenerate}::boolean)`);
+    } catch (error) {
+      this.rethrowFixtureGuard(error);
+      if (isUniqueViolation(error))
+        throw new ConflictException('Fixtures already exist.');
+      throw error;
+    }
+    return this.listFixtures(userId, competitionId);
+  }
+
   private async requireAdmin(userId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
       .select()
@@ -788,6 +989,7 @@ export class CompetitionsService {
           'This team is already a participant in the competition.',
         );
       }
+      this.rethrowFixtureGuard(error);
       throw error;
     }
   }
@@ -805,7 +1007,7 @@ export class CompetitionsService {
       })
       .from(competitionTeams)
       .where(eq(competitionTeams.competitionId, competitionId))
-      .orderBy(asc(competitionTeams.createdAt));
+      .orderBy(asc(competitionTeams.createdAt), asc(competitionTeams.id));
 
     return rows;
   }

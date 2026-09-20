@@ -48,8 +48,9 @@ function nameKey(value: string) {
 }
 
 /**
- * Calculates a conventional 3/1/0 league table from competition results.
- * Ties are ordered by goal difference, goals scored, wins, then team name.
+ * Calculates a configurable league table (3/1/0 by default).
+ * Sporting tiebreaks are points, goal difference and goals scored.
+ * Team name only stabilizes display order for otherwise equal rows.
  * When every team is on zero, that naturally produces alphabetical 1..N.
  */
 export function calculateCompetitionStandings(
@@ -58,6 +59,11 @@ export function calculateCompetitionStandings(
   results: CompetitionStandingResult[],
   viewerTeamId: string | null,
   baselines: CompetitionStandingBaseline[] = [],
+  scoring: {
+    pointsWin?: number;
+    pointsDraw?: number;
+    pointsLoss?: number;
+  } = {},
 ): CalculatedCompetitionStanding[] {
   const baselineByName = new Map(
     baselines.map((row) => [nameKey(row.teamName), row]),
@@ -98,12 +104,13 @@ export function calculateCompetitionStandings(
     row.goalsAgainst += goalsAgainst;
     if (goalsFor > goalsAgainst) {
       row.won += 1;
-      row.points += 3;
+      row.points += scoring.pointsWin ?? 3;
     } else if (goalsFor === goalsAgainst) {
       row.drawn += 1;
-      row.points += 1;
+      row.points += scoring.pointsDraw ?? 1;
     } else {
       row.lost += 1;
+      row.points += scoring.pointsLoss ?? 0;
     }
   };
 
@@ -131,9 +138,6 @@ export function calculateCompetitionStandings(
 
       const goalsFor = b.goalsFor - a.goalsFor;
       if (goalsFor !== 0) return goalsFor;
-
-      const wins = b.won - a.won;
-      if (wins !== 0) return wins;
 
       return a.teamName.localeCompare(b.teamName, undefined, {
         sensitivity: 'base',

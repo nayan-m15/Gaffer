@@ -12,6 +12,7 @@ import { zodValidate } from '../common/zod-validate';
 import {
   athletes,
   athleteMatchStats,
+  competitionFixtures,
   competitionMatches,
   competitions,
   competitionTeams,
@@ -591,8 +592,13 @@ export class StatisticsService {
     }
 
     const competitionIds = teamCompetitions.map((row) => row.competition.id);
-    const [participants, baselineStandings, manualResults, liveResults] =
-      await Promise.all([
+    const [
+      participants,
+      baselineStandings,
+      manualResults,
+      liveResults,
+      fixtureLinks,
+    ] = await Promise.all([
         this.databaseService.database
           .select({
             id: competitionTeams.id,
@@ -608,6 +614,7 @@ export class StatisticsService {
           .where(inArray(standings.competitionId, competitionIds)),
         this.databaseService.database
           .select({
+            id: competitionMatches.id,
             competitionId: competitionMatches.competitionId,
             homeCompetitionTeamId: competitionMatches.homeCompetitionTeamId,
             awayCompetitionTeamId: competitionMatches.awayCompetitionTeamId,
@@ -618,6 +625,7 @@ export class StatisticsService {
           .where(inArray(competitionMatches.competitionId, competitionIds)),
         this.databaseService.database
           .select({
+            matchId: matches.id,
             competitionId: matches.competitionId,
             ownCompetitionTeamId: competitionTeams.id,
             opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
@@ -649,6 +657,15 @@ export class StatisticsService {
             matches.competitionId,
             competitionTeams.id,
           ),
+        this.databaseService.database
+          .select({
+            competitionId: competitionFixtures.competitionId,
+            stage: competitionFixtures.stage,
+            legacyResultId: competitionFixtures.legacyResultId,
+            linkedMatchId: competitionFixtures.linkedMatchId,
+          })
+          .from(competitionFixtures)
+          .where(inArray(competitionFixtures.competitionId, competitionIds)),
       ]);
 
     return teamCompetitions.map(({ competition }) => {
@@ -668,39 +685,61 @@ export class StatisticsService {
           goalsAgainst: standing.goalsAgainst,
           points: standing.points,
         }));
+      let competitionManualResults = manualResults.filter(
+        (result) => result.competitionId === competition.id,
+      );
+      let competitionLiveResults = liveResults.filter(
+        (result) =>
+          result.competitionId === competition.id &&
+          result.opponentCompetitionTeamId !== null,
+      );
+      const competitionFixtureLinks = fixtureLinks.filter(
+        (fixture) => fixture.competitionId === competition.id,
+      );
+      if (
+        competition.format === 'league_knockout' &&
+        competitionFixtureLinks.some((fixture) => fixture.stage === 'knockout')
+      ) {
+        const leagueManualIds = new Set(
+          competitionFixtureLinks
+            .filter((fixture) => fixture.stage === 'league')
+            .map((fixture) => fixture.legacyResultId)
+            .filter((id): id is string => id !== null),
+        );
+        const leagueMatchIds = new Set(
+          competitionFixtureLinks
+            .filter((fixture) => fixture.stage === 'league')
+            .map((fixture) => fixture.linkedMatchId)
+            .filter((id): id is string => id !== null),
+        );
+        competitionManualResults = competitionManualResults.filter((result) =>
+          leagueManualIds.has(result.id),
+        );
+        competitionLiveResults = competitionLiveResults.filter((result) =>
+          leagueMatchIds.has(result.matchId),
+        );
+      }
+
       const resultRows = [
-        ...manualResults
-          .filter((result) => result.competitionId === competition.id)
-          .map((result) => ({
-            homeCompetitionTeamId: result.homeCompetitionTeamId,
-            awayCompetitionTeamId: result.awayCompetitionTeamId,
-            homeScore: result.homeScore,
-            awayScore: result.awayScore,
-          })),
-        ...liveResults
-          .filter(
-            (result) =>
-              result.competitionId === competition.id &&
-              result.opponentCompetitionTeamId !== null,
-          )
-          .map((result) => {
-            const opponentCompetitionTeamId =
-              result.opponentCompetitionTeamId!;
-            return {
-              homeCompetitionTeamId: result.isHome
-                ? result.ownCompetitionTeamId
-                : opponentCompetitionTeamId,
-              awayCompetitionTeamId: result.isHome
-                ? opponentCompetitionTeamId
-                : result.ownCompetitionTeamId,
-              homeScore: result.isHome
-                ? result.teamScore
-                : result.opponentScore,
-              awayScore: result.isHome
-                ? result.opponentScore
-                : result.teamScore,
-            };
-          }),
+        ...competitionManualResults.map((result) => ({
+          homeCompetitionTeamId: result.homeCompetitionTeamId,
+          awayCompetitionTeamId: result.awayCompetitionTeamId,
+          homeScore: result.homeScore,
+          awayScore: result.awayScore,
+        })),
+        ...competitionLiveResults.map((result) => {
+          const opponentCompetitionTeamId = result.opponentCompetitionTeamId!;
+          return {
+            homeCompetitionTeamId: result.isHome
+              ? result.ownCompetitionTeamId
+              : opponentCompetitionTeamId,
+            awayCompetitionTeamId: result.isHome
+              ? opponentCompetitionTeamId
+              : result.ownCompetitionTeamId,
+            homeScore: result.isHome ? result.teamScore : result.opponentScore,
+            awayScore: result.isHome ? result.opponentScore : result.teamScore,
+          };
+        }),
       ];
 
       return {
@@ -717,6 +756,7 @@ export class StatisticsService {
           resultRows,
           teamId,
           baselines,
+          competition,
         ),
       };
     });

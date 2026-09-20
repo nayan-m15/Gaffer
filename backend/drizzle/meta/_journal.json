@@ -197,6 +197,20 @@
       "when": 1790180000005,
       "tag": "0026_competition_match_results",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790180000006,
+      "tag": "0027_competition_fixtures",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790180000007,
+      "tag": "0028_repair_competition_fixture_schema",
+      "breakpoints": true
     }
   ]
 }
