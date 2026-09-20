@@ -211,6 +211,13 @@
       "when": 1790180000007,
       "tag": "0028_repair_competition_fixture_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790180000008,
+      "tag": "0029_competition_fixture_events",
+      "breakpoints": true
     }
   ]
 }

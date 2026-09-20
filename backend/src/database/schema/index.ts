@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
   check,
   foreignKey,
@@ -364,12 +365,25 @@ export const events = pgTable(
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
+    // Generated shared-competition fixtures are surfaced through the normal
+    // team Events calendar. This durable link makes the sync idempotent and
+    // lets schedule/opponent/progression changes update the same event instead
+    // of creating duplicates. Null for ordinary manually-created events.
+    competitionFixtureId: uuid('competition_fixture_id').references(
+      (): AnyPgColumn => competitionFixtures.id,
+      { onDelete: 'cascade' },
+    ),
     ...timestamps,
   },
   (table) => [
     index('events_team_id_index').on(table.teamId),
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
     index('events_competition_id_index').on(table.competitionId),
+    index('events_competition_fixture_id_index').on(table.competitionFixtureId),
+    uniqueIndex('events_team_competition_fixture_unique').on(
+      table.teamId,
+      table.competitionFixtureId,
+    ),
   ],
 );
 
