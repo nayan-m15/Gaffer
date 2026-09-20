@@ -195,14 +195,18 @@ export default function InjuryRecoveryPage() {
   };
 
   /**
-   * One entry per athlete with at least one injury record, alphabetised —
-   * the Overview tab can only ever focus an athlete who has a record, so
-   * this (not the full roster) is what the switcher offers.
+   * One entry per athlete with a currently *open* injury, alphabetised.
+   *
+   * A player who has fully returned has nothing for the 3D model to mark —
+   * it only ever highlights open injuries — so offering them here would
+   * land the coach on a blank-looking model with no obvious explanation.
+   * They're still reachable (History tab, or the deep-linked URL); this
+   * switcher just never puts you there itself.
    */
   const playerOptions = useMemo(() => {
     const byAthlete = new Map<string, { id: string; label: string }>();
     for (const injury of injuries) {
-      if (byAthlete.has(injury.athleteId)) {
+      if (!injury.isOpen || byAthlete.has(injury.athleteId)) {
         continue;
       }
       const name = athleteName(injury);
@@ -224,11 +228,13 @@ export default function InjuryRecoveryPage() {
     [playerOptions],
   );
 
-  /** Jumps to that athlete's most-relevant record, matching the same
-   * attention ordering (open first, worst severity, most recent) the rest
-   * of the page already sorts `injuries` by. */
+  /** Jumps to that athlete's most-relevant *open* record, matching the same
+   * attention ordering (worst severity, most recent) the rest of the page
+   * already sorts `injuries` by. */
   const switchPlayer = (athleteId: string) => {
-    const match = injuries.find((injury) => injury.athleteId === athleteId);
+    const match = injuries.find(
+      (injury) => injury.athleteId === athleteId && injury.isOpen,
+    );
     if (match) {
       selectInjury(match);
     }
