@@ -15,27 +15,19 @@ import {
   enqueueEvent,
   enqueueOperation,
   getOfflineDeviceId,
+  hasSyncedPreparedMatch,
   listQueuedEvents,
   queuedEventAsTimelineRow,
   readCachedResponse,
+  readSyncedMatchSquad,
+  readSyncedOpponentSquad,
+  readSyncedPreparedMatch,
   readSyncedMatchEvents,
   readSyncedMatchProjection,
   rejectQueuedEvent,
   setQueuedItemOutcome,
   setQueuedEventState,
 } from "@/offline/match-store";
-
-async function cachedFetch<T>(key: string, load: () => Promise<T>): Promise<T> {
-  try {
-    const value = await load();
-    await cacheResponse(key, value);
-    return value;
-  } catch (error) {
-    const cached = await readCachedResponse<T>(key);
-    if (cached !== null) return cached;
-    throw error;
-  }
-}
 
 export async function fetchMatch(matchId: string) {
   try {
@@ -45,7 +37,9 @@ export async function fetchMatch(matchId: string) {
     await cacheResponse(`match:${matchId}`, match);
     return match;
   } catch (error) {
-    const match = await readCachedResponse<MatchRecord>(`match:${matchId}`);
+    const match =
+      (await readSyncedPreparedMatch(matchId)) ??
+      (await readCachedResponse<MatchRecord>(`match:${matchId}`));
     if (!match) throw error;
     const projection = await readSyncedMatchProjection(matchId);
     return projection
@@ -59,16 +53,40 @@ export async function fetchMatch(matchId: string) {
   }
 }
 
-export function fetchMatchSquad(matchId: string) {
-  return cachedFetch(`squad:${matchId}`, () =>
-    apiFetch<MatchSquadAthlete[]>(`/matches/${matchId}/squad`),
-  );
+export async function fetchMatchSquad(matchId: string) {
+  try {
+    const squad = await apiFetch<MatchSquadAthlete[]>(`/matches/${matchId}/squad`);
+    await cacheResponse(`squad:${matchId}`, squad);
+    return squad;
+  } catch (error) {
+    const synced = await readSyncedMatchSquad(matchId);
+    if (synced.length > 0 || (await hasSyncedPreparedMatch(matchId))) {
+      return synced;
+    }
+    const cached = await readCachedResponse<MatchSquadAthlete[]>(`squad:${matchId}`);
+    if (cached) return cached;
+    throw error;
+  }
 }
 
-export function fetchMatchOpponentSquad(matchId: string) {
-  return cachedFetch(`opponent-squad:${matchId}`, () =>
-    apiFetch<OpponentMatchPlayer[]>(`/matches/${matchId}/opponent-squad`),
-  );
+export async function fetchMatchOpponentSquad(matchId: string) {
+  try {
+    const squad = await apiFetch<OpponentMatchPlayer[]>(
+      `/matches/${matchId}/opponent-squad`,
+    );
+    await cacheResponse(`opponent-squad:${matchId}`, squad);
+    return squad;
+  } catch (error) {
+    const synced = await readSyncedOpponentSquad(matchId);
+    if (synced.length > 0 || (await hasSyncedPreparedMatch(matchId))) {
+      return synced;
+    }
+    const cached = await readCachedResponse<OpponentMatchPlayer[]>(
+      `opponent-squad:${matchId}`,
+    );
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function fetchMatchEvents(matchId: string) {

@@ -146,6 +146,14 @@ export class MatchesController {
     return this.matchesService.updateClock(user.id, matchId, dto);
   }
 
+  @Get(':matchId/clock-operations')
+  async listClockOperations(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.listClockOperations(user.id, matchId);
+  }
+
   @Get(':matchId')
   async findOne(
     @CurrentUser() user: AuthenticatedRequest['user'],

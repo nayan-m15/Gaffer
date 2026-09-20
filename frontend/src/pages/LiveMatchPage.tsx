@@ -283,7 +283,7 @@ export default function LiveMatchPage() {
   const { team } = useAuth();
 
   const matchQuery = useMatch(matchId);
-  const clockAuthorityRevision = matchQuery.data?.updatedAt;
+  const clockAuthorityRevision = matchQuery.data?.clockRevision ?? 0;
   const refetchMatch = matchQuery.refetch;
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
@@ -582,20 +582,23 @@ export default function LiveMatchPage() {
     (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
       if (!matchId) return;
       void (async () => {
-        const version = await saveClockAnchor(matchId, {
+        const saved = await saveClockAnchor(matchId, {
           period: nextPeriod,
           running: nextRunning,
           elapsedMs: elapsed,
-          authorityRevision: clockAuthorityRevision ?? "offline",
+          authorityRevision: String(clockAuthorityRevision),
         });
         if (!navigator.onLine) return;
         try {
           await updateMatchClock({
+            operationId: saved.operationId,
+            baseRevision: clockAuthorityRevision,
+            clientCreatedAt: saved.clientCreatedAt,
             period: nextPeriod,
             running: nextRunning,
             elapsedMs: elapsed,
           });
-          markClockAnchorSynced(matchId, version);
+          markClockAnchorSynced(matchId, saved.version);
           lastAppliedClockRevisionRef.current = null;
           await refetchMatch();
         } catch (error) {
@@ -626,6 +629,9 @@ export default function LiveMatchPage() {
         if (!anchor || anchor.uncertain) return;
         try {
           await updateMatchClock({
+            operationId: anchor.operationId,
+            baseRevision: Number(anchor.authorityRevision) || 0,
+            clientCreatedAt: anchor.clientCreatedAt,
             period: anchor.period,
             running: anchor.running,
             elapsedMs: anchor.elapsedMs,

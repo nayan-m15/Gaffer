@@ -6,17 +6,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { projectCanonicalEvents } from '@gaffer/match-domain';
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  isNotNull,
-  isNull,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
@@ -28,6 +18,7 @@ import {
   matchEventObservations,
   matchEventOperations,
   matchEventReviews,
+  matchClockOperations,
   matchProjectionState,
   matches,
   opponentMatchPlayers,
@@ -839,34 +830,46 @@ export class MatchesService {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
-    const isRunning = match.clockStartedAt !== null;
-    if (match.clockPeriod === dto.period && isRunning === dto.running) {
-      return this.findOne(userId, matchId);
-    }
-    const [updated] = await this.databaseService.database
-      .update(matches)
-      .set({
-        clockPeriod: dto.period,
-        clockElapsedMs: dto.elapsedMs,
-        clockStartedAt: dto.running ? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(matches.id, matchId),
-          or(
-            ne(matches.clockPeriod, dto.period),
-            dto.running
-              ? isNull(matches.clockStartedAt)
-              : isNotNull(matches.clockStartedAt),
-          ),
-        ),
+    const operationId = dto.operationId ?? randomUUID();
+    const clientCreatedAt = dto.clientCreatedAt ?? new Date().toISOString();
+    const baseRevision = dto.baseRevision ?? match.clockRevision;
+    const payloadHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          matchId,
+          period: dto.period,
+          elapsedMs: dto.elapsedMs,
+          running: dto.running,
+          baseRevision,
+          clientCreatedAt,
+        }),
       )
-      .returning();
-    if (!updated) {
-      return this.findOne(userId, matchId);
-    }
+      .digest('hex');
+    await this.databaseService.database.execute(sql`
+      select * from apply_match_clock_operation(
+        ${operationId}::uuid,
+        ${matchId}::uuid,
+        ${userId}::text,
+        ${dto.period}::text,
+        ${dto.elapsedMs}::integer,
+        ${dto.running}::boolean,
+        ${baseRevision}::integer,
+        ${payloadHash}::text,
+        ${clientCreatedAt}::timestamptz
+      )
+    `);
     return this.findOne(userId, matchId);
+  }
+
+  async listClockOperations(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    return this.databaseService.database
+      .select()
+      .from(matchClockOperations)
+      .where(eq(matchClockOperations.matchId, matchId))
+      .orderBy(desc(matchClockOperations.createdAt))
+      .limit(200);
   }
 
   async finaliseProjection(
@@ -968,11 +971,24 @@ export class MatchesService {
     matchId: string,
     observationId: string,
   ) {
-    const canonicalEventId = await this.canonicalEventIdForObservation(
-      matchId,
-      observationId,
-    );
-    return this.requireMatchEvent(matchId, canonicalEventId);
+    const [logged] = await this.databaseService.database
+      .select({ event: matchEvents })
+      .from(matchEventMemberships)
+      .innerJoin(
+        matchEvents,
+        eq(matchEvents.id, matchEventMemberships.canonicalEventId),
+      )
+      .where(
+        and(
+          eq(matchEventMemberships.observationId, observationId),
+          eq(matchEvents.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    if (!logged) {
+      throw new NotFoundException('Canonical event membership not found.');
+    }
+    return logged.event;
   }
 
   private async recordOperation(input: {
