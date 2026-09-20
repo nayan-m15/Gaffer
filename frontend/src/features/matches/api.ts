@@ -39,7 +39,9 @@ async function cachedFetch<T>(key: string, load: () => Promise<T>): Promise<T> {
 
 export async function fetchMatch(matchId: string) {
   try {
-    const match = await apiFetch<MatchRecord>(`/matches/${matchId}`);
+    const match = await apiFetch<MatchRecord>(`/matches/${matchId}`, {
+      cache: "no-store",
+    });
     await cacheResponse(`match:${matchId}`, match);
     return match;
   } catch (error) {

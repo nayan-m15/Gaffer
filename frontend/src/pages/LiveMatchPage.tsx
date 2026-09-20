@@ -283,6 +283,8 @@ export default function LiveMatchPage() {
   const { team } = useAuth();
 
   const matchQuery = useMatch(matchId);
+  const clockAuthorityRevision = matchQuery.data?.updatedAt;
+  const refetchMatch = matchQuery.refetch;
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
@@ -584,7 +586,7 @@ export default function LiveMatchPage() {
           period: nextPeriod,
           running: nextRunning,
           elapsedMs: elapsed,
-          authorityRevision: matchQuery.data?.updatedAt ?? "offline",
+          authorityRevision: clockAuthorityRevision ?? "offline",
         });
         if (!navigator.onLine) return;
         try {
@@ -594,6 +596,8 @@ export default function LiveMatchPage() {
             elapsedMs: elapsed,
           });
           markClockAnchorSynced(matchId, version);
+          lastAppliedClockRevisionRef.current = null;
+          await refetchMatch();
         } catch (error) {
           if (navigator.onLine) {
             setActionError(
@@ -605,7 +609,12 @@ export default function LiveMatchPage() {
         }
       })();
     },
-    [matchId, matchQuery.data?.updatedAt, updateMatchClock],
+    [
+      matchId,
+      clockAuthorityRevision,
+      refetchMatch,
+      updateMatchClock,
+    ],
   );
 
   useEffect(() => {
@@ -622,6 +631,8 @@ export default function LiveMatchPage() {
             elapsedMs: anchor.elapsedMs,
           });
           markClockAnchorSynced(matchId, anchor.updatedAt);
+          lastAppliedClockRevisionRef.current = null;
+          await refetchMatch();
         } catch (error) {
           setActionError(
             error instanceof Error
@@ -634,7 +645,7 @@ export default function LiveMatchPage() {
     window.addEventListener("online", flushPendingClock);
     flushPendingClock();
     return () => window.removeEventListener("online", flushPendingClock);
-  }, [matchId, updateMatchClock]);
+  }, [matchId, refetchMatch, updateMatchClock]);
 
   const startClock = () => {
     setRunning(true);
@@ -1401,7 +1412,7 @@ export default function LiveMatchPage() {
             className="inline-flex items-center gap-1.5 rounded-md border border-[#233747] px-2.5 py-1.5 text-xs font-semibold text-[#c5ced6] hover:border-[#00d99a]/60 hover:text-white"
           >
             <LayoutDashboard className="size-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Dashboard</span>
+            <span>Dashboard</span>
           </button>
         </div>
         <div className="flex items-center gap-2">

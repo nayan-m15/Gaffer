@@ -266,6 +266,25 @@ test("assistant controls and remote clock changes update without a refresh", asy
   await expect(
     page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible({ timeout: 4_000 });
+
+  match = {
+    ...match,
+    clockPeriod: "half_time",
+    clockStartedAt: null,
+    updatedAt: "2026-09-11T10:02:00.000Z",
+  };
+  await expect(page.getByText("HALF-TIME", { exact: true })).toBeVisible({
+    timeout: 4_000,
+  });
+
+  match = {
+    ...match,
+    clockPeriod: "first_half",
+    updatedAt: "2026-09-11T10:03:00.000Z",
+  };
+  await expect(page.getByText("1ST HALF", { exact: true })).toBeVisible({
+    timeout: 4_000,
+  });
 });
 
 test("dashboard live match clock advances without a page refresh", async ({

@@ -64,12 +64,24 @@ export function OfflineReadinessPanel({
 
   const checks = readiness
     ? [
-        ["Match downloaded", readiness.matchCached],
-        ["Squad downloaded", readiness.squadCached],
-        ["Events downloaded", readiness.eventsCached],
-        ["App shell cached", readiness.appShellCached],
-        ["Local write/read passed", readiness.localDatabaseWritable],
-        ["Persistent storage granted", readiness.persistentStorage],
+        ["Match downloaded", readiness.matchCached, "Needs attention"],
+        ["Squad downloaded", readiness.squadCached, "Needs attention"],
+        ["Events downloaded", readiness.eventsCached, "Needs attention"],
+        [
+          "App shell cached",
+          readiness.appShellCached,
+          import.meta.env.DEV ? "Production PWA only" : "Needs attention",
+        ],
+        [
+          "Local write/read passed",
+          readiness.localDatabaseWritable,
+          "Needs attention",
+        ],
+        [
+          "Persistent storage granted",
+          readiness.persistentStorage,
+          "Browser managed",
+        ],
       ] as const
     : [];
 
@@ -86,17 +98,22 @@ export function OfflineReadinessPanel({
         {error ? <p className="mt-3 text-sm text-[#ff7377]">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-[#00d99a]">{message}</p> : null}
         <div className="mt-4 space-y-2">
-          {readiness ? checks.map(([label, passed]) => (
+          {readiness ? checks.map(([label, passed, fallback]) => (
             <div key={label} className="flex items-center justify-between rounded-lg bg-[#0c1218] px-3 py-2 text-sm">
               <span className="text-[#c5ced6]">{label}</span>
-              <span className={passed ? "text-[#00d99a]" : "text-[#ffbe2e]"}>{passed ? "Ready" : "Needs attention"}</span>
+              <span className={passed ? "text-[#00d99a]" : "text-[#ffbe2e]"}>{passed ? "Ready" : fallback}</span>
             </div>
           )) : <p className="text-sm text-[#9fadb8]">Checking this device…</p>}
         </div>
         {readiness ? (
-          <p className="mt-3 text-xs text-[#7f8d98]">
-            Storage used: {formatBytes(readiness.usageBytes)} of {formatBytes(readiness.quotaBytes)}
-          </p>
+          <div className="mt-3 space-y-1 text-xs text-[#7f8d98]">
+            <p>
+              Storage used: {formatBytes(readiness.usageBytes)} of {formatBytes(readiness.quotaBytes)}
+            </p>
+            {!readiness.persistentStorage ? (
+              <p>Your browser may still store offline data, but it has not guaranteed protection from automatic cleanup.</p>
+            ) : null}
+          </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-[#00d99a] px-3 py-2 text-sm font-semibold text-[#05130f]">Check again</button>

@@ -530,14 +530,11 @@ export function useFinishMatch(matchId: string) {
 }
 
 export function useUpdateMatchClock(matchId: string) {
-  const queryClient = useQueryClient();
   return useMutation({
     scope: { id: `match-clock-${matchId}` },
     networkMode: "always",
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
       updateMatchClock(matchId, input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
   });
 }
 
