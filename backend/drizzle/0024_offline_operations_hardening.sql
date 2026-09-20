@@ -1,4 +1,4 @@
-CREATE TABLE "match_clock_operations" (
+CREATE TABLE IF NOT EXISTS "match_clock_operations" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"match_id" uuid NOT NULL,
 	"actor_user_id" text NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE "match_clock_operations" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "sync_client_telemetry" (
+CREATE TABLE IF NOT EXISTS "sync_client_telemetry" (
 	"device_id" uuid PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"team_id" uuid,
@@ -25,15 +25,27 @@ CREATE TABLE "sync_client_telemetry" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "matches" ADD COLUMN "clock_revision" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "sync_upload_receipts" ADD COLUMN "processing_duration_ms" integer;--> statement-breakpoint
-ALTER TABLE "match_clock_operations" ADD CONSTRAINT "match_clock_operations_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "match_clock_operations" ADD CONSTRAINT "match_clock_operations_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sync_client_telemetry" ADD CONSTRAINT "sync_client_telemetry_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sync_client_telemetry" ADD CONSTRAINT "sync_client_telemetry_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "match_clock_operations_match_revision_index" ON "match_clock_operations" USING btree ("match_id","applied_revision");--> statement-breakpoint
-CREATE INDEX "match_clock_operations_actor_index" ON "match_clock_operations" USING btree ("actor_user_id");--> statement-breakpoint
-CREATE INDEX "sync_client_telemetry_team_index" ON "sync_client_telemetry" USING btree ("team_id","updated_at");
+ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "clock_revision" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "sync_upload_receipts" ADD COLUMN IF NOT EXISTS "processing_duration_ms" integer;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "match_clock_operations" ADD CONSTRAINT "match_clock_operations_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "match_clock_operations" ADD CONSTRAINT "match_clock_operations_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "sync_client_telemetry" ADD CONSTRAINT "sync_client_telemetry_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "sync_client_telemetry" ADD CONSTRAINT "sync_client_telemetry_team_id_teams_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."teams"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "match_clock_operations_match_revision_index" ON "match_clock_operations" USING btree ("match_id","applied_revision");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "match_clock_operations_actor_index" ON "match_clock_operations" USING btree ("actor_user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "sync_client_telemetry_team_index" ON "sync_client_telemetry" USING btree ("team_id","updated_at");
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION apply_match_clock_operation(
   p_operation_id uuid,
