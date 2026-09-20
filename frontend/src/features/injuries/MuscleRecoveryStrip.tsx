@@ -30,6 +30,11 @@ const GROUP_SHAPES: Record<RecoveryGroup, string> = {
 const BODY_OUTLINE =
   "M20 3a5.5 5.5 0 015.5 5.5A5.5 5.5 0 0120 14a5.5 5.5 0 01-5.5-5.5A5.5 5.5 0 0120 3zm-7 17a7 5 0 0114 0v14l-1 10 1 24h-5l-2-22-2 22h-5l1-24-1-10z";
 
+/** Tailwind's `red-700` (#b91c1c) as an sRGB feColorMatrix output row, so the
+ * recoloured mannequin matches the 3D model's own hover-red exactly. */
+const HIGHLIGHT_COLOR_MATRIX =
+  "0 0 0 0 0.725  0 0 0 0 0.110  0 0 0 0 0.110  0 0 0 1 0";
+
 function RecoveryGlyph({
   group,
   percent,
@@ -41,10 +46,41 @@ function RecoveryGlyph({
    * `smooth-player-snapshot.ts`) — null while it's still loading. */
   snapshotUrl: string | null;
 }) {
-  const clipId = useId();
-  // The glyph fills from the bottom up, so a 61% reading is visibly emptier
-  // than a 92% one even before the number is read.
-  const fillHeight = (percent / 100) * 72;
+  const groupClipId = useId();
+  const filterId = useId();
+  // Same two-tone language as the 3D model: a near-white body at rest, and
+  // its dark-red hover colour once a region needs attention — no
+  // traffic-light amber tier here, and nothing drawn at all once ready.
+  const needsHighlight = percent < 90;
+  // The whole group glows at once rather than filling bottom-up: a "legs"
+  // reading covers both legs' quad/hamstring/knee/calf/ankle at once, so a
+  // partial-height reveal within that band would land on whichever sub-part
+  // happens to sit lowest (the ankle) regardless of which one is actually
+  // hurt. Intensity carries the magnitude instead — lower percent glows
+  // stronger — without implying a location the data doesn't have.
+  const highlightOpacity = 0.4 + 0.6 * (1 - percent / 100);
+
+  if (!snapshotUrl) {
+    // Loading placeholder: no raster snapshot exists yet to recolour, so
+    // this falls back to the old hand-drawn block until it resolves.
+    return (
+      <svg
+        viewBox="0 0 40 72"
+        className="h-16 w-auto"
+        role="presentation"
+        aria-hidden="true"
+      >
+        <path d={BODY_OUTLINE} className="fill-white/20" />
+        {needsHighlight && (
+          <path
+            d={GROUP_SHAPES[group]}
+            className="fill-red-700"
+            opacity={highlightOpacity}
+          />
+        )}
+      </svg>
+    );
+  }
 
   return (
     <svg
@@ -53,23 +89,33 @@ function RecoveryGlyph({
       role="presentation"
       aria-hidden="true"
     >
-      <clipPath id={clipId}>
-        <rect x="0" y={72 - fillHeight} width="40" height={fillHeight} />
-      </clipPath>
-      {snapshotUrl ? (
-        <image href={snapshotUrl} x="0" y="0" width="40" height="72" opacity="0.9" />
-      ) : (
-        <path d={BODY_OUTLINE} className="fill-white/20" />
+      <defs>
+        <clipPath id={groupClipId}>
+          <path d={GROUP_SHAPES[group]} />
+        </clipPath>
+        {/* Recolours the mannequin's own pixels to the highlight red,
+         * keeping its alpha — so the highlight hugs the actual silhouette
+         * instead of a synthetic block sitting on top of it. */}
+        <filter id={filterId} colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values={HIGHLIGHT_COLOR_MATRIX} />
+        </filter>
+      </defs>
+
+      <image href={snapshotUrl} x="0" y="0" width="40" height="72" opacity="0.9" />
+
+      {needsHighlight && (
+        <g clipPath={`url(#${groupClipId})`}>
+          <image
+            href={snapshotUrl}
+            x="0"
+            y="0"
+            width="40"
+            height="72"
+            filter={`url(#${filterId})`}
+            opacity={highlightOpacity}
+          />
+        </g>
       )}
-      <path d={GROUP_SHAPES[group]} className="fill-white/35" />
-      <path
-        d={GROUP_SHAPES[group]}
-        clipPath={`url(#${clipId})`}
-        // Same two-tone language as the 3D model: a near-white body at rest,
-        // and its dark-red hover colour once a region needs attention —
-        // no traffic-light amber tier here.
-        className={percent >= 90 ? "fill-white/90" : "fill-red-700"}
-      />
     </svg>
   );
 }

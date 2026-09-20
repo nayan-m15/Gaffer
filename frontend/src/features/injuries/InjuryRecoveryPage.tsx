@@ -1,14 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { HeartPulse, Loader2, Plus, ShieldCheck } from "lucide-react";
+import {
+  Download,
+  HeartPulse,
+  Loader2,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { AppCard } from "@/components/app/AppCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { AnimatedTabs } from "@/components/ui/tabs";
+import { MultiStepLoader } from "@/components/ui/multi-step-loader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { getAthletes } from "@/services/athletes";
 import { cn } from "@/lib/utils";
+import { fetchInjuries, fetchInjury } from "./api";
 import { BodyModelViewer } from "./BodyModelViewer";
 import { CloseInjuryDialog } from "./CloseInjuryDialog";
 import { InjuryDetailCard } from "./InjuryDetailCard";
@@ -17,6 +33,7 @@ import { InjuryTimeline } from "./InjuryTimeline";
 import { LogInjuryDialog } from "./LogInjuryDialog";
 import { MuscleRecoveryStrip } from "./MuscleRecoveryStrip";
 import { injuryTitle } from "./body-regions";
+import { downloadInjuryReportPdf, type InjuryReportEntry } from "./exportInjuryReportPdf";
 import {
   useCloseInjury,
   useCreateInjury,
@@ -93,7 +110,10 @@ export default function InjuryRecoveryPage() {
   const [isCloseOpen, setCloseOpen] = useState(false);
   const [closeError, setCloseError] = useState<string | undefined>();
   const [selectedRegion, setSelectedRegion] = useState<BodyRegion | null>(null);
+  const [isDownloadingReport, setDownloadingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | undefined>();
 
+  const { team } = useAuth();
   const today = todayIso();
   const injuriesQuery = useInjuries();
   const createInjury = useCreateInjury();
@@ -174,6 +194,46 @@ export default function InjuryRecoveryPage() {
     setTab("overview");
   };
 
+  /**
+   * One entry per athlete with at least one injury record, alphabetised —
+   * the Overview tab can only ever focus an athlete who has a record, so
+   * this (not the full roster) is what the switcher offers.
+   */
+  const playerOptions = useMemo(() => {
+    const byAthlete = new Map<string, { id: string; label: string }>();
+    for (const injury of injuries) {
+      if (byAthlete.has(injury.athleteId)) {
+        continue;
+      }
+      const name = athleteName(injury);
+      byAthlete.set(injury.athleteId, {
+        id: injury.athleteId,
+        label:
+          injury.athleteSquadNumber != null
+            ? `#${injury.athleteSquadNumber} ${name}`
+            : name,
+      });
+    }
+    return Array.from(byAthlete.values()).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [injuries]);
+
+  const playerItems = useMemo(
+    () => Object.fromEntries(playerOptions.map((option) => [option.id, option.label])),
+    [playerOptions],
+  );
+
+  /** Jumps to that athlete's most-relevant record, matching the same
+   * attention ordering (open first, worst severity, most recent) the rest
+   * of the page already sorts `injuries` by. */
+  const switchPlayer = (athleteId: string) => {
+    const match = injuries.find((injury) => injury.athleteId === athleteId);
+    if (match) {
+      selectInjury(match);
+    }
+  };
+
   /** Clicking a region on the model jumps to that region's open injury. */
   const handleRegionSelect = (region: BodyRegion) => {
     setSelectedRegion(region);
@@ -182,6 +242,55 @@ export default function InjuryRecoveryPage() {
     );
     if (match && match.id !== focused?.id) {
       selectInjury(match);
+    }
+  };
+
+  /**
+   * The report covers this athlete's whole record, not just the focused
+   * injury, so it re-fetches every one of their injuries (list endpoint
+   * doesn't include timelines) and then each one's full detail in parallel.
+   */
+  const handleDownloadReport = async () => {
+    if (!focused || isDownloadingReport) {
+      return;
+    }
+    setDownloadingReport(true);
+    setReportError(undefined);
+    try {
+      const list = await fetchInjuries({
+        athleteId: focused.athleteId,
+        status: "all",
+      });
+      const details = await Promise.all(
+        list.map((item) => fetchInjury(item.id)),
+      );
+      const recurrenceById = new Map(
+        list.map((item) => [item.id, item.isRecurrence]),
+      );
+      const entries: InjuryReportEntry[] = details.map((detail) => ({
+        ...detail,
+        isRecurrence: recurrenceById.get(detail.id) ?? false,
+      }));
+
+      downloadInjuryReportPdf({
+        athlete: {
+          firstName: focused.athleteFirstName,
+          lastName: focused.athleteLastName,
+          squadNumber: focused.athleteSquadNumber,
+          position: focused.athletePosition,
+        },
+        teamName: team?.name ?? null,
+        injuries: entries,
+        today,
+      });
+    } catch (error) {
+      setReportError(
+        error instanceof ApiError
+          ? error.message
+          : "Could not generate the injury report. Please try again.",
+      );
+    } finally {
+      setDownloadingReport(false);
     }
   };
 
@@ -245,6 +354,15 @@ export default function InjuryRecoveryPage() {
 
   return (
     <>
+      <MultiStepLoader
+        loading={isDownloadingReport}
+        loadingStates={[
+          { text: "Gathering injury history" },
+          { text: "Building timeline" },
+          { text: "Generating PDF" },
+        ]}
+        duration={180}
+      />
       <PageHeader
         title="Injury & Recovery"
         subtitle="Track injuries, monitor recovery and get players back on the pitch."
@@ -333,7 +451,35 @@ export default function InjuryRecoveryPage() {
                 </Button>
               </AppCard>
             ) : (
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+              <>
+                {playerOptions.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Player
+                    </span>
+                    <Select
+                      items={playerItems}
+                      value={focused?.athleteId ?? null}
+                      onValueChange={(value) => value && switchPlayer(value)}
+                    >
+                      <SelectTrigger
+                        aria-label="Switch player"
+                        className="h-8 w-56 justify-between rounded-lg border-border/70 bg-card/70 px-2.5 text-sm text-foreground"
+                      >
+                        <SelectValue placeholder="Select a player…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {playerOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
                 {/* Left: the model, plus the athlete's other open injuries.
                     `self-start` stops it stretching to match the taller
                     right-hand column and leaving dead space below. */}
@@ -349,12 +495,29 @@ export default function InjuryRecoveryPage() {
                           {athleteName(focused)}
                         </p>
                       </div>
-                      {athleteInjuries.length > 1 && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {athleteInjuries.length} open injuries
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {athleteInjuries.length > 1 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {athleteInjuries.length} open injuries
+                          </p>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadReport}
+                          disabled={isDownloadingReport}
+                          className="gap-1.5"
+                        >
+                          <Download className="size-3.5" aria-hidden="true" />
+                          Download report
+                        </Button>
+                      </div>
                     </div>
+                  )}
+                  {reportError && (
+                    <p role="alert" className="mb-3 text-xs text-destructive">
+                      {reportError}
+                    </p>
                   )}
 
                   <BodyModelViewer
@@ -414,7 +577,8 @@ export default function InjuryRecoveryPage() {
                     <MuscleRecoveryStrip readings={recoveryQuery.data} />
                   )}
                 </div>
-              </div>
+                </div>
+              </>
             )}
           </>
         )}

@@ -280,6 +280,11 @@ export function BodyModelViewer({
     let meshEntries: MeshEntry[] = [];
     let allAnatomyMeshes: THREE.Mesh[] = [];
     let regionHotspots = new Map<BodyRegion, THREE.Vector3>();
+    /* Per-mesh regions for hit-testing, keyed by the mesh object itself
+     * rather than name — head.glb meshes carry a "head" region assigned
+     * inline (below) that never goes through MESH_NAME_TO_REGIONS, so a
+     * name-keyed lookup would silently miss every hit on the head. */
+    const meshRegionsByObject = new Map<THREE.Object3D, readonly BodyRegion[]>();
 
     /* Recomputes every region's hotspot from whatever anatomy meshes are
      * currently registered — called once after the anatomy body loads and
@@ -370,6 +375,9 @@ export function BodyModelViewer({
 
         meshEntries = entries;
         allAnatomyMeshes = allMeshes;
+        for (const entry of entries) {
+          meshRegionsByObject.set(entry.mesh, entry.regions);
+        }
         refreshHotspots();
         loadedAnatomyRoot = root;
         scene.add(root);
@@ -433,6 +441,9 @@ export function BodyModelViewer({
             });
 
             meshEntries = [...meshEntries, ...headEntries];
+            for (const entry of headEntries) {
+              meshRegionsByObject.set(entry.mesh, entry.regions);
+            }
             refreshHotspots();
             loadedHeadRoot = headRoot;
             scene.add(headRoot);
@@ -548,7 +559,7 @@ export function BodyModelViewer({
       const hits = raycaster.intersectObjects(allAnatomyMeshes, false);
       const injuredNow = injuredRef.current;
       for (const hit of hits) {
-        const regions = MESH_NAME_TO_REGIONS.get(hit.object.name);
+        const regions = meshRegionsByObject.get(hit.object);
         const match = regions?.find((region) => injuredNow.includes(region));
         if (match) {
           return match;
@@ -569,6 +580,21 @@ export function BodyModelViewer({
       // Only the primary button starts an orbit; a right-click belongs to
       // the browser.
       if (event.button !== 0) {
+        return;
+      }
+      // The view-preset/zoom/expand/reset buttons are overlaid on this same
+      // container so their hit area sits over the canvas. Capturing the
+      // pointer here unconditionally would retarget the browser's synthetic
+      // click to the container instead of the button — the click would
+      // never actually reach it — so a press starting on a button skips
+      // drag-initiation entirely and lets the button handle its own click.
+      // The view-preset/zoom/expand/reset buttons are overlaid on this same
+      // container so their hit area sits over the canvas. Capturing the
+      // pointer here unconditionally would retarget the browser's synthetic
+      // click to the container instead of the button — the click would
+      // never actually reach it — so a press starting on a button skips
+      // drag-initiation entirely and lets the button handle its own click.
+      if ((event.target as HTMLElement | null)?.closest("button")) {
         return;
       }
       dragging = true;
