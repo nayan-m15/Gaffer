@@ -788,7 +788,7 @@ export class MatchesService {
   }
 
   async finish(userId: string, matchId: string) {
-    const team = await this.teamsService.requireCoachTeam(userId);
+    const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
 
@@ -826,7 +826,7 @@ export class MatchesService {
   }
 
   async updateClock(userId: string, matchId: string, dto: UpdateMatchClockDto) {
-    const team = await this.teamsService.requireCoachTeam(userId);
+    const team = await this.requireTeam(userId);
     const { event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
     const [updated] = await this.databaseService.database
@@ -1221,6 +1221,7 @@ export class MatchesService {
     detail?: string | null,
   ) {
     if (eventType !== 'substitution') return;
+    if (team === 'opponent' && !detail) return;
     if (!detail) {
       throw new BadRequestException('An incoming player is required.');
     }
@@ -1252,9 +1253,9 @@ export class MatchesService {
       if (team === 'own' && !athleteId) {
         throw new BadRequestException('An outgoing squad athlete is required.');
       }
-      if (team === 'opponent' && !opponentPlayerId) {
+      if (team === 'opponent' && !opponentPlayerId && !opponentLabel) {
         throw new BadRequestException(
-          'An outgoing opponent player is required.',
+          'An opponent label is required when no opponent squad is available.',
         );
       }
     }

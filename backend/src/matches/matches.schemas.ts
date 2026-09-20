@@ -72,6 +72,7 @@ export const createMatchLogEventSchema = z
     }
     if (
       value.eventType === 'substitution' &&
+      (value.team === 'own' || value.opponentPlayerId) &&
       !z.uuid().safeParse(value.detail).success
     ) {
       ctx.addIssue({

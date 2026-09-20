@@ -6,10 +6,13 @@ import type {
 import { apiUrl } from "@/lib/api-url";
 
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
-let userScope = localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
+let userScope =
+  localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
 
 const deploymentScope = (
-  import.meta.env.VITE_DEPLOYMENT_ENV || window.location.hostname || "local"
+  import.meta.env.VITE_DEPLOYMENT_ENV ||
+  window.location.hostname ||
+  "local"
 )
   .replace(/[^a-zA-Z0-9]/g, "")
   .slice(0, 24);
@@ -55,9 +58,8 @@ export async function setOfflineUserScope(userId: string | null) {
 async function database() {
   if (!databasePromise) {
     databasePromise = (async () => {
-      const { PowerSyncDatabase, Schema, Table, column } = await import(
-        "@powersync/web"
-      );
+      const { PowerSyncDatabase, Schema, Table, column } =
+        await import("@powersync/web");
       const schema = new Schema({
         offline_event_queue: Table.createLocalOnly({
           match_id: column.text,
@@ -138,9 +140,7 @@ async function database() {
         },
       });
       await db.init();
-      const safeUserScope = userScope
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .slice(0, 24);
+      const safeUserScope = userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
       if (safeUserScope && !localStorage.getItem(migrationKey)) {
         const legacy = new PowerSyncDatabase({
@@ -212,7 +212,10 @@ async function database() {
           });
           localStorage.setItem(migrationKey, new Date().toISOString());
         } catch (error) {
-          console.warn("Could not migrate the legacy offline workspace.", error);
+          console.warn(
+            "Could not migrate the legacy offline workspace.",
+            error,
+          );
         } finally {
           await legacy.close();
         }
@@ -221,33 +224,39 @@ async function database() {
         // Local queue access must never wait for the remote sync connection.
         // PowerSync can remain pending while a device is offline; awaiting it
         // here would block enqueueEvent and leave the live logger locked.
-        void db.connect({
-          fetchCredentials: async () => {
-            const response = await fetch(apiUrl("/sync/token"), {
-              credentials: "include",
-            });
-            if (response.status === 401) return null;
-            if (!response.ok) throw new Error("Could not authenticate PowerSync.");
-            const credentials = (await response.json()) as {
-              endpoint: string;
-              token: string;
-              expiresAt: string;
-            };
-            return {
-              endpoint: credentials.endpoint,
-              token: credentials.token,
-              expiresAt: new Date(credentials.expiresAt),
-            };
-          },
-          uploadData: async (syncDatabase) => {
-            // Match capture uses the typed NestJS queue below. Synced tables
-            // are server-owned, so an unexpected direct write is discarded.
-            const transaction = await syncDatabase.getNextCrudTransaction();
-            if (transaction) await transaction.complete();
-          },
-        }).catch((error: unknown) => {
-          console.warn("PowerSync connection is unavailable; using local storage.", error);
-        });
+        void db
+          .connect({
+            fetchCredentials: async () => {
+              const response = await fetch(apiUrl("/sync/token"), {
+                credentials: "include",
+              });
+              if (response.status === 401) return null;
+              if (!response.ok)
+                throw new Error("Could not authenticate PowerSync.");
+              const credentials = (await response.json()) as {
+                endpoint: string;
+                token: string;
+                expiresAt: string;
+              };
+              return {
+                endpoint: credentials.endpoint,
+                token: credentials.token,
+                expiresAt: new Date(credentials.expiresAt),
+              };
+            },
+            uploadData: async (syncDatabase) => {
+              // Match capture uses the typed NestJS queue below. Synced tables
+              // are server-owned, so an unexpected direct write is discarded.
+              const transaction = await syncDatabase.getNextCrudTransaction();
+              if (transaction) await transaction.complete();
+            },
+          })
+          .catch((error: unknown) => {
+            console.warn(
+              "PowerSync connection is unavailable; using local storage.",
+              error,
+            );
+          });
       }
       return db;
     })();
@@ -274,7 +283,12 @@ export async function enqueueEvent(
     `INSERT OR REPLACE INTO offline_event_queue
       (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
      VALUES (?, ?, 'observation', ?, 'queued', NULL, NULL, ?)`,
-    [input.clientRequestId, matchId, JSON.stringify(input), new Date().toISOString()],
+    [
+      input.clientRequestId,
+      matchId,
+      JSON.stringify(input),
+      new Date().toISOString(),
+    ],
   );
   announceQueueChange();
 }
@@ -414,12 +428,17 @@ export interface OfflineClockAnchor {
   updatedAt: string;
 }
 
+function pendingClockKey(matchId: string) {
+  return `gaffer-pending-clock-${deploymentScope}-${userScope}-${matchId}`;
+}
+
 export async function saveClockAnchor(
   matchId: string,
   anchor: Omit<OfflineClockAnchor, "wallClockMs" | "uncertain" | "updatedAt">,
 ) {
   const db = await database();
   const now = Date.now();
+  const updatedAt = new Date(now).toISOString();
   await db.execute(
     `INSERT OR REPLACE INTO offline_clock_anchors
       (id, period, elapsed_ms, running, authority_revision, wall_clock_ms, uncertain, updated_at)
@@ -431,9 +450,21 @@ export async function saveClockAnchor(
       anchor.running ? 1 : 0,
       anchor.authorityRevision,
       now,
-      new Date(now).toISOString(),
+      updatedAt,
     ],
   );
+  localStorage.setItem(pendingClockKey(matchId), updatedAt);
+  return updatedAt;
+}
+
+export function isClockAnchorPending(matchId: string) {
+  return localStorage.getItem(pendingClockKey(matchId)) !== null;
+}
+
+export function markClockAnchorSynced(matchId: string, version: string) {
+  if (localStorage.getItem(pendingClockKey(matchId)) === version) {
+    localStorage.removeItem(pendingClockKey(matchId));
+  }
 }
 
 export async function readClockAnchor(
@@ -517,7 +548,9 @@ interface SyncedEventRow {
   updated_at: string;
 }
 
-export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEvent[]> {
+export async function readSyncedMatchEvents(
+  matchId: string,
+): Promise<MatchLogEvent[]> {
   const db = await database();
   const rows = await db.getAll<SyncedEventRow>(
     "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute DESC, created_at DESC",
@@ -576,7 +609,9 @@ export async function checkOfflineReadiness(
     );
     localDatabaseWritable = probe?.payload === JSON.stringify({ ok: true });
   } finally {
-    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [probeId]);
+    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [
+      probeId,
+    ]);
   }
   const [match, squad, events, registration, persisted, estimate] =
     await Promise.all([
@@ -671,7 +706,9 @@ export async function importUnsentObservations(raw: string) {
         [item.id],
       );
       if (existing && existing.payload !== payload) {
-        throw new Error(`Queued item ${item.id} already exists with different data.`);
+        throw new Error(
+          `Queued item ${item.id} already exists with different data.`,
+        );
       }
       if (!existing) {
         await tx.execute(
@@ -706,7 +743,9 @@ export async function subscribeToSyncedMatchEventChanges(
 
 export async function readSyncedMatchProjection(
   matchId: string,
-): Promise<import("@/features/matches/types").MatchRecord["projection"] | null> {
+): Promise<
+  import("@/features/matches/types").MatchRecord["projection"] | null
+> {
   const db = await database();
   const row = await db.getOptional<{
     revision: number;

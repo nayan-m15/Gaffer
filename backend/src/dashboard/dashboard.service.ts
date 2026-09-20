@@ -145,6 +145,8 @@ export class DashboardService {
           awayScore: activeMatch.isHome
             ? activeMatch.opponentScore
             : activeMatch.teamScore,
+          clockElapsedMs: activeMatch.clockElapsedMs,
+          clockStartedAt: activeMatch.clockStartedAt?.toISOString() ?? null,
           elapsedMinutes: Math.floor(
             (activeMatch.clockElapsedMs +
               (activeMatch.clockStartedAt
