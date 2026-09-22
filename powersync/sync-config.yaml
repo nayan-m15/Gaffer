@@ -23,7 +23,22 @@ streams:
   team_match_projections:
     auto_subscribe: true
     query: |
-      SELECT match_projection_state.*
+      SELECT match_projection_state.match_id AS id,
+             match_projection_state.revision,
+             match_projection_state.input_digest,
+             match_projection_state.rules_version,
+             match_projection_state.confirmed_team_score,
+             match_projection_state.confirmed_opponent_score,
+             match_projection_state.provisional_team_score,
+             match_projection_state.provisional_opponent_score,
+             match_projection_state.possible_effects,
+             match_projection_state.disciplinary_projection,
+             match_projection_state.unresolved_review_count,
+             match_projection_state.finalisation_state,
+             match_projection_state.finalised_by_user_id,
+             match_projection_state.finalised_at,
+             match_projection_state.created_at,
+             match_projection_state.updated_at
       FROM match_projection_state
       JOIN matches ON matches.id = match_projection_state.match_id
       JOIN events ON events.id = matches.event_id

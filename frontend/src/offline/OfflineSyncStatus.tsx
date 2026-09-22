@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { flushOfflineMatchEvents } from "@/features/matches/api";
-import { listQueuedEvents } from "./match-store";
+import { listQueuedEvents, subscribeToOfflineQueueChanges } from "./match-store";
 
 export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const queryClient = useQueryClient();
   const [online, setOnline] = useState(navigator.onLine);
   const [pending, setPending] = useState(0);
   const [rejected, setRejected] = useState(0);
+  const [accepted, setAccepted] = useState(0);
+  const [quarantined, setQuarantined] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(() =>
     localStorage.getItem("gaffer-last-successful-sync"),
@@ -18,8 +20,14 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     const refresh = async () => {
       const rows = await listQueuedEvents(matchId);
       if (!active) return;
-      setPending(rows.filter((row) => row.state !== "rejected").length);
+      setPending(
+        rows.filter((row) =>
+          ["queued", "uploading", "dependency_pending"].includes(row.state),
+        ).length,
+      );
       setRejected(rows.filter((row) => row.state === "rejected").length);
+      setAccepted(rows.filter((row) => row.state === "accepted").length);
+      setQuarantined(rows.filter((row) => row.state === "quarantined").length);
     };
     const reconnect = async () => {
       setOnline(true);
@@ -31,7 +39,11 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
           queryClient.invalidateQueries({ queryKey: ["matches", matchId] }),
         ]);
         const remaining = await listQueuedEvents(matchId);
-        if (!remaining.some((row) => row.state !== "rejected")) {
+        if (
+          !remaining.some((row) =>
+            ["queued", "uploading", "dependency_pending"].includes(row.state),
+          )
+        ) {
           const syncedAt = new Date().toISOString();
           localStorage.setItem("gaffer-last-successful-sync", syncedAt);
           if (active) setLastSync(syncedAt);
@@ -43,6 +55,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     };
     const disconnect = () => setOnline(false);
     void refresh();
+    const unsubscribeQueue = subscribeToOfflineQueueChanges(() => void refresh());
     const timer = window.setInterval(() => void refresh(), 1_000);
     window.addEventListener("online", reconnect);
     window.addEventListener("offline", disconnect);
@@ -52,15 +65,20 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       window.clearInterval(timer);
       window.removeEventListener("online", reconnect);
       window.removeEventListener("offline", disconnect);
+      unsubscribeQueue();
     };
   }, [matchId, queryClient]);
 
-  const label = rejected
+  const label = quarantined
+    ? `${quarantined} access blocked`
+    : rejected
     ? `${rejected} rejected`
     : syncing
       ? `Syncing ${pending}`
       : pending
         ? `${pending} waiting`
+        : accepted
+          ? `${accepted} accepted`
         : online
           ? "Synced"
           : "Offline";
@@ -74,7 +92,11 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     >
       <span
         className={`size-1.5 rounded-full ${
-          rejected ? "bg-[#ff5b5f]" : online ? "bg-[#00d99a]" : "bg-[#ffbe2e]"
+          rejected || quarantined
+            ? "bg-[#ff5b5f]"
+            : online
+              ? "bg-[#00d99a]"
+              : "bg-[#ffbe2e]"
         }`}
       />
       {label}
