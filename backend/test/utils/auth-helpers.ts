@@ -72,3 +72,51 @@ export async function registerCoach(
 
   return { agent, user, team };
 }
+
+export interface AssistantSetup {
+  agent: ReturnType<typeof request.agent>;
+  user: SessionUserBody;
+  identity: TestIdentity;
+}
+
+/**
+ * Adds an assistant to an existing coach's team and returns their
+ * authenticated agent.
+ *
+ * Goes the whole way round the real invite flow rather than inserting a
+ * `team_members` row: the assistant's access is exactly what the accept
+ * endpoint grants, so a suite asserting assistant permissions has to obtain
+ * it the same way a real assistant does.
+ *
+ * The caller owns the returned identity and must pass it to `cleanupUser`.
+ */
+export async function registerAssistant(
+  server: App,
+  coachAgent: ReturnType<typeof request.agent>,
+  identity: TestIdentity,
+  name = 'Test Assistant',
+): Promise<AssistantSetup> {
+  const invite = await coachAgent
+    .post('/team-invites')
+    .send({ email: identity.email })
+    .expect(201);
+  const { token } = invite.body as { token: string };
+
+  const agent = request.agent(server);
+  const signUp = await agent
+    .post('/auth/sign-up')
+    .send({ name, email: identity.email, password: PASSWORD })
+    .expect(201);
+  const { user } = signUp.body as SignUpResponseBody;
+
+  await verifyUserEmail(identity.email);
+
+  await agent
+    .post('/auth/sign-in')
+    .send({ email: identity.email, password: PASSWORD })
+    .expect(201);
+
+  await agent.post(`/team-invites/${token}/accept`).expect(201);
+
+  return { agent, user, identity };
+}

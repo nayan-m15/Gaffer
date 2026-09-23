@@ -253,6 +253,13 @@
       "when": 1790180000010,
       "tag": "0034_merge_schema_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790180000011,
+      "tag": "0035_injuries_and_recovery",
+      "breakpoints": true
     }
   ]
 }

@@ -25,10 +25,12 @@ export function uniqueTestIdentity(prefix = 's1-07'): TestIdentity {
  * Deletes a test-created user and (if it created one) their team.
  *
  * The team goes first: deleting it cascades `team_members`, `athletes`,
- * `events` and `team_invites`. That last one matters because
- * `team_invites.created_by_user_id` and `used_by_user_id` reference `user`
- * with no cascade of their own — deleting the user first would trip those
- * FKs as soon as an account has issued or accepted an invite. Deleting the
+ * `events`, `team_invites` and `injuries` (which in turn cascades
+ * `injury_timeline_entries`). Those last two matter because
+ * `team_invites.created_by_user_id`, `injuries.created_by_user_id` and
+ * `injury_timeline_entries.created_by_user_id` all reference `user` with no
+ * cascade of their own — deleting the user first would trip those FKs as
+ * soon as an account has issued an invite or logged an injury. Deleting the
  * `user` row itself still cascades `session` and `account`.
  */
 export async function cleanupUser({
