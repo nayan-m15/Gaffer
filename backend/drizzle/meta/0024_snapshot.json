@@ -1,5 +1,5 @@
 {
-  "id": "00c1cb80-f1a5-4528-9f4c-66b6eed874df",
+  "id": "7d320200-f29d-4866-9e3c-50ae679695a9",
   "prevId": "c3e72af4-f747-4d49-9b3d-913575673b47",
   "version": "7",
   "dialect": "postgresql",
@@ -1174,73 +1174,153 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.match_clock_operations": {
-      "name": "match_clock_operations",
+    "public.injuries": {
+      "name": "injuries",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "athlete_id": {
+          "name": "athlete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body_region": {
+          "name": "body_region",
+          "type": "injury_body_region",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "injury_type": {
+          "name": "injury_type",
+          "type": "injury_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity": {
+          "name": "severity",
+          "type": "injury_severity",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "injury_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'reported'"
+        },
+        "context": {
+          "name": "context",
+          "type": "injury_context",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'other'"
+        },
+        "occurred_on": {
+          "name": "occurred_on",
+          "type": "date",
+          "primaryKey": false,
           "notNull": true
         },
         "match_id": {
           "name": "match_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "actor_user_id": {
-          "name": "actor_user_id",
-          "type": "text",
+        "match_event_id": {
+          "name": "match_event_id",
+          "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "period": {
-          "name": "period",
-          "type": "text",
+        "minute": {
+          "name": "minute",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "elapsed_ms": {
-          "name": "elapsed_ms",
+        "estimated_return_min_days": {
+          "name": "estimated_return_min_days",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "running": {
-          "name": "running",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "base_revision": {
-          "name": "base_revision",
+        "estimated_return_max_days": {
+          "name": "estimated_return_max_days",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "applied_revision": {
-          "name": "applied_revision",
-          "type": "integer",
+        "estimated_return_from": {
+          "name": "estimated_return_from",
+          "type": "date",
           "primaryKey": false,
           "notNull": true
         },
-        "outcome": {
-          "name": "outcome",
+        "estimated_return_to": {
+          "name": "estimated_return_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actual_return_on": {
+          "name": "actual_return_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diagnosed_by": {
+          "name": "diagnosed_by",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "payload_hash": {
-          "name": "payload_hash",
+        "description": {
+          "name": "description",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "client_created_at": {
-          "name": "client_created_at",
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rehab_phases": {
+          "name": "rehab_phases",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1250,20 +1330,21 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "match_clock_operations_match_revision_index": {
-          "name": "match_clock_operations_match_revision_index",
+        "injuries_team_id_index": {
+          "name": "injuries_team_id_index",
           "columns": [
             {
-              "expression": "match_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "applied_revision",
+              "expression": "team_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1274,11 +1355,228 @@
           "method": "btree",
           "with": {}
         },
-        "match_clock_operations_actor_index": {
-          "name": "match_clock_operations_actor_index",
+        "injuries_athlete_id_index": {
+          "name": "injuries_athlete_id_index",
           "columns": [
             {
-              "expression": "actor_user_id",
+              "expression": "athlete_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "injuries_team_status_index": {
+          "name": "injuries_team_status_index",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "injuries_athlete_region_index": {
+          "name": "injuries_athlete_region_index",
+          "columns": [
+            {
+              "expression": "athlete_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "body_region",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "injuries_match_event_unique": {
+          "name": "injuries_match_event_unique",
+          "columns": [
+            {
+              "expression": "match_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"injuries\".\"match_event_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "injuries_team_id_teams_id_fk": {
+          "name": "injuries_team_id_teams_id_fk",
+          "tableFrom": "injuries",
+          "tableTo": "teams",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "injuries_athlete_id_athletes_id_fk": {
+          "name": "injuries_athlete_id_athletes_id_fk",
+          "tableFrom": "injuries",
+          "tableTo": "athletes",
+          "columnsFrom": [
+            "athlete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "injuries_match_id_matches_id_fk": {
+          "name": "injuries_match_id_matches_id_fk",
+          "tableFrom": "injuries",
+          "tableTo": "matches",
+          "columnsFrom": [
+            "match_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "injuries_match_event_id_match_events_id_fk": {
+          "name": "injuries_match_event_id_match_events_id_fk",
+          "tableFrom": "injuries",
+          "tableTo": "match_events",
+          "columnsFrom": [
+            "match_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "injuries_created_by_user_id_user_id_fk": {
+          "name": "injuries_created_by_user_id_user_id_fk",
+          "tableFrom": "injuries",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.injury_timeline_entries": {
+      "name": "injury_timeline_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "injury_id": {
+          "name": "injury_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "injury_timeline_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_on": {
+          "name": "occurred_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "injury_timeline_entries_injury_index": {
+          "name": "injury_timeline_entries_injury_index",
+          "columns": [
+            {
+              "expression": "injury_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_on",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1291,12 +1589,12 @@
         }
       },
       "foreignKeys": {
-        "match_clock_operations_match_id_matches_id_fk": {
-          "name": "match_clock_operations_match_id_matches_id_fk",
-          "tableFrom": "match_clock_operations",
-          "tableTo": "matches",
+        "injury_timeline_entries_injury_id_injuries_id_fk": {
+          "name": "injury_timeline_entries_injury_id_injuries_id_fk",
+          "tableFrom": "injury_timeline_entries",
+          "tableTo": "injuries",
           "columnsFrom": [
-            "match_id"
+            "injury_id"
           ],
           "columnsTo": [
             "id"
@@ -1304,12 +1602,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "match_clock_operations_actor_user_id_user_id_fk": {
-          "name": "match_clock_operations_actor_user_id_user_id_fk",
-          "tableFrom": "match_clock_operations",
+        "injury_timeline_entries_created_by_user_id_user_id_fk": {
+          "name": "injury_timeline_entries_created_by_user_id_user_id_fk",
+          "tableFrom": "injury_timeline_entries",
           "tableTo": "user",
           "columnsFrom": [
-            "actor_user_id"
+            "created_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -2456,13 +2754,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "clock_revision": {
-          "name": "clock_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3271,125 +3562,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.sync_client_telemetry": {
-      "name": "sync_client_telemetry",
-      "schema": "",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pending_count": {
-          "name": "pending_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "rejected_count": {
-          "name": "rejected_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "oldest_pending_at": {
-          "name": "oldest_pending_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_successful_sync_at": {
-          "name": "last_successful_sync_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deployment": {
-          "name": "deployment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "sync_client_telemetry_team_index": {
-          "name": "sync_client_telemetry_team_index",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "updated_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sync_client_telemetry_user_id_user_id_fk": {
-          "name": "sync_client_telemetry_user_id_user_id_fk",
-          "tableFrom": "sync_client_telemetry",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "sync_client_telemetry_team_id_teams_id_fk": {
-          "name": "sync_client_telemetry_team_id_teams_id_fk",
-          "tableFrom": "sync_client_telemetry",
-          "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.sync_upload_receipts": {
       "name": "sync_upload_receipts",
       "schema": "",
@@ -3433,12 +3605,6 @@
         "safe_error_code": {
           "name": "safe_error_code",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_duration_ms": {
-          "name": "processing_duration_ms",
-          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -4098,6 +4264,105 @@
         "match",
         "training",
         "meeting"
+      ]
+    },
+    "public.injury_body_region": {
+      "name": "injury_body_region",
+      "schema": "public",
+      "values": [
+        "head",
+        "neck",
+        "shoulder_left",
+        "shoulder_right",
+        "upper_arm_left",
+        "upper_arm_right",
+        "forearm_left",
+        "forearm_right",
+        "wrist_hand_left",
+        "wrist_hand_right",
+        "chest",
+        "abdomen",
+        "groin",
+        "back_upper",
+        "back_lower",
+        "glute_left",
+        "glute_right",
+        "hamstring_left",
+        "hamstring_right",
+        "quad_left",
+        "quad_right",
+        "knee_left",
+        "knee_right",
+        "calf_left",
+        "calf_right",
+        "achilles_left",
+        "achilles_right",
+        "ankle_left",
+        "ankle_right",
+        "foot_left",
+        "foot_right"
+      ]
+    },
+    "public.injury_context": {
+      "name": "injury_context",
+      "schema": "public",
+      "values": [
+        "match",
+        "training",
+        "other"
+      ]
+    },
+    "public.injury_severity": {
+      "name": "injury_severity",
+      "schema": "public",
+      "values": [
+        "minor",
+        "moderate",
+        "severe"
+      ]
+    },
+    "public.injury_status": {
+      "name": "injury_status",
+      "schema": "public",
+      "values": [
+        "reported",
+        "assessment",
+        "rehab",
+        "return_to_training",
+        "returned",
+        "season_ending"
+      ]
+    },
+    "public.injury_timeline_kind": {
+      "name": "injury_timeline_kind",
+      "schema": "public",
+      "values": [
+        "sustained",
+        "assessment",
+        "rehab_started",
+        "reassessment",
+        "setback",
+        "return_to_training",
+        "returned",
+        "note",
+        "estimated_return"
+      ]
+    },
+    "public.injury_type": {
+      "name": "injury_type",
+      "schema": "public",
+      "values": [
+        "strain",
+        "sprain",
+        "tear",
+        "fracture",
+        "contusion",
+        "dislocation",
+        "tendinopathy",
+        "concussion",
+        "laceration",
+        "illness",
+        "other"
       ]
     },
     "public.match_event_team": {

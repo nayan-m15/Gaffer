@@ -662,6 +662,27 @@ body {
   scroll-margin-top: 17rem;
 }
 
+/* A thin, theme-coloured scrollbar for panels that scroll internally
+ * (dialogs, popovers) — the browser default reads as a stray light-grey
+ * bar against this app's dark chrome. */
+.themed-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+}
+
 @media (min-width: 1024px) {
   .public-dashboard-page :where(a, button, input, select, [tabindex]):focus {
     scroll-margin-top: 11rem;

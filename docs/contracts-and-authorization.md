@@ -14,6 +14,8 @@ team identifier for team-scoped operations.
 | Player hub reads and RSVP | Own claimed profile | — | — |
 | Team roster, event, game-plan reads | — | Allowed | Allowed |
 | Live match logging | — | Allowed | Allowed |
+| Injury reporting and injury-record reads | — | Allowed | Allowed |
+| Injury-record edits, closing, deletion | — | Denied | Allowed |
 | Roster, event, game-plan mutations | — | Denied | Allowed |
 | Assistant invite management | — | Denied | Allowed |
 
@@ -21,3 +23,9 @@ Feature controllers use requireTeamId for member reads and
 requireCoachTeamId for coach-only mutations. Services still scope every
 resource query by the resolved team ID so authorization cannot depend on the
 frontend hiding controls.
+
+Injury reporting is the one mutation deliberately open to assistants. An
+assistant already runs the live logger, so the person who watches an injury
+happen has to be able to record it; amending the resulting clinical record —
+changing a diagnosis, moving a return estimate, closing it out — stays
+coach-only like every other managed resource.

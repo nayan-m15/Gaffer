@@ -184,6 +184,11 @@ test("all live event workflows remain usable and visible offline", async ({
 
   await openEventPicker(page, 6);
   await page.getByRole("button", { name: "Injury" }).click();
+  // An own-team injury first asks for a diagnosis, and is deliberately
+  // skippable: the clock is running and the mandatory substitution is
+  // waiting behind this sheet.
+  await expect(page.getByRole("dialog", { name: /injury/i })).toBeVisible();
+  await page.getByRole("button", { name: /skip details/i }).click();
   await expect(page.locator('[data-callout="mandatory-sub"]')).toBeVisible();
   await expectCalloutAboveBench(page, '[data-callout="mandatory-sub"]');
   await page.getByRole("button", { name: /13.*Player13/i }).click();

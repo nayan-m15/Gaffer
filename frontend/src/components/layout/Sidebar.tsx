@@ -13,6 +13,7 @@ import {
   Home,
   Users,
   Calendar,
+  HeartPulse,
   Radio,
   BarChart3,
   Sun,
@@ -42,6 +43,12 @@ const COACH_NAV_ITEMS: NavItem[] = [
   { label: "Roster", path: "/athletes", icon: Users, requiresTeam: true },
   { label: "Events", path: "/events", icon: Calendar, requiresTeam: true },
   { label: "Live Logger", path: "/live-logger", icon: Radio, requiresTeam: true },
+  {
+    label: "Injuries",
+    path: "/injuries",
+    icon: HeartPulse,
+    requiresTeam: true,
+  },
   { label: "Stats", path: "/statistics", icon: BarChart3, requiresTeam: true },
   { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
