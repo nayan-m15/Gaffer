@@ -14,10 +14,18 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { MatchesService } from '../matches/matches.service';
 import { DatabaseService } from '../database/database.service';
-import { matchEventOperations, syncUploadReceipts } from '../database/schema';
+import {
+  matchEventOperations,
+  syncClientTelemetry,
+  syncUploadReceipts,
+} from '../database/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { zodValidate } from '../common/zod-validate';
-import { syncUploadSchema, type SyncUploadItem } from './sync.schemas';
+import {
+  syncTelemetrySchema,
+  syncUploadSchema,
+  type SyncUploadItem,
+} from './sync.schemas';
 
 @Controller('sync')
 @UseGuards(AuthGuard)
@@ -86,9 +94,60 @@ export class SyncController {
     return { receipts };
   }
 
+  @Post('telemetry')
+  async telemetry(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Body() body: unknown,
+  ) {
+    const value = zodValidate(syncTelemetrySchema, body);
+    const team = await this.teamsService.findTeamForUser(user.id);
+    await this.databaseService.database
+      .insert(syncClientTelemetry)
+      .values({
+        deviceId: value.deviceId,
+        userId: user.id,
+        teamId: team?.id ?? null,
+        pendingCount: value.pendingCount,
+        rejectedCount: value.rejectedCount,
+        oldestPendingAt: value.oldestPendingAt
+          ? new Date(value.oldestPendingAt)
+          : null,
+        lastSuccessfulSyncAt: value.lastSuccessfulSyncAt
+          ? new Date(value.lastSuccessfulSyncAt)
+          : null,
+        deployment: value.deployment,
+      })
+      .onConflictDoUpdate({
+        target: syncClientTelemetry.deviceId,
+        set: {
+          userId: user.id,
+          teamId: team?.id ?? null,
+          pendingCount: value.pendingCount,
+          rejectedCount: value.rejectedCount,
+          oldestPendingAt: value.oldestPendingAt
+            ? new Date(value.oldestPendingAt)
+            : null,
+          lastSuccessfulSyncAt: value.lastSuccessfulSyncAt
+            ? new Date(value.lastSuccessfulSyncAt)
+            : null,
+          deployment: value.deployment,
+          updatedAt: new Date(),
+        },
+      });
+    return { accepted: true };
+  }
+
   private async processUploadItem(userId: string, item: SyncUploadItem) {
+    const startedAt = performance.now();
     const id =
       item.kind === 'observation' ? item.payload.clientRequestId : item.id;
+    if (!this.offlineSyncEnabled(item.matchId)) {
+      return {
+        id,
+        outcome: 'dependency_pending',
+        safeErrorCode: 'OFFLINE_SYNC_NOT_ENABLED_FOR_MATCH',
+      };
+    }
     const payloadHash = createHash('sha256')
       .update(JSON.stringify(item))
       .digest('hex');
@@ -123,12 +182,14 @@ export class SyncController {
             payloadHash,
             outcome: 'dependency_pending',
             safeErrorCode: 'MISSING_CAUSAL_PARENT',
+            processingDurationMs: Math.round(performance.now() - startedAt),
           })
           .onConflictDoUpdate({
             target: syncUploadReceipts.id,
             set: {
               outcome: 'dependency_pending',
               safeErrorCode: 'MISSING_CAUSAL_PARENT',
+              processingDurationMs: Math.round(performance.now() - startedAt),
               updatedAt: new Date(),
             },
           })
@@ -197,6 +258,7 @@ export class SyncController {
               payloadHash,
               outcome: 'accepted',
               canonicalEventId,
+              processingDurationMs: Math.round(performance.now() - startedAt),
             })
             .onConflictDoUpdate({
               target: syncUploadReceipts.id,
@@ -205,6 +267,7 @@ export class SyncController {
                 outcome: 'accepted',
                 safeErrorCode: null,
                 canonicalEventId,
+                processingDurationMs: Math.round(performance.now() - startedAt),
                 updatedAt: new Date(),
               },
             })
@@ -254,12 +317,14 @@ export class SyncController {
             payloadHash,
             outcome: 'rejected',
             safeErrorCode: fallback.safeErrorCode,
+            processingDurationMs: Math.round(performance.now() - startedAt),
           })
           .onConflictDoUpdate({
             target: syncUploadReceipts.id,
             set: {
               outcome: 'rejected',
               safeErrorCode: fallback.safeErrorCode,
+              processingDurationMs: Math.round(performance.now() - startedAt),
               updatedAt: new Date(),
             },
           })
@@ -271,5 +336,13 @@ export class SyncController {
         return fallback;
       }
     }
+  }
+
+  private offlineSyncEnabled(matchId: string) {
+    if (process.env.OFFLINE_SYNC_ENABLED === 'false') return false;
+    const allowlist = process.env.OFFLINE_SYNC_MATCH_IDS?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    return !allowlist?.length || allowlist.includes(matchId);
   }
 }

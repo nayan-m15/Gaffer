@@ -18,6 +18,7 @@ import {
   matchEventObservations,
   matchEventOperations,
   matchEventReviews,
+  matchClockOperations,
   matchProjectionState,
   matches,
   opponentMatchPlayers,
@@ -788,7 +789,7 @@ export class MatchesService {
   }
 
   async finish(userId: string, matchId: string) {
-    const team = await this.teamsService.requireCoachTeam(userId);
+    const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
 
@@ -826,20 +827,49 @@ export class MatchesService {
   }
 
   async updateClock(userId: string, matchId: string, dto: UpdateMatchClockDto) {
-    const team = await this.teamsService.requireCoachTeam(userId);
-    const { event } = await this.requireMatch(team.id, matchId);
+    const team = await this.requireTeam(userId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
-    const [updated] = await this.databaseService.database
-      .update(matches)
-      .set({
-        clockPeriod: dto.period,
-        clockElapsedMs: dto.elapsedMs,
-        clockStartedAt: dto.running ? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(matches.id, matchId))
-      .returning();
-    return updated;
+    const operationId = dto.operationId ?? randomUUID();
+    const clientCreatedAt = dto.clientCreatedAt ?? new Date().toISOString();
+    const baseRevision = dto.baseRevision ?? match.clockRevision;
+    const payloadHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          matchId,
+          period: dto.period,
+          elapsedMs: dto.elapsedMs,
+          running: dto.running,
+          baseRevision,
+          clientCreatedAt,
+        }),
+      )
+      .digest('hex');
+    await this.databaseService.database.execute(sql`
+      select * from apply_match_clock_operation(
+        ${operationId}::uuid,
+        ${matchId}::uuid,
+        ${userId}::text,
+        ${dto.period}::text,
+        ${dto.elapsedMs}::integer,
+        ${dto.running}::boolean,
+        ${baseRevision}::integer,
+        ${payloadHash}::text,
+        ${clientCreatedAt}::timestamptz
+      )
+    `);
+    return this.findOne(userId, matchId);
+  }
+
+  async listClockOperations(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    return this.databaseService.database
+      .select()
+      .from(matchClockOperations)
+      .where(eq(matchClockOperations.matchId, matchId))
+      .orderBy(desc(matchClockOperations.createdAt))
+      .limit(200);
   }
 
   async finaliseProjection(
@@ -941,11 +971,24 @@ export class MatchesService {
     matchId: string,
     observationId: string,
   ) {
-    const canonicalEventId = await this.canonicalEventIdForObservation(
-      matchId,
-      observationId,
-    );
-    return this.requireMatchEvent(matchId, canonicalEventId);
+    const [logged] = await this.databaseService.database
+      .select({ event: matchEvents })
+      .from(matchEventMemberships)
+      .innerJoin(
+        matchEvents,
+        eq(matchEvents.id, matchEventMemberships.canonicalEventId),
+      )
+      .where(
+        and(
+          eq(matchEventMemberships.observationId, observationId),
+          eq(matchEvents.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    if (!logged) {
+      throw new NotFoundException('Canonical event membership not found.');
+    }
+    return logged.event;
   }
 
   private async recordOperation(input: {
@@ -1221,6 +1264,7 @@ export class MatchesService {
     detail?: string | null,
   ) {
     if (eventType !== 'substitution') return;
+    if (team === 'opponent' && !detail) return;
     if (!detail) {
       throw new BadRequestException('An incoming player is required.');
     }
@@ -1252,9 +1296,9 @@ export class MatchesService {
       if (team === 'own' && !athleteId) {
         throw new BadRequestException('An outgoing squad athlete is required.');
       }
-      if (team === 'opponent' && !opponentPlayerId) {
+      if (team === 'opponent' && !opponentPlayerId && !opponentLabel) {
         throw new BadRequestException(
-          'An outgoing opponent player is required.',
+          'An opponent label is required when no opponent squad is available.',
         );
       }
     }

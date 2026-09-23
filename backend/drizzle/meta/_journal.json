@@ -176,6 +176,13 @@
       "when": 1790180000002,
       "tag": "0023_repair_projection_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790180000006,
+      "tag": "0024_offline_operations_hardening",
+      "breakpoints": true
     }
   ]
 }

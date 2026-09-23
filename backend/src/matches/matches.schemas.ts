@@ -72,6 +72,7 @@ export const createMatchLogEventSchema = z
     }
     if (
       value.eventType === 'substitution' &&
+      (value.team === 'own' || value.opponentPlayerId) &&
       !z.uuid().safeParse(value.detail).success
     ) {
       ctx.addIssue({
@@ -182,6 +183,9 @@ export const matchClockPeriodSchema = z.enum([
 ]);
 
 export const updateMatchClockSchema = z.object({
+  operationId: z.uuid().optional(),
+  baseRevision: z.number().int().min(0).default(0),
+  clientCreatedAt: z.iso.datetime().optional(),
   period: matchClockPeriodSchema,
   running: z.boolean(),
   elapsedMs: z

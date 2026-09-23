@@ -15,15 +15,18 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate:test": "node scripts/migrate-test.mjs",
     "db:migrate:kit": "drizzle-kit migrate",
     "db:configure:powersync": "node scripts/configure-powersync-source.mjs",
+    "db:diagnose:powersync": "node scripts/diagnose-powersync-source.mjs",
+    "health:offline": "node scripts/check-offline-health.mjs",
     "docs:api-reference": "node scripts/generate-public-api-reference.mjs",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "test:integration": "jest --config ./test/jest-e2e.json --runInBand"
+    "test:e2e": "npm run db:migrate:test && jest --config ./test/jest-e2e.json --runInBand",
+    "test:integration": "npm run db:migrate:test && jest --config ./test/jest-e2e.json --runInBand"
   },
   "dependencies": {
     "@gaffer/match-domain": "file:../packages/match-domain",
