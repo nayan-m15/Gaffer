@@ -119,9 +119,10 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
         dialog.getByText(/Choose a region, kind and severity/),
       ).toBeVisible();
 
-      await dialog
-        .getByLabel('Player')
-        .selectOption({ label: '#7 Rosa Hamstring' });
+      // The player field is a combobox whose listbox portals to <body>, so
+      // the option is looked up on the page rather than scoped to the dialog.
+      await dialog.getByLabel('Player').click();
+      await page.getByRole('option', { name: '#7 Rosa Hamstring' }).click();
       await dialog
         .getByRole('button', { name: 'Right hamstring', exact: true })
         .click();
