@@ -11,6 +11,8 @@ export interface EventTypeStyle {
   pill: string;
   /** Text-only accent classes. */
   text: string;
+  /** Filled controls (type segment, submit) on the event-type accent. */
+  action: string;
 }
 
 /**
@@ -24,18 +26,23 @@ export const EVENT_TYPE_STYLES: Record<EventType, EventTypeStyle> = {
     swatch: "bg-event-training",
     pill: "bg-event-training/15 text-foreground hover:bg-event-training/25 border-l-2 border-event-training",
     text: "text-event-training",
+    action:
+      "bg-event-training text-primary-foreground hover:bg-event-training/90",
   },
   match: {
     icon: Trophy,
     swatch: "bg-event-match",
     pill: "bg-event-match/15 text-foreground hover:bg-event-match/25 border-l-2 border-event-match",
     text: "text-event-match",
+    action: "bg-event-match text-primary-foreground hover:bg-event-match/90",
   },
   meeting: {
     icon: Users,
     swatch: "bg-event-meeting",
     pill: "bg-event-meeting/15 text-foreground hover:bg-event-meeting/25 border-l-2 border-event-meeting",
     text: "text-event-meeting",
+    action:
+      "bg-event-meeting text-primary-foreground hover:bg-event-meeting/90",
   },
 };
 
