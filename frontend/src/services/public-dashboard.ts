@@ -21,6 +21,8 @@ export interface PublicCompetition {
   name: string;
   type: "league" | "cup" | "friendly";
   teamId: string;
+  /** All linked participant teams; `teamId` remains the legacy creator team. */
+  teamIds?: string[];
   seasonId: string | null;
 }
 

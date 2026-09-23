@@ -214,13 +214,18 @@ describe('Events (e2e)', () => {
 
   it('carries match competition assignment through creation and editing', async () => {
     const { agent } = await newCoach();
+    // Competition names are globally unique (case-insensitively), so suffix a
+    // uuid to stay collision-free across repeated runs against the persistent
+    // test database.
+    const leagueName = `Premier League ${randomUUID()}`;
+    const cupName = `County Cup ${randomUUID()}`;
     const league = await agent
       .post('/statistics/competitions')
-      .send({ name: 'Premier League', type: 'league', season: '2026/27' })
+      .send({ name: leagueName, type: 'league', season: '2026/27' })
       .expect(201);
     const cup = await agent
       .post('/statistics/competitions')
-      .send({ name: 'County Cup', type: 'cup', season: '2026/27' })
+      .send({ name: cupName, type: 'cup', season: '2026/27' })
       .expect(201);
     const leagueId = (league.body as IdBody).id;
     const cupId = (cup.body as IdBody).id;

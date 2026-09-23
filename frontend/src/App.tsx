@@ -10,6 +10,8 @@ import { PlayerShell } from '@/layouts/PlayerShell'
 import LoginPage from '@/pages/LoginPage'
 import SignUpPage from '@/pages/SignUpPage'
 import ClaimPage from '@/pages/ClaimPage'
+import JoinCompetitionPage from '@/pages/JoinCompetitionPage'
+import { CompetitionInviteResumer } from '@/components/CompetitionInviteResumer'
 import JoinTeamPage from '@/pages/JoinTeamPage'
 import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
 import LandingPage from '@/pages/LandingPage'
@@ -28,12 +30,12 @@ const LiveLoggerPage = lazy(() => import('@/pages/LiveLoggerPage'))
 const LiveMatchPage = lazy(() => import('@/pages/LiveMatchPage'))
 const MatchReportPage = lazy(() => import('@/pages/MatchReportPage'))
 const StatisticsPage = lazy(() => import('@/pages/StatisticsPage'))
+const CompetitionsPage = lazy(() => import('@/features/competitions/CompetitionsPage'))
 const InjuryRecoveryPage = lazy(() => import('@/features/injuries/InjuryRecoveryPage'))
 const TeamManagementPage = lazy(() => import('@/features/team-management/TeamManagementPage'))
 const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
 const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
 const PlayerEventsPage = lazy(() => import('@/features/player/PlayerEventsPage'))
-const PlayerStandingsPage = lazy(() => import('@/features/player/PlayerStandingsPage'))
 
 function RouteFallback() {
   return (
@@ -91,6 +93,7 @@ function App() {
       <BrowserRouter useTransitions={false}>
       <ClaimResumer />
       <TeamInviteResumer />
+      <CompetitionInviteResumer />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -98,6 +101,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
+        <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
         <Route path="/join-team/:token" element={<JoinTeamPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
@@ -118,6 +122,8 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/competitions" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
+          <Route path="/competitions/:id" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
           <Route
             path="/athletes"
             element={
@@ -210,7 +216,9 @@ function App() {
           <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
           <Route path="/player/team" element={<PlayerTeamPage />} />
           <Route path="/player/events" element={<PlayerEventsPage />} />
-          <Route path="/player/standings" element={<PlayerStandingsPage />} />
+          <Route path="/player/competitions" element={<CompetitionsPage />} />
+          <Route path="/player/competitions/:id" element={<CompetitionsPage />} />
+          <Route path="/player/standings" element={<Navigate to="/player/competitions" replace />} />
         </Route>
       </Routes>
       </Suspense>

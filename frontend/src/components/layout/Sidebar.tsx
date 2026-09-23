@@ -50,6 +50,7 @@ const COACH_NAV_ITEMS: NavItem[] = [
     requiresTeam: true,
   },
   { label: "Stats", path: "/statistics", icon: BarChart3, requiresTeam: true },
+  { label: "Leagues & Competitions", path: "/competitions", icon: Trophy, requiresTeam: true },
   { label: "Team", path: "/team", icon: Shield, requiresTeam: true },
 ];
 
@@ -57,7 +58,7 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/player/dashboard", icon: Home },
   { label: "Team", path: "/player/team", icon: Users },
   { label: "Events", path: "/player/events", icon: Calendar },
-  { label: "Standings", path: "/player/standings", icon: Trophy },
+  { label: "Leagues & Competitions", path: "/player/competitions", icon: Trophy },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════

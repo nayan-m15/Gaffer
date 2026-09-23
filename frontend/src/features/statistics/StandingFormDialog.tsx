@@ -218,18 +218,6 @@ export function StandingFormDialog({
             </FormField>
           </div>
 
-          <label className="flex items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={values.isOwnTeam}
-              onChange={(e) => handleChange("isOwnTeam", e.target.checked)}
-              className="size-4 rounded border-input accent-primary"
-            />
-            <span className="text-sm font-medium text-foreground">
-              This is my team
-            </span>
-          </label>
-
           {error && (
             <p role="alert" className="text-xs text-destructive">
               {error}

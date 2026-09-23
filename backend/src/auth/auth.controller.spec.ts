@@ -146,6 +146,43 @@ describe('AuthController', () => {
       });
     });
 
+    it('routes competition signup verification back to the competition invite', async () => {
+      signUpEmail.mockResolvedValue(signUpResponse(false));
+      await controller.signUp(
+        {
+          name: 'Ada',
+          email: 'ada@example.com',
+          password: 'password123',
+          inviteToken: INVITE_TOKEN,
+          inviteKind: 'competition',
+        },
+        res,
+      );
+      expect(signUpEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            callbackURL: `${FRONTEND_URL}/join-competition/${INVITE_TOKEN}`,
+          }),
+        }),
+      );
+    });
+
+    it('rejects an unknown invite kind', async () => {
+      await expect(
+        controller.signUp(
+          {
+            name: 'Ada',
+            email: 'ada@example.com',
+            password: 'password123',
+            inviteToken: INVITE_TOKEN,
+            inviteKind: 'other',
+          },
+          res,
+        ),
+      ).rejects.toThrow();
+      expect(signUpEmail).not.toHaveBeenCalled();
+    });
+
     it('rejects a malformed invite token', async () => {
       await expect(
         controller.signUp(
@@ -175,6 +212,20 @@ describe('AuthController', () => {
         },
       });
       expect(result).toEqual({ status: true });
+    });
+
+    it('routes competition verification resends back to the competition invite', async () => {
+      await controller.sendVerificationEmail({
+        email: 'ada@example.com',
+        inviteToken: INVITE_TOKEN,
+        inviteKind: 'competition',
+      });
+      expect(sendVerificationEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'ada@example.com',
+          callbackURL: `${FRONTEND_URL}/join-competition/${INVITE_TOKEN}`,
+        },
+      });
     });
 
     it('routes the resend back to the pending team invite', async () => {

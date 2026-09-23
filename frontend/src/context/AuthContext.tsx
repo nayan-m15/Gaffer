@@ -67,6 +67,7 @@ export interface SignUpInput {
    * makes the verification email land the user back on the invite.
    */
   inviteToken?: string;
+  inviteKind?: "team" | "competition";
 }
 
 export interface SignInInput {
@@ -100,6 +101,7 @@ interface AuthContextValue {
   resendVerificationEmail: (
     email: string,
     inviteToken?: string,
+    inviteKind?: "team" | "competition",
   ) => Promise<void>;
 }
 
@@ -264,10 +266,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `inviteToken`, when the resend happens mid-team-invite flow, makes the
   // fresh verification email route back to /join-team/:token as well.
   const resendVerificationEmail = useCallback(
-    async (email: string, inviteToken?: string) => {
+    async (email: string, inviteToken?: string, inviteKind?: "team" | "competition") => {
       await apiFetch("/auth/send-verification-email", {
         method: "POST",
-        body: JSON.stringify({ email, inviteToken }),
+        body: JSON.stringify({ email, inviteToken, inviteKind }),
       });
     },
     [],

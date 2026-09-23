@@ -333,6 +333,7 @@ export function useLogMatchEvent(matchId: string) {
         void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
       }
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
     },
   });
 }
@@ -455,6 +456,7 @@ export function useUpdateMatchEvent(matchId: string) {
         }
       }
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
     },
   });
 }
@@ -513,6 +515,7 @@ export function useDeleteMatchEvent(matchId: string) {
         void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
       }
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
     },
   });
 }
@@ -525,6 +528,8 @@ export function useFinishMatch(matchId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
+      void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
     },
   });
 }

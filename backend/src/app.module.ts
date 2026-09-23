@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CompetitionsModule } from './competitions/competitions.module';
+import { CompetitionInvitesModule } from './competition-invites/competition-invites.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
@@ -36,6 +38,8 @@ import { SyncModule } from './sync/sync.module';
     DashboardModule,
     SeasonsModule,
     StatisticsModule,
+    CompetitionsModule,
+    CompetitionInvitesModule,
     ProfileModule,
     WeatherModule,
     PublicApiModule,

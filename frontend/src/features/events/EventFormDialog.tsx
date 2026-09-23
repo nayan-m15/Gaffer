@@ -144,6 +144,16 @@ export function EventFormDialog({
   const [error, setError] = useState<string | null>(null);
   const locationSearchIdRef = useRef(0);
 
+  const competitionOptions = useMemo(
+    () =>
+      (competitionsQuery.data ?? []).filter(
+        (competition) =>
+          competition.type !== "friendly" ||
+          competition.id === event?.competitionId,
+      ),
+    [competitionsQuery.data, event?.competitionId],
+  );
+
   useEffect(() => {
     if (!open) {
       return;
@@ -205,11 +215,11 @@ export function EventFormDialog({
   const typeStyle = getEventTypeStyle(type);
   const competitionItems = useMemo(() => {
     const items: Record<string, string> = { none: "No competition" };
-    for (const competition of competitionsQuery.data ?? []) {
+    for (const competition of competitionOptions) {
       items[competition.id] = competitionOptionLabel(competition);
     }
     return items;
-  }, [competitionsQuery.data]);
+  }, [competitionOptions]);
   const opponentItems = useMemo(
     () => Object.fromEntries(opponentTeams.map((name) => [name, name])),
     [opponentTeams],
@@ -403,7 +413,7 @@ export function EventFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No competition</SelectItem>
-                  {(competitionsQuery.data ?? []).map((competition) => (
+                  {competitionOptions.map((competition) => (
                     <SelectItem key={competition.id} value={competition.id}>
                       {competitionOptionLabel(competition)}
                     </SelectItem>

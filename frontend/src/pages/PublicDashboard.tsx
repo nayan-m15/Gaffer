@@ -105,7 +105,9 @@ export default function PublicDashboard() {
     () =>
       (filtersQuery.data?.competitions ?? []).filter(
         (competition) =>
-          (!teamId || competition.teamId === teamId) &&
+          (!teamId ||
+            competition.teamIds?.includes(teamId) ||
+            competition.teamId === teamId) &&
           (!seasonId || competition.seasonId === seasonId),
       ),
     [filtersQuery.data?.competitions, seasonId, teamId],

@@ -268,6 +268,8 @@ export interface CompetitionWithStandings {
   season: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Whether the signed-in coach administers this shared competition. */
+  isAdmin: boolean;
   standings: StandingRow[];
 }
 
