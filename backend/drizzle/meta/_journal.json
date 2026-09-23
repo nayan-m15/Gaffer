@@ -183,6 +183,13 @@
       "when": 1790180000003,
       "tag": "0024_injuries_and_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790180000006,
+      "tag": "0025_offline_operations_hardening",
+      "breakpoints": true
     }
   ]
 }

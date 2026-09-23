@@ -16,6 +16,8 @@ import { useGamePlan, useGamePlans } from "@/features/team-tactics/api";
 import { formatLocalDate } from "@/features/events/event-utils";
 import { useEvent, useStartMatch } from "@/features/events/hooks";
 import type { OpponentSquadVisibility } from "@/features/events/types";
+import { useCompetitions } from "@/features/statistics/hooks";
+import type { CompetitionWithStandings } from "@/features/statistics/types";
 import {
   contrastText,
   resolveOppColor,
@@ -80,6 +82,60 @@ const cardClassName =
 
 const sectionLabelClassName =
   "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground";
+
+const OPPONENT_NAME_SUGGESTIONS_ID = "opponent-name-suggestions";
+const GENERIC_OPPONENT_PLACEHOLDER = "e.g. Stellenbosch FC";
+
+/** Event titles that are not useful as an opponent-name example. */
+const UNHELPFUL_EVENT_TITLES = new Set([
+  "untitled",
+  "new event",
+  "event",
+  "training",
+  "training session",
+  "saturday training",
+  "match",
+  "meeting",
+  "game",
+  "fixture",
+  "friendly",
+  "practice",
+]);
+
+function opponentNamePlaceholder(eventTitle: string) {
+  const title = eventTitle.trim();
+  if (!title || UNHELPFUL_EVENT_TITLES.has(title.toLowerCase())) {
+    return GENERIC_OPPONENT_PLACEHOLDER;
+  }
+  return `e.g. ${title}`;
+}
+
+function opponentSuggestionsFromStandings(
+  competitions: CompetitionWithStandings[] | undefined,
+  competitionId: string | null,
+) {
+  if (!competitionId) {
+    return [];
+  }
+  const competition = competitions?.find((entry) => entry.id === competitionId);
+  if (!competition) {
+    return [];
+  }
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const standing of competition.standings) {
+    if (standing.isOwnTeam) {
+      continue;
+    }
+    const name = standing.teamName.trim();
+    if (!name || seen.has(name.toLowerCase())) {
+      continue;
+    }
+    seen.add(name.toLowerCase());
+    names.push(name);
+  }
+  return names;
+}
 
 function isBeforeMatchDay(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
@@ -373,6 +429,15 @@ export default function ConfirmSquadPage() {
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
+  const competitionId = eventQuery.data?.competitionId ?? null;
+  const competitionsQuery = useCompetitions({
+    enabled: Boolean(competitionId),
+  });
+  const opponentSuggestions = useMemo(
+    () =>
+      opponentSuggestionsFromStandings(competitionsQuery.data, competitionId),
+    [competitionsQuery.data, competitionId],
+  );
 
   const [selectedGamePlanId, setSelectedGamePlanId] = useState<string | null>(
     null,
@@ -853,13 +918,27 @@ export default function ConfirmSquadPage() {
               <Label htmlFor="opponent-name">Opponent name</Label>
               <input
                 id="opponent-name"
+                list={
+                  opponentSuggestions.length > 0
+                    ? OPPONENT_NAME_SUGGESTIONS_ID
+                    : undefined
+                }
                 className={inputClassName}
                 value={opponentName}
-                onChange={(event) => setOpponentName(event.target.value)}
-                placeholder="Opponent name"
+                onChange={(changeEvent) =>
+                  setOpponentName(changeEvent.target.value)
+                }
+                placeholder={opponentNamePlaceholder(event.title)}
                 autoComplete="off"
                 maxLength={100}
               />
+              {opponentSuggestions.length > 0 ? (
+                <datalist id={OPPONENT_NAME_SUGGESTIONS_ID}>
+                  {opponentSuggestions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              ) : null}
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Venue</p>

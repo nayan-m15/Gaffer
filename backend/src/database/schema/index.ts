@@ -504,6 +504,7 @@ export const matches = pgTable(
     clockPeriod: text('clock_period').default('not_started').notNull(),
     clockElapsedMs: integer('clock_elapsed_ms').default(0).notNull(),
     clockStartedAt: timestamp('clock_started_at', { withTimezone: true }),
+    clockRevision: integer('clock_revision').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -985,6 +986,42 @@ export const matchEventOperations = pgTable(
   ],
 );
 
+/** Append-only audit trail for shared clock commands. The matches row stores
+ * the latest materialised clock while these rows preserve who requested every
+ * transition and which authoritative revision it produced. */
+export const matchClockOperations = pgTable(
+  'match_clock_operations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    period: text('period').notNull(),
+    elapsedMs: integer('elapsed_ms').notNull(),
+    running: boolean('running').notNull(),
+    baseRevision: integer('base_revision').notNull(),
+    appliedRevision: integer('applied_revision').notNull(),
+    outcome: text('outcome').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    clientCreatedAt: timestamp('client_created_at', {
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_clock_operations_match_revision_index').on(
+      table.matchId,
+      table.appliedRevision,
+    ),
+    index('match_clock_operations_actor_index').on(table.actorUserId),
+  ],
+);
+
 export const matchEventReviews = pgTable(
   'match_event_reviews',
   {
@@ -1061,6 +1098,7 @@ export const syncUploadReceipts = pgTable(
     payloadHash: text('payload_hash').notNull(),
     outcome: text('outcome').notNull(),
     safeErrorCode: text('safe_error_code'),
+    processingDurationMs: integer('processing_duration_ms'),
     canonicalEventId: uuid('canonical_event_id').references(
       () => matchEvents.id,
       { onDelete: 'set null' },
@@ -1072,5 +1110,32 @@ export const syncUploadReceipts = pgTable(
       table.submittedByUserId,
       table.createdAt,
     ),
+  ],
+);
+
+/** Latest non-sensitive queue health reported by each browser installation. */
+export const syncClientTelemetry = pgTable(
+  'sync_client_telemetry',
+  {
+    deviceId: uuid('device_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    pendingCount: integer('pending_count').default(0).notNull(),
+    rejectedCount: integer('rejected_count').default(0).notNull(),
+    oldestPendingAt: timestamp('oldest_pending_at', { withTimezone: true }),
+    lastSuccessfulSyncAt: timestamp('last_successful_sync_at', {
+      withTimezone: true,
+    }),
+    deployment: text('deployment').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('sync_client_telemetry_team_index').on(table.teamId, table.updatedAt),
   ],
 );

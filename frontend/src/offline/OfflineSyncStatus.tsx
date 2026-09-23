@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { flushOfflineMatchEvents } from "@/features/matches/api";
-import { listQueuedEvents, subscribeToOfflineQueueChanges } from "./match-store";
+import { apiFetch } from "@/lib/api";
+import {
+  getOfflineDeviceId,
+  listQueuedEvents,
+  subscribeToOfflineQueueChanges,
+} from "./match-store";
 
 export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const queryClient = useQueryClient();
@@ -11,6 +16,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const [accepted, setAccepted] = useState(0);
   const [quarantined, setQuarantined] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const telemetrySentAt = useRef(0);
   const [lastSync, setLastSync] = useState<string | null>(() =>
     localStorage.getItem("gaffer-last-successful-sync"),
   );
@@ -20,14 +26,40 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     const refresh = async () => {
       const rows = await listQueuedEvents(matchId);
       if (!active) return;
+      const pendingRows = rows.filter((row) =>
+        ["queued", "uploading", "dependency_pending"].includes(row.state),
+      );
       setPending(
-        rows.filter((row) =>
-          ["queued", "uploading", "dependency_pending"].includes(row.state),
-        ).length,
+        pendingRows.length,
       );
       setRejected(rows.filter((row) => row.state === "rejected").length);
       setAccepted(rows.filter((row) => row.state === "accepted").length);
       setQuarantined(rows.filter((row) => row.state === "quarantined").length);
+      if (navigator.onLine && Date.now() - telemetrySentAt.current >= 60_000) {
+        telemetrySentAt.current = Date.now();
+        const telemetryRows = await listQueuedEvents();
+        const telemetryPending = telemetryRows.filter((row) =>
+          ["queued", "uploading", "dependency_pending"].includes(row.state),
+        );
+        void apiFetch("/sync/telemetry", {
+          method: "POST",
+          body: JSON.stringify({
+            deviceId: getOfflineDeviceId(),
+            pendingCount: telemetryPending.length,
+            rejectedCount: telemetryRows.filter(
+              (row) => row.state === "rejected",
+            ).length,
+            oldestPendingAt: telemetryPending[0]?.created_at ?? null,
+            lastSuccessfulSyncAt: localStorage.getItem(
+              "gaffer-last-successful-sync",
+            ),
+            deployment:
+              import.meta.env.VITE_DEPLOYMENT_ENV || window.location.hostname,
+          }),
+        }).catch(() => {
+          telemetrySentAt.current = 0;
+        });
+      }
     };
     const reconnect = async () => {
       setOnline(true);

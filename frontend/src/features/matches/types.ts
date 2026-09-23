@@ -41,6 +41,7 @@ export interface MatchRecord {
   clockPeriod: MatchClockPeriod;
   clockElapsedMs: number;
   clockStartedAt: string | null;
+  clockRevision: number;
   createdAt: string;
   updatedAt: string;
   eventTitle: string;
@@ -135,6 +136,9 @@ export interface UpdateMatchLogEventInput {
 }
 
 export interface UpdateMatchClockInput {
+  operationId: string;
+  baseRevision: number;
+  clientCreatedAt: string;
   period: MatchClockPeriod;
   running: boolean;
   elapsedMs: number;

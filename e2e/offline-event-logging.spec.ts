@@ -108,7 +108,9 @@ function player(page: Page, number: number) {
 
 async function openEventPicker(page: Page, number: number) {
   await player(page, number).click();
-  await expect(page.getByText("Log match event", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Log match event", { exact: true }),
+  ).toBeVisible();
 }
 
 async function expectCalloutAboveBench(page: Page, selector: string) {
@@ -152,7 +154,9 @@ test("all live event workflows remain usable and visible offline", async ({
 
   await openEventPicker(page, 4);
   await page.getByRole("button", { name: "Yellow" }).click();
-  await expect(page.getByText(/Yellow card saved on this device/i)).toBeVisible();
+  await expect(
+    page.getByText(/Yellow card saved on this device/i),
+  ).toBeVisible();
   await expect(page.getByText(/12' Yellow Card/i)).toBeVisible();
 
   await openEventPicker(page, 5);
@@ -174,7 +178,9 @@ test("all live event workflows remain usable and visible offline", async ({
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "SCORED" }).click();
-  await expect(page.getByText("12' Penalty 2-0", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("12' Penalty 2-0", { exact: true }),
+  ).toBeVisible();
 
   await openEventPicker(page, 6);
   await page.getByRole("button", { name: "Injury" }).click();
@@ -184,6 +190,38 @@ test("all live event workflows remain usable and visible offline", async ({
   await expect(page.getByText(/12' Injury/i)).toBeVisible();
 
   await expect(page.getByText("9 waiting", { exact: true })).toBeVisible();
+});
+
+test("generic opponent events do not request unavailable players", async ({
+  page,
+  context,
+}) => {
+  await mockLiveMatch(page);
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await context.setOffline(true);
+
+  const openOpponentEvent = async () => {
+    await page.getByRole("button", { name: /log opponent/i }).click();
+    await expect(
+      page.getByText("Log match event", { exact: true }),
+    ).toBeVisible();
+  };
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.locator('[data-callout="assist-pick"]')).toHaveCount(0);
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Substitution" }).click();
+  await expect(page.locator('[data-callout="voluntary-sub-in"]')).toHaveCount(
+    0,
+  );
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Injury" }).click();
+  await expect(page.locator('[data-callout="mandatory-sub"]')).toHaveCount(0);
+  await expect(page.getByText("3 waiting", { exact: true })).toBeVisible();
 });
 
 test("storage exhaustion fails visibly without claiming an event was saved", async ({
@@ -199,11 +237,15 @@ test("storage exhaustion fails visibly without claiming an event was saved", asy
   await context.setOffline(true);
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByRole("alert")).toContainText("Offline storage is full.");
+  await expect(page.getByRole("alert")).toContainText(
+    "Offline storage is full.",
+  );
   await expect(page.getByText(/Goal saved on this device/i)).toHaveCount(0);
 });
 
-test("expired sessions retain queued work for a later retry", async ({ page }) => {
+test("expired sessions retain queued work for a later retry", async ({
+  page,
+}) => {
   await mockLiveMatch(page);
   await page.route("**/api/sync/upload", (route) =>
     json(route, { message: "Sign in required." }, 401),
@@ -239,11 +281,16 @@ test("membership revocation quarantines work instead of deleting it", async ({
   await page.getByRole("button", { name: "RESUME Match paused" }).click();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByText("1 access blocked", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 access blocked", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/retained on this device/i)).toBeVisible();
 });
 
-test("two tabs observe the same durable pending queue", async ({ page, context }) => {
+test("two tabs observe the same durable pending queue", async ({
+  page,
+  context,
+}) => {
   const second = await context.newPage();
   await Promise.all([mockLiveMatch(page), mockLiveMatch(second)]);
   await Promise.all([
