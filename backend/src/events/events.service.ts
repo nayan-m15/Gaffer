@@ -12,6 +12,7 @@ import {
   athleteMatchStats,
   athletes,
   competitions,
+  competitionFixtures,
   competitionTeams,
   eventRsvps,
   events,
@@ -83,15 +84,21 @@ export class EventsService {
       .select({
         event: events,
         matchId: matches.id,
+        fixtureScheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
       })
       .from(events)
       .leftJoin(matches, eq(matches.eventId, events.id))
+      .leftJoin(
+        competitionFixtures,
+        eq(competitionFixtures.id, events.competitionFixtureId),
+      )
       .where(eq(events.teamId, teamId))
       .orderBy(asc(events.scheduledAt));
 
     return rows.map((row) => ({
       ...row.event,
       matchId: row.matchId,
+      fixtureScheduleConfirmedAt: row.fixtureScheduleConfirmedAt,
     }));
   }
 
@@ -188,12 +195,29 @@ export class EventsService {
 
   async findOne(userId: string, eventId: string) {
     const team = await this.requireTeam(userId);
-    return this.requireEvent(team.id, eventId);
+    const event = await this.requireEvent(team.id, eventId);
+    if (!event.competitionFixtureId) {
+      return { ...event, fixtureScheduleConfirmedAt: null };
+    }
+    const [fixture] = await this.databaseService.database
+      .select({ scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt })
+      .from(competitionFixtures)
+      .where(eq(competitionFixtures.id, event.competitionFixtureId))
+      .limit(1);
+    return {
+      ...event,
+      fixtureScheduleConfirmedAt: fixture?.scheduleConfirmedAt ?? null,
+    };
   }
 
   async update(userId: string, eventId: string, dto: UpdateEventDto) {
     const team = await this.requireTeam(userId);
     const existingEvent = await this.requireEvent(team.id, eventId);
+    if (existingEvent.competitionFixtureId) {
+      throw new BadRequestException(
+        'Generated competition fixtures are managed from Leagues & Competitions.',
+      );
+    }
     const type = dto.type ?? existingEvent.type;
     const competitionId =
       type === 'match'
@@ -262,7 +286,12 @@ export class EventsService {
 
   async cancel(userId: string, eventId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireEvent(team.id, eventId);
+    const existingEvent = await this.requireEvent(team.id, eventId);
+    if (existingEvent.competitionFixtureId) {
+      throw new BadRequestException(
+        'Generated competition fixtures are managed from Leagues & Competitions.',
+      );
+    }
 
     const [event] = await this.databaseService.database
       .update(events)
@@ -286,6 +315,21 @@ export class EventsService {
 
     if (event.status !== 'scheduled') {
       throw new BadRequestException('Only scheduled matches can be started.');
+    }
+
+    if (event.competitionFixtureId) {
+      const [fixture] = await this.databaseService.database
+        .select({
+          scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
+        })
+        .from(competitionFixtures)
+        .where(eq(competitionFixtures.id, event.competitionFixtureId))
+        .limit(1);
+      if (!fixture?.scheduleConfirmedAt) {
+        throw new ForbiddenException(
+          'Both teams must confirm the fixture date before this match can start.',
+        );
+      }
     }
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {

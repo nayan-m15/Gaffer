@@ -239,6 +239,20 @@
       "when": 1790180000008,
       "tag": "0029_competition_fixture_events",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790180000009,
+      "tag": "0033_fixture_schedule_confirmation",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790180000010,
+      "tag": "0034_merge_schema_reconciliation",
+      "breakpoints": true
     }
   ]
 }

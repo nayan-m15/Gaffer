@@ -121,3 +121,29 @@ export type UpdateCompetitionResultDto = z.infer<
 export const generateFixturesSchema = z.object({
   regenerate: z.boolean().optional().default(false),
 });
+
+export const fixtureScheduleAcceptSchema = z.object({
+  competitionTeamId: z.uuid().optional(),
+  expectedRevision: z.number().int().positive(),
+});
+export type FixtureScheduleAcceptDto = z.infer<
+  typeof fixtureScheduleAcceptSchema
+>;
+
+export const fixtureScheduleProposalSchema = z.object({
+  competitionTeamId: z.uuid().optional(),
+  expectedRevision: z.number().int().positive(),
+  scheduledAt: z.iso.datetime({
+    offset: true,
+    error: 'Enter a valid proposed date and time.',
+  }),
+  note: z
+    .string()
+    .trim()
+    .max(500, 'Reschedule note must be 500 characters or fewer.')
+    .optional(),
+});
+export type FixtureScheduleProposalDto = z.infer<
+  typeof fixtureScheduleProposalSchema
+>;
+

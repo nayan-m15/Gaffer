@@ -518,9 +518,13 @@ export default function ConfirmSquadPage() {
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
+  const fixtureDateConfirmed =
+    !eventQuery.data?.competitionFixtureId ||
+    Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
   const canSubmit =
     startingCount === STARTING_XI_SIZE &&
     opponentReady &&
+    fixtureDateConfirmed &&
     !beforeMatchDay &&
     !startMatch.isPending &&
     !(eventQuery.data?.competitionId &&
@@ -1249,6 +1253,12 @@ export default function ConfirmSquadPage() {
             Bench: {benchCount}
           </p>
         </div>
+
+        {!fixtureDateConfirmed && (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+            This generated fixture is still provisional. Both teams must agree the date in Leagues & Competitions before the match can start.
+          </p>
+        )}
 
         {beforeMatchDay && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">

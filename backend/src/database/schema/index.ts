@@ -478,6 +478,10 @@ export const fixtureStatus = pgEnum('competition_fixture_status', [
   'completed',
   'cancelled',
 ]);
+export const fixtureScheduleResponse = pgEnum(
+  'competition_fixture_schedule_response',
+  ['pending', 'accepted', 'external_confirmed'],
+);
 
 // A league or cup the team is competing in this season.
 export const competitions = pgTable(
@@ -1103,6 +1107,28 @@ export const competitionFixtures = pgTable(
     legacyResultId: uuid('legacy_result_id').references(
       () => competitionMatches.id,
     ),
+    scheduleRevision: integer('schedule_revision').default(1).notNull(),
+    homeScheduleResponse: fixtureScheduleResponse('home_schedule_response')
+      .default('pending')
+      .notNull(),
+    awayScheduleResponse: fixtureScheduleResponse('away_schedule_response')
+      .default('pending')
+      .notNull(),
+    homeScheduleRespondedAt: timestamp('home_schedule_responded_at', {
+      withTimezone: true,
+    }),
+    awayScheduleRespondedAt: timestamp('away_schedule_responded_at', {
+      withTimezone: true,
+    }),
+    homeScheduleRespondedByUserId: text('home_schedule_responded_by_user_id'),
+    awayScheduleRespondedByUserId: text('away_schedule_responded_by_user_id'),
+    scheduleProposedByCompetitionTeamId: uuid(
+      'schedule_proposed_by_competition_team_id',
+    ),
+    scheduleProposalNote: text('schedule_proposal_note'),
+    scheduleConfirmedAt: timestamp('schedule_confirmed_at', {
+      withTimezone: true,
+    }),
     ...timestamps,
   },
   (table) => [
@@ -1148,6 +1174,24 @@ export const competitionFixtures = pgTable(
       foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
     }),
     foreignKey({
+      name: 'competition_fixtures_home_schedule_user_fk',
+      columns: [table.homeScheduleRespondedByUserId],
+      foreignColumns: [user.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'competition_fixtures_away_schedule_user_fk',
+      columns: [table.awayScheduleRespondedByUserId],
+      foreignColumns: [user.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'competition_fixtures_schedule_proposer_fk',
+      columns: [
+        table.competitionId,
+        table.scheduleProposedByCompetitionTeamId,
+      ],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
       name: 'competition_fixtures_next_fixture_fk',
       columns: [table.competitionId, table.nextFixtureId],
       foreignColumns: [table.competitionId, table.id],
@@ -1162,6 +1206,9 @@ export const competitionFixtures = pgTable(
     and ((${table.homeScore} is null and ${table.awayScore} is null) or (${table.homeScore} between 0 and 99 and ${table.awayScore} between 0 and 99 and ${table.homeScore} is not null and ${table.awayScore} is not null))
     and ((${table.homePenaltyScore} is null and ${table.awayPenaltyScore} is null) or (${table.stage} = 'knockout' and ${table.homePenaltyScore} between 0 and 99 and ${table.awayPenaltyScore} between 0 and 99 and ${table.homePenaltyScore} is not null and ${table.awayPenaltyScore} is not null))
     and (${table.winnerCompetitionTeamId} is null or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.winnerCompetitionTeamId} in (${table.homeCompetitionTeamId}, ${table.awayCompetitionTeamId})))
+    and ${table.scheduleRevision} > 0
+    and (${table.scheduleProposedByCompetitionTeamId} is null or (${table.homeCompetitionTeamId} is not null and ${table.scheduleProposedByCompetitionTeamId} = ${table.homeCompetitionTeamId}) or (${table.awayCompetitionTeamId} is not null and ${table.scheduleProposedByCompetitionTeamId} = ${table.awayCompetitionTeamId}))
+    and (${table.scheduleConfirmedAt} is null or (${table.homeScheduleResponse} in ('accepted','external_confirmed') and ${table.awayScheduleResponse} in ('accepted','external_confirmed')))
     and (${table.status} <> 'completed' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.homeScore} is not null and ${table.awayScore} is not null and (${table.stage} <> 'knockout' or ${table.winnerCompetitionTeamId} is not null)))
   `,
     ),

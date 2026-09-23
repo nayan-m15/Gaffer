@@ -22,6 +22,8 @@ export interface PlayerEvent {
   weatherTimezone: string | null;
   notes: string | null;
   competitionId: string | null;
+  competitionFixtureId: string | null;
+  fixtureScheduleConfirmedAt: string | null;
   matchId: string | null;
   createdAt: string;
   updatedAt: string;

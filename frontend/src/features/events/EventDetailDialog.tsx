@@ -77,6 +77,9 @@ export function EventDetailDialog({
   };
 
   const playerEvent = readOnly ? (event as PlayerEvent | null) : null;
+  const generatedFixture = Boolean(event?.competitionFixtureId);
+  const fixtureDateConfirmed =
+    !generatedFixture || Boolean(event?.fixtureScheduleConfirmedAt);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
@@ -106,6 +109,20 @@ export function EventDetailDialog({
             {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
             <LocationLinks event={event} />
             <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+            {generatedFixture && event.status === "scheduled" && (
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm",
+                  fixtureDateConfirmed
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-500"
+                    : "border-amber-500/25 bg-amber-500/10 text-amber-500",
+                )}
+              >
+                {fixtureDateConfirmed
+                  ? "Fixture date confirmed by both teams."
+                  : "This generated fixture date is provisional. Coaches manage confirmation and rescheduling from Leagues & Competitions."}
+              </div>
+            )}
             {event.status !== "cancelled" && !readOnly && (
               <EventWeatherCard event={event} enabled={open} />
             )}
@@ -152,15 +169,20 @@ export function EventDetailDialog({
 
         {!readOnly && (
           <DialogFooter className="gap-2 sm:justify-between">
-            {canManage && event && event.status !== "cancelled" && (
+            {canManage && event && event.status !== "cancelled" && !generatedFixture && (
               <Button variant="destructive" onClick={() => void handleCancel()} disabled={cancelEvent.isPending}>
                 {cancelEvent.isPending ? "Cancelling…" : "Cancel Event"}
               </Button>
             )}
             {event && event.type === "match" && event.status !== "cancelled" && (
-              <Button onClick={() => navigate(`/events/${event.id}/confirm-squad`)}>Confirm squad</Button>
+              <Button
+                disabled={!fixtureDateConfirmed}
+                onClick={() => navigate(`/events/${event.id}/confirm-squad`)}
+              >
+                {fixtureDateConfirmed ? "Confirm squad" : "Awaiting fixture confirmation"}
+              </Button>
             )}
-            {canManage && event && (
+            {canManage && event && !generatedFixture && (
               <Button variant="outline" className="sm:ml-auto" onClick={() => onEdit(event as TeamEvent)}>Edit</Button>
             )}
           </DialogFooter>

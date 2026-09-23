@@ -37,6 +37,8 @@ import type {
   CreateCompetitionDto,
   CreateCompetitionResultDto,
   CreateCompetitionTeamDto,
+  FixtureScheduleAcceptDto,
+  FixtureScheduleProposalDto,
   UpdateCompetitionDto,
   UpdateCompetitionResultDto,
 } from './competitions.schemas';
@@ -106,6 +108,18 @@ export interface CompetitionResultView {
   source: 'live_logged' | 'manual';
   linkedMatchId: string | null;
   createdAt: Date;
+}
+
+interface FixtureScheduleParticipant {
+  id: string;
+  teamId: string | null;
+  displayName: string;
+}
+
+interface FixtureScheduleContext {
+  fixture: typeof competitionFixtures.$inferSelect;
+  home: FixtureScheduleParticipant;
+  away: FixtureScheduleParticipant;
 }
 
 /**
@@ -890,6 +904,149 @@ export class CompetitionsService {
       );
   }
 
+  async acceptFixtureSchedule(
+    userId: string,
+    competitionId: string,
+    fixtureId: string,
+    dto: FixtureScheduleAcceptDto,
+  ) {
+    const context = await this.requireFixtureScheduleContext(
+      competitionId,
+      fixtureId,
+    );
+    const actor = await this.resolveFixtureScheduleActor(
+      userId,
+      competitionId,
+      context,
+      dto.competitionTeamId,
+    );
+    if (context.fixture.scheduleRevision !== dto.expectedRevision) {
+      throw new ConflictException(
+        'This fixture date changed while you were viewing it. Refresh and review the latest proposal.',
+      );
+    }
+    const response = actor.participant.teamId
+      ? ('accepted' as const)
+      : ('external_confirmed' as const);
+    const now = new Date();
+
+    const [updated] = await this.databaseService.database
+      .update(competitionFixtures)
+      .set(
+        actor.side === 'home'
+          ? {
+              homeScheduleResponse: response,
+              homeScheduleRespondedAt: now,
+              homeScheduleRespondedByUserId: userId,
+              updatedAt: now,
+            }
+          : {
+              awayScheduleResponse: response,
+              awayScheduleRespondedAt: now,
+              awayScheduleRespondedByUserId: userId,
+              updatedAt: now,
+            },
+      )
+      .where(
+        and(
+          eq(competitionFixtures.id, fixtureId),
+          eq(competitionFixtures.competitionId, competitionId),
+          eq(competitionFixtures.status, 'scheduled'),
+          eq(competitionFixtures.scheduleRevision, dto.expectedRevision),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      throw new ConflictException(
+        'This fixture changed before your confirmation was saved. Refresh and try again.',
+      );
+    }
+    return updated;
+  }
+
+  async proposeFixtureSchedule(
+    userId: string,
+    competitionId: string,
+    fixtureId: string,
+    dto: FixtureScheduleProposalDto,
+  ) {
+    const context = await this.requireFixtureScheduleContext(
+      competitionId,
+      fixtureId,
+    );
+    const actor = await this.resolveFixtureScheduleActor(
+      userId,
+      competitionId,
+      context,
+      dto.competitionTeamId,
+    );
+    if (context.fixture.scheduleRevision !== dto.expectedRevision) {
+      throw new ConflictException(
+        'This fixture date changed while you were viewing it. Refresh and review the latest proposal.',
+      );
+    }
+    const scheduledAt = new Date(dto.scheduledAt);
+    if (scheduledAt.getTime() === context.fixture.scheduledAt.getTime()) {
+      throw new BadRequestException(
+        'Choose a different date or time for the reschedule proposal.',
+      );
+    }
+
+    const response = actor.participant.teamId
+      ? ('accepted' as const)
+      : ('external_confirmed' as const);
+    const now = new Date();
+    const common = {
+      scheduledAt,
+      scheduleRevision: sql<number>`${competitionFixtures.scheduleRevision} + 1`,
+      scheduleProposedByCompetitionTeamId: actor.participant.id,
+      scheduleProposalNote: dto.note?.trim() || null,
+      scheduleConfirmedAt: null,
+      updatedAt: now,
+    };
+
+    const [updated] = await this.databaseService.database
+      .update(competitionFixtures)
+      .set(
+        actor.side === 'home'
+          ? {
+              ...common,
+              homeScheduleResponse: response,
+              homeScheduleRespondedAt: now,
+              homeScheduleRespondedByUserId: userId,
+              awayScheduleResponse: 'pending',
+              awayScheduleRespondedAt: null,
+              awayScheduleRespondedByUserId: null,
+            }
+          : {
+              ...common,
+              awayScheduleResponse: response,
+              awayScheduleRespondedAt: now,
+              awayScheduleRespondedByUserId: userId,
+              homeScheduleResponse: 'pending',
+              homeScheduleRespondedAt: null,
+              homeScheduleRespondedByUserId: null,
+            },
+      )
+      .where(
+        and(
+          eq(competitionFixtures.id, fixtureId),
+          eq(competitionFixtures.competitionId, competitionId),
+          eq(competitionFixtures.status, 'scheduled'),
+          eq(competitionFixtures.scheduleRevision, dto.expectedRevision),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      throw new ConflictException(
+        'This fixture changed before your proposal was saved. Refresh and try again.',
+      );
+    }
+    return updated;
+  }
+
   async generateFixtures(
     userId: string,
     competitionId: string,
@@ -922,6 +1079,118 @@ export class CompetitionsService {
       throw error;
     }
     return this.listFixtures(userId, competitionId);
+  }
+
+  private async requireFixtureScheduleContext(
+    competitionId: string,
+    fixtureId: string,
+  ) {
+    const [fixture] = await this.databaseService.database
+      .select()
+      .from(competitionFixtures)
+      .where(
+        and(
+          eq(competitionFixtures.id, fixtureId),
+          eq(competitionFixtures.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
+
+    if (!fixture) {
+      throw new NotFoundException('Competition fixture not found.');
+    }
+    if (fixture.status !== 'scheduled') {
+      throw new ConflictException(
+        'Only scheduled fixtures can change their match date.',
+      );
+    }
+    if (!fixture.homeCompetitionTeamId || !fixture.awayCompetitionTeamId) {
+      throw new ConflictException(
+        'Both teams must be known before the fixture date can be confirmed.',
+      );
+    }
+
+    const [startedMatch] = await this.databaseService.database
+      .select({ id: matches.id })
+      .from(events)
+      .innerJoin(matches, eq(matches.eventId, events.id))
+      .where(eq(events.competitionFixtureId, fixtureId))
+      .limit(1);
+    if (startedMatch) {
+      throw new ConflictException(
+        'The fixture date cannot change after either team has started match setup.',
+      );
+    }
+
+    const participants = await this.databaseService.database
+      .select({
+        id: competitionTeams.id,
+        teamId: competitionTeams.teamId,
+        displayName: competitionTeams.displayName,
+      })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.competitionId, competitionId),
+          inArray(competitionTeams.id, [
+            fixture.homeCompetitionTeamId,
+            fixture.awayCompetitionTeamId,
+          ]),
+        ),
+      );
+    const byId = new Map(participants.map((participant) => [participant.id, participant]));
+    const home = byId.get(fixture.homeCompetitionTeamId);
+    const away = byId.get(fixture.awayCompetitionTeamId);
+    if (!home || !away) {
+      throw new ConflictException('Fixture participants are no longer available.');
+    }
+
+    return { fixture, home, away };
+  }
+
+  private async resolveFixtureScheduleActor(
+    userId: string,
+    competitionId: string,
+    context: FixtureScheduleContext,
+    requestedCompetitionTeamId?: string,
+  ) {
+    const sides = [
+      { side: 'home' as const, participant: context.home },
+      { side: 'away' as const, participant: context.away },
+    ];
+
+    if (requestedCompetitionTeamId) {
+      const target = sides.find(
+        ({ participant }) => participant.id === requestedCompetitionTeamId,
+      );
+      if (!target) {
+        throw new BadRequestException(
+          'That team is not participating in this fixture.',
+        );
+      }
+      if (target.participant.teamId === null) {
+        await this.requireAdmin(userId, competitionId);
+        return target;
+      }
+      const team = await this.requireCoachTeam(userId);
+      if (team.id !== target.participant.teamId) {
+        throw new ForbiddenException(
+          'Only that linked team’s coach can respond for this fixture.',
+        );
+      }
+      return target;
+    }
+
+    const team = await this.requireCoachTeam(userId);
+    const target = sides.find(
+      ({ participant }) => participant.teamId === team.id,
+    );
+    if (!target) {
+      throw new ForbiddenException(
+        'Your team is not participating in this fixture.',
+      );
+    }
+    return target;
   }
 
   private async requireAdmin(userId: string, competitionId: string) {

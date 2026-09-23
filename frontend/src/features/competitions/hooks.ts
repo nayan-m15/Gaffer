@@ -32,6 +32,10 @@ export function useCompetitionFixtures(id: string | null | undefined) {
     queryKey: [...useCompetitionKey(), "fixtures", id ?? ""],
     queryFn: () => api.fetchCompetitionFixtures(id!),
     enabled: Boolean(id),
+    // Fixture confirmations can come from the opposing coach in another
+    // session. Poll lightly while this page is open so agreements and
+    // counter-proposals appear without requiring a manual refresh.
+    refetchInterval: 30_000,
   });
 }
 
@@ -54,6 +58,12 @@ export function useCompetitionMutation<T, R>(mutationFn: (input: T) => Promise<R
       await Promise.all([
         client.invalidateQueries({ queryKey }),
         client.invalidateQueries({ queryKey: ["statistics"] }),
+        // Fixture schedule negotiation can move generated calendar events, so
+        // keep every calendar/dashboard consumer in sync with the database
+        // trigger that mirrors competition fixture dates into Events.
+        client.invalidateQueries({ queryKey: ["events"] }),
+        client.invalidateQueries({ queryKey: ["dashboard"] }),
+        client.invalidateQueries({ queryKey: ["player"] }),
       ]);
     },
   });

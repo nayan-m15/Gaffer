@@ -96,6 +96,10 @@ export interface CompetitionResultInput {
 
 export type CompetitionFixtureStage = "league" | "knockout";
 export type CompetitionFixtureStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
+export type CompetitionFixtureScheduleResponse =
+  | "pending"
+  | "accepted"
+  | "external_confirmed";
 
 export interface CompetitionFixture {
   id: string;
@@ -116,6 +120,16 @@ export interface CompetitionFixture {
   nextFixtureSlot: "home" | "away" | null;
   linkedMatchId: string | null;
   legacyResultId: string | null;
+  scheduleRevision: number;
+  homeScheduleResponse: CompetitionFixtureScheduleResponse;
+  awayScheduleResponse: CompetitionFixtureScheduleResponse;
+  homeScheduleRespondedAt: string | null;
+  awayScheduleRespondedAt: string | null;
+  homeScheduleRespondedByUserId: string | null;
+  awayScheduleRespondedByUserId: string | null;
+  scheduleProposedByCompetitionTeamId: string | null;
+  scheduleProposalNote: string | null;
+  scheduleConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

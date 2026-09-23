@@ -78,3 +78,27 @@ export const generateCompetitionFixtures = (id: string, regenerate = false) =>
     method: "POST",
     body: JSON.stringify({ regenerate }),
   });
+export const acceptCompetitionFixtureSchedule = (
+  competitionId: string,
+  fixtureId: string,
+  expectedRevision: number,
+  competitionTeamId?: string,
+) =>
+  apiFetch<CompetitionFixture>(
+    `/competitions/${encodeURIComponent(competitionId)}/fixtures/${encodeURIComponent(fixtureId)}/schedule/accept`,
+    {
+      method: "POST",
+      body: JSON.stringify({ expectedRevision, ...(competitionTeamId ? { competitionTeamId } : {}) }),
+    },
+  );
+
+export const proposeCompetitionFixtureSchedule = (
+  competitionId: string,
+  fixtureId: string,
+  input: { scheduledAt: string; note?: string; competitionTeamId?: string; expectedRevision: number },
+) =>
+  apiFetch<CompetitionFixture>(
+    `/competitions/${encodeURIComponent(competitionId)}/fixtures/${encodeURIComponent(fixtureId)}/schedule/propose`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+

@@ -16,6 +16,8 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import {
   competitionSearchSchema,
+  fixtureScheduleAcceptSchema,
+  fixtureScheduleProposalSchema,
   generateFixturesSchema,
   createCompetitionResultSchema,
   createCompetitionSchema,
@@ -104,6 +106,38 @@ export class CompetitionsController {
       user.id,
       id,
       dto.regenerate,
+    );
+  }
+
+  @Post(':id/fixtures/:fixtureId/schedule/accept')
+  async acceptFixtureSchedule(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fixtureId', ParseUUIDPipe) fixtureId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(fixtureScheduleAcceptSchema, body ?? {});
+    return this.competitionsService.acceptFixtureSchedule(
+      user.id,
+      id,
+      fixtureId,
+      dto,
+    );
+  }
+
+  @Post(':id/fixtures/:fixtureId/schedule/propose')
+  async proposeFixtureSchedule(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fixtureId', ParseUUIDPipe) fixtureId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(fixtureScheduleProposalSchema, body);
+    return this.competitionsService.proposeFixtureSchedule(
+      user.id,
+      id,
+      fixtureId,
+      dto,
     );
   }
 

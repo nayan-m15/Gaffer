@@ -26,7 +26,14 @@ export function EventPill({ event, now, onSelect }: EventPillProps) {
   const timeLabel = formatEventTime(event.scheduledAt);
   const cancelled = event.status === "cancelled";
   const completed = displayEventStatus(event, now) === "completed";
-  const statusLabel = displayEventStatus(event, now);
+  const provisionalFixture = Boolean(
+    event.competitionFixtureId &&
+      !event.fixtureScheduleConfirmedAt &&
+      event.status === "scheduled",
+  );
+  const statusLabel = provisionalFixture
+    ? "provisional"
+    : displayEventStatus(event, now);
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -95,7 +102,9 @@ export function EventPill({ event, now, onSelect }: EventPillProps) {
                   ? "text-destructive"
                   : statusLabel === "completed"
                     ? "text-muted-foreground"
-                    : "text-primary",
+                    : statusLabel === "provisional"
+                      ? "text-amber-500"
+                      : "text-primary",
               )}
             >
               {statusLabel}

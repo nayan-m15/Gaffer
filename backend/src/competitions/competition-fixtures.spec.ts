@@ -4,6 +4,7 @@ import type { NeonQueryFunction } from '@neondatabase/serverless';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -60,6 +61,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
   let service: CompetitionsService;
   let competitionId: string;
   let teamId: string;
+  let secondaryTeamId: string | null;
 
   beforeAll(async () => {
     pg = new PGlite();
@@ -80,24 +82,49 @@ describe('Competition fixtures (PostgreSQL)', () => {
     db = testDatabase(pg);
     const databaseService = { database: db } as DatabaseService;
     service = new CompetitionsService(databaseService, {
-      requireCoachTeam: () =>
-        Promise.resolve({
-          id: teamId,
-          name: 'Owner',
-          role: 'coach',
-        }),
-      findTeamForUser: () =>
-        Promise.resolve({
-          id: teamId,
-          name: 'Owner',
-          role: 'coach',
-        }),
+      requireCoachTeam: (userId: string) => {
+        if (userId === 'admin') {
+          return Promise.resolve({
+            id: teamId,
+            name: 'Owner',
+            role: 'coach' as const,
+          });
+        }
+        if (userId === 'secondary-coach' && secondaryTeamId) {
+          return Promise.resolve({
+            id: secondaryTeamId,
+            name: 'Linked opponent',
+            role: 'coach' as const,
+          });
+        }
+        return Promise.reject(
+          new ForbiddenException('Only coaches can perform this action.'),
+        );
+      },
+      findTeamForUser: (userId: string) => {
+        if (userId === 'admin') {
+          return Promise.resolve({
+            id: teamId,
+            name: 'Owner',
+            role: 'coach' as const,
+          });
+        }
+        if (userId === 'secondary-coach' && secondaryTeamId) {
+          return Promise.resolve({
+            id: secondaryTeamId,
+            name: 'Linked opponent',
+            role: 'coach' as const,
+          });
+        }
+        return Promise.resolve(null);
+      },
     } as unknown as TeamsService);
   }, 60000);
   afterAll(async () => {
     await pg?.close();
   });
   beforeEach(async () => {
+    secondaryTeamId = null;
     await pg.exec('TRUNCATE "user", teams, competitions CASCADE');
     await db
       .insert(schema.user)
@@ -681,6 +708,211 @@ describe('Competition fixtures (PostgreSQL)', () => {
         .set({ status: 'completed', homeScore: 1 })
         .where(eq(schema.competitionFixtures.id, opening.id)),
     ).rejects.toThrow();
+  });
+
+  it('keeps generated dates provisional until both sides agree, including an external team', async () => {
+    await fill();
+    const fixtures = await service.generateFixtures('admin', competitionId);
+    const slots = await participants();
+    const owner = slots.find((participant) => participant.teamId === teamId)!;
+    const fixture = fixtures.find((candidate) =>
+      [candidate.homeCompetitionTeamId, candidate.awayCompetitionTeamId].includes(owner.id),
+    )!;
+    const externalId =
+      fixture.homeCompetitionTeamId === owner.id
+        ? fixture.awayCompetitionTeamId!
+        : fixture.homeCompetitionTeamId!;
+
+    const ownAccepted = await service.acceptFixtureSchedule(
+      'admin',
+      competitionId,
+      fixture.id,
+      { expectedRevision: fixture.scheduleRevision },
+    );
+    expect(ownAccepted.scheduleConfirmedAt).toBeNull();
+    expect(
+      fixture.homeCompetitionTeamId === owner.id
+        ? ownAccepted.homeScheduleResponse
+        : ownAccepted.awayScheduleResponse,
+    ).toBe('accepted');
+
+    const confirmed = await service.acceptFixtureSchedule(
+      'admin',
+      competitionId,
+      fixture.id,
+      {
+        competitionTeamId: externalId,
+        expectedRevision: ownAccepted.scheduleRevision,
+      },
+    );
+    expect(confirmed.scheduleConfirmedAt).not.toBeNull();
+    expect(
+      fixture.homeCompetitionTeamId === externalId
+        ? confirmed.homeScheduleResponse
+        : confirmed.awayScheduleResponse,
+    ).toBe('external_confirmed');
+  });
+
+  it('lets a linked opponent coach counter-propose and requires the other linked coach to accept the new revision', async () => {
+    await fill();
+    const fixtures = await service.generateFixtures('admin', competitionId);
+    const slots = await participants();
+    const owner = slots.find((participant) => participant.teamId === teamId)!;
+    const fixture = fixtures.find((candidate) =>
+      [candidate.homeCompetitionTeamId, candidate.awayCompetitionTeamId].includes(owner.id),
+    )!;
+    const opponentId =
+      fixture.homeCompetitionTeamId === owner.id
+        ? fixture.awayCompetitionTeamId!
+        : fixture.homeCompetitionTeamId!;
+
+    await db.insert(schema.user).values({
+      id: 'secondary-coach',
+      name: 'Secondary coach',
+      email: 'secondary@test.local',
+    });
+    const [linkedTeam] = await db
+      .insert(schema.teams)
+      .values({ name: 'Linked opponent' })
+      .returning();
+    secondaryTeamId = linkedTeam.id;
+    await db
+      .update(schema.competitionTeams)
+      .set({ teamId: linkedTeam.id })
+      .where(eq(schema.competitionTeams.id, opponentId));
+
+    const proposedDate = new Date(
+      fixture.scheduledAt.getTime() + 2 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const proposal = await service.proposeFixtureSchedule(
+      'secondary-coach',
+      competitionId,
+      fixture.id,
+      {
+        expectedRevision: fixture.scheduleRevision,
+        scheduledAt: proposedDate,
+        note: 'Squad unavailable on the original date.',
+      },
+    );
+    expect(proposal.scheduleRevision).toBe(2);
+    expect(proposal.scheduledAt.toISOString()).toBe(proposedDate);
+    expect(proposal.scheduleProposedByCompetitionTeamId).toBe(opponentId);
+    expect(proposal.scheduleConfirmedAt).toBeNull();
+    expect(
+      fixture.homeCompetitionTeamId === opponentId
+        ? proposal.homeScheduleResponse
+        : proposal.awayScheduleResponse,
+    ).toBe('accepted');
+    expect(
+      fixture.homeCompetitionTeamId === owner.id
+        ? proposal.homeScheduleResponse
+        : proposal.awayScheduleResponse,
+    ).toBe('pending');
+
+    const calendarRows = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.competitionFixtureId, fixture.id));
+    expect(calendarRows).toHaveLength(2);
+    expect(
+      calendarRows.every(
+        (event) => event.scheduledAt.toISOString() === proposedDate,
+      ),
+    ).toBe(true);
+
+    await expect(
+      service.acceptFixtureSchedule('admin', competitionId, fixture.id, {
+        expectedRevision: fixture.scheduleRevision,
+      }),
+    ).rejects.toThrow('changed while you were viewing');
+
+    const confirmed = await service.acceptFixtureSchedule(
+      'admin',
+      competitionId,
+      fixture.id,
+      { expectedRevision: proposal.scheduleRevision },
+    );
+    expect(confirmed.scheduleConfirmedAt).not.toBeNull();
+  });
+
+  it('lets the competition admin record a proposal and confirmation for unlinked teams without impersonating linked teams', async () => {
+    await fill();
+    const fixtures = await service.generateFixtures('admin', competitionId);
+    const slots = await participants();
+    const owner = slots.find((participant) => participant.teamId === teamId)!;
+    const externalFixture = fixtures.find(
+      (fixture) =>
+        fixture.homeCompetitionTeamId !== owner.id &&
+        fixture.awayCompetitionTeamId !== owner.id,
+    )!;
+    const proposedById = externalFixture.homeCompetitionTeamId!;
+    const otherId = externalFixture.awayCompetitionTeamId!;
+    const proposedDate = new Date(
+      externalFixture.scheduledAt.getTime() + 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const proposed = await service.proposeFixtureSchedule(
+      'admin',
+      competitionId,
+      externalFixture.id,
+      {
+        competitionTeamId: proposedById,
+        expectedRevision: externalFixture.scheduleRevision,
+        scheduledAt: proposedDate,
+        note: 'Agreed over phone with the external coach.',
+      },
+    );
+    expect(proposed.scheduleProposedByCompetitionTeamId).toBe(proposedById);
+    expect(proposed.homeScheduleResponse).toBe('external_confirmed');
+    expect(proposed.awayScheduleResponse).toBe('pending');
+
+    const confirmed = await service.acceptFixtureSchedule(
+      'admin',
+      competitionId,
+      externalFixture.id,
+      {
+        competitionTeamId: otherId,
+        expectedRevision: proposed.scheduleRevision,
+      },
+    );
+    expect(confirmed.scheduleConfirmedAt).not.toBeNull();
+
+    await db.insert(schema.user).values({
+      id: 'secondary-coach',
+      name: 'Secondary coach',
+      email: 'secondary2@test.local',
+    });
+    const [linkedTeam] = await db
+      .insert(schema.teams)
+      .values({ name: 'Linked later' })
+      .returning();
+    secondaryTeamId = linkedTeam.id;
+    await db
+      .update(schema.competitionTeams)
+      .set({ teamId: linkedTeam.id })
+      .where(eq(schema.competitionTeams.id, otherId));
+
+    await expect(
+      service.acceptFixtureSchedule('admin', competitionId, externalFixture.id, {
+        competitionTeamId: otherId,
+        expectedRevision: confirmed.scheduleRevision,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('does not open confirmation for future knockout fixtures until both teams are known', async () => {
+    await service.update('admin', competitionId, {
+      type: 'cup',
+      format: 'knockout',
+    });
+    await fill();
+    const fixtures = await service.generateFixtures('admin', competitionId);
+    const final = fixtures.find((fixture) => fixture.nextFixtureId === null)!;
+    await expect(
+      service.acceptFixtureSchedule('admin', competitionId, final.id, {
+        expectedRevision: final.scheduleRevision,
+      }),
+    ).rejects.toThrow('Both teams must be known');
   });
 
   it('validates settings and rejects unsupported knockout sizes', async () => {

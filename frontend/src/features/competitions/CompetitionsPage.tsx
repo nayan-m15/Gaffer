@@ -189,7 +189,7 @@ function CompetitionDetails({ id }: { id: string }) {
 
         {fixturesQuery.isPending && <AppCard><p role="status" className="text-sm text-muted-foreground">Loading fixtures...</p></AppCard>}
         <RequestError error={fixturesQuery.error} />
-        {hasGeneratedFixtures && <CompetitionFixturesView format={format} fixtures={fixtures} participants={competition.participants} isAdmin={competition.isAdmin} onRecordResult={openFixtureResult} />}
+        {hasGeneratedFixtures && <CompetitionFixturesView format={format} fixtures={fixtures} participants={competition.participants} isAdmin={competition.isAdmin} viewerTeamId={team?.id ?? null} canRespond={team?.role === "coach"} onRecordResult={openFixtureResult} />}
 
         <AppCard id="results" className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Recorded results</h2><p className="mt-1 text-sm text-muted-foreground">Live-logged and admin-entered results feed the competition automatically.</p></div>{competition.isAdmin && fixtureStateKnown && !hasGeneratedFixtures && <Button onClick={() => { setResultFixture(null); setEditingResult("new"); }} disabled={competition.participants.length < 2}><Plus className="size-4" />Record result</Button>}</div>
