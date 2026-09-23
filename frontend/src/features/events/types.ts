@@ -19,6 +19,9 @@ export interface TeamEvent {
   competitionId: string | null;
   competitionFixtureId: string | null;
   fixtureScheduleConfirmedAt: string | null;
+  /** Present on the single-event response for generated competition fixtures. */
+  fixtureOpponentCompetitionTeamId?: string | null;
+  fixtureOpponentName?: string | null;
   matchId?: string | null;
   createdAt: string;
   updatedAt: string;

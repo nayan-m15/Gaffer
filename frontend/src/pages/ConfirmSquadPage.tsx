@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
-import { Loader2, Pencil, ShieldAlert, Users } from "lucide-react";
+import { Loader2, LockKeyhole, Pencil, ShieldAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAthletes } from "@/features/team-management/api";
@@ -489,8 +489,22 @@ export default function ConfirmSquadPage() {
       ) ?? null,
     [competitionParticipants, opponentCompetitionTeamId],
   );
+  const generatedFixtureOpponentId =
+    eventQuery.data?.fixtureOpponentCompetitionTeamId ?? null;
+  const generatedFixtureOpponentName =
+    eventQuery.data?.fixtureOpponentName?.trim() ?? "";
+  const generatedFixtureHasOpponent = Boolean(
+    eventQuery.data?.competitionFixtureId &&
+      generatedFixtureOpponentId &&
+      generatedFixtureOpponentName,
+  );
 
   useEffect(() => {
+    if (eventQuery.data?.competitionFixtureId) {
+      setOpponentCompetitionTeamId(generatedFixtureOpponentId);
+      setOpponentName(generatedFixtureOpponentName);
+      return;
+    }
     if (!eventQuery.data?.competitionId) {
       setOpponentCompetitionTeamId(null);
       return;
@@ -506,15 +520,20 @@ export default function ConfirmSquadPage() {
     }
   }, [
     competitionParticipants,
+    eventQuery.data?.competitionFixtureId,
     eventQuery.data?.competitionId,
+    generatedFixtureOpponentId,
+    generatedFixtureOpponentName,
     opponentCompetitionTeamId,
   ]);
 
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
-  const opponentReady = eventQuery.data?.competitionId
-    ? selectedCompetitionOpponent !== null
-    : opponentName.trim().length > 0;
+  const opponentReady = eventQuery.data?.competitionFixtureId
+    ? generatedFixtureHasOpponent
+    : eventQuery.data?.competitionId
+      ? selectedCompetitionOpponent !== null
+      : opponentName.trim().length > 0;
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
@@ -528,6 +547,7 @@ export default function ConfirmSquadPage() {
     !beforeMatchDay &&
     !startMatch.isPending &&
     !(eventQuery.data?.competitionId &&
+      !eventQuery.data?.competitionFixtureId &&
       (competitionQuery.isFetching || competitionQuery.isError)) &&
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
 
@@ -660,10 +680,16 @@ export default function ConfirmSquadPage() {
     setSubmitError(null);
     setOpponentSquadError(null);
     try {
+      const resolvedCompetitionOpponentId = eventQuery.data?.competitionFixtureId
+        ? generatedFixtureOpponentId
+        : selectedCompetitionOpponent?.id ?? null;
+      const resolvedCompetitionOpponentName = eventQuery.data?.competitionFixtureId
+        ? generatedFixtureOpponentName
+        : selectedCompetitionOpponent?.displayName ?? opponentName.trim();
       const match = await startMatch.mutateAsync({
-        opponentName: selectedCompetitionOpponent?.displayName ?? opponentName.trim(),
-        ...(eventQuery.data?.competitionId
-          ? { opponentCompetitionTeamId: selectedCompetitionOpponent!.id }
+        opponentName: resolvedCompetitionOpponentName,
+        ...(eventQuery.data?.competitionId && resolvedCompetitionOpponentId
+          ? { opponentCompetitionTeamId: resolvedCompetitionOpponentId }
           : {}),
         isHome,
         startingAthleteIds: [...startingIds],
@@ -807,8 +833,9 @@ export default function ConfirmSquadPage() {
   }
 
   const ownName = team?.name ?? "Your team";
-  const resolvedOpponentName =
-    selectedCompetitionOpponent?.displayName ?? opponentName.trim();
+  const resolvedOpponentName = eventQuery.data?.competitionFixtureId
+    ? generatedFixtureOpponentName
+    : selectedCompetitionOpponent?.displayName ?? opponentName.trim();
   const oppName = resolvedOpponentName || "Opponent";
   const oppEmpty = !resolvedOpponentName;
   const homeClub = isHome
@@ -926,8 +953,31 @@ export default function ConfirmSquadPage() {
           <h2 className={sectionLabelClassName}>Match details</h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="opponent-name">Opponent</Label>
-              {event.competitionId ? (
+              <Label htmlFor={event.competitionFixtureId ? undefined : "opponent-name"}>
+                Opponent
+              </Label>
+              {event.competitionFixtureId ? (
+                <>
+                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-sm font-medium",
+                        !generatedFixtureHasOpponent && "text-muted-foreground",
+                      )}
+                    >
+                      {generatedFixtureHasOpponent
+                        ? generatedFixtureOpponentName
+                        : "Opponent not determined yet"}
+                    </span>
+                    <LockKeyhole className="size-4 shrink-0 text-primary" aria-hidden />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {generatedFixtureHasOpponent
+                      ? "This opponent is fixed by the generated competition fixture."
+                      : "The opponent will be filled automatically when the fixture pairing is known."}
+                  </p>
+                </>
+              ) : event.competitionId ? (
                 <>
                   <select
                     id="opponent-name"

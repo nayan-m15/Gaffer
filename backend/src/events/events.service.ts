@@ -197,16 +197,25 @@ export class EventsService {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
     if (!event.competitionFixtureId) {
-      return { ...event, fixtureScheduleConfirmedAt: null };
+      return {
+        ...event,
+        fixtureScheduleConfirmedAt: null,
+        fixtureOpponentCompetitionTeamId: null,
+        fixtureOpponentName: null,
+      };
     }
-    const [fixture] = await this.databaseService.database
-      .select({ scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt })
-      .from(competitionFixtures)
-      .where(eq(competitionFixtures.id, event.competitionFixtureId))
-      .limit(1);
+
+    const fixtureContext = await this.resolveGeneratedFixtureOpponent(
+      team.id,
+      event.competitionFixtureId,
+      event.competitionId,
+    );
+
     return {
       ...event,
-      fixtureScheduleConfirmedAt: fixture?.scheduleConfirmedAt ?? null,
+      fixtureScheduleConfirmedAt: fixtureContext.scheduleConfirmedAt,
+      fixtureOpponentCompetitionTeamId: fixtureContext.opponent?.id ?? null,
+      fixtureOpponentName: fixtureContext.opponent?.displayName ?? null,
     };
   }
 
@@ -317,19 +326,33 @@ export class EventsService {
       throw new BadRequestException('Only scheduled matches can be started.');
     }
 
+    let generatedFixtureOpponent: { id: string; displayName: string } | null =
+      null;
     if (event.competitionFixtureId) {
-      const [fixture] = await this.databaseService.database
-        .select({
-          scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
-        })
-        .from(competitionFixtures)
-        .where(eq(competitionFixtures.id, event.competitionFixtureId))
-        .limit(1);
-      if (!fixture?.scheduleConfirmedAt) {
+      const fixtureContext = await this.resolveGeneratedFixtureOpponent(
+        team.id,
+        event.competitionFixtureId,
+        event.competitionId,
+      );
+      if (!fixtureContext.scheduleConfirmedAt) {
         throw new ForbiddenException(
           'Both teams must confirm the fixture date before this match can start.',
         );
       }
+      if (!fixtureContext.opponent) {
+        throw new BadRequestException(
+          'The opponent for this generated fixture is not known yet.',
+        );
+      }
+      if (
+        dto.opponentCompetitionTeamId &&
+        dto.opponentCompetitionTeamId !== fixtureContext.opponent.id
+      ) {
+        throw new BadRequestException(
+          'The opponent is fixed by this generated competition fixture.',
+        );
+      }
+      generatedFixtureOpponent = fixtureContext.opponent;
     }
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {
@@ -338,13 +361,15 @@ export class EventsService {
       );
     }
 
-    const competitionOpponent = event.competitionId
-      ? await this.requireCompetitionOpponent(
-          team.id,
-          event.competitionId,
-          dto.opponentCompetitionTeamId,
-        )
-      : null;
+    const competitionOpponent = generatedFixtureOpponent
+      ? generatedFixtureOpponent
+      : event.competitionId
+        ? await this.requireCompetitionOpponent(
+            team.id,
+            event.competitionId,
+            dto.opponentCompetitionTeamId,
+          )
+        : null;
     const opponentName = competitionOpponent?.displayName ?? dto.opponentName;
 
     const gamePlan = dto.gamePlanId
@@ -516,6 +541,88 @@ export class EventsService {
         position: player.position ?? null,
       })),
     );
+  }
+
+  private async resolveGeneratedFixtureOpponent(
+    teamId: string,
+    fixtureId: string,
+    eventCompetitionId: string | null,
+  ): Promise<{
+    scheduleConfirmedAt: Date | null;
+    opponent: { id: string; displayName: string } | null;
+  }> {
+    const [fixture] = await this.databaseService.database
+      .select({
+        competitionId: competitionFixtures.competitionId,
+        homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+        awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
+        scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
+      })
+      .from(competitionFixtures)
+      .where(eq(competitionFixtures.id, fixtureId))
+      .limit(1);
+
+    if (!fixture) {
+      throw new BadRequestException('Generated competition fixture not found.');
+    }
+    if (
+      !eventCompetitionId ||
+      fixture.competitionId !== eventCompetitionId
+    ) {
+      throw new BadRequestException(
+        'Generated fixture does not match this event competition.',
+      );
+    }
+
+    const [ownParticipant] = await this.databaseService.database
+      .select({ id: competitionTeams.id })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.competitionId, fixture.competitionId),
+          eq(competitionTeams.teamId, teamId),
+        ),
+      )
+      .limit(1);
+
+    if (!ownParticipant) {
+      throw new BadRequestException(
+        'Your team is not a participant in this generated fixture competition.',
+      );
+    }
+
+    const opponentId =
+      ownParticipant.id === fixture.homeCompetitionTeamId
+        ? fixture.awayCompetitionTeamId
+        : ownParticipant.id === fixture.awayCompetitionTeamId
+          ? fixture.homeCompetitionTeamId
+          : null;
+
+    if (!opponentId) {
+      return {
+        scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+        opponent: null,
+      };
+    }
+
+    const [opponent] = await this.databaseService.database
+      .select({
+        id: competitionTeams.id,
+        displayName: competitionTeams.displayName,
+      })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.id, opponentId),
+          eq(competitionTeams.competitionId, fixture.competitionId),
+        ),
+      )
+      .limit(1);
+
+    return {
+      scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+      opponent: opponent ?? null,
+    };
   }
 
   private async requireCompetitionOpponent(
