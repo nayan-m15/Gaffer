@@ -17,6 +17,8 @@ import {
   updateMatchLogEventSchema,
   updateMatchClockSchema,
   resolveMatchEventReviewSchema,
+  finaliseMatchProjectionSchema,
+  reopenMatchProjectionSchema,
 } from './matches.schemas';
 import { MatchesService } from './matches.service';
 
@@ -110,6 +112,30 @@ export class MatchesController {
     return this.matchesService.finish(user.id, matchId);
   }
 
+  @Post(':matchId/finalise')
+  async finalise(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(finaliseMatchProjectionSchema, body);
+    return this.matchesService.finaliseProjection(
+      user.id,
+      matchId,
+      dto.expectedRevision,
+    );
+  }
+
+  @Post(':matchId/reopen')
+  async reopen(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(reopenMatchProjectionSchema, body);
+    return this.matchesService.reopenProjection(user.id, matchId, dto.reason);
+  }
+
   @Patch(':matchId/clock')
   async updateClock(
     @CurrentUser() user: AuthenticatedRequest['user'],
@@ -118,6 +144,14 @@ export class MatchesController {
   ) {
     const dto = zodValidate(updateMatchClockSchema, body);
     return this.matchesService.updateClock(user.id, matchId, dto);
+  }
+
+  @Get(':matchId/clock-operations')
+  async listClockOperations(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.listClockOperations(user.id, matchId);
   }
 
   @Get(':matchId')

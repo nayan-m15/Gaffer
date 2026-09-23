@@ -19,6 +19,7 @@ import PublicDashboard from '@/pages/PublicDashboard'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 import { Loader2 } from 'lucide-react'
+import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const AthletesPage = lazy(() => import('@/pages/AthletesPage'))
@@ -84,6 +85,7 @@ function App() {
 
   return (
     <>
+      <PwaUpdatePrompt />
       {!loadingDone && (
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}

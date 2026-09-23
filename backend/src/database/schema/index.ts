@@ -680,6 +680,7 @@ export const matches = pgTable(
     clockPeriod: text('clock_period').default('not_started').notNull(),
     clockElapsedMs: integer('clock_elapsed_ms').default(0).notNull(),
     clockStartedAt: timestamp('clock_started_at', { withTimezone: true }),
+    clockRevision: integer('clock_revision').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -884,6 +885,7 @@ export const matchEvents = pgTable(
       jsonb('structured_payload').$type<Record<string, unknown>>(),
     lifecycleStatus: text('lifecycle_status').default('provisional').notNull(),
     rulesVersion: integer('rules_version').default(1).notNull(),
+    projectionRevision: integer('projection_revision').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -957,12 +959,91 @@ export const matchEventMemberships = pgTable(
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    projectionRevision: integer('projection_revision').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
     index('match_event_memberships_canonical_index').on(table.canonicalEventId),
+  ],
+);
+
+/** Immutable commands which explain every correction, void, merge, split and
+ * conflict decision. Materialised match_events rows may change, but this
+ * command history is append-only. */
+export const matchEventOperations = pgTable(
+  'match_event_operations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    operationType: text('operation_type').notNull(),
+    targetObservationIds: jsonb('target_observation_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    canonicalEventId: uuid('canonical_event_id').references(
+      () => matchEvents.id,
+      { onDelete: 'set null' },
+    ),
+    causalParentIds: jsonb('causal_parent_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    decision: jsonb('decision').$type<Record<string, unknown>>().notNull(),
+    reason: text('reason'),
+    schemaVersion: integer('schema_version').default(1).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_event_operations_match_index').on(
+      table.matchId,
+      table.createdAt,
+    ),
+    index('match_event_operations_actor_index').on(table.actorUserId),
+  ],
+);
+
+/** Append-only audit trail for shared clock commands. The matches row stores
+ * the latest materialised clock while these rows preserve who requested every
+ * transition and which authoritative revision it produced. */
+export const matchClockOperations = pgTable(
+  'match_clock_operations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    period: text('period').notNull(),
+    elapsedMs: integer('elapsed_ms').notNull(),
+    running: boolean('running').notNull(),
+    baseRevision: integer('base_revision').notNull(),
+    appliedRevision: integer('applied_revision').notNull(),
+    outcome: text('outcome').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    clientCreatedAt: timestamp('client_created_at', {
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_clock_operations_match_revision_index').on(
+      table.matchId,
+      table.appliedRevision,
+    ),
+    index('match_clock_operations_actor_index').on(table.actorUserId),
   ],
 );
 
@@ -993,6 +1074,7 @@ export const matchEventReviews = pgTable(
       .where(sql`${table.status} = 'open'`),
   ],
 );
+
 
 // One shared fixture per pairing. Later knockout rounds have empty participant
 // slots until winners advance through nextFixtureId + nextFixtureSlot.
@@ -1083,5 +1165,96 @@ export const competitionFixtures = pgTable(
     and (${table.status} <> 'completed' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.homeScore} is not null and ${table.awayScore} is not null and (${table.stage} <> 'knockout' or ${table.winnerCompetitionTeamId} is not null)))
   `,
     ),
+  ],
+);
+
+
+/** One authoritative projection revision for every consumer of a match. */
+export const matchProjectionState = pgTable('match_projection_state', {
+  matchId: uuid('match_id')
+    .primaryKey()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  revision: integer('revision').default(0).notNull(),
+  inputDigest: text('input_digest').notNull(),
+  rulesVersion: integer('rules_version').default(1).notNull(),
+  confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
+  confirmedOpponentScore: integer('confirmed_opponent_score')
+    .default(0)
+    .notNull(),
+  provisionalTeamScore: integer('provisional_team_score').default(0).notNull(),
+  provisionalOpponentScore: integer('provisional_opponent_score')
+    .default(0)
+    .notNull(),
+  possibleEffects: jsonb('possible_effects')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  disciplinaryProjection: jsonb('disciplinary_projection')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  unresolvedReviewCount: integer('unresolved_review_count')
+    .default(0)
+    .notNull(),
+  finalisationState: text('finalisation_state').default('open').notNull(),
+  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
+  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Durable acknowledgement for each submitted observation or operation. */
+export const syncUploadReceipts = pgTable(
+  'sync_upload_receipts',
+  {
+    id: uuid('id').primaryKey(),
+    submittedByUserId: text('submitted_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    itemType: text('item_type').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    outcome: text('outcome').notNull(),
+    safeErrorCode: text('safe_error_code'),
+    processingDurationMs: integer('processing_duration_ms'),
+    canonicalEventId: uuid('canonical_event_id').references(
+      () => matchEvents.id,
+      { onDelete: 'set null' },
+    ),
+    ...timestamps,
+  },
+  (table) => [
+    index('sync_upload_receipts_user_index').on(
+      table.submittedByUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/** Latest non-sensitive queue health reported by each browser installation. */
+export const syncClientTelemetry = pgTable(
+  'sync_client_telemetry',
+  {
+    deviceId: uuid('device_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    pendingCount: integer('pending_count').default(0).notNull(),
+    rejectedCount: integer('rejected_count').default(0).notNull(),
+    oldestPendingAt: timestamp('oldest_pending_at', { withTimezone: true }),
+    lastSuccessfulSyncAt: timestamp('last_successful_sync_at', {
+      withTimezone: true,
+    }),
+    deployment: text('deployment').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('sync_client_telemetry_team_index').on(table.teamId, table.updatedAt),
   ],
 );

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   useMutation,
   useQuery,
@@ -12,9 +13,12 @@ import {
   fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
+  finaliseMatchProjection,
+  reopenMatchProjection,
   updateMatchLogEvent,
   updateMatchClock,
 } from "./api";
+import { subscribeToSyncedMatchEventChanges } from "@/offline/match-store";
 import type {
   CreateMatchLogEventInput,
   MatchEventTeam,
@@ -25,8 +29,7 @@ import type {
   UpdateMatchLogEventInput,
 } from "./types";
 
-export const matchQueryKey = (matchId: string) =>
-  ["matches", matchId] as const;
+export const matchQueryKey = (matchId: string) => ["matches", matchId] as const;
 export const matchSquadQueryKey = (matchId: string) =>
   ["matches", matchId, "squad"] as const;
 export const matchEventsQueryKey = (matchId: string) =>
@@ -42,6 +45,13 @@ export function useMatch(matchId: string | undefined) {
     queryFn: () => fetchMatch(matchId!),
     enabled: Boolean(matchId),
     staleTime: MATCH_QUERY_STALE_MS,
+    refetchInterval: (query) =>
+      typeof navigator !== "undefined" &&
+      navigator.onLine &&
+      query.state.data?.eventStatus !== "completed"
+        ? 1_000
+        : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -55,6 +65,34 @@ export function useMatchSquad(matchId: string | undefined) {
 }
 
 export function useMatchEvents(matchId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!matchId) return;
+
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void subscribeToSyncedMatchEventChanges(() => {
+      void queryClient.invalidateQueries({
+        queryKey: matchEventsQueryKey(matchId),
+      });
+      void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
+    })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unsubscribe = dispose;
+      })
+      .catch((error: unknown) => {
+        console.warn("Could not subscribe to synced match events.", error);
+      });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [matchId, queryClient]);
+
   return useQuery({
     queryKey: matchEventsQueryKey(matchId ?? ""),
     queryFn: () => fetchMatchEvents(matchId!),
@@ -170,8 +208,7 @@ function mergeServerEvent(
     id: server.id,
     athleteId,
     athlete:
-      server.athlete ??
-      resolveAthlete(athleteId, squad, previous.athlete),
+      server.athlete ?? resolveAthlete(athleteId, squad, previous.athlete),
     pending: server.pending ?? false,
     syncStatus: server.syncStatus ?? "synced",
     syncError: server.syncError ?? null,
@@ -202,13 +239,23 @@ export function useLogMatchEvent(matchId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The mutation function writes to SQLite before attempting HTTP, so it
+    // must run while the browser reports offline. TanStack otherwise pauses
+    // it before createMatchLogEvent can reach the durable local queue.
+    networkMode: "always",
     mutationFn: (input: CreateMatchLogEventInput) =>
       createMatchLogEvent(matchId, input),
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
       const affectsScore = input.eventType === "goal";
-      if (affectsScore) {
-        await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      // A request that was already refetching when connectivity disappeared
+      // may not settle promptly. Do not let cancelling it block the local
+      // optimistic row or the durable SQLite enqueue.
+      if (!offline) {
+        await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
+        if (affectsScore) {
+          await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+        }
       }
 
       const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(
@@ -232,14 +279,13 @@ export function useLogMatchEvent(matchId: string) {
         createdAt: now,
         updatedAt: now,
         athlete: resolveAthlete(input.athleteId ?? null, squad),
-        opponentPlayer:
-          input.opponentPlayerId
-            ? queryClient
-                .getQueryData<MatchRecord>(matchKey(matchId))
-                ?.opponentSquad.find(
-                  (player) => player.id === input.opponentPlayerId,
-                ) ?? null
-            : null,
+        opponentPlayer: input.opponentPlayerId
+          ? (queryClient
+              .getQueryData<MatchRecord>(matchKey(matchId))
+              ?.opponentSquad.find(
+                (player) => player.id === input.opponentPlayerId,
+              ) ?? null)
+          : null,
         pending: true,
         optimisticKey: tempId,
       };
@@ -262,9 +308,8 @@ export function useLogMatchEvent(matchId: string) {
       if (!context) {
         return;
       }
-      queryClient.setQueryData<MatchLogEvent[]>(
-        eventsKey(matchId),
-        (current) => (current ?? []).filter((event) => event.id !== context.tempId),
+      queryClient.setQueryData<MatchLogEvent[]>(eventsKey(matchId), (current) =>
+        (current ?? []).filter((event) => event.id !== context.tempId),
       );
       if (context.scoreTeam) {
         applyScoreDelta(queryClient, matchId, context.scoreTeam, -1);
@@ -365,7 +410,8 @@ export function useUpdateMatchEvent(matchId: string) {
 
       return {
         previousEvent,
-        scoreTeam: scoreDelta !== 0 && previousEvent ? previousEvent.team : null,
+        scoreTeam:
+          scoreDelta !== 0 && previousEvent ? previousEvent.team : null,
         scoreDelta,
       } satisfies UpdateMutateContext;
     },
@@ -373,12 +419,10 @@ export function useUpdateMatchEvent(matchId: string) {
       if (!context?.previousEvent) {
         return;
       }
-      queryClient.setQueryData<MatchLogEvent[]>(
-        eventsKey(matchId),
-        (current) =>
-          (current ?? []).map((event) =>
-            event.id === eventId ? context.previousEvent! : event,
-          ),
+      queryClient.setQueryData<MatchLogEvent[]>(eventsKey(matchId), (current) =>
+        (current ?? []).map((event) =>
+          event.id === eventId ? context.previousEvent! : event,
+        ),
       );
       if (context.scoreTeam && context.scoreDelta) {
         applyScoreDelta(
@@ -428,16 +472,16 @@ export function useDeleteMatchEvent(matchId: string) {
       const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(
         eventsKey(matchId),
       );
-      const index = previousEvents?.findIndex((event) => event.id === eventId) ?? -1;
+      const index =
+        previousEvents?.findIndex((event) => event.id === eventId) ?? -1;
       const removed = index >= 0 ? (previousEvents?.[index] ?? null) : null;
       const wasGoal = removed?.eventType === "goal";
       if (wasGoal) {
         await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
       }
 
-      queryClient.setQueryData<MatchLogEvent[]>(
-        eventsKey(matchId),
-        (current) => (current ?? []).filter((event) => event.id !== eventId),
+      queryClient.setQueryData<MatchLogEvent[]>(eventsKey(matchId), (current) =>
+        (current ?? []).filter((event) => event.id !== eventId),
       );
       if (wasGoal && removed) {
         applyScoreDelta(queryClient, matchId, removed.team, -1);
@@ -457,10 +501,7 @@ export function useDeleteMatchEvent(matchId: string) {
         eventsKey(matchId),
         (current) => {
           const next = [...(current ?? [])];
-          const insertAt = Math.min(
-            Math.max(context.index, 0),
-            next.length,
-          );
+          const insertAt = Math.min(Math.max(context.index, 0), next.length);
           next.splice(insertAt, 0, context.removed!);
           return next;
         },
@@ -496,7 +537,27 @@ export function useFinishMatch(matchId: string) {
 export function useUpdateMatchClock(matchId: string) {
   return useMutation({
     scope: { id: `match-clock-${matchId}` },
+    networkMode: "always",
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
       updateMatchClock(matchId, input),
+  });
+}
+
+export function useFinaliseMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (expectedRevision: number) =>
+      finaliseMatchProjection(matchId, expectedRevision),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
+  });
+}
+
+export function useReopenMatchProjection(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => reopenMatchProjection(matchId, reason),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
   });
 }

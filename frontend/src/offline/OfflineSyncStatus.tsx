@@ -1,22 +1,65 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { flushOfflineMatchEvents } from "@/features/matches/api";
-import { listQueuedEvents } from "./match-store";
+import { apiFetch } from "@/lib/api";
+import {
+  getOfflineDeviceId,
+  listQueuedEvents,
+  subscribeToOfflineQueueChanges,
+} from "./match-store";
 
 export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const queryClient = useQueryClient();
   const [online, setOnline] = useState(navigator.onLine);
   const [pending, setPending] = useState(0);
   const [rejected, setRejected] = useState(0);
+  const [accepted, setAccepted] = useState(0);
+  const [quarantined, setQuarantined] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const telemetrySentAt = useRef(0);
+  const [lastSync, setLastSync] = useState<string | null>(() =>
+    localStorage.getItem("gaffer-last-successful-sync"),
+  );
 
   useEffect(() => {
     let active = true;
     const refresh = async () => {
       const rows = await listQueuedEvents(matchId);
       if (!active) return;
-      setPending(rows.filter((row) => row.state === "queued").length);
+      const pendingRows = rows.filter((row) =>
+        ["queued", "uploading", "dependency_pending"].includes(row.state),
+      );
+      setPending(
+        pendingRows.length,
+      );
       setRejected(rows.filter((row) => row.state === "rejected").length);
+      setAccepted(rows.filter((row) => row.state === "accepted").length);
+      setQuarantined(rows.filter((row) => row.state === "quarantined").length);
+      if (navigator.onLine && Date.now() - telemetrySentAt.current >= 60_000) {
+        telemetrySentAt.current = Date.now();
+        const telemetryRows = await listQueuedEvents();
+        const telemetryPending = telemetryRows.filter((row) =>
+          ["queued", "uploading", "dependency_pending"].includes(row.state),
+        );
+        void apiFetch("/sync/telemetry", {
+          method: "POST",
+          body: JSON.stringify({
+            deviceId: getOfflineDeviceId(),
+            pendingCount: telemetryPending.length,
+            rejectedCount: telemetryRows.filter(
+              (row) => row.state === "rejected",
+            ).length,
+            oldestPendingAt: telemetryPending[0]?.created_at ?? null,
+            lastSuccessfulSyncAt: localStorage.getItem(
+              "gaffer-last-successful-sync",
+            ),
+            deployment:
+              import.meta.env.VITE_DEPLOYMENT_ENV || window.location.hostname,
+          }),
+        }).catch(() => {
+          telemetrySentAt.current = 0;
+        });
+      }
     };
     const reconnect = async () => {
       setOnline(true);
@@ -27,6 +70,16 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
           queryClient.invalidateQueries({ queryKey: ["matches", matchId, "events"] }),
           queryClient.invalidateQueries({ queryKey: ["matches", matchId] }),
         ]);
+        const remaining = await listQueuedEvents(matchId);
+        if (
+          !remaining.some((row) =>
+            ["queued", "uploading", "dependency_pending"].includes(row.state),
+          )
+        ) {
+          const syncedAt = new Date().toISOString();
+          localStorage.setItem("gaffer-last-successful-sync", syncedAt);
+          if (active) setLastSync(syncedAt);
+        }
       } finally {
         if (active) setSyncing(false);
         await refresh();
@@ -34,6 +87,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     };
     const disconnect = () => setOnline(false);
     void refresh();
+    const unsubscribeQueue = subscribeToOfflineQueueChanges(() => void refresh());
     const timer = window.setInterval(() => void refresh(), 1_000);
     window.addEventListener("online", reconnect);
     window.addEventListener("offline", disconnect);
@@ -43,15 +97,20 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       window.clearInterval(timer);
       window.removeEventListener("online", reconnect);
       window.removeEventListener("offline", disconnect);
+      unsubscribeQueue();
     };
   }, [matchId, queryClient]);
 
-  const label = rejected
+  const label = quarantined
+    ? `${quarantined} access blocked`
+    : rejected
     ? `${rejected} rejected`
     : syncing
       ? `Syncing ${pending}`
       : pending
         ? `${pending} waiting`
+        : accepted
+          ? `${accepted} accepted`
         : online
           ? "Synced"
           : "Offline";
@@ -60,11 +119,16 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     <span
       role="status"
       title="Offline event synchronisation status"
+      aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
       className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#101920] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c5ced6]"
     >
       <span
         className={`size-1.5 rounded-full ${
-          rejected ? "bg-[#ff5b5f]" : online ? "bg-[#00d99a]" : "bg-[#ffbe2e]"
+          rejected || quarantined
+            ? "bg-[#ff5b5f]"
+            : online
+              ? "bg-[#00d99a]"
+              : "bg-[#ffbe2e]"
         }`}
       />
       {label}

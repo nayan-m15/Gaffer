@@ -1,6 +1,6 @@
 # Offline collaborative event logging: implementation plan
 
-Status: first implementation slice completed on 17 September 2026. The repository now includes immutable observations, deterministic duplicate anchoring and review, PowerSync-backed browser SQLite, a retry queue, offline session/match caching, an installable PWA, PowerSync authentication, and scoped Sync Streams. Production activation still requires applying migration `0021`, configuring the PowerSync service/publication, and setting the documented environment variables.
+Status: implementation and operational hardening completed on 20 September 2026. The repository now includes immutable observations and operations, deterministic reconciliation, an auditable clock ledger, PowerSync-backed match and squad preparation, production-build PWA coverage, PostgreSQL concurrency and rollback coverage, queue telemetry, protected operational health metrics, staged rollout controls, and a recovery runbook. Deployment of this hardening requires migration `0024`, the expanded publication, and the updated Sync Streams configuration.
 
 Use a PWA with PowerSync-managed local SQLite, retain NestJS and Neon/PostgreSQL, and introduce immutable observations and operations from which the server derives canonical match events. PowerSync transports data; the application decides how observations affect the result.
 

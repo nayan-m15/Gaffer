@@ -166,54 +166,75 @@
     {
       "idx": 22,
       "version": "7",
+      "when": 1789749902618,
+      "tag": "0022_perpetual_jimmy_woo",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
       "when": 1790180000000,
       "tag": "0022_shared_competition_teams",
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 24,
       "version": "7",
       "when": 1790180000001,
       "tag": "0023_competition_invites",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
+      "version": "7",
+      "when": 1790180000002,
+      "tag": "0023_repair_projection_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
       "version": "7",
       "when": 1790180000003,
       "tag": "0024_repair_shared_competitions",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 27,
       "version": "7",
       "when": 1790180000004,
       "tag": "0025_early_runaways",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 28,
       "version": "7",
       "when": 1790180000005,
       "tag": "0026_competition_match_results",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 29,
+      "version": "7",
+      "when": 1790180000006,
+      "tag": "0024_offline_operations_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
       "version": "7",
       "when": 1790180000006,
       "tag": "0027_competition_fixtures",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "idx": 31,
       "version": "7",
       "when": 1790180000007,
       "tag": "0028_repair_competition_fixture_schema",
       "breakpoints": true
     },
     {
-      "idx": 29,
+      "idx": 32,
       "version": "7",
       "when": 1790180000008,
       "tag": "0029_competition_fixture_events",

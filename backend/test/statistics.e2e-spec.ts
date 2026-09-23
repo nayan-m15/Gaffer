@@ -162,14 +162,16 @@ describe('Statistics and seasons (e2e)', () => {
       .expect(201);
     const eventId = (event.body as { id: string }).id;
 
-    const started = await agent
-      .post(`/events/${eventId}/start-match`)
-      .send({
-        opponentName: options.opponent,
-        isHome: true,
-        startingAthleteIds: squad,
-      })
-      .expect(201);
+    const started = await agent.post(`/events/${eventId}/start-match`).send({
+      opponentName: options.opponent,
+      isHome: true,
+      startingAthleteIds: squad,
+    });
+    if (started.status !== 201) {
+      throw new Error(
+        `Starting ${options.opponent} (${pastIso(options.daysAgo)}) failed with ${started.status}: ${JSON.stringify(started.body)}`,
+      );
+    }
     const matchId = (started.body as { id: string }).id;
 
     for (let i = 0; i < options.ownGoals; i += 1) {

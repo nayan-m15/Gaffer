@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { motion, useReducedMotion } from "motion/react";
+import { listQueuedEvents } from "@/offline/match-store";
 import type { LucideIcon } from "lucide-react";
 import {
   Home,
@@ -78,7 +79,25 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      const pending = (await listQueuedEvents()).filter((item) =>
+        ["queued", "uploading", "dependency_pending", "rejected", "quarantined"].includes(
+          item.state,
+        ),
+      );
+      let pendingData: "retain" | "discard" = "retain";
+      if (pending.length > 0) {
+        const retain = window.confirm(
+          `You have ${pending.length} unsent offline item${pending.length === 1 ? "" : "s"}. Select OK to retain them for this account. Select Cancel to choose whether to discard them.`,
+        );
+        if (!retain) {
+          const discard = window.confirm(
+            "Permanently discard the unsent offline items? Select Cancel to stay signed in.",
+          );
+          if (!discard) return;
+          pendingData = "discard";
+        }
+      }
+      await signOut({ pendingData });
       navigate("/", { replace: true });
     } catch (error) {
       console.error("Failed to sign out:", error);

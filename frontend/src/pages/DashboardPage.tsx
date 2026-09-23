@@ -45,6 +45,8 @@ interface LiveMatchData {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
+  clockElapsedMs: number;
+  clockStartedAt: string | null;
   elapsedMinutes: number;
 }
 
@@ -136,9 +138,7 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function DashboardFrame({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative min-h-full">{children}</div>
-  );
+  return <div className="relative min-h-full">{children}</div>;
 }
 
 function SectionTitle({
@@ -158,18 +158,10 @@ function SectionTitle({
   );
 }
 
-function EmptyState({
-  message,
-  icon,
-}: {
-  message: string;
-  icon?: ReactNode;
-}) {
+function EmptyState({ message, icon }: { message: string; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-      {icon && (
-        <div className="mb-2 opacity-40">{icon}</div>
-      )}
+      {icon && <div className="mb-2 opacity-40">{icon}</div>}
       <p className="text-sm">{message}</p>
     </div>
   );
@@ -178,7 +170,11 @@ function EmptyState({
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
     <Card>
-      <div className="animate-pulse space-y-3" role="status" aria-label="Loading">
+      <div
+        className="animate-pulse space-y-3"
+        role="status"
+        aria-label="Loading"
+      >
         <div className="h-3 w-1/3 rounded-sm bg-muted" />
         {Array.from({ length: lines }).map((_, i) => (
           <div key={i} className="h-3 w-full rounded-sm bg-muted" />
@@ -258,6 +254,19 @@ function LiveMatchPanel({
   match: LiveMatchData | null;
   onOpenLogger: () => void;
 }) {
+  const clockNow = useNow(1_000);
+  const elapsedMs = match
+    ? (match.clockElapsedMs ?? match.elapsedMinutes * 60_000) +
+      (match.clockStartedAt
+        ? Math.max(
+            0,
+            clockNow.getTime() - new Date(match.clockStartedAt).getTime(),
+          )
+        : 0)
+    : 0;
+  const elapsedClock = `${Math.floor(elapsedMs / 60_000)}:${String(
+    Math.floor((elapsedMs % 60_000) / 1_000),
+  ).padStart(2, "0")}`;
   return (
     <div
       className={cn(
@@ -303,7 +312,7 @@ function LiveMatchPanel({
             </span>
             {match && (
               <span className="text-xs text-muted-foreground">
-                {match.elapsedMinutes}&apos;
+                {elapsedClock}
               </span>
             )}
           </div>
@@ -323,7 +332,9 @@ function LiveMatchPanel({
             </div>
           ) : (
             <div>
-              <p className="text-sm font-semibold text-foreground">Live Logger</p>
+              <p className="text-sm font-semibold text-foreground">
+                Live Logger
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Start or continue match tracking.
               </p>
@@ -373,11 +384,7 @@ function SummaryStat({
   );
 }
 
-function SeasonSummaryCard({
-  summary,
-}: {
-  summary: SeasonSummaryData | null;
-}) {
+function SeasonSummaryCard({ summary }: { summary: SeasonSummaryData | null }) {
   return (
     <Card aria-label="Season summary">
       <SectionTitle icon={<Trophy className="size-4 text-muted-foreground" />}>
@@ -464,7 +471,8 @@ function RecentFormCard({
   );
   const recentResults = results.slice(0, 10);
   const selected =
-    recentResults.find((result) => result.id === selectedId) ?? recentResults[0];
+    recentResults.find((result) => result.id === selectedId) ??
+    recentResults[0];
 
   return (
     <Card aria-label="Recent form">
@@ -475,7 +483,10 @@ function RecentFormCard({
       </SectionTitle>
       {results.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2" aria-label="Recent results">
+          <div
+            className="flex flex-wrap items-center gap-2"
+            aria-label="Recent results"
+          >
             {recentResults.map((result) => (
               <ResultBadge
                 key={result.id}
@@ -513,7 +524,13 @@ function RecentFormCard({
  *  UPCOMING EVENTS  (Sprint 1 — connected to real backend)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function EventItem({ event, onOpen }: { event: UpcomingEvent; onOpen: () => void }) {
+function EventItem({
+  event,
+  onOpen,
+}: {
+  event: UpcomingEvent;
+  onOpen: () => void;
+}) {
   const destination = [event.location, event.venueAddress]
     .filter(Boolean)
     .join(", ");
@@ -531,7 +548,10 @@ function EventItem({ event, onOpen }: { event: UpcomingEvent; onOpen: () => void
       <div className="min-w-0 px-1">
         <p className="truncate text-sm text-foreground">
           <span className="font-semibold">{event.title}</span>
-          <span className="text-muted-foreground"> · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}
+          </span>
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
           <span>{event.location}</span>
@@ -571,7 +591,11 @@ function UpcomingEventsCard({
       {upcomingEvents.length > 0 ? (
         <ul className="-my-1">
           {upcomingEvents.map((event) => (
-            <EventItem key={event.id} event={event} onOpen={() => onOpenEvent(event.id)} />
+            <EventItem
+              key={event.id}
+              event={event}
+              onOpen={() => onOpenEvent(event.id)}
+            />
           ))}
         </ul>
       ) : (
@@ -662,6 +686,8 @@ export default function DashboardPage() {
     queryKey: ["dashboard"],
     queryFn: fetchDashboardData,
     staleTime: 30_000,
+    refetchInterval: (query) => (query.state.data?.liveMatch ? 2_000 : 15_000),
+    refetchIntervalInBackground: false,
   });
 
   // Route player accounts to their own dashboard.
@@ -681,7 +707,10 @@ export default function DashboardPage() {
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="flex flex-col items-center justify-center gap-4 p-16">
-          <AlertCircle className="size-10 text-destructive" aria-hidden="true" />
+          <AlertCircle
+            className="size-10 text-destructive"
+            aria-hidden="true"
+          />
           <div className="text-center">
             <p className="font-medium text-foreground">
               Failed to load dashboard data
@@ -767,7 +796,10 @@ export default function DashboardPage() {
       <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
-          <Card aria-label="Pending team invitation" className="border-primary/30">
+          <Card
+            aria-label="Pending team invitation"
+            className="border-primary/30"
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -807,7 +839,9 @@ export default function DashboardPage() {
 
         {team && (
           <section aria-labelledby="quick-actions-heading">
-            <SectionTitle icon={<Activity className="size-4 text-muted-foreground" />}>
+            <SectionTitle
+              icon={<Activity className="size-4 text-muted-foreground" />}
+            >
               <span id="quick-actions-heading">Quick Actions</span>
             </SectionTitle>
             <HoverEffect
@@ -824,10 +858,23 @@ export default function DashboardPage() {
                   description: "Manage athletes and availability.",
                   to: "/athletes",
                   icon: <Users className="size-5" />,
-                  stat: { label: "Active Athletes", value: activeAthletesCount },
+                  stat: {
+                    label: "Active Athletes",
+                    value: activeAthletesCount,
+                  },
                 },
-                { title: "Live Logger", description: "Start or continue match tracking.", to: "/live-logger", icon: <Activity className="size-5" /> },
-                { title: "Statistics", description: "Review form and performance trends.", to: "/statistics", icon: <BarChart3 className="size-5" /> },
+                {
+                  title: "Live Logger",
+                  description: "Start or continue match tracking.",
+                  to: "/live-logger",
+                  icon: <Activity className="size-5" />,
+                },
+                {
+                  title: "Statistics",
+                  description: "Review form and performance trends.",
+                  to: "/statistics",
+                  icon: <BarChart3 className="size-5" />,
+                },
               ]}
             />
           </section>
@@ -836,7 +883,10 @@ export default function DashboardPage() {
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-5">
           <div className="md:col-span-3">
-            <UpcomingEventsCard events={upcomingEvents} onOpenEvent={setSelectedEventId} />
+            <UpcomingEventsCard
+              events={upcomingEvents}
+              onOpenEvent={setSelectedEventId}
+            />
           </div>
           <div className="space-y-5 md:col-span-2">
             <RecentFormCard

@@ -82,6 +82,32 @@ const cardClassName =
 const sectionLabelClassName =
   "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground";
 
+const GENERIC_OPPONENT_PLACEHOLDER = "e.g. Stellenbosch FC";
+
+/** Event titles that are not useful as an opponent-name example. */
+const UNHELPFUL_EVENT_TITLES = new Set([
+  "untitled",
+  "new event",
+  "event",
+  "training",
+  "training session",
+  "saturday training",
+  "match",
+  "meeting",
+  "game",
+  "fixture",
+  "friendly",
+  "practice",
+]);
+
+function opponentNamePlaceholder(eventTitle: string) {
+  const title = eventTitle.trim();
+  if (!title || UNHELPFUL_EVENT_TITLES.has(title.toLowerCase())) {
+    return GENERIC_OPPONENT_PLACEHOLDER;
+  }
+  return `e.g. ${title}`;
+}
+
 function isBeforeMatchDay(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
   if (Number.isNaN(scheduled.getTime())) {
@@ -375,7 +401,6 @@ export default function ConfirmSquadPage() {
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
-
   const [selectedGamePlanId, setSelectedGamePlanId] = useState<string | null>(
     null,
   );
@@ -925,7 +950,8 @@ export default function ConfirmSquadPage() {
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Opponents are limited to teams participating in {competitionQuery.data?.name ?? "this competition"}.
+                    Opponents are limited to teams participating in{" "}
+                    {competitionQuery.data?.name ?? "this competition"}.
                   </p>
                   {competitionQuery.isError && (
                     <p className="text-xs text-destructive">
@@ -938,8 +964,10 @@ export default function ConfirmSquadPage() {
                   id="opponent-name"
                   className={inputClassName}
                   value={opponentName}
-                  onChange={(changeEvent) => setOpponentName(changeEvent.target.value)}
-                  placeholder="Opponent name"
+                  onChange={(changeEvent) =>
+                    setOpponentName(changeEvent.target.value)
+                  }
+                  placeholder={opponentNamePlaceholder(event.title)}
                   autoComplete="off"
                   maxLength={100}
                 />

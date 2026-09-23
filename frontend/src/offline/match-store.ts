@@ -2,11 +2,46 @@ import type { PowerSyncDatabase } from "@powersync/web";
 import type {
   CreateMatchLogEventInput,
   MatchLogEvent,
+  MatchRecord,
+  MatchSquadAthlete,
+  OpponentMatchPlayer,
 } from "@/features/matches/types";
 import { apiUrl } from "@/lib/api-url";
 
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
-let userScope = localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
+let userScope =
+  localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
+
+const deploymentScope = (
+  import.meta.env.VITE_DEPLOYMENT_ENV ||
+  window.location.hostname ||
+  "local"
+)
+  .replace(/[^a-zA-Z0-9]/g, "")
+  .slice(0, 24);
+const queueChannel =
+  typeof BroadcastChannel === "undefined"
+    ? null
+    : new BroadcastChannel(`gaffer-offline-queue-${deploymentScope}`);
+
+function announceQueueChange() {
+  queueChannel?.postMessage({ userScope, changedAt: Date.now() });
+}
+
+function assertStorageWritable() {
+  if (localStorage.getItem("gaffer-simulate-storage-full") === "1") {
+    throw new DOMException("Offline storage is full.", "QuotaExceededError");
+  }
+}
+
+export function subscribeToOfflineQueueChanges(onChange: () => void) {
+  if (!queueChannel) return () => undefined;
+  const listener = (event: MessageEvent<{ userScope?: string }>) => {
+    if (event.data.userScope === userScope) onChange();
+  };
+  queueChannel.addEventListener("message", listener);
+  return () => queueChannel.removeEventListener("message", listener);
+}
 
 export async function setOfflineUserScope(userId: string | null) {
   const next = userId ?? "anonymous";
@@ -26,19 +61,31 @@ export async function setOfflineUserScope(userId: string | null) {
 async function database() {
   if (!databasePromise) {
     databasePromise = (async () => {
-      const { PowerSyncDatabase, Schema, Table, column } = await import(
-        "@powersync/web"
-      );
+      const { PowerSyncDatabase, Schema, Table, column } =
+        await import("@powersync/web");
       const schema = new Schema({
         offline_event_queue: Table.createLocalOnly({
           match_id: column.text,
+          kind: column.text,
           payload: column.text,
           state: column.text,
           error: column.text,
+          canonical_event_id: column.text,
           created_at: column.text,
         }),
         offline_response_cache: Table.createLocalOnly({
           payload: column.text,
+          updated_at: column.text,
+        }),
+        offline_clock_anchors: Table.createLocalOnly({
+          period: column.text,
+          elapsed_ms: column.integer,
+          running: column.integer,
+          authority_revision: column.text,
+          wall_clock_ms: column.integer,
+          uncertain: column.integer,
+          operation_id: column.text,
+          client_created_at: column.text,
           updated_at: column.text,
         }),
         match_events: new Table({
@@ -55,7 +102,10 @@ async function database() {
           client_request_id: column.text,
           period: column.text,
           match_elapsed_ms: column.integer,
+          structured_payload: column.text,
           lifecycle_status: column.text,
+          rules_version: column.integer,
+          projection_revision: column.integer,
           created_at: column.text,
           updated_at: column.text,
         }),
@@ -65,43 +115,210 @@ async function database() {
           reason: column.text,
           status: column.text,
           resolution: column.text,
+          resolved_by_user_id: column.text,
+          resolved_at: column.text,
           created_at: column.text,
           updated_at: column.text,
+        }),
+        match_projection_state: new Table({
+          revision: column.integer,
+          input_digest: column.text,
+          rules_version: column.integer,
+          confirmed_team_score: column.integer,
+          confirmed_opponent_score: column.integer,
+          provisional_team_score: column.integer,
+          provisional_opponent_score: column.integer,
+          possible_effects: column.text,
+          disciplinary_projection: column.text,
+          unresolved_review_count: column.integer,
+          finalisation_state: column.text,
+          finalised_by_user_id: column.text,
+          finalised_at: column.text,
+          created_at: column.text,
+          updated_at: column.text,
+        }),
+        matches: new Table({
+          event_id: column.text,
+          competition_id: column.text,
+          opponent_name: column.text,
+          is_home: column.integer,
+          team_score: column.integer,
+          opponent_score: column.integer,
+          game_plan_id: column.text,
+          game_plan_snapshot: column.text,
+          opponent_squad_visibility: column.text,
+          team_color: column.text,
+          opponent_color: column.text,
+          clock_period: column.text,
+          clock_elapsed_ms: column.integer,
+          clock_started_at: column.text,
+          clock_revision: column.integer,
+          created_at: column.text,
+          updated_at: column.text,
+        }),
+        events: new Table({
+          team_id: column.text,
+          title: column.text,
+          status: column.text,
+          scheduled_at: column.text,
+          location: column.text,
+        }),
+        athletes: new Table({
+          team_id: column.text,
+          first_name: column.text,
+          last_name: column.text,
+          squad_number: column.integer,
+          position: column.text,
+        }),
+        athlete_match_stats: new Table({
+          match_id: column.text,
+          athlete_id: column.text,
+          started: column.integer,
+        }),
+        opponent_match_players: new Table({
+          match_id: column.text,
+          shirt_number: column.integer,
+          name: column.text,
+          position: column.text,
+        }),
+        match_clock_operations: new Table({
+          match_id: column.text,
+          actor_user_id: column.text,
+          period: column.text,
+          elapsed_ms: column.integer,
+          running: column.integer,
+          base_revision: column.integer,
+          applied_revision: column.integer,
+          outcome: column.text,
+          payload_hash: column.text,
+          client_created_at: column.text,
+          created_at: column.text,
         }),
       });
       const db = new PowerSyncDatabase({
         schema,
         database: {
-          dbFilename: `gaffer-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
+          dbFilename: `gaffer-${deploymentScope}-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
         },
       });
       await db.init();
-      if (import.meta.env.VITE_POWERSYNC_URL) {
-        await db.connect({
-          fetchCredentials: async () => {
-            const response = await fetch(apiUrl("/sync/token"), {
-              credentials: "include",
-            });
-            if (response.status === 401) return null;
-            if (!response.ok) throw new Error("Could not authenticate PowerSync.");
-            const credentials = (await response.json()) as {
-              endpoint: string;
-              token: string;
-              expiresAt: string;
-            };
-            return {
-              endpoint: credentials.endpoint,
-              token: credentials.token,
-              expiresAt: new Date(credentials.expiresAt),
-            };
-          },
-          uploadData: async (syncDatabase) => {
-            // Match capture uses the typed NestJS queue below. Synced tables
-            // are server-owned, so an unexpected direct write is discarded.
-            const transaction = await syncDatabase.getNextCrudTransaction();
-            if (transaction) await transaction.complete();
-          },
+      const safeUserScope = userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
+      if (safeUserScope && !localStorage.getItem(migrationKey)) {
+        const legacy = new PowerSyncDatabase({
+          schema,
+          database: { dbFilename: `gaffer-${safeUserScope}.db` },
         });
+        try {
+          await legacy.init();
+          const [queued, cached, clocks] = await Promise.all([
+            legacy.getAll<QueuedEventRow>("SELECT * FROM offline_event_queue"),
+            legacy.getAll<{
+              id: string;
+              payload: string;
+              updated_at: string;
+            }>("SELECT * FROM offline_response_cache"),
+            legacy.getAll<{
+              id: string;
+              period: string;
+              elapsed_ms: number;
+              running: number;
+              authority_revision: string;
+              wall_clock_ms: number;
+              uncertain: number;
+              updated_at: string;
+            }>("SELECT * FROM offline_clock_anchors"),
+          ]);
+          await db.writeTransaction(async (tx) => {
+            for (const row of queued) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_event_queue
+                  (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  row.id,
+                  row.match_id,
+                  row.kind ?? "observation",
+                  row.payload,
+                  row.state,
+                  row.error,
+                  row.canonical_event_id,
+                  row.created_at,
+                ],
+              );
+            }
+            for (const row of cached) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_response_cache
+                  (id, payload, updated_at) VALUES (?, ?, ?)`,
+                [row.id, row.payload, row.updated_at],
+              );
+            }
+            for (const row of clocks) {
+              await tx.execute(
+                `INSERT OR IGNORE INTO offline_clock_anchors
+                  (id, period, elapsed_ms, running, authority_revision, wall_clock_ms, uncertain, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  row.id,
+                  row.period,
+                  row.elapsed_ms,
+                  row.running,
+                  row.authority_revision,
+                  row.wall_clock_ms,
+                  row.uncertain,
+                  row.updated_at,
+                ],
+              );
+            }
+          });
+          localStorage.setItem(migrationKey, new Date().toISOString());
+        } catch (error) {
+          console.warn(
+            "Could not migrate the legacy offline workspace.",
+            error,
+          );
+        } finally {
+          await legacy.close();
+        }
+      }
+      if (import.meta.env.VITE_POWERSYNC_URL) {
+        // Local queue access must never wait for the remote sync connection.
+        // PowerSync can remain pending while a device is offline; awaiting it
+        // here would block enqueueEvent and leave the live logger locked.
+        void db
+          .connect({
+            fetchCredentials: async () => {
+              const response = await fetch(apiUrl("/sync/token"), {
+                credentials: "include",
+              });
+              if (response.status === 401) return null;
+              if (!response.ok)
+                throw new Error("Could not authenticate PowerSync.");
+              const credentials = (await response.json()) as {
+                endpoint: string;
+                token: string;
+                expiresAt: string;
+              };
+              return {
+                endpoint: credentials.endpoint,
+                token: credentials.token,
+                expiresAt: new Date(credentials.expiresAt),
+              };
+            },
+            uploadData: async (syncDatabase) => {
+              // Match capture uses the typed NestJS queue below. Synced tables
+              // are server-owned, so an unexpected direct write is discarded.
+              const transaction = await syncDatabase.getNextCrudTransaction();
+              if (transaction) await transaction.complete();
+            },
+          })
+          .catch((error: unknown) => {
+            console.warn(
+              "PowerSync connection is unavailable; using local storage.",
+              error,
+            );
+          });
       }
       return db;
     })();
@@ -122,18 +339,69 @@ export async function enqueueEvent(
   matchId: string,
   input: CreateMatchLogEventInput,
 ) {
+  assertStorageWritable();
   const db = await database();
   await db.execute(
     `INSERT OR REPLACE INTO offline_event_queue
-      (id, match_id, payload, state, error, created_at)
-     VALUES (?, ?, ?, 'queued', NULL, ?)`,
-    [input.clientRequestId, matchId, JSON.stringify(input), new Date().toISOString()],
+      (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+     VALUES (?, ?, 'observation', ?, 'queued', NULL, NULL, ?)`,
+    [
+      input.clientRequestId,
+      matchId,
+      JSON.stringify(input),
+      new Date().toISOString(),
+    ],
   );
+  announceQueueChange();
+}
+
+export interface OfflineOperationInput {
+  kind: "operation";
+  id: string;
+  matchId: string;
+  operationType: "correct" | "void" | "resolve_review";
+  canonicalEventId?: string;
+  replacement?: import("@/features/matches/types").UpdateMatchLogEventInput;
+  reason?: string;
+  reviewId?: string;
+  resolution?: "same_event" | "separate_events";
+  causalParentIds: string[];
+}
+
+export async function enqueueOperation(input: OfflineOperationInput) {
+  assertStorageWritable();
+  const db = await database();
+  await db.execute(
+    `INSERT OR REPLACE INTO offline_event_queue
+      (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+     VALUES (?, ?, 'operation', ?, 'queued', NULL, ?, ?)`,
+    [
+      input.id,
+      input.matchId,
+      JSON.stringify(input),
+      input.canonicalEventId ?? null,
+      new Date().toISOString(),
+    ],
+  );
+  announceQueueChange();
 }
 
 export async function completeQueuedEvent(id: string) {
   const db = await database();
   await db.execute("DELETE FROM offline_event_queue WHERE id = ?", [id]);
+  announceQueueChange();
+}
+
+export async function setQueuedEventState(
+  id: string,
+  state: "queued" | "uploading",
+) {
+  const db = await database();
+  await db.execute(
+    "UPDATE offline_event_queue SET state = ?, error = NULL WHERE id = ?",
+    [state, id],
+  );
+  announceQueueChange();
 }
 
 export async function rejectQueuedEvent(id: string, message: string) {
@@ -142,14 +410,45 @@ export async function rejectQueuedEvent(id: string, message: string) {
     "UPDATE offline_event_queue SET state = 'rejected', error = ? WHERE id = ?",
     [message, id],
   );
+  announceQueueChange();
+}
+
+export async function setQueuedItemOutcome(
+  id: string,
+  outcome: "accepted" | "dependency_pending" | "quarantined",
+  canonicalEventId?: string | null,
+  message?: string | null,
+) {
+  const db = await database();
+  await db.execute(
+    `UPDATE offline_event_queue
+       SET state = ?, canonical_event_id = ?, error = ?
+     WHERE id = ?`,
+    [outcome, canonicalEventId ?? null, message ?? null, id],
+  );
+  announceQueueChange();
+}
+
+export async function discardQueuedItems() {
+  const db = await database();
+  await db.execute("DELETE FROM offline_event_queue");
+  announceQueueChange();
 }
 
 export interface QueuedEventRow {
   id: string;
   match_id: string;
+  kind: "observation" | "operation" | null;
   payload: string;
-  state: "queued" | "rejected";
+  state:
+    | "queued"
+    | "uploading"
+    | "accepted"
+    | "dependency_pending"
+    | "quarantined"
+    | "rejected";
   error: string | null;
+  canonical_event_id: string | null;
   created_at: string;
 }
 
@@ -181,6 +480,236 @@ export async function readCachedResponse<T>(key: string): Promise<T | null> {
   return row ? (JSON.parse(row.payload) as T) : null;
 }
 
+export async function readSyncedPreparedMatch(
+  matchId: string,
+): Promise<MatchRecord | null> {
+  const db = await database();
+  const row = await db.getOptional<{
+    id: string;
+    event_id: string;
+    competition_id: string | null;
+    opponent_name: string;
+    is_home: number;
+    team_score: number;
+    opponent_score: number;
+    game_plan_id: string | null;
+    game_plan_snapshot: string | null;
+    opponent_squad_visibility: MatchRecord["opponentSquadVisibility"];
+    team_color: string | null;
+    opponent_color: string | null;
+    clock_period: MatchRecord["clockPeriod"];
+    clock_elapsed_ms: number;
+    clock_started_at: string | null;
+    clock_revision: number;
+    created_at: string;
+    updated_at: string;
+    event_title: string;
+    event_status: MatchRecord["eventStatus"];
+    event_scheduled_at: string;
+    event_location: string;
+  }>(
+    `SELECT m.*, e.title AS event_title, e.status AS event_status,
+            e.scheduled_at AS event_scheduled_at,
+            e.location AS event_location
+       FROM matches m
+       JOIN events e ON e.id = m.event_id
+      WHERE m.id = ?`,
+    [matchId],
+  );
+  if (!row) return null;
+  const [projection, opponentSquad] = await Promise.all([
+    readSyncedMatchProjection(matchId),
+    readSyncedOpponentSquad(matchId),
+  ]);
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    competitionId: row.competition_id,
+    opponentName: row.opponent_name,
+    isHome: Boolean(row.is_home),
+    teamScore: projection?.provisionalTeamScore ?? row.team_score,
+    opponentScore: projection?.provisionalOpponentScore ?? row.opponent_score,
+    gamePlanId: row.game_plan_id,
+    gamePlanSnapshot: row.game_plan_snapshot
+      ? (JSON.parse(row.game_plan_snapshot) as MatchRecord["gamePlanSnapshot"])
+      : null,
+    opponentSquadVisibility: row.opponent_squad_visibility,
+    teamColor: row.team_color,
+    opponentColor: row.opponent_color,
+    clockPeriod: row.clock_period,
+    clockElapsedMs: row.clock_elapsed_ms,
+    clockStartedAt: row.clock_started_at,
+    clockRevision: row.clock_revision,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    eventTitle: row.event_title,
+    eventStatus: row.event_status,
+    eventScheduledAt: row.event_scheduled_at,
+    eventLocation: row.event_location,
+    competitionName: null,
+    opponentSquad,
+    projection: projection ?? undefined,
+  };
+}
+
+export async function hasSyncedPreparedMatch(matchId: string) {
+  const db = await database();
+  const row = await db.getOptional<{ id: string }>(
+    "SELECT id FROM matches WHERE id = ?",
+    [matchId],
+  );
+  return Boolean(row);
+}
+
+export async function readSyncedMatchSquad(
+  matchId: string,
+): Promise<MatchSquadAthlete[]> {
+  const db = await database();
+  const rows = await db.getAll<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    squad_number: number | null;
+    position: string | null;
+    started: number;
+  }>(
+    `SELECT a.id, a.first_name, a.last_name, a.squad_number, a.position,
+            s.started
+       FROM athlete_match_stats s
+       JOIN athletes a ON a.id = s.athlete_id
+      WHERE s.match_id = ?
+      ORDER BY a.squad_number, a.last_name`,
+    [matchId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    squadNumber: row.squad_number,
+    position: row.position,
+    started: Boolean(row.started),
+  }));
+}
+
+export async function readSyncedOpponentSquad(
+  matchId: string,
+): Promise<OpponentMatchPlayer[]> {
+  const db = await database();
+  const rows = await db.getAll<{
+    id: string;
+    shirt_number: number;
+    name: string | null;
+    position: string | null;
+  }>(
+    `SELECT id, shirt_number, name, position
+       FROM opponent_match_players
+      WHERE match_id = ?
+      ORDER BY shirt_number`,
+    [matchId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    shirtNumber: row.shirt_number,
+    name: row.name,
+    position: row.position,
+  }));
+}
+
+export interface OfflineClockAnchor {
+  period: import("@/features/matches/types").MatchClockPeriod;
+  elapsedMs: number;
+  running: boolean;
+  authorityRevision: string;
+  wallClockMs: number;
+  uncertain: boolean;
+  operationId: string;
+  clientCreatedAt: string;
+  updatedAt: string;
+}
+
+function pendingClockKey(matchId: string) {
+  return `gaffer-pending-clock-${deploymentScope}-${userScope}-${matchId}`;
+}
+
+export async function saveClockAnchor(
+  matchId: string,
+  anchor: Omit<
+    OfflineClockAnchor,
+    | "wallClockMs"
+    | "uncertain"
+    | "operationId"
+    | "clientCreatedAt"
+    | "updatedAt"
+  >,
+) {
+  const db = await database();
+  const now = Date.now();
+  const updatedAt = new Date(now).toISOString();
+  const operationId = crypto.randomUUID();
+  const clientCreatedAt = updatedAt;
+  await db.execute(
+    `INSERT OR REPLACE INTO offline_clock_anchors
+      (id, period, elapsed_ms, running, authority_revision, wall_clock_ms,
+       uncertain, operation_id, client_created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    [
+      matchId,
+      anchor.period,
+      anchor.elapsedMs,
+      anchor.running ? 1 : 0,
+      anchor.authorityRevision,
+      now,
+      operationId,
+      clientCreatedAt,
+      updatedAt,
+    ],
+  );
+  localStorage.setItem(pendingClockKey(matchId), updatedAt);
+  return { version: updatedAt, operationId, clientCreatedAt };
+}
+
+export function isClockAnchorPending(matchId: string) {
+  return localStorage.getItem(pendingClockKey(matchId)) !== null;
+}
+
+export function markClockAnchorSynced(matchId: string, version: string) {
+  if (localStorage.getItem(pendingClockKey(matchId)) === version) {
+    localStorage.removeItem(pendingClockKey(matchId));
+  }
+}
+
+export async function readClockAnchor(
+  matchId: string,
+): Promise<OfflineClockAnchor | null> {
+  const db = await database();
+  const row = await db.getOptional<{
+    period: OfflineClockAnchor["period"];
+    elapsed_ms: number;
+    running: number;
+    authority_revision: string;
+    wall_clock_ms: number;
+    uncertain: number;
+    operation_id: string | null;
+    client_created_at: string | null;
+    updated_at: string;
+  }>("SELECT * FROM offline_clock_anchors WHERE id = ?", [matchId]);
+  if (!row) return null;
+  const wallDelta = Date.now() - row.wall_clock_ms;
+  const uncertain =
+    Boolean(row.uncertain) || wallDelta < 0 || wallDelta > 6 * 60 * 60 * 1000;
+  return {
+    period: row.period,
+    elapsedMs: row.elapsed_ms + (row.running && !uncertain ? wallDelta : 0),
+    running: Boolean(row.running) && !uncertain,
+    authorityRevision: row.authority_revision,
+    wallClockMs: row.wall_clock_ms,
+    uncertain,
+    operationId: row.operation_id ?? crypto.randomUUID(),
+    clientCreatedAt: row.client_created_at ?? row.updated_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
   const input = JSON.parse(row.payload) as CreateMatchLogEventInput;
   const now = row.created_at;
@@ -203,7 +732,7 @@ export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
     updatedAt: now,
     athlete: null,
     opponentPlayer: null,
-    pending: row.state === "queued",
+    pending: !["accepted"].includes(row.state),
     syncStatus: row.state,
     syncError: row.error,
   };
@@ -234,7 +763,9 @@ interface SyncedEventRow {
   updated_at: string;
 }
 
-export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEvent[]> {
+export async function readSyncedMatchEvents(
+  matchId: string,
+): Promise<MatchLogEvent[]> {
   const db = await database();
   const rows = await db.getAll<SyncedEventRow>(
     "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute DESC, created_at DESC",
@@ -260,6 +791,199 @@ export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEv
     updatedAt: row.updated_at,
     athlete: null,
     opponentPlayer: null,
-    syncStatus: "synced",
+    syncStatus: "reconciled",
   }));
+}
+
+export interface OfflineReadiness {
+  matchCached: boolean;
+  squadCached: boolean;
+  eventsCached: boolean;
+  appShellCached: boolean;
+  localDatabaseWritable: boolean;
+  persistentStorage: boolean;
+  usageBytes: number | null;
+  quotaBytes: number | null;
+}
+
+export async function checkOfflineReadiness(
+  matchId: string,
+): Promise<OfflineReadiness> {
+  const db = await database();
+  const probeId = `readiness:${crypto.randomUUID()}`;
+  let localDatabaseWritable = false;
+  try {
+    await db.execute(
+      `INSERT INTO offline_response_cache (id, payload, updated_at)
+       VALUES (?, ?, ?)`,
+      [probeId, JSON.stringify({ ok: true }), new Date().toISOString()],
+    );
+    const probe = await db.getOptional<{ payload: string }>(
+      "SELECT payload FROM offline_response_cache WHERE id = ?",
+      [probeId],
+    );
+    localDatabaseWritable = probe?.payload === JSON.stringify({ ok: true });
+  } finally {
+    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [
+      probeId,
+    ]);
+  }
+  const [match, squad, events, registration, persisted, estimate] =
+    await Promise.all([
+      readCachedResponse(`match:${matchId}`),
+      readCachedResponse(`squad:${matchId}`),
+      readCachedResponse(`events:${matchId}`),
+      navigator.serviceWorker?.getRegistration(),
+      navigator.storage?.persisted?.() ?? Promise.resolve(false),
+      navigator.storage?.estimate?.() ?? Promise.resolve({}),
+    ]);
+  return {
+    matchCached: match !== null,
+    squadCached: squad !== null,
+    eventsCached: events !== null,
+    appShellCached: Boolean(registration?.active),
+    localDatabaseWritable,
+    persistentStorage: persisted,
+    usageBytes: estimate.usage ?? null,
+    quotaBytes: estimate.quota ?? null,
+  };
+}
+
+export async function exportUnsentObservations() {
+  const rows = await listQueuedEvents();
+  return {
+    format: "gaffer-offline-observations",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    userScope,
+    items: rows.map((row) => ({
+      id: row.id,
+      matchId: row.match_id,
+      kind: row.kind ?? "observation",
+      state: row.state,
+      error: row.error,
+      createdAt: row.created_at,
+      payload: JSON.parse(row.payload) as CreateMatchLogEventInput,
+    })),
+  };
+}
+
+export async function importUnsentObservations(raw: string) {
+  assertStorageWritable();
+  const parsed = JSON.parse(raw) as {
+    format?: string;
+    version?: number;
+    userScope?: string;
+    items?: Array<{
+      id?: string;
+      matchId?: string;
+      kind?: "observation" | "operation";
+      payload?: unknown;
+      createdAt?: string;
+    }>;
+    observations?: Array<{
+      id?: string;
+      matchId?: string;
+      payload?: unknown;
+      createdAt?: string;
+    }>;
+  };
+  if (
+    parsed.format !== "gaffer-offline-observations" ||
+    parsed.version !== 1 ||
+    parsed.userScope !== userScope
+  ) {
+    throw new Error("This export belongs to a different account or format.");
+  }
+  const items: Array<{
+    id?: string;
+    matchId?: string;
+    kind?: "observation" | "operation";
+    payload?: unknown;
+    createdAt?: string;
+  }> = parsed.items ?? parsed.observations ?? [];
+  const db = await database();
+  let imported = 0;
+  await db.writeTransaction(async (tx) => {
+    for (const item of items) {
+      if (
+        typeof item.id !== "string" ||
+        typeof item.matchId !== "string" ||
+        !item.payload ||
+        typeof item.payload !== "object"
+      ) {
+        throw new Error("The export contains an invalid queued item.");
+      }
+      const kind = item.kind ?? "observation";
+      const payload = JSON.stringify(item.payload);
+      const existing = await tx.getOptional<{ payload: string }>(
+        "SELECT payload FROM offline_event_queue WHERE id = ?",
+        [item.id],
+      );
+      if (existing && existing.payload !== payload) {
+        throw new Error(
+          `Queued item ${item.id} already exists with different data.`,
+        );
+      }
+      if (!existing) {
+        await tx.execute(
+          `INSERT INTO offline_event_queue
+            (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
+           VALUES (?, ?, ?, ?, 'queued', NULL, NULL, ?)`,
+          [
+            item.id,
+            item.matchId,
+            kind,
+            payload,
+            item.createdAt ?? new Date().toISOString(),
+          ],
+        );
+        imported += 1;
+      }
+    }
+  });
+  announceQueueChange();
+  return imported;
+}
+
+export async function subscribeToSyncedMatchEventChanges(
+  onChange: () => void,
+): Promise<() => void> {
+  const db = await database();
+  return db.onChange(
+    { onChange },
+    { tables: ["match_events", "match_projection_state"] },
+  );
+}
+
+export async function readSyncedMatchProjection(
+  matchId: string,
+): Promise<
+  import("@/features/matches/types").MatchRecord["projection"] | null
+> {
+  const db = await database();
+  const row = await db.getOptional<{
+    revision: number;
+    confirmed_team_score: number;
+    confirmed_opponent_score: number;
+    provisional_team_score: number;
+    provisional_opponent_score: number;
+    possible_effects: string | Record<string, unknown>;
+    unresolved_review_count: number;
+    finalisation_state: "open" | "finalised" | "amendment_required";
+  }>("SELECT * FROM match_projection_state WHERE id = ?", [matchId]);
+  if (!row) return null;
+  return {
+    revision: row.revision,
+    confirmedTeamScore: row.confirmed_team_score,
+    confirmedOpponentScore: row.confirmed_opponent_score,
+    provisionalTeamScore: row.provisional_team_score,
+    provisionalOpponentScore: row.provisional_opponent_score,
+    possibleEffects:
+      typeof row.possible_effects === "string"
+        ? JSON.parse(row.possible_effects)
+        : row.possible_effects,
+    unresolvedReviewCount: row.unresolved_review_count,
+    finalisationState: row.finalisation_state,
+  };
 }

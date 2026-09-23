@@ -19,3 +19,110 @@ streams:
       JOIN matches ON matches.id = match_event_reviews.match_id
       JOIN events ON events.id = matches.event_id
       WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_projections:
+    auto_subscribe: true
+    query: |
+      SELECT match_projection_state.match_id AS id,
+             match_projection_state.revision,
+             match_projection_state.input_digest,
+             match_projection_state.rules_version,
+             match_projection_state.confirmed_team_score,
+             match_projection_state.confirmed_opponent_score,
+             match_projection_state.provisional_team_score,
+             match_projection_state.provisional_opponent_score,
+             match_projection_state.possible_effects,
+             match_projection_state.disciplinary_projection,
+             match_projection_state.unresolved_review_count,
+             match_projection_state.finalisation_state,
+             match_projection_state.finalised_by_user_id,
+             match_projection_state.finalised_at,
+             match_projection_state.created_at,
+             match_projection_state.updated_at
+      FROM match_projection_state
+      JOIN matches ON matches.id = match_projection_state.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_matches:
+    auto_subscribe: true
+    query: |
+      SELECT matches.id,
+             matches.event_id,
+             matches.competition_id,
+             matches.opponent_name,
+             matches.is_home,
+             matches.team_score,
+             matches.opponent_score,
+             matches.game_plan_id,
+             matches.game_plan_snapshot,
+             matches.opponent_squad_visibility,
+             matches.team_color,
+             matches.opponent_color,
+             matches.clock_period,
+             matches.clock_elapsed_ms,
+             matches.clock_started_at,
+             matches.clock_revision,
+             matches.created_at,
+             matches.updated_at
+      FROM matches
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_events_metadata:
+    auto_subscribe: true
+    query: |
+      SELECT events.id,
+             events.team_id,
+             events.title,
+             events.status,
+             events.scheduled_at,
+             events.location
+      FROM events
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_athletes:
+    auto_subscribe: true
+    query: |
+      SELECT athletes.id,
+             athletes.team_id,
+             athletes.first_name,
+             athletes.last_name,
+             athletes.squad_number,
+             athletes.position
+      FROM athletes
+      WHERE athletes.team_id = auth.parameter('team_id')
+
+  team_match_squads:
+    auto_subscribe: true
+    query: |
+      SELECT athlete_match_stats.id,
+             athlete_match_stats.match_id,
+             athlete_match_stats.athlete_id,
+             athlete_match_stats.started
+      FROM athlete_match_stats
+      JOIN matches ON matches.id = athlete_match_stats.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_opponent_squads:
+    auto_subscribe: true
+    query: |
+      SELECT opponent_match_players.id,
+             opponent_match_players.match_id,
+             opponent_match_players.shirt_number,
+             opponent_match_players.name,
+             opponent_match_players.position
+      FROM opponent_match_players
+      JOIN matches ON matches.id = opponent_match_players.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')
+
+  team_match_clock_operations:
+    auto_subscribe: true
+    query: |
+      SELECT match_clock_operations.*
+      FROM match_clock_operations
+      JOIN matches ON matches.id = match_clock_operations.match_id
+      JOIN events ON events.id = matches.event_id
+      WHERE events.team_id = auth.parameter('team_id')

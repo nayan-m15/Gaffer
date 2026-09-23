@@ -41,6 +41,7 @@ export interface MatchRecord {
   clockPeriod: MatchClockPeriod;
   clockElapsedMs: number;
   clockStartedAt: string | null;
+  clockRevision: number;
   createdAt: string;
   updatedAt: string;
   eventTitle: string;
@@ -49,6 +50,20 @@ export interface MatchRecord {
   eventLocation: string;
   competitionName: string | null;
   opponentSquad: OpponentMatchPlayer[];
+  projection?: {
+    revision: number;
+    confirmedTeamScore: number;
+    confirmedOpponentScore: number;
+    provisionalTeamScore: number;
+    provisionalOpponentScore: number;
+    possibleEffects: {
+      teamGoals?: number;
+      opponentGoals?: number;
+      disciplinaryEvents?: number;
+    };
+    unresolvedReviewCount: number;
+    finalisationState: "open" | "finalised" | "amendment_required";
+  };
 }
 
 export interface MatchSquadAthlete {
@@ -84,7 +99,15 @@ export interface MatchLogEvent {
   pending?: boolean;
   /** Client-only: stable list key so confirming a log does not remount the row. */
   optimisticKey?: string;
-  syncStatus?: "queued" | "rejected" | "synced";
+  syncStatus?:
+    | "queued"
+    | "uploading"
+    | "accepted"
+    | "reconciled"
+    | "dependency_pending"
+    | "quarantined"
+    | "rejected"
+    | "synced";
   syncError?: string | null;
 }
 
@@ -113,6 +136,9 @@ export interface UpdateMatchLogEventInput {
 }
 
 export interface UpdateMatchClockInput {
+  operationId: string;
+  baseRevision: number;
+  clientCreatedAt: string;
   period: MatchClockPeriod;
   running: boolean;
   elapsedMs: number;

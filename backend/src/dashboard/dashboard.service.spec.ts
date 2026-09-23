@@ -150,6 +150,8 @@ describe('DashboardService', () => {
       awayTeam: 'United',
       homeScore: 1,
       awayScore: 0,
+      clockElapsedMs: 30 * 60 * 1000,
+      clockStartedAt: null,
       elapsedMinutes: 30,
     });
     expect(summary.recentForm).toEqual([

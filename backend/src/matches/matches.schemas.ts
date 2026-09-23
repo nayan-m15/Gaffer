@@ -72,6 +72,7 @@ export const createMatchLogEventSchema = z
     }
     if (
       value.eventType === 'substitution' &&
+      (value.team === 'own' || value.opponentPlayerId) &&
       !z.uuid().safeParse(value.detail).success
     ) {
       ctx.addIssue({
@@ -106,6 +107,14 @@ export const resolveMatchEventReviewSchema = z.object({
 export type ResolveMatchEventReviewDto = z.infer<
   typeof resolveMatchEventReviewSchema
 >;
+
+export const finaliseMatchProjectionSchema = z.object({
+  expectedRevision: z.number().int().min(1),
+});
+
+export const reopenMatchProjectionSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
 
 export const updateMatchLogEventSchema = z
   .object({
@@ -174,6 +183,9 @@ export const matchClockPeriodSchema = z.enum([
 ]);
 
 export const updateMatchClockSchema = z.object({
+  operationId: z.uuid().optional(),
+  baseRevision: z.number().int().min(0).default(0),
+  clientCreatedAt: z.iso.datetime().optional(),
   period: matchClockPeriodSchema,
   running: z.boolean(),
   elapsedMs: z

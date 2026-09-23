@@ -23,8 +23,13 @@ await sql.transaction((tx) => [
   tx.query(`GRANT SELECT ON TABLE
     public.match_events,
     public.match_event_reviews,
+    public.match_projection_state,
+    public.match_clock_operations,
     public.matches,
-    public.events
+    public.events,
+    public.athletes,
+    public.athlete_match_stats,
+    public.opponent_match_players
     TO powersync_role`),
 ]);
 
@@ -35,8 +40,13 @@ if (!publication) {
   await sql.query(`CREATE PUBLICATION powersync FOR TABLE
     public.match_events,
     public.match_event_reviews,
+    public.match_projection_state,
+    public.match_clock_operations,
     public.matches,
-    public.events`);
+    public.events,
+    public.athletes,
+    public.athlete_match_stats,
+    public.opponent_match_players`);
 } else {
   const published = await sql.query(
     `SELECT tablename
@@ -47,8 +57,13 @@ if (!publication) {
   for (const table of [
     'match_events',
     'match_event_reviews',
+    'match_projection_state',
+    'match_clock_operations',
     'matches',
     'events',
+    'athletes',
+    'athlete_match_stats',
+    'opponent_match_players',
   ]) {
     if (!publishedNames.has(table)) {
       await sql.query(`ALTER PUBLICATION powersync ADD TABLE public.${table}`);
