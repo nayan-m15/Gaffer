@@ -7,15 +7,15 @@ const frontendPort = new URL(frontendURL).port || '5173';
 /**
  * Full-stack e2e config — drives a real browser against the real Vite dev
  * server and the real Nest API (not mocked), matching how `npm run dev`
- * already runs both (see root package.json). If both dev servers are
- * already running locally, Playwright reuses them instead of starting a
- * second copy.
+ * already runs both (see root package.json). Start dedicated test servers
+ * so an existing development server cannot redirect tests to development data.
  */
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'pwa-production.spec.ts',
   // Full-stack flows perform several real database round trips. Shared CI
   // runners can take well over 90 seconds even when every assertion passes.
-  timeout: process.env.CI ? 180_000 : 30_000,
+  timeout: process.env.CI ? 180_000 : 90_000,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,
   },
@@ -46,13 +46,13 @@ export default defineConfig({
         ? 'npm --prefix backend run start:prod'
         : 'npm --prefix backend run start:dev',
       url: `${backendURL}/health/database`,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
     {
       command: `npm --prefix frontend run dev -- --port ${frontendPort}`,
       url: frontendURL,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],

@@ -347,14 +347,26 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
     json(route, [event]),
   );
   await page.route(
-    `**/api/matches/${MATCH_ID}/events/${LOG_ID}`,
+    "**/api/sync/upload",
     async (route) => {
+      const { items } = route.request().postDataJSON() as {
+        items: { id: string; kind: string; operationType: string; canonicalEventId: string; replacement: Partial<typeof event> }[];
+      };
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        kind: "operation",
+        operationType: "correct",
+        canonicalEventId: LOG_ID,
+        replacement: { minute: 12, eventType: "yellow_card" },
+      });
       event = {
         ...event,
-        ...((await route.request().postDataJSON()) as object),
+        ...items[0].replacement,
         manuallyAdjusted: true,
       };
-      return json(route, event);
+      return json(route, {
+        receipts: [{ id: items[0].id, outcome: "accepted", canonicalEventId: LOG_ID }],
+      });
     },
   );
 
@@ -370,5 +382,8 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: /12' Yellow Card/i }),
   ).toBeVisible();
+  await expect(page.getByText("Manually adjusted")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /12' Yellow Card/i })).toBeVisible();
   await expect(page.getByText("Manually adjusted")).toBeVisible();
 });

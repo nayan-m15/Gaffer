@@ -599,74 +599,70 @@ export class StatisticsService {
       liveResults,
       fixtureLinks,
     ] = await Promise.all([
-        this.databaseService.database
-          .select({
-            id: competitionTeams.id,
-            competitionId: competitionTeams.competitionId,
-            teamId: competitionTeams.teamId,
-            displayName: competitionTeams.displayName,
-          })
-          .from(competitionTeams)
-          .where(inArray(competitionTeams.competitionId, competitionIds)),
-        this.databaseService.database
-          .select()
-          .from(standings)
-          .where(inArray(standings.competitionId, competitionIds)),
-        this.databaseService.database
-          .select({
-            id: competitionMatches.id,
-            competitionId: competitionMatches.competitionId,
-            homeCompetitionTeamId: competitionMatches.homeCompetitionTeamId,
-            awayCompetitionTeamId: competitionMatches.awayCompetitionTeamId,
-            homeScore: competitionMatches.homeScore,
-            awayScore: competitionMatches.awayScore,
-          })
-          .from(competitionMatches)
-          .where(inArray(competitionMatches.competitionId, competitionIds)),
-        this.databaseService.database
-          .select({
-            matchId: matches.id,
-            competitionId: matches.competitionId,
-            ownCompetitionTeamId: competitionTeams.id,
-            opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
-            isHome: matches.isHome,
-            teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
-            opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
-          })
-          .from(matches)
-          .innerJoin(events, eq(matches.eventId, events.id))
-          .innerJoin(competitions, eq(matches.competitionId, competitions.id))
-          .innerJoin(
-            competitionTeams,
-            and(
-              eq(competitionTeams.competitionId, matches.competitionId),
-              eq(competitionTeams.teamId, events.teamId),
-            ),
-          )
-          .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
-          .where(
-            and(
-              inArray(matches.competitionId, competitionIds),
-              eq(events.status, 'completed'),
-              gte(matches.createdAt, competitions.resultTrackingStartedAt),
-              sql`${matches.opponentCompetitionTeamId} is not null`,
-            ),
-          )
-          .groupBy(
-            matches.id,
-            matches.competitionId,
-            competitionTeams.id,
+      this.databaseService.database
+        .select({
+          id: competitionTeams.id,
+          competitionId: competitionTeams.competitionId,
+          teamId: competitionTeams.teamId,
+          displayName: competitionTeams.displayName,
+        })
+        .from(competitionTeams)
+        .where(inArray(competitionTeams.competitionId, competitionIds)),
+      this.databaseService.database
+        .select()
+        .from(standings)
+        .where(inArray(standings.competitionId, competitionIds)),
+      this.databaseService.database
+        .select({
+          id: competitionMatches.id,
+          competitionId: competitionMatches.competitionId,
+          homeCompetitionTeamId: competitionMatches.homeCompetitionTeamId,
+          awayCompetitionTeamId: competitionMatches.awayCompetitionTeamId,
+          homeScore: competitionMatches.homeScore,
+          awayScore: competitionMatches.awayScore,
+        })
+        .from(competitionMatches)
+        .where(inArray(competitionMatches.competitionId, competitionIds)),
+      this.databaseService.database
+        .select({
+          matchId: matches.id,
+          competitionId: matches.competitionId,
+          ownCompetitionTeamId: competitionTeams.id,
+          opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
+          isHome: matches.isHome,
+          teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+        })
+        .from(matches)
+        .innerJoin(events, eq(matches.eventId, events.id))
+        .innerJoin(competitions, eq(matches.competitionId, competitions.id))
+        .innerJoin(
+          competitionTeams,
+          and(
+            eq(competitionTeams.competitionId, matches.competitionId),
+            eq(competitionTeams.teamId, events.teamId),
           ),
-        this.databaseService.database
-          .select({
-            competitionId: competitionFixtures.competitionId,
-            stage: competitionFixtures.stage,
-            legacyResultId: competitionFixtures.legacyResultId,
-            linkedMatchId: competitionFixtures.linkedMatchId,
-          })
-          .from(competitionFixtures)
-          .where(inArray(competitionFixtures.competitionId, competitionIds)),
-      ]);
+        )
+        .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
+        .where(
+          and(
+            inArray(matches.competitionId, competitionIds),
+            eq(events.status, 'completed'),
+            gte(matches.createdAt, competitions.resultTrackingStartedAt),
+            sql`${matches.opponentCompetitionTeamId} is not null`,
+          ),
+        )
+        .groupBy(matches.id, matches.competitionId, competitionTeams.id),
+      this.databaseService.database
+        .select({
+          competitionId: competitionFixtures.competitionId,
+          stage: competitionFixtures.stage,
+          legacyResultId: competitionFixtures.legacyResultId,
+          linkedMatchId: competitionFixtures.linkedMatchId,
+        })
+        .from(competitionFixtures)
+        .where(inArray(competitionFixtures.competitionId, competitionIds)),
+    ]);
 
     return teamCompetitions.map(({ competition }) => {
       const competitionParticipants = participants.filter(
@@ -909,7 +905,11 @@ export class StatisticsService {
     dto: UpdateStandingDto,
   ) {
     const team = await this.requireTeam(userId);
-    const existing = await this.requireStandingAdmin(userId, team.id, standingId);
+    const existing = await this.requireStandingAdmin(
+      userId,
+      team.id,
+      standingId,
+    );
 
     zodValidate(createStandingSchema, {
       teamName: dto.teamName ?? existing.teamName,
@@ -1079,10 +1079,7 @@ export class StatisticsService {
         eq(competitionTeams.competitionId, competitions.id),
       )
       .where(
-        and(
-          eq(standings.id, standingId),
-          eq(competitionTeams.teamId, teamId),
-        ),
+        and(eq(standings.id, standingId), eq(competitionTeams.teamId, teamId)),
       )
       .limit(1);
 
@@ -1101,5 +1098,4 @@ export class StatisticsService {
 
     return row;
   }
-
 }

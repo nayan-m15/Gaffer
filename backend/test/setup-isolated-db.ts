@@ -19,3 +19,5 @@ if (testDatabaseUrl === developmentDatabaseUrl) {
 }
 
 process.env.DATABASE_URL = testDatabaseUrl;
+// Verification is performed by the test helpers; never send real test emails.
+process.env.BREVO_API_KEY = '';

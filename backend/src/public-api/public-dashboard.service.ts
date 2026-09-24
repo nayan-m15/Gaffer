@@ -101,8 +101,7 @@ export class PublicDashboardService {
     const teamIdsByCompetition = new Map<string, string[]>();
     for (const participant of participantRows) {
       if (!participant.teamId) continue;
-      const teamIds =
-        teamIdsByCompetition.get(participant.competitionId) ?? [];
+      const teamIds = teamIdsByCompetition.get(participant.competitionId) ?? [];
       teamIds.push(participant.teamId);
       teamIdsByCompetition.set(participant.competitionId, teamIds);
     }

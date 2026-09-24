@@ -245,10 +245,7 @@ export class MatchesService {
       .digest('hex');
 
     if (event.status === 'completed' && dto.eventType === 'goal') {
-      const current = await this.buildCompetitionFixtureResult(
-        team.id,
-        match,
-      );
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
       if (current) {
         const projected = this.adjustFixtureScore(
           current.result,
@@ -635,7 +632,10 @@ export class MatchesService {
         .filter((observation) => observation.eventType === 'goal');
       separatedGoals = additionalGoals.length > 0;
       if (event.status === 'completed' && separatedGoals) {
-        const current = await this.buildCompetitionFixtureResult(team.id, match);
+        const current = await this.buildCompetitionFixtureResult(
+          team.id,
+          match,
+        );
         if (current) {
           let projected = current.result;
           for (const observation of additionalGoals) {
@@ -900,10 +900,7 @@ export class MatchesService {
       logged.lifecycleStatus !== 'voided' &&
       logged.eventType === 'goal';
     if (changesScore) {
-      const current = await this.buildCompetitionFixtureResult(
-        team.id,
-        match,
-      );
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
       if (current) {
         const projected = this.adjustFixtureScore(
           current.result,

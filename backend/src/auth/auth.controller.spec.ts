@@ -162,7 +162,7 @@ describe('AuthController', () => {
         expect.objectContaining({
           body: expect.objectContaining({
             callbackURL: `${FRONTEND_URL}/join-competition/${INVITE_TOKEN}`,
-          }),
+          }) as unknown,
         }),
       );
     });

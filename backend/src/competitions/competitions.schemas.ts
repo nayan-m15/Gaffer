@@ -146,4 +146,3 @@ export const fixtureScheduleProposalSchema = z.object({
 export type FixtureScheduleProposalDto = z.infer<
   typeof fixtureScheduleProposalSchema
 >;
-

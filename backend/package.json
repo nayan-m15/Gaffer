@@ -24,6 +24,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "npm run test -- --watch",
     "test:cov": "npm run test -- --coverage",
+    "posttest:cov": "node scripts/normalize-coverage.mjs",
     "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "npm run db:migrate:test && jest --config ./test/jest-e2e.json --runInBand",
     "test:integration": "npm run db:migrate:test && jest --config ./test/jest-e2e.json --runInBand"

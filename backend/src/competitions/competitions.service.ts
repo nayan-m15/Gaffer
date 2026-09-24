@@ -690,7 +690,8 @@ export class CompetitionsService {
         standingsResults = results.filter((row) =>
           row.source === 'manual'
             ? leagueManualIds.has(row.id)
-            : row.linkedMatchId !== null && leagueMatchIds.has(row.linkedMatchId),
+            : row.linkedMatchId !== null &&
+              leagueMatchIds.has(row.linkedMatchId),
         );
       }
     }
@@ -1138,11 +1139,15 @@ export class CompetitionsService {
           ]),
         ),
       );
-    const byId = new Map(participants.map((participant) => [participant.id, participant]));
+    const byId = new Map(
+      participants.map((participant) => [participant.id, participant]),
+    );
     const home = byId.get(fixture.homeCompetitionTeamId);
     const away = byId.get(fixture.awayCompetitionTeamId);
     if (!home || !away) {
-      throw new ConflictException('Fixture participants are no longer available.');
+      throw new ConflictException(
+        'Fixture participants are no longer available.',
+      );
     }
 
     return { fixture, home, away };

@@ -565,10 +565,7 @@ export class EventsService {
     if (!fixture) {
       throw new BadRequestException('Generated competition fixture not found.');
     }
-    if (
-      !eventCompetitionId ||
-      fixture.competitionId !== eventCompetitionId
-    ) {
+    if (!eventCompetitionId || fixture.competitionId !== eventCompetitionId) {
       throw new BadRequestException(
         'Generated fixture does not match this event competition.',
       );
