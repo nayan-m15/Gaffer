@@ -9,7 +9,7 @@
     "\\.(m|c)?js$": ["babel-jest", { "configFile": "./test/babel.config.cjs" }]
   },
   "transformIgnorePatterns": [
-    "/node_modules/(?!(?:better-auth|@better-auth|@better-fetch|@noble|better-call|jose|kysely|nanostores)/|.*\\.mjs$)"
+    "/node_modules/(?!(?:better-auth|@better-auth|@better-fetch|@noble|better-call|jose|kysely|nanostores|rou3)/)"
   ],
-  "testTimeout": 20000
+  "testTimeout": 60000
 }

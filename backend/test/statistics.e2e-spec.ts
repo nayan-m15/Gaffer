@@ -123,15 +123,15 @@ describe('Statistics and seasons (e2e)', () => {
 
   /** Creates the 11 athletes a starting XI needs, returning their ids. */
   async function createSquad(agent: Agent): Promise<string[]> {
-    const ids: string[] = [];
-    for (let i = 0; i < 11; i += 1) {
-      const response = await agent
-        .post('/athletes')
-        .send({ firstName: `Player${i}`, lastName: `Test${i}` })
-        .expect(201);
-      ids.push((response.body as { id: string }).id);
-    }
-    return ids;
+    const responses = await Promise.all(
+      Array.from({ length: 11 }, (_, index) =>
+        agent
+          .post('/athletes')
+          .send({ firstName: `Player${index}`, lastName: `Test${index}` })
+          .expect(201),
+      ),
+    );
+    return responses.map((response) => (response.body as { id: string }).id);
   }
 
   /**

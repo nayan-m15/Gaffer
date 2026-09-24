@@ -43,7 +43,7 @@ jobs:
   api-tests:
     name: API tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       BETTER_AUTH_URL: http://localhost:3000

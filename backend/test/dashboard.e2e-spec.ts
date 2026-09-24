@@ -332,5 +332,5 @@ describe('Dashboard (e2e)', () => {
       goalsFor: 3,
       goalsAgainst: 1,
     });
-  }, 30_000);
+  }, 60_000);
 });

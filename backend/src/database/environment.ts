@@ -27,4 +27,4 @@ function findBackendRoot(startDir: string): string {
 // `backend/` package root is correct no matter the invocation method or
 // whether this is running from source or from the compiled `dist` output.
 const backendRoot = findBackendRoot(__dirname);
-config({ path: resolve(backendRoot, '..', '.env') });
+config({ path: resolve(backendRoot, '..', '.env'), quiet: true });

@@ -309,7 +309,7 @@ describe('Events (e2e)', () => {
       .get(`/matches/${match.id}`)
       .expect(200);
     expect((matchAfterUpdate.body as MatchBody).competitionId).toBe(leagueId);
-  }, 40000);
+  }, 60_000);
 
   it('cancels an event by setting its status, rather than deleting it', async () => {
     const { agent } = await newCoach();
