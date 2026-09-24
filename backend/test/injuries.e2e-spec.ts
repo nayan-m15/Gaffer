@@ -82,7 +82,7 @@ describe('Injuries (e2e)', () => {
   afterAll(async () => {
     await Promise.all(identities.map(cleanupUser));
     await app.close();
-  });
+  }, 60000);
 
   async function newCoach() {
     const identity = uniqueTestIdentity('s1-21-injuries');

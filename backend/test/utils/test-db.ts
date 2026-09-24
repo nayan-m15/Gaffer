@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { createDatabaseClient } from '../../src/database/drizzle';
-import { teams, user } from '../../src/database/schema';
+import {
+  injuries,
+  injuryTimelineEntries,
+  playerClaimInvites,
+  teamInvites,
+  teams,
+  user,
+} from '../../src/database/schema';
 
 // Jest maps the separately configured TEST_DATABASE_URL to DATABASE_URL
 // before application or database modules are imported.
@@ -37,6 +44,37 @@ export async function cleanupUser({
   email,
   teamName,
 }: TestIdentity): Promise<void> {
+  const [existingUser] = await testDb
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1);
+
+  if (existingUser) {
+    await testDb
+      .delete(injuryTimelineEntries)
+      .where(eq(injuryTimelineEntries.createdByUserId, existingUser.id));
+    await testDb
+      .delete(injuries)
+      .where(eq(injuries.createdByUserId, existingUser.id));
+    await testDb
+      .delete(teamInvites)
+      .where(
+        or(
+          eq(teamInvites.usedByUserId, existingUser.id),
+          eq(teamInvites.createdByUserId, existingUser.id),
+        ),
+      );
+    await testDb
+      .delete(playerClaimInvites)
+      .where(
+        or(
+          eq(playerClaimInvites.usedByUserId, existingUser.id),
+          eq(playerClaimInvites.createdByUserId, existingUser.id),
+        ),
+      );
+  }
+
   await testDb.delete(teams).where(eq(teams.name, teamName));
   await testDb.delete(user).where(eq(user.email, email));
 }

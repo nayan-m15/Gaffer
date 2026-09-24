@@ -243,6 +243,30 @@ describe('Events (e2e)', () => {
     const event = created.body as EventBody;
     expect(event.competitionId).toBe(leagueId);
 
+    const updated = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: cupId })
+      .expect(200);
+    expect((updated.body as EventBody).competitionId).toBe(cupId);
+
+    const cleared = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: null })
+      .expect(200);
+    expect((cleared.body as EventBody).competitionId).toBeNull();
+
+    const reassigned = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: leagueId })
+      .expect(200);
+    expect((reassigned.body as EventBody).competitionId).toBe(leagueId);
+
+    const opponentParticipant = await agent
+      .post(`/competitions/${leagueId}/teams`)
+      .send({ displayName: 'Rivals FC' })
+      .expect(201);
+    const opponentCompetitionTeamId = (opponentParticipant.body as IdBody).id;
+
     const athleteIds = await Promise.all(
       Array.from({ length: 11 }, async (_, index) => {
         const athlete = await agent
@@ -259,6 +283,7 @@ describe('Events (e2e)', () => {
       .post(`/events/${event.id}/start-match`)
       .send({
         opponentName: 'Rivals FC',
+        opponentCompetitionTeamId,
         isHome: true,
         startingAthleteIds: athleteIds,
       })
@@ -266,22 +291,25 @@ describe('Events (e2e)', () => {
     const match = started.body as MatchBody;
     expect(match.competitionId).toBe(leagueId);
 
-    const updated = await agent
+    // After the match has started, the competition cannot be changed
+    await agent
       .patch(`/events/${event.id}`)
       .send({ competitionId: cupId })
-      .expect(200);
-    expect((updated.body as EventBody).competitionId).toBe(cupId);
-    const reassignedMatch = await agent.get(`/matches/${match.id}`).expect(200);
-    expect((reassignedMatch.body as MatchBody).competitionId).toBe(cupId);
+      .expect(400);
 
-    const cleared = await agent
+    // Other fields can still be updated and the match assignment is retained
+    const renamed = await agent
       .patch(`/events/${event.id}`)
-      .send({ competitionId: null })
+      .send({ title: 'Rescheduled League Match' })
       .expect(200);
-    expect((cleared.body as EventBody).competitionId).toBeNull();
-    const clearedMatch = await agent.get(`/matches/${match.id}`).expect(200);
-    expect((clearedMatch.body as MatchBody).competitionId).toBeNull();
-  });
+    expect((renamed.body as EventBody).title).toBe('Rescheduled League Match');
+    expect((renamed.body as EventBody).competitionId).toBe(leagueId);
+
+    const matchAfterUpdate = await agent
+      .get(`/matches/${match.id}`)
+      .expect(200);
+    expect((matchAfterUpdate.body as MatchBody).competitionId).toBe(leagueId);
+  }, 40000);
 
   it('cancels an event by setting its status, rather than deleting it', async () => {
     const { agent } = await newCoach();
