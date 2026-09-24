@@ -9,9 +9,18 @@ import {
   startMatch,
   updateEvent,
 } from "./api";
+import {
+  acceptFriendlyFixture,
+  declineFriendlyFixture,
+  getIncomingFriendlyFixtures,
+} from "@/services/friendly-fixtures";
 import type { StartMatchInput, UpdateEventInput } from "./types";
 
 export const eventsQueryKey = ["events"] as const;
+export const incomingFriendlyFixturesQueryKey = [
+  "friendly-fixtures",
+  "incoming",
+] as const;
 
 /** Ticks so past `scheduled` events can flip to a completed display status. */
 export function useNow(intervalMs = 30_000) {
@@ -115,6 +124,52 @@ export function useStartMatch(eventId: string) {
     mutationFn: (input: StartMatchInput) => startMatch(eventId, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: eventsQueryKey });
+    },
+  });
+}
+
+/**
+ * Pending inbox for the signed-in coach's team. Accepting a request mirrors
+ * the match onto this team's calendar, so both the events list, the
+ * dashboard, and the request banner are refreshed together.
+ */
+export function useIncomingFriendlyFixtures(enabled = true) {
+  return useQuery({
+    queryKey: incomingFriendlyFixturesQueryKey,
+    queryFn: getIncomingFriendlyFixtures,
+    enabled,
+  });
+}
+
+async function invalidateFriendlyFixtureData(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  await Promise.all([
+    invalidateEventData(queryClient),
+    queryClient.invalidateQueries({
+      queryKey: incomingFriendlyFixturesQueryKey,
+    }),
+  ]);
+}
+
+export function useAcceptFriendlyFixture() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: acceptFriendlyFixture,
+    onSuccess: async () => {
+      await invalidateFriendlyFixtureData(queryClient);
+    },
+  });
+}
+
+export function useDeclineFriendlyFixture() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: declineFriendlyFixture,
+    onSuccess: async () => {
+      await invalidateFriendlyFixtureData(queryClient);
     },
   });
 }

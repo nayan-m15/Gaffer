@@ -500,6 +500,13 @@ export default function ConfirmSquadPage() {
   );
 
   useEffect(() => {
+    if (eventQuery.data?.friendlyFixtureId) {
+      // The opponent is the linked Gaffer team — resolved server-side when
+      // the match is started, so it is read-only here.
+      setOpponentCompetitionTeamId(null);
+      setOpponentName(eventQuery.data.friendlyOpponentTeamName ?? "");
+      return;
+    }
     if (eventQuery.data?.competitionFixtureId) {
       setOpponentCompetitionTeamId(generatedFixtureOpponentId);
       setOpponentName(generatedFixtureOpponentName);
@@ -522,6 +529,8 @@ export default function ConfirmSquadPage() {
     competitionParticipants,
     eventQuery.data?.competitionFixtureId,
     eventQuery.data?.competitionId,
+    eventQuery.data?.friendlyFixtureId,
+    eventQuery.data?.friendlyOpponentTeamName,
     generatedFixtureOpponentId,
     generatedFixtureOpponentName,
     opponentCompetitionTeamId,
@@ -537,9 +546,16 @@ export default function ConfirmSquadPage() {
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
+  // Friendly fixtures are only confirmed once the Gaffer opponent accepted;
+  // generated competition fixtures keep their own schedule gate.
+  const friendlyFixtureLinked = Boolean(eventQuery.data?.friendlyFixtureStatus);
+  const friendlyFixtureAccepted =
+    !friendlyFixtureLinked ||
+    eventQuery.data?.friendlyFixtureStatus === "accepted";
   const fixtureDateConfirmed =
-    !eventQuery.data?.competitionFixtureId ||
-    Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
+    (!eventQuery.data?.competitionFixtureId ||
+      Boolean(eventQuery.data.fixtureScheduleConfirmedAt)) &&
+    friendlyFixtureAccepted;
   const canSubmit =
     startingCount === STARTING_XI_SIZE &&
     opponentReady &&
@@ -953,7 +969,13 @@ export default function ConfirmSquadPage() {
           <h2 className={sectionLabelClassName}>Match details</h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor={event.competitionFixtureId ? undefined : "opponent-name"}>
+              <Label
+                htmlFor={
+                  event.competitionFixtureId || event.friendlyFixtureId
+                    ? undefined
+                    : "opponent-name"
+                }
+              >
                 Opponent
               </Label>
               {event.competitionFixtureId ? (
@@ -975,6 +997,34 @@ export default function ConfirmSquadPage() {
                     {generatedFixtureHasOpponent
                       ? "This opponent is fixed by the generated competition fixture."
                       : "The opponent will be filled automatically when the fixture pairing is known."}
+                  </p>
+                </>
+              ) : event.friendlyFixtureId ? (
+                <>
+                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-sm font-medium",
+                        !event.friendlyOpponentTeamName?.trim() &&
+                          "text-muted-foreground",
+                      )}
+                    >
+                      {event.friendlyOpponentTeamName?.trim() ||
+                        "Opponent pending"}
+                    </span>
+                    <LockKeyhole
+                      className="size-4 shrink-0 text-primary"
+                      aria-hidden
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {event.friendlyFixtureStatus === "accepted"
+                      ? "This Gaffer opponent accepted the friendly fixture — the squad can be confirmed."
+                      : event.friendlyFixtureStatus === "pending"
+                        ? "Waiting for this Gaffer opponent to accept the fixture request."
+                        : event.friendlyFixtureStatus === "declined"
+                          ? "The opponent declined this fixture. Update the event to pick another opponent."
+                          : "This friendly fixture is no longer active."}
                   </p>
                 </>
               ) : event.competitionId ? (

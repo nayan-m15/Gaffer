@@ -74,6 +74,9 @@ const createEventBaseSchema = z.object({
     .max(2000, 'Notes must be 2000 characters or fewer.')
     .optional(),
   competitionId: z.uuid().nullable().optional(),
+  // Manual match events only: the Gaffer team to request a friendly fixture
+  // against. Null/omitted keeps free-text (non-Gaffer) opponents working.
+  friendlyOpponentTeamId: z.uuid().nullable().optional(),
   ...venueFieldsSchema.shape,
 });
 

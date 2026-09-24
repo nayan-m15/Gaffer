@@ -2,6 +2,7 @@ import { apiFetch } from "@/lib/api";
 import type { BackendAthlete } from "./athletes";
 import type { CompetitionWithStandings } from "@/features/statistics/types";
 import type { AthleteStatistics } from "@/features/statistics/types";
+import type { FriendlyFixtureStatus } from "@/features/events/types";
 
 /**
  * A team event annotated with the current player's RSVP status, as returned
@@ -24,6 +25,14 @@ export interface PlayerEvent {
   competitionId: string | null;
   competitionFixtureId: string | null;
   fixtureScheduleConfirmedAt: string | null;
+  /**
+   * Friendly-fixture link — the player events endpoint reuses the same team
+   * query, so manual matches against another Gaffer team carry these too.
+   */
+  friendlyFixtureId?: string | null;
+  friendlyFixtureStatus?: FriendlyFixtureStatus | null;
+  friendlyOpponentTeamId?: string | null;
+  friendlyOpponentTeamName?: string | null;
   matchId: string | null;
   createdAt: string;
   updatedAt: string;

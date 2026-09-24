@@ -80,6 +80,14 @@ export function EventDetailDialog({
   const generatedFixture = Boolean(event?.competitionFixtureId);
   const fixtureDateConfirmed =
     !generatedFixture || Boolean(event?.fixtureScheduleConfirmedAt);
+  // A manual match against another Gaffer team only counts as confirmed for
+  // this team once the opponent accepted the friendly-fixture request.
+  const friendlyFixtureLinked = Boolean(event?.friendlyFixtureStatus);
+  const friendlyOpponentName =
+    event?.friendlyOpponentTeamName ?? event?.title ?? "the opponent";
+  const friendlyFixtureConfirmed =
+    !friendlyFixtureLinked || event?.friendlyFixtureStatus === "accepted";
+  const canConfirmSquad = fixtureDateConfirmed && friendlyFixtureConfirmed;
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
@@ -121,6 +129,30 @@ export function EventDetailDialog({
                 {fixtureDateConfirmed
                   ? "Fixture date confirmed by both teams."
                   : "This generated fixture date is provisional. Coaches manage confirmation and rescheduling from Leagues & Competitions."}
+              </div>
+            )}
+            {friendlyFixtureLinked && event.status === "scheduled" && (
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm",
+                  event.friendlyFixtureStatus === "accepted" &&
+                    "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
+                  event.friendlyFixtureStatus === "pending" &&
+                    "border-amber-500/25 bg-amber-500/10 text-amber-500",
+                  event.friendlyFixtureStatus === "declined" &&
+                    "border-destructive/25 bg-destructive/10 text-destructive",
+                  event.friendlyFixtureStatus === "cancelled" &&
+                    "border-border bg-muted/40 text-muted-foreground",
+                )}
+              >
+                {event.friendlyFixtureStatus === "accepted" &&
+                  `Friendly fixture confirmed with ${friendlyOpponentName}. The match appears on both teams' calendars.`}
+                {event.friendlyFixtureStatus === "pending" &&
+                  `Friendly fixture request sent to ${friendlyOpponentName} — waiting for them to accept.`}
+                {event.friendlyFixtureStatus === "declined" &&
+                  `${friendlyOpponentName} declined this friendly fixture. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
+                {event.friendlyFixtureStatus === "cancelled" &&
+                  "This friendly fixture has been cancelled."}
               </div>
             )}
             {event.status !== "cancelled" && !readOnly && (
@@ -176,10 +208,10 @@ export function EventDetailDialog({
             )}
             {event && event.type === "match" && event.status !== "cancelled" && (
               <Button
-                disabled={!fixtureDateConfirmed}
+                disabled={!canConfirmSquad}
                 onClick={() => navigate(`/events/${event.id}/confirm-squad`)}
               >
-                {fixtureDateConfirmed ? "Confirm squad" : "Awaiting fixture confirmation"}
+                {canConfirmSquad ? "Confirm squad" : "Awaiting fixture confirmation"}
               </Button>
             )}
             {canManage && event && !generatedFixture && (
