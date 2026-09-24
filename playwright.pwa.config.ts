@@ -5,6 +5,7 @@ const baseURL = 'http://127.0.0.1:4173';
 export default defineConfig({
   testDir: './e2e',
   testMatch: 'pwa-production.spec.ts',
+  outputDir: 'test-results/pwa',
   timeout: 90_000,
   expect: { timeout: 15_000 },
   workers: 1,
@@ -13,11 +14,12 @@ export default defineConfig({
     baseURL,
     ...devices['Desktop Chrome'],
     serviceWorkers: 'allow',
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
   },
   webServer: {
-    command:
-      'npm --prefix frontend run build && npm --prefix frontend run preview -- --host 127.0.0.1 --port 4173',
+    command: process.env.CI || process.env.UI_TEST_PRODUCTION === 'true'
+      ? 'npm --prefix frontend run preview -- --host 127.0.0.1 --port 4173 --strictPort'
+      : 'npm --prefix frontend run build && npm --prefix frontend run preview -- --host 127.0.0.1 --port 4173 --strictPort',
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

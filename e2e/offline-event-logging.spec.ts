@@ -134,7 +134,14 @@ test("all live event workflows remain usable and visible offline", async ({
   page,
   context,
 }) => {
-  test.setTimeout(60_000);
+  // Keep the displayed minute stable while giving queued events distinct
+  // timestamps so same-minute goals retain their insertion order.
+  let wallClockMs = Date.parse("2026-09-18T10:12:34.000Z");
+  const advanceWallClock = async () => {
+    wallClockMs += 1_000;
+    await page.clock.setFixedTime(wallClockMs);
+  };
+  await page.clock.setFixedTime(wallClockMs);
   await mockLiveMatch(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/matches/${MATCH_ID}/live`);
@@ -153,6 +160,7 @@ test("all live event workflows remain usable and visible offline", async ({
   await expect(page.getByText(/Assist saved on this device/i)).toBeVisible();
   await expect(page.locator(".live-match-scoreline")).toContainText("1-0");
 
+  await advanceWallClock();
   await openEventPicker(page, 4);
   await page.getByRole("button", { name: "Yellow" }).click();
   await expect(
@@ -160,10 +168,12 @@ test("all live event workflows remain usable and visible offline", async ({
   ).toBeVisible();
   await expect(page.getByText(/12' Yellow Card/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 5);
   await page.getByRole("button", { name: "Red" }).click();
   await expect(page.getByText(/12' Red Card/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 1);
   await page.getByRole("button", { name: "Substitution" }).click();
   await expect(page.locator('[data-callout="voluntary-sub-in"]')).toBeVisible();
@@ -171,11 +181,13 @@ test("all live event workflows remain usable and visible offline", async ({
   await page.getByRole("button", { name: /12.*Player12/i }).click();
   await expect(page.getByText(/12' Substitution/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "MISSED" }).click();
   await expect(page.getByText(/12' Penalty Missed/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "SCORED" }).click();
@@ -183,6 +195,7 @@ test("all live event workflows remain usable and visible offline", async ({
     page.getByText("12' Penalty 2-0", { exact: true }),
   ).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 6);
   await page.getByRole("button", { name: "Injury" }).click();
   // An own-team injury first asks for a diagnosis, and is deliberately

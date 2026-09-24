@@ -104,16 +104,35 @@ jobs:
         run: npm --prefix backend run test:cov
 
       - name: SonarQube scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        id: sonar
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Report quality gate conditions
+        if: always() && steps.sonar.outcome != 'skipped'
+        continue-on-error: true
+        run: node scripts/sonar-quality-gate.mjs
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Upload quality gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: sonar-quality-gate
+          path: .scannerwork/quality-gate.json
+          if-no-files-found: ignore
 
   ui-tests:
     name: UI tests
     runs-on: ubuntu-latest
     needs: api-tests
-    timeout-minutes: 30
+    # Includes installs/builds, the bounded 25-minute suite, PWA verification,
+    # and artifact upload. The old job deadline killed Playwright mid-test.
+    timeout-minutes: 45
     env:
       CI: "true"
       DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -145,8 +164,9 @@ jobs:
       - name: Migrate the test database
         run: npm --prefix backend run db:migrate
 
-      - name: Build backend for browser tests
-        run: npm --prefix backend run build
+      - name: Build application for browser tests
+        id: browser-build
+        run: npm run build
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -155,6 +175,7 @@ jobs:
         run: npm run test:e2e:ui
 
       - name: Run production PWA tests
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: npm run test:e2e:pwa
 
       - name: Upload Playwright failure artifacts

@@ -3,7 +3,7 @@
 This project analyses code with a **self-hosted SonarQube (Community
 Edition)** instance. It reports bugs, code smells, security hotspots,
 duplication, and test coverage for the backend (coverage) and frontend
-(static analysis only — no frontend tests exist yet).
+(static analysis only — frontend model and browser tests do not yet emit LCOV).
 
 CI runs the scan automatically; this doc covers the one-off setup needed
 before that works, and how to run a scan locally.
@@ -122,3 +122,24 @@ SonarQube still analyses frontend production code for bugs, smells and
 duplication; frontend coverage remains unmeasured. Adding component coverage and pointing
 `sonar.javascript.lcov.reportPaths` at both reports is the natural next step
 when frontend LCOV coverage is added.
+
+## Diagnosing a failed quality gate
+
+CI uses `SonarSource/sonarqube-scan-action@v6`. A completed scan followed by
+`QUALITY GATE STATUS: FAILED` means the server rejected a quality metric;
+the cache-miss and empty referenced-tsconfig messages are not that condition.
+The scanner remains configured to fail on a red gate.
+
+After the scan, `scripts/sonar-quality-gate.mjs` looks up the exact submitted
+analysis and prints each condition's metric, actual value, comparator, and
+threshold. The same result is uploaded as the `sonar-quality-gate` artifact.
+If the token cannot read the result, use the project's dashboard to obtain
+the failing conditions and issue locations; scanner logs alone cannot identify
+which coverage, duplication, reliability, or security requirement failed.
+
+Run the diagnostic locally with `SONAR_HOST_URL` and `SONAR_TOKEN` in the
+environment after a scan has produced `.scannerwork/report-task.txt`:
+
+```sh
+node scripts/sonar-quality-gate.mjs
+```

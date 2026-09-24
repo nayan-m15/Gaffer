@@ -78,6 +78,7 @@ async function mockAuthenticatedMatch(page: Page, completed = false) {
 test("account switching clears private dashboard cache", async ({ page }) => {
   let active = "a";
   await page.route("**/auth/session", (route) =>
+    active === "signed-out" ? json(route, {}, 401) :
     json(
       route,
       active === "a"
@@ -110,6 +111,9 @@ test("account switching clears private dashboard cache", async ({ page }) => {
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Sign Out" }).click();
+  // Wait for asynchronous cache/scope cleanup and the application's redirect
+  // before navigating; a full reload here used to interrupt sign-out.
+  await expect(page).toHaveURL(/\/$/);
   await page.goto("/login");
   await page.getByLabel("Email address").fill("coach-b@example.com");
   await page.getByLabel("Password", { exact: true }).fill("password123");
@@ -122,6 +126,7 @@ test("account switching clears private dashboard cache", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: /2 Active Athletes/ }),
   ).toBeVisible();
+  await expect(page.getByRole("link", { name: /11 Active Athletes/ })).toHaveCount(0);
 });
 
 test("authenticated sidebar navigates on mobile and preserves history", async ({
@@ -373,7 +378,7 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
   await page.goto(`/matches/${MATCH_ID}/report`);
   await expect(
     page.getByRole("heading", { name: "Match Events" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: process.env.CI ? 30_000 : 10_000 });
   await page.getByRole("button", { name: /10' Goal/i }).click();
   await page.getByLabel("Minute").fill("12");
   await page.getByLabel("Event type").selectOption("yellow_card");
