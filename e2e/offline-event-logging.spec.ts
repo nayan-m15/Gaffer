@@ -2,6 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const MATCH_ID = "71111111-1111-4111-8111-111111111111";
 const EVENT_ID = "72222222-2222-4222-8222-222222222222";
+const UI_WAIT = { timeout: process.env.CI ? 30_000 : 10_000 };
 
 function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({
@@ -110,7 +111,7 @@ async function openEventPicker(page: Page, number: number) {
   await player(page, number).click();
   await expect(
     page.getByText("Log match event", { exact: true }),
-  ).toBeVisible();
+  ).toBeVisible(UI_WAIT);
 }
 
 async function expectCalloutAboveBench(page: Page, selector: string) {
@@ -203,14 +204,17 @@ test("generic opponent events do not request unavailable players", async ({
 }) => {
   await mockLiveMatch(page);
   await page.goto(`/matches/${MATCH_ID}/live`);
-  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  const resume = page.getByRole("button", { name: "RESUME Match paused" });
+  await expect(resume).toBeVisible(UI_WAIT);
+  await resume.click();
   await context.setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
 
   const openOpponentEvent = async () => {
     await page.getByRole("button", { name: /log opponent/i }).click();
     await expect(
       page.getByText("Log match event", { exact: true }),
-    ).toBeVisible();
+    ).toBeVisible(UI_WAIT);
   };
 
   await openOpponentEvent();
@@ -226,7 +230,7 @@ test("generic opponent events do not request unavailable players", async ({
   await openOpponentEvent();
   await page.getByRole("button", { name: "Injury" }).click();
   await expect(page.locator('[data-callout="mandatory-sub"]')).toHaveCount(0);
-  await expect(page.getByText("3 waiting", { exact: true })).toBeVisible();
+  await expect(page.getByText("3 waiting", { exact: true })).toBeVisible(UI_WAIT);
 });
 
 test("storage exhaustion fails visibly without claiming an event was saved", async ({
@@ -302,10 +306,23 @@ test("two tabs observe the same durable pending queue", async ({
     page.goto(`/matches/${MATCH_ID}/live`),
     second.goto(`/matches/${MATCH_ID}/live`),
   ]);
-  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  const resume = page.getByRole("button", { name: "RESUME Match paused" });
+  await expect(resume).toBeVisible(UI_WAIT);
+  await expect(
+    second.getByRole("button", { name: "RESUME Match paused" }),
+  ).toBeVisible(UI_WAIT);
+  await resume.click();
   await context.setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
+  await expect.poll(() => second.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByText("1 waiting", { exact: true })).toBeVisible();
-  await expect(second.getByText("1 waiting", { exact: true })).toBeVisible();
+  // The writer may still be attempting a sync started just before the
+  // browser went offline; both labels confirm the same queued item exists.
+  await expect(
+    page.getByRole("status", { name: /^(?:Syncing 1|1 waiting)/ }),
+  ).toBeVisible(UI_WAIT);
+  await expect(
+    second.getByRole("status", { name: /^1 waiting/ }),
+  ).toBeVisible(UI_WAIT);
 });

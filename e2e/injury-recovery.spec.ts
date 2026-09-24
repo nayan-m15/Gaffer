@@ -8,7 +8,8 @@ const PASSWORD = 'password123';
  * instead of the 5s expect default — the round-trip regularly exceeds it on a
  * hosted database, and a too-short wait fails on latency, not on behaviour.
  */
-const NETWORK = { timeout: 30_000 };
+const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
+const INJURY_TEST_TIMEOUT = process.env.CI ? 360_000 : 180_000;
 
 /**
  * Injury & Recovery through the real UI.
@@ -72,7 +73,7 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
    * round-trips to a remote Postgres before this spec reaches its subject, so
    * the default per-test budget is raised rather than split across specs that
    * would each pay that setup cost again. */
-  test.setTimeout(180_000);
+  test.setTimeout(INJURY_TEST_TIMEOUT);
 
   const { email, teamName } = uniqueTestIdentity('injury-e2e');
 
@@ -175,12 +176,15 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
       const timeline = page.locator('section', {
         hasText: 'Injury timeline',
       });
+      // The overview initially renders from the list response while the full
+      // detail (including its timeline) is fetched separately.
+      await expect(timeline).toBeVisible(NETWORK);
       await expect(
         timeline.getByText('Injury sustained', { exact: true }),
-      ).toBeVisible();
+      ).toBeVisible(NETWORK);
       await expect(
         timeline.getByText('Estimated return', { exact: true }),
-      ).toBeVisible();
+      ).toBeVisible(NETWORK);
     });
 
     await test.step('the 3D model renders and marks the region', async () => {

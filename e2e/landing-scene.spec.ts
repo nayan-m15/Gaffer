@@ -1,10 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// Loading Three.js and compiling its first WebGL scene can be noticeably
+// slower on shared CI runners using SwiftShader than on a developer machine.
+const SCENE_TIMEOUT = process.env.CI ? 30_000 : 10_000;
+
 async function openLandingPage(page: Page) {
   await page.route("**/auth/session", (route) => route.fulfill({ status: 401, body: "{}" }));
   await page.goto("/");
-  await expect(page.locator("#root .loading-overlay")).toBeHidden({ timeout: 10_000 });
-  await expect(page.locator("#preloader")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator("#root .loading-overlay")).toBeHidden({ timeout: SCENE_TIMEOUT });
+  await expect(page.locator("#preloader")).toHaveCount(0, { timeout: SCENE_TIMEOUT });
 }
 
 test.describe("landing-page tactical background", () => {
@@ -12,12 +16,12 @@ test.describe("landing-page tactical background", () => {
     await openLandingPage(page);
 
     const scene = page.locator(".landing-scene");
-    await expect(scene).toHaveAttribute("data-ready", "true", { timeout: 10_000 });
-    await expect(scene.locator("canvas")).toHaveCount(1);
+    await expect(scene).toHaveAttribute("data-ready", "true", { timeout: SCENE_TIMEOUT });
+    await expect(scene.locator("canvas")).toHaveCount(1, { timeout: SCENE_TIMEOUT });
     await expect(scene).toHaveCSS("pointer-events", "none");
 
     const pause = page.getByRole("button", { name: "Pause background" });
-    await expect(pause).toBeVisible();
+    await expect(pause).toBeVisible({ timeout: SCENE_TIMEOUT });
     await pause.click();
     await expect(page.getByRole("button", { name: "Resume background" })).toHaveAttribute("aria-pressed", "true");
 
@@ -39,7 +43,7 @@ test.describe("landing-page tactical background", () => {
     await openLandingPage(page);
 
     const canvas = page.locator(".landing-scene canvas");
-    await expect(canvas).toBeVisible({ timeout: 10_000 });
+    await expect(canvas).toBeVisible({ timeout: SCENE_TIMEOUT });
     await expect(page.getByRole("button", { name: /background/ })).toBeHidden();
 
     const bufferSize = await canvas.evaluate((element: HTMLCanvasElement) => ({
