@@ -40,7 +40,7 @@ export function AthleteComparisonSection({
               : "Season totals and per-appearance rates, side by side."}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onClear}>
+        <Button className="no-print" variant="outline" size="sm" onClick={onClear}>
           <X className="size-4" />
           Clear
         </Button>

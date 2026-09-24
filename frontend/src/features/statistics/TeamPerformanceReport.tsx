@@ -10,7 +10,7 @@ export function TeamPerformanceReport({ data }: { data: TeamReportData }) {
   const highlights = reportHighlights(overview);
 
   return (
-    <article className="statistics-print-root space-y-6" aria-labelledby="team-report-title">
+    <article className="team-performance-report space-y-6" aria-labelledby="team-report-title">
       <AppCard className="report-cover relative overflow-hidden p-6 sm:p-8">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-primary" aria-hidden="true" />
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">

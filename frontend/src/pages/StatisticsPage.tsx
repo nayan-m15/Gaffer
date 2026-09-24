@@ -205,7 +205,8 @@ export default function StatisticsPage() {
 
   return (
     <>
-      <PageHeader
+      <div className="statistics-page">
+        <PageHeader
         title="Statistics"
         subtitle={subtitle}
         actions={<div className="flex flex-wrap items-center gap-2">
@@ -221,9 +222,9 @@ export default function StatisticsPage() {
           </div>
           {isCoach && reportData && <ReportActions data={reportData} />}
         </div>}
-      />
+        />
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
+        <div className="statistics-page-content mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {/* ── Statistics overview ──────────────────────────────────────────── */}
         {overviewQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -347,6 +348,7 @@ export default function StatisticsPage() {
           competitions={competitions}
           isLoading={competitionsQuery.isLoading}
         />
+        </div>
       </div>
 
       {/* Dialogs */}

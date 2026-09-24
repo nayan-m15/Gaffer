@@ -77,7 +77,7 @@ export function RollingFormChart({
   const rows = rollingChartRows(rolling, rollingWindow);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -135,7 +135,7 @@ export function CumulativePointsChart({
   const rows = cumulativeChartRows(cumulative);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <defs>
@@ -175,7 +175,7 @@ export function PeriodSplitChart({
   const rows = periodChartRows(splits, metric);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -198,7 +198,7 @@ export function AthleteComparisonChart({
   const rows = comparisonChartRows(athletes);
 
   return (
-    <div className="h-60">
+    <div className="stats-chart h-60">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
