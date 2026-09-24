@@ -759,6 +759,8 @@ body {
     --muted-foreground: #5f625f;
     --border: #d9d6d2;
     color: #171717 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .statistics-page > header {
@@ -772,7 +774,7 @@ body {
     padding: 0 !important;
   }
 
-  .statistics-page :where(.stats-print-keep, .report-keep, .report-cover, tr) {
+  .statistics-page :where(.stats-print-keep, .stats-chart-section, .report-keep, .report-cover, tr) {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -814,15 +816,34 @@ body {
   }
 
   .statistics-page .stats-chart {
+    display: block !important;
     width: 100% !important;
     height: 58mm !important;
     min-height: 58mm !important;
     overflow: visible !important;
   }
 
-  .statistics-page .stats-chart :where(svg, .recharts-wrapper, .recharts-surface) {
+  .statistics-page .stats-chart > .recharts-responsive-container {
+    display: block !important;
+    width: 100% !important;
+    height: 58mm !important;
+    min-width: 1px !important;
+    min-height: 58mm !important;
+    overflow: visible !important;
+  }
+
+  .statistics-page .stats-chart :where(.recharts-wrapper, .recharts-surface) {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 1px !important;
+    min-height: 1px !important;
     max-width: 100% !important;
     overflow: visible !important;
+  }
+
+  .statistics-page .stats-chart :where(svg, path, rect, line, text, g) {
+    visibility: visible !important;
   }
 
   .statistics-page .report-document-footer {

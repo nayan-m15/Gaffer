@@ -101,6 +101,7 @@ export function RollingFormChart({
             stroke={GOALS_FOR}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             type="monotone"
@@ -109,6 +110,7 @@ export function RollingFormChart({
             stroke={GOALS_AGAINST}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             yAxisId="ppg"
@@ -119,6 +121,7 @@ export function RollingFormChart({
             strokeWidth={2}
             strokeDasharray="4 3"
             dot={false}
+            isAnimationActive={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -155,6 +158,7 @@ export function CumulativePointsChart({
             stroke={POINTS}
             strokeWidth={2}
             fill="url(#cumulativePointsFill)"
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -182,7 +186,13 @@ export function PeriodSplitChart({
           <XAxis dataKey="label" axisLine={false} tickLine={false} tick={AXIS} />
           <YAxis axisLine={false} tickLine={false} tick={AXIS} />
           <Tooltip {...tooltipStyle} />
-          <Bar dataKey="value" name={label} fill={GOALS_FOR} radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="value"
+            name={label}
+            fill={GOALS_FOR}
+            radius={[4, 4, 0, 0]}
+            isAnimationActive={false}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -212,6 +222,7 @@ export function AthleteComparisonChart({
               dataKey={athlete.name}
               fill={SERIES[index % SERIES.length]}
               radius={[4, 4, 0, 0]}
+              isAnimationActive={false}
             />
           ))}
         </BarChart>

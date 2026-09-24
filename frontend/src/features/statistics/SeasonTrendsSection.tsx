@@ -45,7 +45,7 @@ export function SeasonTrendsSection({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
-      <section className="stats-chart-section stats-print-keep rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
+      <section className="stats-chart-section stats-print-keep no-print rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
         <SectionHeading>Form Trend</SectionHeading>
         <p className="mb-3 text-xs text-muted-foreground">
           Rolling average over the last {rollingWindow} matches. Early matches
@@ -54,7 +54,7 @@ export function SeasonTrendsSection({
         <RollingFormChart rolling={form.rolling} rollingWindow={rollingWindow} />
       </section>
 
-      <section className="stats-chart-section stats-print-keep rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
+      <section className="stats-chart-section stats-print-keep no-print rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
         <SectionHeading>Points Progression</SectionHeading>
         <p className="mb-3 text-xs text-muted-foreground">
           Points accumulated across the season.
@@ -63,7 +63,7 @@ export function SeasonTrendsSection({
       </section>
 
       {periods.splits.length >= 2 && (
-        <section className="stats-chart-section stats-print-keep rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6 lg:col-span-2">
+        <section className="stats-chart-section stats-print-keep no-print rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6 lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <SectionHeading>
