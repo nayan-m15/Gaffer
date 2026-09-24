@@ -33,6 +33,14 @@ export default defineConfig({
     baseURL: frontendURL,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
+    launchOptions: {
+      args: [
+        '--enable-webgl',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
+        '--ignore-gpu-blocklist',
+      ],
+    },
   },
   projects: [
     {

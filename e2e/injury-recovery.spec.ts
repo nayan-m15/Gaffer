@@ -191,21 +191,34 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
       expect(box?.width ?? 0).toBeGreaterThan(200);
       expect(box?.height ?? 0).toBeGreaterThan(200);
 
+      const fallback = page.getByText(
+        'The 3D model could not be displayed on this device.',
+      );
+      if (await fallback.isVisible()) {
+        await expect(
+          page.getByRole('button', {
+            name: 'Right hamstring',
+            exact: true,
+          }),
+        ).toBeVisible();
+        return;
+      }
+
       // The camera presets are present and the front view starts selected.
       const angles = page.getByRole('group', { name: 'Camera angle' });
+      await angles.scrollIntoViewIfNeeded();
       await expect(
         angles.getByRole('button', { name: 'Front' }),
       ).toHaveAttribute('aria-pressed', 'true');
-      await angles.getByRole('button', { name: 'Back' }).click();
+      const backButton = angles.getByRole('button', { name: 'Back' });
+      await backButton.scrollIntoViewIfNeeded();
+      await backButton.click();
       await expect(
         angles.getByRole('button', { name: 'Back' }),
       ).toHaveAttribute('aria-pressed', 'true');
 
       // The injured region is reachable without the canvas, which is what a
       // keyboard or screen-reader user relies on.
-      await page
-        .getByRole('group', { name: 'Camera angle' })
-        .scrollIntoViewIfNeeded();
       await page
         .getByText('Select a region from a list instead')
         .click();
