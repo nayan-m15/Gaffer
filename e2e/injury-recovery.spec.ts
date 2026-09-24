@@ -1,5 +1,15 @@
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from '@playwright/test';
 import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import {
+  BACKEND_URL,
+  registerVerifiedUser,
+} from './utils/auth';
 
 const PASSWORD = 'password123';
 
@@ -8,8 +18,8 @@ const PASSWORD = 'password123';
  * instead of the 5s expect default — the round-trip regularly exceeds it on a
  * hosted database, and a too-short wait fails on latency, not on behaviour.
  */
-const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
-const INJURY_TEST_TIMEOUT = process.env.CI ? 360_000 : 180_000;
+const NETWORK = { timeout: process.env.CI ? 90_000 : 30_000 };
+const INJURY_TEST_TIMEOUT = process.env.CI ? 480_000 : 180_000;
 
 /**
  * Injury & Recovery through the real UI.
@@ -28,71 +38,68 @@ const INJURY_TEST_TIMEOUT = process.env.CI ? 360_000 : 180_000;
 const sidebarLink = (page: Page, name: string) =>
   page.getByLabel('Main navigation').getByRole('link', { name });
 
-async function registerCoachWithTeam(
-  page: Page,
+async function expectApiOk(response: APIResponse, operation: string) {
+  if (!response.ok()) {
+    throw new Error(
+      `${operation} failed (${response.status()}): ${await response.text()}`,
+    );
+  }
+}
+
+async function seedCoachWithTeamAndAthlete(
+  request: APIRequestContext,
   email: string,
   teamName: string,
 ) {
-  await page.goto('/signup');
-  await page.getByLabel('Full name').fill('Injury Test Coach');
-  await page.getByLabel('Email address').fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('Confirm password', { exact: true }).fill(PASSWORD);
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: /join the dugout/i }).click();
-  await expect(page).toHaveURL(/\/verify-email$/, NETWORK);
-
-  const { signJWT } = await import('better-auth/crypto');
-  const token = await signJWT(
-    { email: email.toLowerCase() },
-    process.env.BETTER_AUTH_SECRET!,
-    60 * 60,
+  await registerVerifiedUser(request, email, 'Injury Test Coach');
+  await expectApiOk(
+    await request.post(`${BACKEND_URL}/auth/sign-in`, {
+      data: { email, password: PASSWORD },
+    }),
+    'coach sign-in',
   );
-  const callbackURL = encodeURIComponent(
-    'http://localhost:5173/login?verified=1',
+  await expectApiOk(
+    await request.post(`${BACKEND_URL}/teams`, {
+      data: { name: teamName },
+    }),
+    'team creation',
   );
-  await page.goto(`/auth/verify-email?token=${token}&callbackURL=${callbackURL}`);
-  await expect(page).toHaveURL(/\/login\?verified=1$/, NETWORK);
+  await expectApiOk(
+    await request.post(`${BACKEND_URL}/athletes`, {
+      data: {
+        firstName: 'Rosa',
+        lastName: 'Hamstring',
+        squadNumber: 7,
+        position: 'ST',
+      },
+    }),
+    'athlete creation',
+  );
+}
 
+async function signInCoach(page: Page, email: string) {
+  await page.goto('/login');
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: /sign in to dugout/i }).click();
   await expect(page).toHaveURL(/\/dashboard$/, NETWORK);
-
-  await page.getByRole('button', { name: 'Add Team' }).click();
-  const teamDialog = page.getByRole('dialog', { name: 'Add your team' });
-  await teamDialog.getByLabel('Team name').fill(teamName);
-  await teamDialog.getByRole('button', { name: 'Create Team' }).click();
-  await expect(teamDialog).toBeHidden(NETWORK);
 }
 
 test('a logged injury produces a record, a 3D model and an unavailable player', async ({
   page,
+  request,
 }) => {
-  /* Sign-up, email verification, sign-in and team creation alone are a dozen
-   * round-trips to a remote Postgres before this spec reaches its subject, so
-   * the default per-test budget is raised rather than split across specs that
-   * would each pay that setup cost again. */
+  /* The injury workflow uses the real API and database, while setup is seeded
+   * through the API to avoid spending most of the CI budget repeating the
+   * registration/team/roster journey already covered by main-flow.spec.ts. */
   test.setTimeout(INJURY_TEST_TIMEOUT);
 
   const { email, teamName } = uniqueTestIdentity('injury-e2e');
 
   try {
-    await test.step('register a coach with a team', async () => {
-      await registerCoachWithTeam(page, email, teamName);
-    });
-
-    await test.step('add an athlete to injure', async () => {
-      await sidebarLink(page, 'Roster').click();
-      await expect(page).toHaveURL(/\/athletes$/);
-      await page.getByRole('button', { name: 'Add Athlete' }).click();
-
-      const dialog = page.getByRole('dialog', { name: 'Add Athlete' });
-      await dialog.getByLabel('First name').fill('Rosa');
-      await dialog.getByLabel('Last name').fill('Hamstring');
-      await dialog.getByLabel('Jersey number').fill('7');
-      await dialog.getByRole('button', { name: 'Add Athlete' }).click();
-      await expect(dialog).toBeHidden(NETWORK);
+    await test.step('seed the coach, team and athlete', async () => {
+      await seedCoachWithTeamAndAthlete(request, email, teamName);
+      await signInCoach(page, email);
     });
 
     await test.step('the injuries page starts empty', async () => {
