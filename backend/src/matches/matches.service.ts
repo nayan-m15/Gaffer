@@ -23,6 +23,7 @@ import {
   matchProjectionState,
   matches,
   opponentMatchPlayers,
+  seasons,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import {
@@ -53,13 +54,21 @@ export class MatchesService {
     const { match, event } = await this.requireMatch(team.id, matchId);
 
     let competitionName: string | null = null;
+    let competitionSeason: string | null = null;
     if (match.competitionId) {
       const [competition] = await this.databaseService.database
-        .select({ name: competitions.name })
+        .select({
+          name: competitions.name,
+          legacySeason: competitions.season,
+          seasonName: seasons.name,
+        })
         .from(competitions)
+        .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
         .where(eq(competitions.id, match.competitionId))
         .limit(1);
       competitionName = competition?.name ?? null;
+      competitionSeason =
+        competition?.seasonName ?? competition?.legacySeason ?? null;
     }
 
     const opponentSquad = await this.listOpponentPlayers(match.id);
@@ -74,7 +83,9 @@ export class MatchesService {
       eventStatus: event.status,
       eventScheduledAt: event.scheduledAt,
       eventLocation: event.location,
+      eventNotes: event.notes,
       competitionName,
+      competitionSeason,
       opponentSquad,
     };
   }
@@ -245,10 +256,7 @@ export class MatchesService {
       .digest('hex');
 
     if (event.status === 'completed' && dto.eventType === 'goal') {
-      const current = await this.buildCompetitionFixtureResult(
-        team.id,
-        match,
-      );
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
       if (current) {
         const projected = this.adjustFixtureScore(
           current.result,
@@ -635,7 +643,10 @@ export class MatchesService {
         .filter((observation) => observation.eventType === 'goal');
       separatedGoals = additionalGoals.length > 0;
       if (event.status === 'completed' && separatedGoals) {
-        const current = await this.buildCompetitionFixtureResult(team.id, match);
+        const current = await this.buildCompetitionFixtureResult(
+          team.id,
+          match,
+        );
         if (current) {
           let projected = current.result;
           for (const observation of additionalGoals) {
@@ -900,10 +911,7 @@ export class MatchesService {
       logged.lifecycleStatus !== 'voided' &&
       logged.eventType === 'goal';
     if (changesScore) {
-      const current = await this.buildCompetitionFixtureResult(
-        team.id,
-        match,
-      );
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
       if (current) {
         const projected = this.adjustFixtureScore(
           current.result,
