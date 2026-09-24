@@ -15,6 +15,8 @@ import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
 import { StandingsSection } from "@/features/statistics/StandingsSection";
 import { StatCardsGrid } from "@/features/statistics/StatCardsGrid";
 import { StatisticsFilters } from "@/features/statistics/StatisticsFilters";
+import { ReportActions } from "@/features/statistics/ReportActions";
+import { TeamPerformanceReport } from "@/features/statistics/TeamPerformanceReport";
 import { useStatisticsFilters } from "@/features/statistics/useStatisticsFilters";
 import { formatSeasonRange } from "@/features/statistics/season-trends-model";
 import {
@@ -111,6 +113,7 @@ export default function StatisticsPage() {
   }, [currentSeasonId, hasSeasonParam, setSeasonId]);
 
   const activeSeason = overview?.season ?? null;
+  const activeCompetition = competitions.find((competition) => competition.id === competitionId);
   const scopeLabel = activeSeason
     ? `${activeSeason.name} · ${formatSeasonRange(activeSeason.startDate, activeSeason.endDate)}`
     : "All time";
@@ -118,6 +121,25 @@ export default function StatisticsPage() {
   const subtitle = overview
     ? `${scopeLabel} — ${overview.matchesPlayed} matches — ${overview.wins}W / ${overview.draws}D / ${overview.losses}L — ${overview.goalsFor} GF / ${overview.goalsAgainst} GA`
     : "Team performance, player statistics, and standings.";
+
+  const reportData = useMemo(
+    () =>
+      overview && team
+        ? {
+            overview,
+            context: {
+              teamName: team.name,
+              competitionName: activeCompetition?.name ?? "All competitions",
+              seasonName: activeSeason?.name ?? "All time",
+              dateRange: activeSeason
+                ? formatSeasonRange(activeSeason.startDate, activeSeason.endDate)
+                : "All recorded matches",
+              generatedAt: new Date(),
+            },
+          }
+        : null,
+    [activeCompetition?.name, activeSeason, overview, team],
+  );
 
   /* ── Season form handlers ─────────────────────────────────────────────── */
   const openAddSeason = () => setSeasonForm({ open: true, editing: null });
@@ -186,16 +208,19 @@ export default function StatisticsPage() {
       <PageHeader
         title="Statistics"
         subtitle={subtitle}
-        actions={
-          <StatisticsFilters
-            seasons={seasons}
-            competitions={competitions}
-            seasonId={seasonId}
-            competitionId={competitionId}
-            onSeasonChange={setSeasonId}
-            onCompetitionChange={setCompetitionId}
-          />
-        }
+        actions={<div className="flex flex-wrap items-center gap-2">
+          <div className="report-filters no-print">
+            <StatisticsFilters
+              seasons={seasons}
+              competitions={competitions}
+              seasonId={seasonId}
+              competitionId={competitionId}
+              onSeasonChange={setSeasonId}
+              onCompetitionChange={setCompetitionId}
+            />
+          </div>
+          {isCoach && reportData && <ReportActions data={reportData} />}
+        </div>}
       />
 
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
@@ -235,6 +260,18 @@ export default function StatisticsPage() {
               Match statistics will appear here once results are logged.
             </p>
           </div>
+        )}
+
+        {reportData && (
+          <section aria-label="Team performance report preview">
+            <div className="no-print mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Report preview</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Updates automatically when season or competition filters change.</p>
+              </div>
+            </div>
+            <TeamPerformanceReport data={reportData} />
+          </section>
         )}
 
         {overview && overview.matchesPlayed > 0 && (

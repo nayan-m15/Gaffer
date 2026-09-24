@@ -696,3 +696,78 @@ body {
     rgba(0, 0, 0, 0.55) 100%
   );
 }
+
+/* Team performance reports use the normal theme on screen and become a
+ * clean, self-contained A4 document when sent to the browser print dialog. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  body {
+    min-width: 0;
+    background: #fff !important;
+    color: #171717 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .statistics-print-root,
+  .statistics-print-root * {
+    visibility: visible !important;
+  }
+
+  .statistics-print-root {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    color: #171717 !important;
+  }
+
+  .statistics-print-root :where(section, article, .report-keep, tr) {
+    break-inside: avoid;
+  }
+
+  .statistics-print-root .report-table-section {
+    break-inside: auto;
+  }
+
+  .statistics-print-root thead {
+    display: table-header-group;
+  }
+
+  .statistics-print-root :where(.bg-card, [class*="bg-card"], .report-cover) {
+    background: #fff !important;
+  }
+
+  .statistics-print-root :where(.text-foreground, [class*="text-foreground"]) {
+    color: #171717 !important;
+  }
+
+  .statistics-print-root :where(.text-muted-foreground, [class*="text-muted-foreground"]) {
+    color: #5f625f !important;
+  }
+
+  .statistics-print-root :where(.border-border, [class*="border-border"]) {
+    border-color: #d9d6d2 !important;
+  }
+
+  .statistics-print-root .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .statistics-print-root table {
+    min-width: 0 !important;
+  }
+
+  .statistics-print-root .report-document-footer {
+    display: block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
