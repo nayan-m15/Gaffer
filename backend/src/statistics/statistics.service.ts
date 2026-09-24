@@ -21,9 +21,12 @@ import {
   matches,
   standings,
 } from '../database/schema';
+import { InsightsService } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
+
+const RECENT_INSIGHTS_LIMIT = 3;
 import type {
   CompareAthletesDto,
   CreateCompetitionDto,
@@ -154,6 +157,7 @@ export class StatisticsService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly seasonsService: SeasonsService,
+    private readonly insightsService: InsightsService,
   ) {}
 
   /* ── Read endpoints ─────────────────────────────────────────────────────── */
@@ -276,6 +280,11 @@ export class StatisticsService {
         a.name.localeCompare(b.name),
     );
 
+    const recentInsights = await this.insightsService.getRecentForTeam(
+      team.id,
+      RECENT_INSIGHTS_LIMIT,
+    );
+
     return {
       ...totals,
       trends,
@@ -285,6 +294,7 @@ export class StatisticsService {
       rollingWindow: trendAnalysis.rollingWindow,
       form: trendAnalysis.form,
       periods: trendAnalysis.periods,
+      recentInsights,
     };
   }
 

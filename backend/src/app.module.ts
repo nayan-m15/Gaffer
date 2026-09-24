@@ -9,6 +9,7 @@ import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
 import { GamePlansModule } from './game-plans/game-plans.module';
 import { InjuriesModule } from './injuries/injuries.module';
+import { InsightsModule } from './insights/insights.module';
 import { MatchesModule } from './matches/matches.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { StatisticsModule } from './statistics/statistics.module';
@@ -35,6 +36,7 @@ import { SyncModule } from './sync/sync.module';
     GamePlansModule,
     MatchesModule,
     InjuriesModule,
+    InsightsModule,
     DashboardModule,
     SeasonsModule,
     StatisticsModule,

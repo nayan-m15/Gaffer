@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { InsightsService } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
@@ -19,6 +20,10 @@ describe('StatisticsService', () => {
 
   const mockSeasonsService = {
     resolveSeasonWindow: jest.fn(),
+  };
+
+  const mockInsightsService = {
+    getRecentForTeam: jest.fn(),
   };
 
   /**
@@ -86,12 +91,14 @@ describe('StatisticsService', () => {
         { provide: TeamsService, useValue: mockTeamsService },
         { provide: SeasonsService, useValue: mockSeasonsService },
         { provide: DatabaseService, useValue: mockDatabaseService },
+        { provide: InsightsService, useValue: mockInsightsService },
       ],
     }).compile();
 
     service = module.get<StatisticsService>(StatisticsService);
 
     jest.clearAllMocks();
+    mockInsightsService.getRecentForTeam.mockResolvedValue([]);
   });
 
   it('should be defined', () => {

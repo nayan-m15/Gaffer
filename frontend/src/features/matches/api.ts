@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import type {
   CreateMatchLogEventInput,
+  MatchInsight,
   MatchLogEvent,
   MatchRecord,
   MatchSquadAthlete,
@@ -87,6 +88,10 @@ export async function fetchMatchOpponentSquad(matchId: string) {
     if (cached) return cached;
     throw error;
   }
+}
+
+export function fetchMatchInsight(matchId: string) {
+  return apiFetch<MatchInsight>(`/matches/${matchId}/insight`);
 }
 
 export async function fetchMatchEvents(matchId: string) {

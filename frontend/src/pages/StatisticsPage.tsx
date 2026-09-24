@@ -9,6 +9,7 @@ import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { PlayerStatsTable } from "@/features/statistics/PlayerStatsTable";
 import { RecentFormSection } from "@/features/statistics/RecentFormSection";
+import { RecentInsightsSection } from "@/features/statistics/RecentInsightsSection";
 import { SeasonFormDialog } from "@/features/statistics/SeasonFormDialog";
 import { SeasonsSection } from "@/features/statistics/SeasonsSection";
 import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
@@ -254,6 +255,9 @@ export default function StatisticsPage() {
               periods={overview.periods}
               rollingWindow={overview.rollingWindow}
             />
+
+            {/* AI-generated per-match narratives */}
+            <RecentInsightsSection insights={overview.recentInsights} />
 
             {/* Player stats + detail panel */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">

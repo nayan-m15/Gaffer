@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { projectCanonicalEvents } from '@gaffer/match-domain';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { InsightsService } from '../insights/insights.service';
 import {
   athleteMatchStats,
   athletes,
@@ -43,9 +45,12 @@ import type {
  */
 @Injectable()
 export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly insightsService: InsightsService,
   ) {}
 
   async findOne(userId: string, matchId: string) {
@@ -102,6 +107,13 @@ export class MatchesService {
     const team = await this.requireTeam(userId);
     await this.requireMatch(team.id, matchId);
     return this.listOpponentPlayers(matchId);
+  }
+
+  async getInsight(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    const insight = await this.insightsService.getForMatch(matchId);
+    return insight ?? { matchId, status: 'unavailable' as const };
   }
 
   async listEvents(userId: string, matchId: string) {
@@ -1090,6 +1102,17 @@ export class MatchesService {
       targetObservationIds: [],
       decision: { projectionRevision: expectedRevision },
     });
+    // Fire-and-forget: insight generation must never delay or fail
+    // finalisation. InsightsService.generateForMatch always resolves (never
+    // rejects) by writing a failed row internally, so this catch is a
+    // last-resort log, not the primary error handling.
+    void this.insightsService
+      .generateForMatch(matchId, { projectionRevision: finalised.revision })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Insight generation failed for match ${matchId}: ${String(error)}`,
+        ),
+      );
     return finalised;
   }
 
@@ -1116,6 +1139,8 @@ export class MatchesService {
       decision: { reason },
       reason,
     });
+    // Cheap flag update, no LLM call — the next finalise regenerates.
+    await this.insightsService.markStale(matchId);
     return reopened;
   }
 

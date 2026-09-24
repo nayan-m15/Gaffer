@@ -25,6 +25,14 @@ export interface PlayerStatLine {
   redCards: number;
 }
 
+/** One AI-generated match narrative, as surfaced on the statistics/dashboard pages. */
+export interface MatchInsightSummary {
+  matchId: string;
+  status: "ready" | "failed" | "stale" | "pending" | "unavailable";
+  narrativeText: string | null;
+  generatedAt: string | null;
+}
+
 /** Team-wide season overview returned by GET /statistics. */
 export interface TeamOverview {
   matchesPlayed: number;
@@ -47,6 +55,7 @@ export interface TeamOverview {
   rollingWindow: number;
   form: SeasonForm;
   periods: SeasonPeriods;
+  recentInsights: MatchInsightSummary[];
 }
 
 /** A single match's stats for the athlete detail view. */

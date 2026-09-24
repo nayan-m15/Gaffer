@@ -4,12 +4,15 @@ import {
   ArrowLeftRight,
   ChevronLeft,
   Loader2,
+  Lock,
   Plus,
   Share2,
   ShieldAlert,
+  Sparkles,
   Square,
   Timer,
   Trash2,
+  Unlock,
   X,
   Zap,
 } from "lucide-react";
@@ -22,10 +25,13 @@ import { useGamePlan } from "@/features/team-tactics/api";
 import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
   useDeleteMatchEvent,
+  useFinaliseMatchProjection,
   useLogMatchEvent,
   useMatch,
   useMatchEvents,
+  useMatchInsight,
   useMatchSquad,
+  useReopenMatchProjection,
   useUpdateMatchEvent,
 } from "@/features/matches/hooks";
 import {
@@ -43,6 +49,7 @@ import {
 import type {
   MatchEventTeam,
   MatchEventType,
+  MatchInsight,
   MatchLogEvent,
   MatchSquadAthlete,
   OpponentMatchPlayer,
@@ -179,6 +186,11 @@ export default function MatchReportPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
+  const insightQuery = useMatchInsight(
+    matchId,
+    matchQuery.data?.projection?.finalisationState !== undefined &&
+      matchQuery.data.projection.finalisationState !== "open",
+  );
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
   const gamePlanQuery = useGamePlan(
     gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
@@ -187,6 +199,8 @@ export default function MatchReportPage() {
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const logEvent = useLogMatchEvent(matchId ?? "");
+  const finaliseProjection = useFinaliseMatchProjection(matchId ?? "");
+  const reopenProjection = useReopenMatchProjection(matchId ?? "");
 
   const [tab, setTab] = useState<Tab>("match");
   const [editing, setEditing] = useState<MatchLogEvent | null>(null);
@@ -194,6 +208,12 @@ export default function MatchReportPage() {
   const [adding, setAdding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [resultActionError, setResultActionError] = useState<string | null>(
+    null,
+  );
+  const [resultActionNote, setResultActionNote] = useState<string | null>(
+    null,
+  );
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
 
@@ -321,6 +341,32 @@ export default function MatchReportPage() {
     squad,
   });
 
+  const finaliseResult = () => {
+    if (!match?.projection) return;
+    setResultActionError(null);
+    finaliseProjection.mutate(match.projection.revision, {
+      onSuccess: () => setResultActionNote("Result finalised"),
+      onError: (err) =>
+        setResultActionError(
+          err instanceof Error ? err.message : "Could not finalise the result.",
+        ),
+    });
+  };
+
+  const reopenResult = () => {
+    setResultActionError(null);
+    reopenProjection.mutate(
+      "Coach reopened the published result for amendment.",
+      {
+        onSuccess: () => setResultActionNote("Result reopened"),
+        onError: (err) =>
+          setResultActionError(
+            err instanceof Error ? err.message : "Could not reopen the result.",
+          ),
+      },
+    );
+  };
+
   const shareReport = async () => {
     const url = window.location.href;
     const title = `${ownName} ${teamScore}-${oppScore} ${oppName}`;
@@ -438,6 +484,13 @@ export default function MatchReportPage() {
     .join(" · ")
     .toUpperCase();
 
+  const projection = match.projection;
+  const canManageResult =
+    team?.role === "coach" &&
+    match.eventStatus === "completed" &&
+    Boolean(projection);
+  const isFinalised = projection?.finalisationState !== "open";
+
   return (
     <div className="match-report min-h-full overflow-x-hidden">
       <header className="border-b border-[#1c2b36]">
@@ -459,17 +512,44 @@ export default function MatchReportPage() {
                 {metaLine}
               </p>
             </div>
-            <button
-              type="button"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
-              onClick={() => void shareReport()}
-              aria-label="Share match report"
-            >
-              <Share2 className="size-4" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {canManageResult && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#233747] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#c5ced6] transition-colors hover:text-white disabled:opacity-60"
+                  onClick={isFinalised ? reopenResult : finaliseResult}
+                  disabled={finaliseProjection.isPending || reopenProjection.isPending}
+                >
+                  {isFinalised ? (
+                    <Unlock className="size-3.5" />
+                  ) : (
+                    <Lock className="size-3.5" />
+                  )}
+                  {isFinalised ? "Reopen Result" : "Finalise Result"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
+                onClick={() => void shareReport()}
+                aria-label="Share match report"
+              >
+                <Share2 className="size-4" />
+              </button>
+            </div>
           </div>
           {shareNote ? (
             <p className="mt-2 text-right text-[11px] text-[#00d99a]">{shareNote}</p>
+          ) : null}
+          {resultActionNote ? (
+            <p className="mt-2 text-right text-[11px] text-[#00d99a]">
+              {resultActionNote}
+            </p>
+          ) : null}
+          {resultActionError ? (
+            <p className="mt-2 text-right text-[11px] text-[#ff5b5f]">
+              {resultActionError}
+            </p>
           ) : null}
         </div>
       </header>
@@ -537,6 +617,8 @@ export default function MatchReportPage() {
                   {story}
                 </p>
               </section>
+
+              <MatchInsightSection insight={insightQuery.data} />
 
               <section>
                 <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
@@ -1025,6 +1107,37 @@ export default function MatchReportPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * AI-generated narrative summary for a finalised match. Renders nothing
+ * while unavailable/pending/failed so the page never shows a broken or
+ * empty-looking card — a Gemini failure just means this section is absent.
+ */
+function MatchInsightSection({ insight }: { insight: MatchInsight | undefined }) {
+  if (!insight || insight.status === "unavailable" || insight.status === "pending") {
+    return null;
+  }
+  if (insight.status === "failed" || !insight.narrativeText) {
+    return null;
+  }
+
+  return (
+    <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4 sm:p-5">
+      <h2 className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+        <Sparkles className="size-3.5 text-[#00d99a]" aria-hidden="true" />
+        AI Match Insight
+        {insight.status === "stale" && (
+          <span className="ml-auto rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#ffbe2e] bg-[#ffbe2e]/15">
+            May be outdated
+          </span>
+        )}
+      </h2>
+      <p className="text-sm leading-relaxed text-[#c5ced6]">
+        {insight.narrativeText}
+      </p>
+    </section>
   );
 }
 

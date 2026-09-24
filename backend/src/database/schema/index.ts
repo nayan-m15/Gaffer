@@ -1434,6 +1434,38 @@ export const matchProjectionState = pgTable('match_projection_state', {
   ...timestamps,
 });
 
+export const matchInsightStatus = pgEnum('match_insight_status', [
+  'pending',
+  'ready',
+  'failed',
+  'stale',
+]);
+
+/** Latest LLM-generated narrative summary for a finalised match. One mutable
+ * row per match (upserted on regeneration), mirroring matchProjectionState —
+ * a derived cache row, not part of the append-only event ledger. */
+export const matchInsights = pgTable('match_insights', {
+  matchId: uuid('match_id')
+    .primaryKey()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  status: matchInsightStatus('status').default('pending').notNull(),
+  narrativeText: text('narrative_text'),
+  // Structured highlights extracted alongside the prose (e.g. top performer,
+  // biggest trend) so the frontend can render a short list without
+  // re-parsing narrativeText.
+  highlights: jsonb('highlights').$type<Record<string, unknown>>(),
+  model: text('model'),
+  promptVersion: integer('prompt_version').default(1).notNull(),
+  // Hash of the stats payload sent to the model. Lets generation be skipped
+  // when nothing has changed since the last successful run.
+  inputDigest: text('input_digest'),
+  projectionRevision: integer('projection_revision'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
+  failureReason: text('failure_reason'),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  ...timestamps,
+});
+
 /** Durable acknowledgement for each submitted observation or operation. */
 export const syncUploadReceipts = pgTable(
   'sync_upload_receipts',

@@ -8,9 +8,12 @@ import {
   matches,
   seasons,
 } from '../database/schema';
+import { InsightsService } from '../insights/insights.service';
 import { StatisticsService } from '../statistics/statistics.service';
 import { matchResult } from '../statistics/statistics.trends';
 import { TeamsService } from '../teams/teams.service';
+
+const RECENT_INSIGHTS_LIMIT = 3;
 
 /**
  * Aggregates dashboard summary data for a coach's team.
@@ -28,6 +31,7 @@ export class DashboardService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly statisticsService: StatisticsService,
+    private readonly insightsService: InsightsService,
   ) {}
 
   async getSummary(userId: string) {
@@ -42,6 +46,7 @@ export class DashboardService {
         recentForm: [],
         seasonSummary: null,
         recentStats: [],
+        recentInsights: [],
       };
     }
 
@@ -226,6 +231,11 @@ export class DashboardService {
           ]
         : [];
 
+    const recentInsights = await this.insightsService.getRecentForTeam(
+      team.id,
+      RECENT_INSIGHTS_LIMIT,
+    );
+
     return {
       activeAthletesCount,
       totalEventsCount,
@@ -234,6 +244,7 @@ export class DashboardService {
       recentForm,
       seasonSummary,
       recentStats,
+      recentInsights,
     };
   }
 }
