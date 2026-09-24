@@ -32,12 +32,16 @@ export type MatchInsightStatus =
   | "pending"
   | "unavailable";
 
+export interface MatchInsightHighlights {
+  playerOfTheMatch?: { athleteName: string; reason: string } | null;
+}
+
 /** LLM-generated narrative summary for a finalised match. See GET /matches/:matchId/insight. */
 export interface MatchInsight {
   matchId: string;
   status: MatchInsightStatus;
   narrativeText: string | null;
-  highlights: Record<string, unknown> | null;
+  highlights: MatchInsightHighlights | null;
   generatedAt: string | null;
 }
 

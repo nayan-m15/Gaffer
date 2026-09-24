@@ -5,7 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { GeminiClient } from '../src/insights/gemini-client';
-import { registerCoach } from './utils/auth-helpers';
+import { registerAssistant, registerCoach } from './utils/auth-helpers';
 import {
   cleanupUsers,
   uniqueTestIdentity,
@@ -227,5 +227,193 @@ describe('Match insights (e2e)', () => {
     const matchId = await seedFinishedMatch(agentA, squadA, 'Rivals FC');
 
     await agentB.get(`/matches/${matchId}/insight`).expect(404);
+  });
+});
+
+describe('Season insights (e2e)', () => {
+  let app: INestApplication<App>;
+  const identities: TestIdentity[] = [];
+  const mockGeminiClient = { generateNarrative: jest.fn() };
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(GeminiClient)
+      .useValue(mockGeminiClient)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await cleanupUsers(identities);
+    await app.close();
+  });
+
+  beforeEach(() => {
+    mockGeminiClient.generateNarrative.mockReset();
+  });
+
+  it('returns "unavailable" before a coach generates one', async () => {
+    const identity = uniqueTestIdentity('season-insight-unavailable');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+
+    const response = await agent.get('/statistics/season-insight').expect(200);
+
+    expect((response.body as { status: string }).status).toBe('unavailable');
+  });
+
+  it('generates and persists a season insight for the all-time overview', async () => {
+    const identity = uniqueTestIdentity('season-insight-generate');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    mockGeminiClient.generateNarrative.mockResolvedValue('A promising campaign so far.');
+
+    const generated = await agent
+      .post('/statistics/season-insight')
+      .send({})
+      .expect(201);
+    expect((generated.body as { status: string; narrativeText: string }).status).toBe(
+      'ready',
+    );
+    expect(
+      (generated.body as { narrativeText: string }).narrativeText,
+    ).toBe('A promising campaign so far.');
+
+    const fetched = await agent.get('/statistics/season-insight').expect(200);
+    expect((fetched.body as { status: string }).status).toBe('ready');
+  });
+
+  it('records a failed status without throwing when Gemini errors', async () => {
+    const identity = uniqueTestIdentity('season-insight-failed');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    mockGeminiClient.generateNarrative.mockRejectedValue(
+      new Error('Gemini provider returned 429.'),
+    );
+
+    const response = await agent
+      .post('/statistics/season-insight')
+      .send({})
+      .expect(201);
+
+    expect((response.body as { status: string }).status).toBe('failed');
+  });
+
+  it('rejects generation from a non-coach assistant', async () => {
+    const coachIdentity = uniqueTestIdentity('season-insight-assistant-coach');
+    const assistantIdentity = uniqueTestIdentity(
+      'season-insight-assistant-user',
+    );
+    identities.push(coachIdentity, assistantIdentity);
+    const { agent: coachAgent } = await registerCoach(
+      app.getHttpServer(),
+      coachIdentity,
+    );
+    const { agent: assistantAgent } = await registerAssistant(
+      app.getHttpServer(),
+      coachAgent,
+      assistantIdentity,
+    );
+
+    await assistantAgent.post('/statistics/season-insight').send({}).expect(403);
+  });
+});
+
+describe('Stats assistant (e2e)', () => {
+  let app: INestApplication<App>;
+  const identities: TestIdentity[] = [];
+  const mockGeminiClient = { generateNarrative: jest.fn() };
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(GeminiClient)
+      .useValue(mockGeminiClient)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await cleanupUsers(identities);
+    await app.close();
+  });
+
+  beforeEach(() => {
+    mockGeminiClient.generateNarrative.mockReset();
+  });
+
+  it('answers a question using the team overview', async () => {
+    const identity = uniqueTestIdentity('assistant-answers');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    mockGeminiClient.generateNarrative.mockResolvedValue(
+      'No matches have been played yet.',
+    );
+
+    const response = await agent
+      .post('/statistics/assistant')
+      .send({ question: 'Who has scored the most goals?' })
+      .expect(201);
+
+    expect(response.body).toEqual({
+      status: 'ready',
+      answer: 'No matches have been played yet.',
+    });
+    expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(1);
+    const prompt = mockGeminiClient.generateNarrative.mock.calls[0][0] as string;
+    expect(prompt).toContain('Who has scored the most goals?');
+  });
+
+  it('rejects a question that fails validation', async () => {
+    const identity = uniqueTestIdentity('assistant-validation');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+
+    await agent.post('/statistics/assistant').send({ question: 'hi' }).expect(400);
+    expect(mockGeminiClient.generateNarrative).not.toHaveBeenCalled();
+  });
+
+  it('returns a failed status without a 500 when Gemini errors', async () => {
+    const identity = uniqueTestIdentity('assistant-failed');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    mockGeminiClient.generateNarrative.mockRejectedValue(
+      new Error('Gemini provider returned 429.'),
+    );
+
+    const response = await agent
+      .post('/statistics/assistant')
+      .send({ question: 'Who has scored the most goals?' })
+      .expect(201);
+
+    expect(response.body).toEqual({ status: 'failed', answer: null });
+  });
+
+  it('allows an assistant (non-coach) to ask a question', async () => {
+    const coachIdentity = uniqueTestIdentity('assistant-role-coach');
+    const assistantIdentity = uniqueTestIdentity('assistant-role-user');
+    identities.push(coachIdentity, assistantIdentity);
+    const { agent: coachAgent } = await registerCoach(
+      app.getHttpServer(),
+      coachIdentity,
+    );
+    const { agent: assistantAgent } = await registerAssistant(
+      app.getHttpServer(),
+      coachAgent,
+      assistantIdentity,
+    );
+    mockGeminiClient.generateNarrative.mockResolvedValue('An answer.');
+
+    await assistantAgent
+      .post('/statistics/assistant')
+      .send({ question: 'How is the team doing?' })
+      .expect(201);
   });
 });

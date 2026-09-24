@@ -1,7 +1,10 @@
 import {
   buildInsightPrompt,
   computeInputDigest,
+  parseInsightResponse,
+  sanitizePlayerOfTheMatch,
   type BuildInsightPromptInput,
+  type InsightAthletePerformance,
 } from './insight-prompt';
 
 function baseInput(): BuildInsightPromptInput {
@@ -116,6 +119,77 @@ describe('buildInsightPrompt', () => {
 
     expect(prompt).toContain('(No notable events were logged.)');
     expect(prompt).toContain('(No goal/assist/card contributions logged.)');
+  });
+});
+
+describe('parseInsightResponse', () => {
+  it('extracts the summary and player of the match', () => {
+    const raw =
+      'SUMMARY: Rovers won 2-1 against City.\nPLAYER_OF_THE_MATCH: Sam Rivers - scored the winner.';
+
+    const parsed = parseInsightResponse(raw);
+
+    expect(parsed.narrativeText).toBe('Rovers won 2-1 against City.');
+    expect(parsed.playerOfTheMatch).toEqual({
+      athleteName: 'Sam Rivers',
+      reason: 'scored the winner.',
+    });
+  });
+
+  it('treats "None" as no player of the match', () => {
+    const raw = 'SUMMARY: A quiet draw.\nPLAYER_OF_THE_MATCH: None';
+
+    const parsed = parseInsightResponse(raw);
+
+    expect(parsed.playerOfTheMatch).toBeNull();
+  });
+
+  it('falls back to the whole response when the SUMMARY marker is missing', () => {
+    const raw = 'Rovers played well today.';
+
+    const parsed = parseInsightResponse(raw);
+
+    expect(parsed.narrativeText).toBe('Rovers played well today.');
+    expect(parsed.playerOfTheMatch).toBeNull();
+  });
+
+  it('handles a player name with no reason separator', () => {
+    const raw = 'SUMMARY: Win.\nPLAYER_OF_THE_MATCH: Sam Rivers';
+
+    const parsed = parseInsightResponse(raw);
+
+    expect(parsed.playerOfTheMatch).toEqual({
+      athleteName: 'Sam Rivers',
+      reason: '',
+    });
+  });
+});
+
+describe('sanitizePlayerOfTheMatch', () => {
+  const performances: InsightAthletePerformance[] = [
+    { athleteName: 'Sam Rivers', goals: 1, assists: 0, yellowCards: 0, redCards: 0 },
+  ];
+
+  it('keeps a pick that matches a real contributor', () => {
+    const pick = { athleteName: 'Sam Rivers', reason: 'scored twice' };
+
+    expect(sanitizePlayerOfTheMatch(pick, performances)).toEqual(pick);
+  });
+
+  it('is case-insensitive when matching', () => {
+    const pick = { athleteName: 'sam rivers', reason: 'scored twice' };
+
+    expect(sanitizePlayerOfTheMatch(pick, performances)).toEqual(pick);
+  });
+
+  it('nulls out a pick that does not match any known performer', () => {
+    const pick = { athleteName: 'Invented Player', reason: 'scored twice' };
+
+    expect(sanitizePlayerOfTheMatch(pick, performances)).toBeNull();
+  });
+
+  it('passes through null unchanged', () => {
+    expect(sanitizePlayerOfTheMatch(null, performances)).toBeNull();
   });
 });
 

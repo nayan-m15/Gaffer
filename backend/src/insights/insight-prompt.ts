@@ -131,7 +131,11 @@ ${performanceLines || '(No goal/assist/card contributions logged.)'}
 
 ${seasonLines}
 
-Write the summary now.`;
+Respond in exactly this two-line format:
+SUMMARY: <your 2-4 sentence summary>
+PLAYER_OF_THE_MATCH: <full name> - <one short clause reason>
+
+Only name a player who appears in the notable individual performances list above. If no single player stood out, write "PLAYER_OF_THE_MATCH: None" instead.`;
 
   const digestPayload: Record<string, unknown> = {
     match,
@@ -149,4 +153,64 @@ export function computeInputDigest(payload: Record<string, unknown>): string {
   return createHash('sha256')
     .update(JSON.stringify(payload))
     .digest('hex');
+}
+
+export interface ParsedInsightResponse {
+  narrativeText: string;
+  playerOfTheMatch: { athleteName: string; reason: string } | null;
+}
+
+/**
+ * Parses Gemini's two-line `SUMMARY:`/`PLAYER_OF_THE_MATCH:` response (see
+ * the format requested in `buildInsightPrompt`). Falls back to treating the
+ * whole response as the narrative if the model didn't follow the format —
+ * the summary must never end up empty just because the marker line is missing.
+ */
+export function parseInsightResponse(raw: string): ParsedInsightResponse {
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const summaryLine = lines.find((line) => /^summary:/i.test(line));
+  const potmLine = lines.find((line) => /^player_of_the_match:/i.test(line));
+
+  const narrativeText = summaryLine
+    ? summaryLine.replace(/^summary:/i, '').trim()
+    : raw.trim();
+
+  let playerOfTheMatch: ParsedInsightResponse['playerOfTheMatch'] = null;
+  if (potmLine) {
+    const value = potmLine.replace(/^player_of_the_match:/i, '').trim();
+    if (value && !/^none$/i.test(value)) {
+      const separator = value.match(/\s[-—]\s/);
+      playerOfTheMatch = separator
+        ? {
+            athleteName: value.slice(0, separator.index).trim(),
+            reason: value
+              .slice((separator.index ?? 0) + separator[0].length)
+              .trim(),
+          }
+        : { athleteName: value, reason: '' };
+    }
+  }
+
+  return { narrativeText, playerOfTheMatch };
+}
+
+/**
+ * Nulls out a parsed player-of-the-match pick that doesn't match a real
+ * contributor from this match — a guard against the model inventing a name
+ * despite being told not to.
+ */
+export function sanitizePlayerOfTheMatch(
+  parsed: ParsedInsightResponse['playerOfTheMatch'],
+  athletePerformances: InsightAthletePerformance[],
+): ParsedInsightResponse['playerOfTheMatch'] {
+  if (!parsed) return null;
+  const known = athletePerformances.some(
+    (performance) =>
+      performance.athleteName.toLowerCase() ===
+      parsed.athleteName.toLowerCase(),
+  );
+  return known ? parsed : null;
 }

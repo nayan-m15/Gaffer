@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -13,11 +14,14 @@ import {
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
+import { InsightsService } from '../insights/insights.service';
 import { TeamsService } from '../teams/teams.service';
 import {
+  askAssistantSchema,
   compareAthletesSchema,
   createCompetitionSchema,
   createStandingSchema,
+  generateSeasonInsightSchema,
   updateCompetitionSchema,
   updateStandingSchema,
 } from './statistics.schemas';
@@ -38,10 +42,67 @@ export class StatisticsController {
   constructor(
     private readonly statisticsService: StatisticsService,
     private readonly teamsService: TeamsService,
+    private readonly insightsService: InsightsService,
   ) {}
 
   private async assertCoach(userId: string): Promise<void> {
     await this.teamsService.requireCoachTeam(userId);
+  }
+
+  @Get('season-insight')
+  async getSeasonInsight(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Query('seasonId', new ParseUUIDPipe({ optional: true }))
+    seasonId?: string,
+  ) {
+    const team = await this.teamsService.findTeamForUser(user.id);
+    if (!team) {
+      throw new ForbiddenException('No team associated with this account.');
+    }
+    const insight = await this.insightsService.getSeasonInsight(
+      team.id,
+      seasonId ?? null,
+    );
+    return (
+      insight ?? {
+        teamId: team.id,
+        seasonId: seasonId ?? null,
+        status: 'unavailable' as const,
+      }
+    );
+  }
+
+  /**
+   * Coach-triggered (no automatic "season ended" event exists to hook this
+   * to) — generates synchronously and returns the resulting row, unlike the
+   * fire-and-forget per-match insight.
+   */
+  @Post('season-insight')
+  async generateSeasonInsight(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(generateSeasonInsightSchema, body);
+    const team = await this.teamsService.requireCoachTeam(user.id);
+    return this.insightsService.generateSeasonInsight(
+      team.id,
+      dto.seasonId ?? null,
+      user.id,
+    );
+  }
+
+  /**
+   * Natural-language stats question, open to every team member (matches the
+   * rest of this controller's read philosophy) — read-only and stateless,
+   * nothing is persisted.
+   */
+  @Post('assistant')
+  async askAssistant(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(askAssistantSchema, body);
+    return this.statisticsService.askAssistant(user.id, dto);
   }
 
   @Get()

@@ -1137,6 +1137,18 @@ function MatchInsightSection({ insight }: { insight: MatchInsight | undefined })
       <p className="text-sm leading-relaxed text-[#c5ced6]">
         {insight.narrativeText}
       </p>
+      {insight.highlights?.playerOfTheMatch && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#1c2b36]/60 bg-[#0c1218] px-3 py-2">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#f5c518]" aria-hidden="true" />
+          <p className="text-xs text-[#c5ced6]">
+            <span className="font-semibold text-white">Player of the Match: </span>
+            {insight.highlights.playerOfTheMatch.athleteName}
+            {insight.highlights.playerOfTheMatch.reason && (
+              <span> — {insight.highlights.playerOfTheMatch.reason}</span>
+            )}
+          </p>
+        </div>
+      )}
     </section>
   );
 }

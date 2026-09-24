@@ -21,13 +21,15 @@ import {
   matches,
   standings,
 } from '../database/schema';
-import { InsightsService } from '../insights/insights.service';
+import { buildAssistantPrompt } from '../insights/assistant-prompt';
+import { InsightsService, type AssistantAnswer } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
 
 const RECENT_INSIGHTS_LIMIT = 3;
 import type {
+  AskAssistantDto,
   CompareAthletesDto,
   CreateCompetitionDto,
   CreateStandingDto,
@@ -296,6 +298,46 @@ export class StatisticsService {
       periods: trendAnalysis.periods,
       recentInsights,
     };
+  }
+
+  /**
+   * Answers a free-text stats question via Gemini, scoped to the same
+   * season totals, trend deltas, and player table `getOverview` already
+   * computes — no separate data path to keep in sync. Fully stateless: the
+   * question and answer are never persisted, only returned to the caller.
+   */
+  async askAssistant(
+    userId: string,
+    dto: AskAssistantDto,
+  ): Promise<AssistantAnswer> {
+    const team = await this.requireTeam(userId);
+    const overview = await this.getOverview(userId, { seasonId: dto.seasonId });
+
+    const prompt = buildAssistantPrompt({
+      teamName: team.name,
+      seasonLabel: overview.season?.name ?? 'all matches',
+      question: dto.question,
+      totals: {
+        matchesPlayed: overview.matchesPlayed,
+        wins: overview.wins,
+        draws: overview.draws,
+        losses: overview.losses,
+        goalsFor: overview.goalsFor,
+        goalsAgainst: overview.goalsAgainst,
+        points: overview.points,
+      },
+      deltas: overview.periods.deltas,
+      players: overview.players.map((player) => ({
+        name: player.name,
+        appearances: player.appearances,
+        goals: player.goals,
+        assists: player.assists,
+        yellowCards: player.yellowCards,
+        redCards: player.redCards,
+      })),
+    });
+
+    return this.insightsService.answerQuestion(prompt);
   }
 
   /**

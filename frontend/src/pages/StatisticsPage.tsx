@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { useAuth } from "@/hooks/useAuth";
+import { AssistantChatPanel } from "@/features/statistics/AssistantChatPanel";
 import { AthleteComparisonSection } from "@/features/statistics/AthleteComparisonSection";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
@@ -11,6 +12,7 @@ import { PlayerStatsTable } from "@/features/statistics/PlayerStatsTable";
 import { RecentFormSection } from "@/features/statistics/RecentFormSection";
 import { RecentInsightsSection } from "@/features/statistics/RecentInsightsSection";
 import { SeasonFormDialog } from "@/features/statistics/SeasonFormDialog";
+import { SeasonInsightSection } from "@/features/statistics/SeasonInsightSection";
 import { SeasonsSection } from "@/features/statistics/SeasonsSection";
 import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
 import { StandingsSection } from "@/features/statistics/StandingsSection";
@@ -200,6 +202,9 @@ export default function StatisticsPage() {
       />
 
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
+        {/* AI stats assistant — independent of overview load state */}
+        <AssistantChatPanel seasonId={seasonId} />
+
         {/* ── Statistics overview ──────────────────────────────────────────── */}
         {overviewQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -254,6 +259,13 @@ export default function StatisticsPage() {
               form={overview.form}
               periods={overview.periods}
               rollingWindow={overview.rollingWindow}
+            />
+
+            {/* AI-generated season-summary narrative */}
+            <SeasonInsightSection
+              seasonId={seasonId}
+              seasonLabel={overview.season?.name ?? "All Time"}
+              canGenerate={isCoach}
             />
 
             {/* AI-generated per-match narratives */}

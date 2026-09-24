@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { GoogleGenerativeAIFetchError } from '@google/generative-ai';
+import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
@@ -10,20 +11,38 @@ import {
   matchInsights,
   matches,
   opponentMatchPlayers,
+  seasonInsights,
   teams,
 } from '../database/schema';
+import { SeasonsService } from '../seasons/seasons.service';
+import type { SeasonWindow } from '../seasons/season-window';
 import { buildTrends, summariseMatches } from '../statistics/statistics.trends';
 import { GeminiClient, GeminiNotConfiguredError } from './gemini-client';
 import {
   buildInsightPrompt,
   computeInputDigest,
+  parseInsightResponse,
+  sanitizePlayerOfTheMatch,
   type InsightAthletePerformance,
   type InsightEventSummary,
   type InsightSeasonContext,
 } from './insight-prompt';
+import {
+  buildSeasonInsightPrompt,
+  computeSeasonInputDigest,
+  type SeasonInsightTopPlayer,
+} from './season-insight-prompt';
 
 const DEFAULT_MODEL = 'gemini-3.8-flash';
 const PROMPT_VERSION = 1;
+const ASSISTANT_RETRY_DELAY_MS = 1_000;
+
+/** 503s from Gemini's free tier ("currently experiencing high demand") are
+ * transient capacity issues, not something retrying with the same prompt
+ * will avoid triggering again on a genuinely broken request. */
+function isRetryableGeminiError(error: unknown): boolean {
+  return error instanceof GoogleGenerativeAIFetchError && error.status === 503;
+}
 
 function matchGoalCount(team: 'own' | 'opponent') {
   return sql<number>`coalesce((
@@ -43,6 +62,20 @@ export interface MatchInsightSummary {
   generatedAt: string | null;
 }
 
+export interface SeasonInsightSummary {
+  teamId: string;
+  seasonId: string | null;
+  status: 'pending' | 'ready' | 'failed';
+  narrativeText: string | null;
+  generatedAt: string | null;
+  failureReason: string | null;
+}
+
+export interface AssistantAnswer {
+  status: 'ready' | 'failed';
+  answer: string | null;
+}
+
 /**
  * Generates and serves LLM narrative summaries for finalised matches.
  *
@@ -57,6 +90,7 @@ export class InsightsService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly geminiClient: GeminiClient,
+    private readonly seasonsService: SeasonsService,
   ) {}
 
   /** Generates (or skips, if nothing changed) the insight for a match. Never throws. */
@@ -110,6 +144,71 @@ export class InsightsService {
       );
   }
 
+  /**
+   * Answers a free-text stats question with a plain-text Gemini call. Fully
+   * stateless — nothing is written to the database, since a unique question
+   * has no meaningful cache key. Never throws; a Gemini failure comes back
+   * as `{ status: 'failed', answer: null }` for the caller to render as a
+   * friendly "couldn't answer that" message.
+   *
+   * Unlike the match/season insight generators, this retries once on a 503
+   * ("high demand") — it's a single user-initiated click rather than an
+   * automatic background job, so one extra attempt is cheap and meaningfully
+   * improves the odds of a real answer instead of asking the coach to
+   * manually retype the same question.
+   */
+  async answerQuestion(prompt: string): Promise<AssistantAnswer> {
+    try {
+      const answer = await this.generateNarrativeWithRetry(prompt);
+      return { status: 'ready', answer };
+    } catch (error) {
+      if (!(error instanceof GeminiNotConfiguredError)) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Assistant query failed: ${message}`);
+      }
+      return { status: 'failed', answer: null };
+    }
+  }
+
+  private async generateNarrativeWithRetry(prompt: string): Promise<string> {
+    try {
+      return await this.geminiClient.generateNarrative(prompt);
+    } catch (error) {
+      if (!isRetryableGeminiError(error)) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, ASSISTANT_RETRY_DELAY_MS),
+      );
+      return this.geminiClient.generateNarrative(prompt);
+    }
+  }
+
+  /**
+   * Generates (or returns the cached, still-valid) season-summary narrative
+   * for a team. Unlike `generateForMatch`, this is coach-triggered (a
+   * "Generate season summary" button) rather than fire-and-forget, so it
+   * runs synchronously and returns the resulting row — but still never
+   * throws; a Gemini failure comes back as a `failed` summary.
+   */
+  async generateSeasonInsight(
+    teamId: string,
+    seasonId: string | null,
+    userId: string,
+  ): Promise<SeasonInsightSummary> {
+    try {
+      return await this.runSeasonGeneration(teamId, seasonId, userId);
+    } catch (error) {
+      return this.markSeasonFailed(teamId, seasonId, userId, error);
+    }
+  }
+
+  async getSeasonInsight(
+    teamId: string,
+    seasonId: string | null,
+  ): Promise<SeasonInsightSummary | null> {
+    const row = await this.findSeasonInsightRow(teamId, seasonId);
+    return row ? this.toSeasonSummary(row) : null;
+  }
+
   private toSummary(row: typeof matchInsights.$inferSelect): MatchInsightSummary {
     return {
       matchId: row.matchId,
@@ -118,6 +217,231 @@ export class InsightsService {
       highlights: row.highlights,
       generatedAt: row.generatedAt?.toISOString() ?? null,
     };
+  }
+
+  private toSeasonSummary(
+    row: typeof seasonInsights.$inferSelect,
+  ): SeasonInsightSummary {
+    return {
+      teamId: row.teamId,
+      seasonId: row.seasonId,
+      status: row.status,
+      narrativeText: row.narrativeText,
+      generatedAt: row.generatedAt?.toISOString() ?? null,
+      failureReason: row.failureReason,
+    };
+  }
+
+  private async findSeasonInsightRow(teamId: string, seasonId: string | null) {
+    const [row] = await this.databaseService.database
+      .select()
+      .from(seasonInsights)
+      .where(
+        and(
+          eq(seasonInsights.teamId, teamId),
+          seasonId ? eq(seasonInsights.seasonId, seasonId) : isNull(seasonInsights.seasonId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  private async runSeasonGeneration(
+    teamId: string,
+    seasonId: string | null,
+    userId: string,
+  ): Promise<SeasonInsightSummary> {
+    let seasonLabel = 'all matches';
+    let window: SeasonWindow | undefined;
+    if (seasonId) {
+      const resolved = await this.seasonsService.resolveSeasonWindow(
+        teamId,
+        seasonId,
+      );
+      seasonLabel = resolved.season.name;
+      window = resolved.window;
+    }
+
+    const teamMatches = await this.loadTeamMatches(teamId, window);
+    const { totals, entries } = summariseMatches(teamMatches);
+    const trendAnalysis = buildTrends(entries);
+
+    const [team] = await this.databaseService.database
+      .select({ name: teams.name })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    const { topScorers, topAssisters } = await this.loadTopPlayers(
+      teamId,
+      window,
+    );
+
+    const { prompt, digestPayload } = buildSeasonInsightPrompt({
+      teamName: team?.name ?? 'The team',
+      seasonLabel,
+      totals: {
+        matchesPlayed: totals.matchesPlayed,
+        wins: totals.wins,
+        draws: totals.draws,
+        losses: totals.losses,
+        goalsFor: totals.goalsFor,
+        goalsAgainst: totals.goalsAgainst,
+        points: totals.points,
+      },
+      deltas: trendAnalysis.periods.deltas,
+      topScorers,
+      topAssisters,
+    });
+    const inputDigest = computeSeasonInputDigest(digestPayload);
+
+    const existing = await this.findSeasonInsightRow(teamId, seasonId);
+    if (existing?.status === 'ready' && existing.inputDigest === inputDigest) {
+      return this.toSeasonSummary(existing);
+    }
+
+    const narrativeText = await this.geminiClient.generateNarrative(prompt);
+    const modelName = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+
+    const values = {
+      teamId,
+      seasonId,
+      status: 'ready' as const,
+      narrativeText,
+      model: modelName,
+      promptVersion: PROMPT_VERSION,
+      inputDigest,
+      generatedAt: new Date(),
+      failureReason: null,
+      attemptCount: (existing?.attemptCount ?? 0) + 1,
+      generatedByUserId: userId,
+    };
+
+    const row = existing
+      ? (
+          await this.databaseService.database
+            .update(seasonInsights)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(seasonInsights.id, existing.id))
+            .returning()
+        )[0]
+      : (
+          await this.databaseService.database
+            .insert(seasonInsights)
+            .values(values)
+            .returning()
+        )[0];
+    return this.toSeasonSummary(row);
+  }
+
+  private async markSeasonFailed(
+    teamId: string,
+    seasonId: string | null,
+    userId: string,
+    error: unknown,
+  ): Promise<SeasonInsightSummary> {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!(error instanceof GeminiNotConfiguredError)) {
+      this.logger.warn(
+        `Season insight generation failed for team ${teamId}: ${message}`,
+      );
+    }
+
+    const existing = await this.findSeasonInsightRow(teamId, seasonId);
+    const values = {
+      teamId,
+      seasonId,
+      status: 'failed' as const,
+      failureReason: message,
+      attemptCount: (existing?.attemptCount ?? 0) + 1,
+      generatedByUserId: userId,
+    };
+
+    const row = existing
+      ? (
+          await this.databaseService.database
+            .update(seasonInsights)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(seasonInsights.id, existing.id))
+            .returning()
+        )[0]
+      : (
+          await this.databaseService.database
+            .insert(seasonInsights)
+            .values(values)
+            .returning()
+        )[0];
+    return this.toSeasonSummary(row);
+  }
+
+  /** Completed matches for a team, optionally windowed to a season's date range. */
+  private async loadTeamMatches(teamId: string, window?: SeasonWindow) {
+    const conditions = [eq(events.teamId, teamId), eq(events.status, 'completed')];
+    if (window) {
+      conditions.push(
+        gte(events.scheduledAt, window.start),
+        lte(events.scheduledAt, window.end),
+      );
+    }
+    return this.databaseService.database
+      .select({
+        matchId: matches.id,
+        eventId: matches.eventId,
+        date: events.scheduledAt,
+        opponent: matches.opponentName,
+        isHome: matches.isHome,
+        teamScore: matchGoalCount('own'),
+        opponentScore: matchGoalCount('opponent'),
+      })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .where(and(...conditions))
+      .orderBy(asc(events.scheduledAt));
+  }
+
+  /** Top 3 goal scorers and top 3 assisters, optionally windowed to a season. */
+  private async loadTopPlayers(
+    teamId: string,
+    window?: SeasonWindow,
+  ): Promise<{
+    topScorers: SeasonInsightTopPlayer[];
+    topAssisters: SeasonInsightTopPlayer[];
+  }> {
+    const conditions = [
+      eq(athletes.teamId, teamId),
+      eq(events.status, 'completed'),
+      eq(matchEvents.team, 'own'),
+      sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+    ];
+    if (window) {
+      conditions.push(
+        gte(events.scheduledAt, window.start),
+        lte(events.scheduledAt, window.end),
+      );
+    }
+
+    const rows = await this.databaseService.database
+      .select({
+        name: sql<string>`${athletes.firstName} || ' ' || ${athletes.lastName}`,
+        goals: sql<number>`count(*) filter (where ${matchEvents.eventType} = 'goal')::int`,
+        assists: sql<number>`count(*) filter (where ${matchEvents.eventType} = 'assist')::int`,
+      })
+      .from(matchEvents)
+      .innerJoin(athletes, eq(matchEvents.athleteId, athletes.id))
+      .innerJoin(matches, eq(matchEvents.matchId, matches.id))
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .where(and(...conditions))
+      .groupBy(athletes.id, athletes.firstName, athletes.lastName);
+
+    const topScorers = [...rows]
+      .filter((row) => row.goals > 0)
+      .sort((a, b) => b.goals - a.goals)
+      .slice(0, 3);
+    const topAssisters = [...rows]
+      .filter((row) => row.assists > 0)
+      .sort((a, b) => b.assists - a.assists)
+      .slice(0, 3);
+
+    return { topScorers, topAssisters };
   }
 
   private async runGeneration(
@@ -149,13 +473,19 @@ export class InsightsService {
       return; // nothing changed since the last successful generation
     }
 
-    const narrativeText = await this.geminiClient.generateNarrative(prompt);
+    const rawResponse = await this.geminiClient.generateNarrative(prompt);
+    const parsed = parseInsightResponse(rawResponse);
+    const playerOfTheMatch = sanitizePlayerOfTheMatch(
+      parsed.playerOfTheMatch,
+      context.athletePerformances,
+    );
     const modelName = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
 
     const values = {
       matchId,
       status: 'ready' as const,
-      narrativeText,
+      narrativeText: parsed.narrativeText,
+      highlights: playerOfTheMatch ? { playerOfTheMatch } : null,
       model: modelName,
       promptVersion: PROMPT_VERSION,
       inputDigest,
@@ -318,20 +648,7 @@ export class InsightsService {
         redCards: row.redCards,
       }));
 
-    const teamMatches = await this.databaseService.database
-      .select({
-        matchId: matches.id,
-        eventId: matches.eventId,
-        date: events.scheduledAt,
-        opponent: matches.opponentName,
-        isHome: matches.isHome,
-        teamScore: matchGoalCount('own'),
-        opponentScore: matchGoalCount('opponent'),
-      })
-      .from(matches)
-      .innerJoin(events, eq(matches.eventId, events.id))
-      .where(and(eq(events.teamId, row.teamId), eq(events.status, 'completed')))
-      .orderBy(asc(events.scheduledAt));
+    const teamMatches = await this.loadTeamMatches(row.teamId);
 
     const { totals, entries } = summariseMatches(teamMatches);
     const trendAnalysis = buildTrends(entries);
