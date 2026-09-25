@@ -18,7 +18,7 @@ const user = {
   emailVerified: true,
 } as SessionUser;
 
-/** 11 distinct RFC-4122-shaped UUIDs for the starting-XI payload. */
+/** 11 distinct RFC-4122-shaped UUIDs for the starting-lineup payload. */
 const startingAthleteIds = Array.from(
   { length: 11 },
   (_, i) => `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,

@@ -64,7 +64,7 @@ export function LiveInjurySheet({
 
   /* Only the plausible types for the chosen region are offered; a head
    * injury is not a "strain", and mid-match is the wrong moment to scroll a
-   * list of eleven. */
+   * starting lineup. */
   const typeOptions = useMemo(
     () => (bodyRegion ? injuryTypesForRegion(bodyRegion).slice(0, 4) : []),
     [bodyRegion],

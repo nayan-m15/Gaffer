@@ -1,12 +1,12 @@
 /**
  * Core state management hook for the Team Management tactical board.
  *
- * Manages formation selection, starting XI assignments, substitutes, and
+ * Manages formation selection, starting-lineup assignments, substitutes, and
  * all drag-and-drop operations while enforcing the hard team rules:
  *
- * - Maximum 11 players on the pitch
- * - Exactly 1 goalkeeper in a complete XI
- * - No player in both starting XI and substitutes simultaneously
+ * - Maximum players on the pitch is defined by the selected formation
+ * - Exactly 1 goalkeeper in a complete lineup
+ * - No player in both the starting lineup and substitutes simultaneously
  * - GK position only accepts goalkeepers
  */
 
@@ -16,6 +16,7 @@ import {
   FORMATIONS,
   DEFAULT_FORMATION_ID,
   autoFillFormation,
+  remapPlayers,
 } from "./formations";
 import type { DragItem, PitchAssignments, SavedLineup } from "./types";
 
@@ -122,8 +123,11 @@ export function useLineupState(athletes: BackendAthlete[]) {
   /** Number of players currently on the pitch. */
   const pitchCount = pitchAthleteIds.size;
 
-  /** Whether the starting XI is complete (exactly 11). */
-  const isXiComplete = pitchCount === 11;
+  /** Required starters for the selected match format. */
+  const lineupSize = formation?.playerCount ?? 11;
+
+  /** Whether the starting lineup is complete for the selected format. */
+  const isLineupComplete = pitchCount === lineupSize;
 
   /** Whether exactly one goalkeeper is assigned to the GK position. */
   const hasGoalkeeper = useMemo(() => {
@@ -186,7 +190,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
    *
    * Only available players are auto-assigned: injured and suspended athletes
    * stay on the bench (clearly badged) rather than being placed into the
-   * starting XI automatically. Injured athletes also cannot be placed on the
+   * starting lineup automatically. Injured athletes also cannot be placed on the
    * pitch manually.
    */
   const runAutoFill = useCallback(
@@ -231,13 +235,24 @@ export function useLineupState(athletes: BackendAthlete[]) {
       }
 
       // Auto-fill OFF:
-      // Changing formation starts with an empty pitch.
-      // Nothing is automatically placed.
-      setAssignments(emptyAssignments(newFormationId));
-      setSubstituteIds(athletes.map((a) => a.id));
+      // Preserve as much of the current lineup as possible. When switching to
+      // a smaller format, overflow starters move safely to the bench.
+      const {
+        assignments: remappedAssignments,
+        overflowToSubs,
+      } = remapPlayers(formationId, newFormationId, assignments);
+      setAssignments(remappedAssignments);
+      setSubstituteIds((current) => [
+        ...new Set([...current, ...overflowToSubs]),
+      ]);
       setError(null);
     },
-    [formationId, athletes, autoFillEnabled, runAutoFill],
+    [
+      formationId,
+      assignments,
+      autoFillEnabled,
+      runAutoFill,
+    ],
   );
 
   /* ── Drag start / end ──────────────────────────────────────────────────── */
@@ -265,9 +280,9 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
       const athlete = athletes.find((a) => a.id === athleteId);
 
-      // Injured athletes are not eligible for a starting-XI position.
+      // Injured athletes are not eligible for a starting-lineup position.
       if (athlete?.status === "injured") {
-        setError("Injured players cannot be placed in the starting XI.");
+        setError("Injured players cannot be placed in the starting lineup.");
         return;
       }
 
@@ -277,10 +292,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
         return;
       }
 
-      // Validate: max 11 (only if the player is genuinely new to the pitch)
+      // Validate the selected format's pitch capacity.
       const targetOccupant = assignments[targetPositionId];
-      if (!targetOccupant && pitchCount >= 11) {
-        setError("Starting XI is full. Remove a player first.");
+      if (!targetOccupant && pitchCount >= lineupSize) {
+        setError("Starting lineup is full. Remove a player first.");
         return;
       }
 
@@ -310,7 +325,14 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
       setError(null);
     },
-    [formation, pitchAthleteIds, assignments, pitchCount, athletes],
+    [
+      formation,
+      pitchAthleteIds,
+      assignments,
+      pitchCount,
+      lineupSize,
+      athletes,
+    ],
   );
 
   /**
@@ -445,7 +467,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
     error,
     autoFillEnabled,
     pitchCount,
-    isXiComplete,
+    lineupSize,
+    isLineupComplete,
+    // Backwards-compatible alias for existing call sites while they migrate.
+    isXiComplete: isLineupComplete,
     hasGoalkeeper,
     misplacedAthleteIds,
     hasMisplacedPlayers,
@@ -455,7 +480,9 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
     // Derived athlete counts
     totalAthletes: athletes.length,
-    hasEnoughForXi: athletes.length >= 11,
+    hasEnoughPlayers: athletes.length >= lineupSize,
+    // Backwards-compatible alias for existing call sites while they migrate.
+    hasEnoughForXi: athletes.length >= lineupSize,
 
     // Actions
     setFormation,

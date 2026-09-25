@@ -67,7 +67,7 @@ export default function LandingPage() {
           {/* ── Section 2: Squad Roster Management ──────────────────────── */}
           <RosterSection />
 
-          {/* ── Section 3: Tactical Pitch & Starting XI ─────────────────── */}
+          {/* ── Section 3: Tactical Pitch & Starting Lineup ─────────────────── */}
           <TacticsSection />
 
           {/* ── Section 4: Live Sideline Match Tracking & Sync ──────────── */}
@@ -113,7 +113,7 @@ function PhilosophySection() {
   const STEPS = [
     { step: "01", label: "Create Team", desc: "Set squad details & division" },
     { step: "02", label: "Add Roster", desc: "Athletes, numbers & positions" },
-    { step: "03", label: "Set Lineup", desc: "Formation, starting XI & bench" },
+    { step: "03", label: "Set Lineup", desc: "Formation, starting lineup & bench" },
     { step: "04", label: "Log Sideline", desc: "Live score, cards & match report" },
   ];
 
@@ -211,11 +211,11 @@ function TacticsSection() {
       id="tactics"
       badge="Tactical Pitch"
       icon={<Shield className="size-4 text-brand" />}
-      title="Interactive Formation Pitch & Starting XI Builder"
+      title="Interactive Formation Pitch & Starting Lineup Builder"
       description="Set your match tactics visually before walking onto the pitch. Position players, test tactical formations, and manage your substitute bench with confidence."
       bullets={[
-        "Visual pitch coordinate board: realistic turf markings and draggable starting XI positions.",
-        "Selection checks: requires 11 unique starters and keeps substitutes separate.",
+        "Visual pitch coordinate board: realistic turf markings and draggable starting lineup positions.",
+        "Selection checks: requires the selected format's exact number of unique starters and keeps substitutes separate.",
         "Formation presets: switch between supported shapes including 4-3-3, 4-4-2, and 3-5-2.",
         "Substitutes drawer: manage bench rotations and reserve players before kickoff.",
       ]}
@@ -522,7 +522,7 @@ function TacticalPitchMockup() {
       <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-foreground">Tactical Pitch</span>
-          <p className="text-[10px] text-muted-foreground">11 Starters &bull; 1 GK Rule Confirmed</p>
+          <p className="text-[10px] text-muted-foreground">Format-ready lineup &bull; 1 GK Rule Confirmed</p>
         </div>
         <div className="flex gap-1">
           {(["4-3-3", "4-4-2", "3-5-2"] as const).map((f) => (

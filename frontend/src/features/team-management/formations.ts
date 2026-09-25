@@ -1,8 +1,8 @@
 /**
  * Formation definitions for common football systems.
  *
- * Each formation contains exactly 11 positions with percentage-based
- * coordinates relative to the pitch (0–100 on both axes).
+ * Formations support 5-, 7-, and 11-a-side football. Position coordinates
+ * are percentage-based relative to the pitch (0–100 on both axes).
  *
  * The pitch is oriented with the opponent's goal at the top (y = 0) and
  * the own goal at the bottom (y = 100), so the goalkeeper sits near y ≈ 94.
@@ -10,6 +10,7 @@
 
 import type {
   Formation,
+  FormationPlayerCount,
   FormationPosition,
   PitchAssignments,
   PositionRole,
@@ -38,6 +39,7 @@ function pos(
 const fourThreeThree: Formation = {
   id: "4-3-3",
   name: "4-3-3",
+  playerCount: 11,
   positions: [
     pos("433", "GK", "GK", 50, 94),
     pos("433", "LB", "DEF", 12, 72),
@@ -57,6 +59,7 @@ const fourThreeThree: Formation = {
 const fourFourTwo: Formation = {
   id: "4-4-2",
   name: "4-4-2",
+  playerCount: 11,
   positions: [
     pos("442", "GK", "GK", 50, 94),
     pos("442", "LB", "DEF", 12, 72),
@@ -76,6 +79,7 @@ const fourFourTwo: Formation = {
 const fourTwoThreeOne: Formation = {
   id: "4-2-3-1",
   name: "4-2-3-1",
+  playerCount: 11,
   positions: [
     pos("4231", "GK", "GK", 50, 94),
     pos("4231", "LB", "DEF", 12, 72),
@@ -95,6 +99,7 @@ const fourTwoThreeOne: Formation = {
 const fourOneFourOne: Formation = {
   id: "4-1-4-1",
   name: "4-1-4-1",
+  playerCount: 11,
   positions: [
     pos("4141", "GK", "GK", 50, 94),
     pos("4141", "LB", "DEF", 12, 72),
@@ -114,6 +119,7 @@ const fourOneFourOne: Formation = {
 const threeFiveTwo: Formation = {
   id: "3-5-2",
   name: "3-5-2",
+  playerCount: 11,
   positions: [
     pos("352", "GK", "GK", 50, 94),
     pos("352", "CB", "DEF", 26, 76, "1"),
@@ -133,6 +139,7 @@ const threeFiveTwo: Formation = {
 const threeFourThree: Formation = {
   id: "3-4-3",
   name: "3-4-3",
+  playerCount: 11,
   positions: [
     pos("343", "GK", "GK", 50, 94),
     pos("343", "CB", "DEF", 26, 76, "1"),
@@ -152,6 +159,7 @@ const threeFourThree: Formation = {
 const fiveThreeTwo: Formation = {
   id: "5-3-2",
   name: "5-3-2",
+  playerCount: 11,
   positions: [
     pos("532", "GK", "GK", 50, 94),
     pos("532", "LWB", "DEF", 8, 68),
@@ -171,6 +179,7 @@ const fiveThreeTwo: Formation = {
 const fiveFourOne: Formation = {
   id: "5-4-1",
   name: "5-4-1",
+  playerCount: 11,
   positions: [
     pos("541", "GK", "GK", 50, 94),
     pos("541", "LWB", "DEF", 8, 68),
@@ -186,10 +195,108 @@ const fiveFourOne: Formation = {
   ],
 };
 
+
+
+/* ─── 5-a-side: 1-2-1 ──────────────────────────────────────────────────── */
+const fiveVFiveOneTwoOne: Formation = {
+  id: "5v5-1-2-1",
+  name: "1-2-1",
+  playerCount: 5,
+  positions: [
+    pos("5v5-121", "GK", "GK", 50, 94),
+    pos("5v5-121", "CB", "DEF", 50, 72),
+    pos("5v5-121", "LM", "MID", 25, 47),
+    pos("5v5-121", "RM", "MID", 75, 47),
+    pos("5v5-121", "ST", "FWD", 50, 18),
+  ],
+};
+
+/* ─── 5-a-side: 2-1-1 ──────────────────────────────────────────────────── */
+const fiveVFiveTwoOneOne: Formation = {
+  id: "5v5-2-1-1",
+  name: "2-1-1",
+  playerCount: 5,
+  positions: [
+    pos("5v5-211", "GK", "GK", 50, 94),
+    pos("5v5-211", "CB", "DEF", 30, 72, "1"),
+    pos("5v5-211", "CB", "DEF", 70, 72, "2"),
+    pos("5v5-211", "CM", "MID", 50, 46),
+    pos("5v5-211", "ST", "FWD", 50, 18),
+  ],
+};
+
+/* ─── 5-a-side: 1-1-2 ──────────────────────────────────────────────────── */
+const fiveVFiveOneOneTwo: Formation = {
+  id: "5v5-1-1-2",
+  name: "1-1-2",
+  playerCount: 5,
+  positions: [
+    pos("5v5-112", "GK", "GK", 50, 94),
+    pos("5v5-112", "CB", "DEF", 50, 72),
+    pos("5v5-112", "CM", "MID", 50, 48),
+    pos("5v5-112", "ST", "FWD", 34, 18, "1"),
+    pos("5v5-112", "ST", "FWD", 66, 18, "2"),
+  ],
+};
+
+/* ─── 7-a-side: 2-3-1 ──────────────────────────────────────────────────── */
+const sevenVSevenTwoThreeOne: Formation = {
+  id: "7v7-2-3-1",
+  name: "2-3-1",
+  playerCount: 7,
+  positions: [
+    pos("7v7-231", "GK", "GK", 50, 94),
+    pos("7v7-231", "CB", "DEF", 30, 74, "1"),
+    pos("7v7-231", "CB", "DEF", 70, 74, "2"),
+    pos("7v7-231", "LM", "MID", 18, 48),
+    pos("7v7-231", "CM", "MID", 50, 44),
+    pos("7v7-231", "RM", "MID", 82, 48),
+    pos("7v7-231", "ST", "FWD", 50, 17),
+  ],
+};
+
+/* ─── 7-a-side: 3-2-1 ──────────────────────────────────────────────────── */
+const sevenVSevenThreeTwoOne: Formation = {
+  id: "7v7-3-2-1",
+  name: "3-2-1",
+  playerCount: 7,
+  positions: [
+    pos("7v7-321", "GK", "GK", 50, 94),
+    pos("7v7-321", "LB", "DEF", 18, 72),
+    pos("7v7-321", "CB", "DEF", 50, 78),
+    pos("7v7-321", "RB", "DEF", 82, 72),
+    pos("7v7-321", "CM", "MID", 34, 47, "1"),
+    pos("7v7-321", "CM", "MID", 66, 47, "2"),
+    pos("7v7-321", "ST", "FWD", 50, 17),
+  ],
+};
+
+/* ─── 7-a-side: 2-2-2 ──────────────────────────────────────────────────── */
+const sevenVSevenTwoTwoTwo: Formation = {
+  id: "7v7-2-2-2",
+  name: "2-2-2",
+  playerCount: 7,
+  positions: [
+    pos("7v7-222", "GK", "GK", 50, 94),
+    pos("7v7-222", "CB", "DEF", 30, 74, "1"),
+    pos("7v7-222", "CB", "DEF", 70, 74, "2"),
+    pos("7v7-222", "CM", "MID", 32, 48, "1"),
+    pos("7v7-222", "CM", "MID", 68, 48, "2"),
+    pos("7v7-222", "ST", "FWD", 34, 18, "1"),
+    pos("7v7-222", "ST", "FWD", 66, 18, "2"),
+  ],
+};
+
 /* ─── Public API ─────────────────────────────────────────────────────────── */
 
 /** All supported formations, keyed by ID. */
 export const FORMATIONS: Record<string, Formation> = {
+  "5v5-1-2-1": fiveVFiveOneTwoOne,
+  "5v5-2-1-1": fiveVFiveTwoOneOne,
+  "5v5-1-1-2": fiveVFiveOneOneTwo,
+  "7v7-2-3-1": sevenVSevenTwoThreeOne,
+  "7v7-3-2-1": sevenVSevenThreeTwoOne,
+  "7v7-2-2-2": sevenVSevenTwoTwoTwo,
   "4-3-3": fourThreeThree,
   "4-4-2": fourFourTwo,
   "4-2-3-1": fourTwoThreeOne,
@@ -200,12 +307,56 @@ export const FORMATIONS: Record<string, Formation> = {
   "5-4-1": fiveFourOne,
 };
 
-/** Ordered list for the formation selector dropdown. */
-export const FORMATION_OPTIONS: { value: string; label: string }[] =
-  Object.values(FORMATIONS).map((f) => ({ value: f.id, label: f.name }));
+/** Ordered format choices shown to coaches. */
+export const FORMAT_OPTIONS: {
+  value: FormationPlayerCount;
+  label: string;
+}[] = [
+  { value: 5, label: "5-a-side" },
+  { value: 7, label: "7-a-side" },
+  { value: 11, label: "11-a-side" },
+];
+
+export const DEFAULT_FORMATION_BY_PLAYER_COUNT: Record<
+  FormationPlayerCount,
+  string
+> = {
+  5: "5v5-1-2-1",
+  7: "7v7-2-3-1",
+  11: "4-3-3",
+};
+
+/** Ordered list for formation selectors. */
+export const FORMATION_OPTIONS: {
+  value: string;
+  label: string;
+  playerCount: FormationPlayerCount;
+}[] = Object.values(FORMATIONS).map((f) => ({
+  value: f.id,
+  label: f.name,
+  playerCount: f.playerCount,
+}));
 
 /** Default formation used when the page first loads. */
-export const DEFAULT_FORMATION_ID = "4-3-3";
+export const DEFAULT_FORMATION_ID = DEFAULT_FORMATION_BY_PLAYER_COUNT[11];
+
+export function getFormationPlayerCount(
+  formationId: string | null | undefined,
+): FormationPlayerCount {
+  return FORMATIONS[formationId ?? ""]?.playerCount ?? 11;
+}
+
+export function getDefaultFormationIdForPlayerCount(
+  playerCount: FormationPlayerCount,
+): string {
+  return DEFAULT_FORMATION_BY_PLAYER_COUNT[playerCount];
+}
+
+export function getFormationOptionsForPlayerCount(
+  playerCount: FormationPlayerCount,
+) {
+  return FORMATION_OPTIONS.filter((option) => option.playerCount === playerCount);
+}
 
 /**
  * Pick the formation whose slot labels best match a set of recorded
@@ -217,13 +368,27 @@ export function inferFormationIdFromPositions(
   const labels = positions
     .map((value) => (value ?? "").trim().toUpperCase())
     .filter(Boolean);
+  const hintedPlayerCount =
+    positions.length === 5 || positions.length === 7 || positions.length === 11
+      ? (positions.length as FormationPlayerCount)
+      : null;
+  const candidates = hintedPlayerCount
+    ? Object.values(FORMATIONS).filter(
+        (formation) => formation.playerCount === hintedPlayerCount,
+      )
+    : Object.values(FORMATIONS);
+
   if (labels.length === 0) {
-    return DEFAULT_FORMATION_ID;
+    return hintedPlayerCount
+      ? getDefaultFormationIdForPlayerCount(hintedPlayerCount)
+      : DEFAULT_FORMATION_ID;
   }
 
-  let bestId = DEFAULT_FORMATION_ID;
+  let bestId = hintedPlayerCount
+    ? getDefaultFormationIdForPlayerCount(hintedPlayerCount)
+    : DEFAULT_FORMATION_ID;
   let bestScore = -1;
-  for (const formation of Object.values(FORMATIONS)) {
+  for (const formation of candidates) {
     const remaining = formation.positions.map((pos) =>
       pos.label.trim().toUpperCase(),
     );
@@ -468,7 +633,7 @@ export function autoFillFormation(
 }
 
 /**
- * Place the current starting XI onto a formation for a live preview.
+ * Place the current starting lineup onto a formation for a live preview.
  *
  * Prefers saved game-plan slots when those athletes are still starters, then
  * fills remaining slots (exact position, then role, then any leftover) so a

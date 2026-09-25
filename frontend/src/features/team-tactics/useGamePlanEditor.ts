@@ -1,7 +1,7 @@
 /**
  * State + persistence for a team's game plans. A game plan is one record
  * covering both halves of a matchday plan — the squad selection (formation,
- * starting XI, bench) and the tactical settings — so selecting, saving and
+ * starting lineup, bench) and the tactical settings — so selecting, saving and
  * deleting a plan moves both together.
  *
  * `TeamManagementPage` owns the single instance and hands it to the header
@@ -59,7 +59,7 @@ export interface GamePlanEditor {
   isError: boolean;
   refetch: () => void;
 
-  /** The tactical board: formation, starting XI, bench and drag-and-drop. */
+  /** The tactical board: formation, starting lineup, bench and drag-and-drop. */
   lineup: LineupBoard;
 
   selectedId: string | null;
@@ -163,7 +163,7 @@ export function useGamePlanEditor(
   const save = () => {
     setSaveError(null);
     if (lineup.hasInjuredPitchPlayers) {
-      setSaveError("Remove injured players from the starting XI before saving.");
+      setSaveError("Remove injured players from the starting lineup before saving.");
       return;
     }
     if (!selectedPlan) {
@@ -185,7 +185,7 @@ export function useGamePlanEditor(
   const saveAsNew = async (name: string) => {
     setSaveError(null);
     if (lineup.hasInjuredPitchPlayers) {
-      setSaveError("Remove injured players from the starting XI before saving.");
+      setSaveError("Remove injured players from the starting lineup before saving.");
       return;
     }
 

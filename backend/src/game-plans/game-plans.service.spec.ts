@@ -26,4 +26,21 @@ describe('GamePlansService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
+
+  it('rejects more starters than the selected format allows', async () => {
+    const assignments = Object.fromEntries(
+      Array.from({ length: 6 }, (_, index) => [
+        `slot-${index}`,
+        `athlete-${index}`,
+      ]),
+    );
+
+    await expect(
+      service.create('team-id', {
+        name: 'Five-a-side',
+        formationId: '5v5-1-2-1',
+        assignments,
+      } as never),
+    ).rejects.toThrow('at most 5 starting athletes');
+  });
 });

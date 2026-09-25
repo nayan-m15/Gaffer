@@ -266,7 +266,7 @@ export const offensiveStyle = pgEnum('offensive_style', [
 // A named tactical profile ("game plan") for a team, modeled on FIFA 20's
 // Custom Tactics. A team keeps several (e.g. "Balanced", "Cup final low
 // block") and swaps between them per fixture; names are unique per team. Each
-// row is a complete snapshot of the matchday plan: the starting XI and bench
+// row is a complete snapshot of the matchday plan: the starting lineup and bench
 // alongside the formation + defensive/offensive settings + set-piece takers.
 export const gamePlans = pgTable(
   'game_plans',
@@ -761,7 +761,7 @@ export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
 
 // Per-match opponent players. Empty when visibility is `none`. `name` is
 // null in numbers-only mode and required in full mode. `position` is optional
-// so numbers-only / unknown-formation squads still persist without a XI.
+// so numbers-only / unknown-formation squads still persist without a recorded formation.
 export const opponentMatchPlayers = pgTable(
   'opponent_match_players',
   {

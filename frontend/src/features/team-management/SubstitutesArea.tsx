@@ -3,7 +3,7 @@
  *
  * Displays substitute players in a horizontal scrollable row and acts as a
  * drag-and-drop target so pitch players can be dragged here to remove them
- * from the starting XI.
+ * from the starting lineup.
  */
 
 import { useCallback, useMemo, useState } from "react";

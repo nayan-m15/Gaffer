@@ -1,6 +1,6 @@
 /**
  * Team Management page — the tactical board where a coach configures their
- * starting XI, selects a formation, positions players on the pitch, and
+ * starting lineup, selects a formation, positions players on the pitch, and
  * manages substitutes through drag-and-drop, plus the tactics editor.
  *
  * Both sections edit one saved record: a game plan holds the squad selection
@@ -171,7 +171,7 @@ export default function TeamManagementPage() {
           </h2>
           <p className="max-w-sm text-sm text-muted-foreground">
             Add players to your squad from the Roster page before creating a
-            starting XI.
+            starting lineup.
           </p>
           <Button
             variant="outline"
@@ -193,7 +193,7 @@ export default function TeamManagementPage() {
     <>
       <PageHeader
         title="Team Management"
-        subtitle="Configure your starting XI, tactical formation, and matchday squad."
+        subtitle="Configure your starting lineup, match format, tactical formation, and matchday squad."
         actions={
           <GamePlanControls editor={gamePlanEditor} readOnly={!canManageTeam}>
             {activeSection === "squad" && canManageTeam && (
@@ -246,8 +246,8 @@ export default function TeamManagementPage() {
         <StatusBar
           label="On Pitch"
           value={lineup.pitchCount}
-          max={11}
-          isComplete={lineup.isXiComplete}
+          max={lineup.lineupSize}
+          isComplete={lineup.isLineupComplete}
         />
         <StatusBar
           label="Substitutes"
@@ -274,7 +274,7 @@ export default function TeamManagementPage() {
 
         {lineup.hasInjuredPitchPlayers && (
           <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
-            Remove injured players from the starting XI before saving
+            Remove injured players from the starting lineup before saving
           </span>
         )}
 
@@ -286,9 +286,9 @@ export default function TeamManagementPage() {
           </span>
         )}
 
-        {!lineup.hasEnoughForXi && (
+        {!lineup.hasEnoughPlayers && (
           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-            Need at least 11 players for a full XI
+            Need at least {lineup.lineupSize} players for a full lineup
           </span>
         )}
 

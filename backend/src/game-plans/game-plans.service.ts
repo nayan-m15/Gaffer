@@ -7,6 +7,10 @@ import {
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { athletes, gamePlans } from '../database/schema';
+import {
+  DEFAULT_FORMATION_ID,
+  getFormationPlayerCount,
+} from '../common/formations';
 import type {
   CreateGamePlanDto,
   UpdateGamePlanDto,
@@ -51,6 +55,7 @@ export class GamePlansService {
 
   async create(teamId: string, input: CreateGamePlanDto) {
     await this.validatePlan(teamId, {
+      formationId: input.formationId ?? DEFAULT_FORMATION_ID,
       assignments: input.assignments ?? {},
       substituteIds: input.substituteIds ?? [],
       captainId: input.captainId ?? null,
@@ -117,6 +122,7 @@ export class GamePlansService {
   private async validatePlan(
     teamId: string,
     plan: {
+      formationId: string;
       assignments: Record<string, string | null>;
       substituteIds: string[];
       captainId: string | null;
@@ -128,6 +134,15 @@ export class GamePlansService {
     const starters = Object.values(plan.assignments).filter(
       (id): id is string => id !== null,
     );
+    const starterLimit = getFormationPlayerCount(plan.formationId);
+    if (!starterLimit) {
+      throw new BadRequestException('Formation is not supported.');
+    }
+    if (starters.length > starterLimit) {
+      throw new BadRequestException(
+        `This formation allows at most ${starterLimit} starting athletes.`,
+      );
+    }
     if (new Set(starters).size !== starters.length) {
       throw new BadRequestException('Starting athletes must be unique.');
     }

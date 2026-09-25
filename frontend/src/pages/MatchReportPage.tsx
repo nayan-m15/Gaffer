@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Timeline } from "@/components/ui/timeline";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { useGamePlan } from "@/features/team-tactics/api";
+import { getFormationPlayerCount } from "@/features/team-management/formations";
 import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
   useDeleteMatchEvent,
@@ -234,8 +235,8 @@ export default function MatchReportPage() {
     [squad, timeline],
   );
   const oppState = useMemo(
-    () => opponentPitchState(match?.opponentSquad ?? [], timeline),
-    [match?.opponentSquad, timeline],
+    () => opponentPitchState(match?.opponentSquad ?? [], timeline, getFormationPlayerCount(gamePlan?.formationId)),
+    [gamePlan?.formationId, match?.opponentSquad, timeline],
   );
   const ownPlaced = useMemo(
     () =>
@@ -249,8 +250,13 @@ export default function MatchReportPage() {
     [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
-    () => placeOppPlayers(oppState.onPitch, oppHalf, timeline),
-    [oppState.onPitch, oppHalf, timeline],
+    () => placeOppPlayers(
+        oppState.onPitch,
+        oppHalf,
+        timeline,
+        getFormationPlayerCount(gamePlan?.formationId),
+      ),
+    [gamePlan?.formationId, oppState.onPitch, oppHalf, timeline],
   );
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
@@ -827,7 +833,7 @@ export default function MatchReportPage() {
                         {squad.filter((p) => p.started).length}
                       </p>
                       <p className="text-[10px] uppercase tracking-wider text-[#8e9ba8]">
-                        Starting XI
+                        Starting lineup
                       </p>
                     </div>
                     <div className="rounded-xl border border-[#1c2b36]/60 bg-[#0c1218] p-3">
@@ -869,7 +875,7 @@ export default function MatchReportPage() {
                             {row.athlete.firstName} {row.athlete.lastName}
                           </p>
                           <span className="shrink-0 rounded bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#8e9ba8]">
-                            {row.athlete.started ? "Starting XI" : "Bench"}
+                            {row.athlete.started ? "Starting lineup" : "Bench"}
                           </span>
                         </div>
                         <div className="mt-2 grid grid-cols-4 gap-2 text-center">
@@ -914,7 +920,7 @@ export default function MatchReportPage() {
                           {row.athlete.firstName} {row.athlete.lastName}
                         </td>
                         <td className="px-2 py-3 text-[#8e9ba8]">
-                          {row.athlete.started ? "XI" : "Bench"}
+                          {row.athlete.started ? "Starting" : "Bench"}
                         </td>
                         <td className="px-2 py-3 text-right font-oswald text-[#00d99a]">
                           {row.goals}

@@ -1,9 +1,11 @@
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
+  getDefaultFormationIdForPlayerCount,
   inferFormationIdFromPositions,
   previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
+import type { FormationPlayerCount } from "@/features/team-management/types";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
 import type {
@@ -243,6 +245,7 @@ function hasRecordedPosition(player: OpponentMatchPlayer) {
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
   timeline: MatchLogEvent[],
+  starterLimit = 11,
 ) {
   const unique = uniqueOpponents(players);
   const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
@@ -252,7 +255,7 @@ export function opponentPitchState(
   const seenNumbers = new Set<number>();
 
   const takeStarter = (player: OpponentMatchPlayer) => {
-    if (seenNumbers.has(player.shirtNumber) || starters.length >= 11) {
+    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) {
       return false;
     }
     seenNumbers.add(player.shirtNumber);
@@ -373,13 +376,16 @@ export function placeOppPlayers(
   onPitch: OpponentMatchPlayer[],
   half: PitchHalf,
   timeline: MatchLogEvent[] = [],
+  formatPlayerCount?: FormationPlayerCount,
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
   const byId = new Map(unique.map((player) => [player.id, player]));
   const hasPositions = unique.some(hasRecordedPosition);
   const formationId = hasPositions
     ? inferFormationIdFromPositions(unique.map((player) => player.position))
-    : DEFAULT_FORMATION_ID;
+    : formatPlayerCount
+      ? getDefaultFormationIdForPlayerCount(formatPlayerCount)
+      : inferFormationIdFromPositions(unique.map((player) => player.position));
   const formation =
     FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
   const placed: PlacedOppPlayer[] = [];

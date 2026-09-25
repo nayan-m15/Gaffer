@@ -21,6 +21,10 @@ import {
   opponentMatchPlayers,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import {
+  DEFAULT_FORMATION_ID,
+  getFormationPlayerCount,
+} from '../common/formations';
 import type {
   CreateEventDto,
   CreateRsvpDto,
@@ -375,6 +379,17 @@ export class EventsService {
     const gamePlan = dto.gamePlanId
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
       : null;
+
+    const formationId = gamePlan?.formationId ?? DEFAULT_FORMATION_ID;
+    const requiredStarterCount = getFormationPlayerCount(formationId);
+    if (!requiredStarterCount) {
+      throw new BadRequestException('Formation is not supported.');
+    }
+    if (dto.startingAthleteIds.length !== requiredStarterCount) {
+      throw new BadRequestException(
+        `This match format requires exactly ${requiredStarterCount} starting athletes.`,
+      );
+    }
 
     const teamAthletes = await this.databaseService.database
       .select()

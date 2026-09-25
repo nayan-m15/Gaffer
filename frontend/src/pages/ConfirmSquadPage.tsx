@@ -7,6 +7,8 @@ import { useAthletes } from "@/features/team-management/api";
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
+  getDefaultFormationIdForPlayerCount,
+  getFormationPlayerCount,
   getPositionRole,
   previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
@@ -34,7 +36,6 @@ import { cn } from "@/lib/utils";
 import type { BackendAthlete } from "@/services/athletes";
 import type { BackendGamePlan } from "@/services/gamePlans";
 
-const STARTING_XI_SIZE = 11;
 
 const VISIBILITY_OPTIONS: {
   value: OpponentSquadVisibility;
@@ -121,12 +122,13 @@ function startingIdsFromGamePlan(
   selectableRosterIds: Set<string>,
 ) {
   const ids: string[] = [];
+  const starterLimit = getFormationPlayerCount(plan.formationId);
   for (const athleteId of Object.values(plan.assignments)) {
     if (
       athleteId &&
       selectableRosterIds.has(athleteId) &&
       !ids.includes(athleteId) &&
-      ids.length < STARTING_XI_SIZE
+      ids.length < starterLimit
     ) {
       ids.push(athleteId);
     }
@@ -437,6 +439,18 @@ export default function ConfirmSquadPage() {
     () => gamePlansQuery.data ?? [],
     [gamePlansQuery.data],
   );
+  const selectedPlanSummary = useMemo(
+    () =>
+      selectedGamePlanId
+        ? gamePlans.find((plan) => plan.id === selectedGamePlanId) ?? null
+        : null,
+    [gamePlans, selectedGamePlanId],
+  );
+  const startingTarget = getFormationPlayerCount(
+    gamePlanQuery.data?.formationId ??
+      selectedPlanSummary?.formationId ??
+      DEFAULT_FORMATION_ID,
+  );
   const selectableAthletes = useMemo(
     () => athletes.filter((athlete) => athlete.status !== "injured"),
     [athletes],
@@ -465,6 +479,16 @@ export default function ConfirmSquadPage() {
       startingIdsFromGamePlan(gamePlanQuery.data, selectableRosterIds),
     );
   }, [selectedGamePlanId, gamePlanQuery.data, selectableRosterIds]);
+
+  useEffect(() => {
+    const currentFormation = FORMATIONS[opponentFormationId];
+    if (currentFormation?.playerCount === startingTarget) {
+      return;
+    }
+    setOpponentFormationId(
+      getDefaultFormationIdForPlayerCount(startingTarget),
+    );
+  }, [opponentFormationId, startingTarget]);
 
   useEffect(() => {
     setStartingIds((current) => {
@@ -541,7 +565,7 @@ export default function ConfirmSquadPage() {
     !eventQuery.data?.competitionFixtureId ||
     Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
   const canSubmit =
-    startingCount === STARTING_XI_SIZE &&
+    startingCount === startingTarget &&
     opponentReady &&
     fixtureDateConfirmed &&
     !beforeMatchDay &&
@@ -554,7 +578,7 @@ export default function ConfirmSquadPage() {
   const detailsComplete = opponentReady;
   const squadInfoComplete =
     opponentSquadVisibility === "none" || opponentPlayers.length > 0;
-  const xiComplete = startingCount === STARTING_XI_SIZE;
+  const lineupComplete = startingCount === startingTarget;
   const stepState = [
     detailsComplete ? "done" : "current",
     detailsComplete
@@ -562,7 +586,7 @@ export default function ConfirmSquadPage() {
         ? "done"
         : "current"
       : "todo",
-    xiComplete ? "done" : detailsComplete && squadInfoComplete ? "current" : "todo",
+    lineupComplete ? "done" : detailsComplete && squadInfoComplete ? "current" : "todo",
   ] as const;
 
   const sortedAthletes = useMemo(() => {
@@ -646,7 +670,7 @@ export default function ConfirmSquadPage() {
       const next = new Set(current);
       if (next.has(athleteId)) {
         next.delete(athleteId);
-      } else if (next.size < STARTING_XI_SIZE) {
+      } else if (next.size < startingTarget) {
         next.add(athleteId);
       }
       return next;
@@ -731,6 +755,7 @@ export default function ConfirmSquadPage() {
       visibility: opponentSquadVisibility,
       players: opponentPlayers,
       formationId: opponentFormationId,
+      playerCount: startingTarget,
       opponentColor: oppColor,
       onSave: (next) => {
         setOpponentSquadVisibility(next.visibility);
@@ -818,7 +843,7 @@ export default function ConfirmSquadPage() {
           </h2>
           <p className="max-w-sm text-sm text-muted-foreground">
             Add players to your squad from the Roster page before confirming
-            a starting XI.
+            a starting lineup.
           </p>
           <Button
             variant="outline"
@@ -1175,7 +1200,7 @@ export default function ConfirmSquadPage() {
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <h2 className={sectionLabelClassName}>Saved game plan</h2>
           <p className="text-sm text-muted-foreground">
-            Pick a plan to pre-fill your XI, then adjust below
+            Pick a plan to pre-fill your starting lineup, then adjust below
           </p>
         </div>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1265,7 +1290,7 @@ export default function ConfirmSquadPage() {
                       {plan.formationId}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      {counts.starters} starters · {counts.subs} subs
+                      {getFormationPlayerCount(plan.formationId)}-a-side · {counts.starters} starters · {counts.subs} subs
                     </span>
                   </span>
                 </button>
@@ -1294,10 +1319,10 @@ export default function ConfirmSquadPage() {
           <p className="text-sm text-muted-foreground">
             <span
               className={cn(
-                xiComplete ? "text-primary" : "text-muted-foreground",
+                lineupComplete ? "text-primary" : "text-muted-foreground",
               )}
             >
-              Starting XI: {startingCount} / {STARTING_XI_SIZE}
+              Starting lineup: {startingCount} / {startingTarget}
             </span>
             <span className="mx-2 text-border">·</span>
             Bench: {benchCount}
@@ -1316,9 +1341,9 @@ export default function ConfirmSquadPage() {
           </p>
         )}
 
-        {selectableAthletes.length < STARTING_XI_SIZE && (
+        {selectableAthletes.length < startingTarget && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            Need at least 11 players for a full XI.
+            Need at least {startingTarget} players for a full lineup.
           </p>
         )}
 
@@ -1427,7 +1452,7 @@ export default function ConfirmSquadPage() {
           "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
         )}
       >
-        {startMatch.isPending ? "Saving…" : "Confirm starting XI"}
+        {startMatch.isPending ? "Saving…" : "Confirm starting lineup"}
       </button>
     </div>
   );

@@ -18,7 +18,7 @@ export type OffensiveStyle =
 /**
  * A named matchday plan for a team, modeled on FIFA 20's Custom Tactics. One
  * record holds both halves of the plan — the squad selection (formation,
- * starting XI, bench) and the tactical settings. Names are unique per team.
+ * starting lineup, bench) and the tactical settings. Names are unique per team.
  */
 export interface BackendGamePlan {
   id: string;

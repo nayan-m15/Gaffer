@@ -1,15 +1,7 @@
 import { z } from 'zod';
+import { FORMATION_IDS } from '../common/formations';
 
-export const FORMATION_IDS = [
-  '4-3-3',
-  '4-4-2',
-  '4-2-3-1',
-  '4-1-4-1',
-  '3-5-2',
-  '3-4-3',
-  '5-3-2',
-  '5-4-1',
-] as const;
+export { FORMATION_IDS } from '../common/formations';
 
 /** FIFA-style defensive approaches, most passive → most aggressive. */
 export const DEFENSIVE_STYLES = [

@@ -21,6 +21,11 @@ describe('PublicApiService', () => {
       );
     });
 
+    it('exposes the player count for small-sided formations', () => {
+      expect(service.getFormation('5v5-1-2-1').playerCount).toBe(5);
+      expect(service.getFormation('7v7-2-3-1').playerCount).toBe(7);
+    });
+
     it('throws NotFoundException for an unknown id', () => {
       expect(() => service.getFormation('does-not-exist')).toThrow(
         NotFoundException,
