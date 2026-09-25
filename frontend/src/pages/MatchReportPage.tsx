@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 import { Timeline } from "@/components/ui/timeline";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { useGamePlan } from "@/features/team-tactics/api";
-import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
+import {
+  AthletePicker,
+  OpponentPlayerPicker,
+} from "@/features/matches/AthletePicker";
 import {
   useDeleteMatchEvent,
   useLogMatchEvent,
@@ -218,8 +221,28 @@ export default function MatchReportPage() {
   const oppColor = resolveOppColor(match?.opponentColor);
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = match?.teamScore ?? 0;
-  const oppScore = match?.opponentScore ?? 0;
+  const teamScore = eventsQuery.isSuccess
+    ? timeline.filter(
+        (event) =>
+          event.team === "own" &&
+          event.eventType === "goal" &&
+          event.lifecycleStatus !== "voided",
+      ).length
+    : (match?.teamScore ?? 0);
+  const oppScore = eventsQuery.isSuccess
+    ? timeline.filter(
+        (event) =>
+          event.team === "opponent" &&
+          event.eventType === "goal" &&
+          event.lifecycleStatus !== "voided",
+      ).length
+    : (match?.opponentScore ?? 0);
+  const projection = match?.projection;
+  const projectionConsistent =
+    !projection ||
+    timeline
+      .filter((event) => event.syncStatus === "reconciled")
+      .every((event) => event.projectionRevision === projection.revision);
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
@@ -291,8 +314,7 @@ export default function MatchReportPage() {
           .length,
         yellow: ownEvents.filter((event) => event.eventType === "yellow_card")
           .length,
-        red: ownEvents.filter((event) => event.eventType === "red_card")
-          .length,
+        red: ownEvents.filter((event) => event.eventType === "red_card").length,
       };
     });
   }, [squad, timeline]);
@@ -352,9 +374,7 @@ export default function MatchReportPage() {
       setDeleting(null);
     } catch (err) {
       setDeleteError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not delete this event.",
+        err instanceof ApiError ? err.message : "Could not delete this event.",
       );
     }
   };
@@ -401,7 +421,9 @@ export default function MatchReportPage() {
       <div className="match-report flex min-h-[70dvh] items-center justify-center px-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <ShieldAlert className="size-8 text-[#ff5b5f]" />
-          <p className="font-oswald text-xl tracking-wide">FAILED TO LOAD REPORT</p>
+          <p className="font-oswald text-xl tracking-wide">
+            FAILED TO LOAD REPORT
+          </p>
           <p className="text-sm text-[#8e9ba8]">
             {error instanceof Error ? error.message : "Something went wrong."}
           </p>
@@ -469,7 +491,9 @@ export default function MatchReportPage() {
             </button>
           </div>
           {shareNote ? (
-            <p className="mt-2 text-right text-[11px] text-[#00d99a]">{shareNote}</p>
+            <p className="mt-2 text-right text-[11px] text-[#00d99a]">
+              {shareNote}
+            </p>
           ) : null}
         </div>
       </header>
@@ -495,9 +519,7 @@ export default function MatchReportPage() {
         </div>
 
         {(tab === "match" || tab === "events") && (
-          <div
-            className="grid grid-cols-1 items-start gap-5 xl:grid-cols-12"
-          >
+          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-12">
             {/* Left Column: Score, Facts, Analytical Charts */}
             <div
               className={cn(
@@ -533,6 +555,17 @@ export default function MatchReportPage() {
                     />
                   </div>
                 </div>
+                {projection ? (
+                  <p className="mt-3 text-center text-xs text-[#c5ced6]">
+                    {!projectionConsistent
+                      ? "Syncing result and event log"
+                      : projection.finalisationState === "finalised"
+                        ? `Final result · revision ${projection.revision}`
+                        : projection.unresolvedReviewCount > 0
+                          ? `Provisional result · ${projection.unresolvedReviewCount} event review${projection.unresolvedReviewCount === 1 ? "" : "s"} open`
+                          : `Provisional result · revision ${projection.revision}`}
+                  </p>
+                ) : null}
                 <p className="mt-5 border-l-2 border-[#00d99a] pl-3 text-sm leading-relaxed text-[#c5ced6]">
                   {story}
                 </p>
@@ -616,7 +649,8 @@ export default function MatchReportPage() {
                       Match Events
                     </h2>
                     <p className="text-[11px] text-[#8e9ba8]">
-                      {timeline.length} {timeline.length === 1 ? "event" : "events"} logged
+                      {timeline.length}{" "}
+                      {timeline.length === 1 ? "event" : "events"} logged
                     </p>
                   </div>
                   <button
@@ -635,13 +669,17 @@ export default function MatchReportPage() {
                 {timeline.length === 0 ? (
                   <div className="py-8 text-center">
                     <Timer className="mx-auto mb-2 size-8 text-[#8e9ba8]/40" />
-                    <p className="text-sm text-[#8e9ba8]">No events logged yet.</p>
+                    <p className="text-sm text-[#8e9ba8]">
+                      No events logged yet.
+                    </p>
                   </div>
                 ) : (
                   <div className="max-h-[32rem] overflow-y-auto pr-1 xl:max-h-[38rem]">
                     <Timeline
                       data={timeline
-                        .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
+                        .filter(
+                          (event) => !isPairedAssistEvent(event, assistsByGoal),
+                        )
                         .map((event) => ({
                           id: event.optimisticKey ?? event.id,
                           markerColor: EVENT_COLOR[event.eventType],
@@ -667,18 +705,21 @@ export default function MatchReportPage() {
                                     />
                                     <div className="min-w-0">
                                       <p className="font-oswald text-xs tracking-wide text-white sm:text-sm">
-                                        {event.minute}&apos; {eventDisplayLabel(event)}
+                                        {event.minute}&apos;{" "}
+                                        {eventDisplayLabel(event)}
                                       </p>
                                       <p className="truncate text-[11px] text-[#8e9ba8]">
-                                        {event.team === "own" ? ownName : oppName} ·{" "}
-                                        {whoLabel(event, squad)}
+                                        {event.team === "own"
+                                          ? ownName
+                                          : oppName}{" "}
+                                        · {whoLabel(event, squad)}
                                         {event.eventType === "goal" &&
                                         assistsByGoal.get(event.id)
                                           ? `, Assist: ${whoLabel(assistsByGoal.get(event.id)!, squad)}`
                                           : ""}
                                         {substitutionIncoming(event, squad)}
                                       </p>
-                                        {event.detail &&
+                                      {event.detail &&
                                         event.eventType !== "substitution" &&
                                         event.eventType !== "assist" &&
                                         event.eventType !== "goal" &&
@@ -697,7 +738,9 @@ export default function MatchReportPage() {
                                 type="button"
                                 aria-label="Delete event"
                                 className="shrink-0 self-center rounded-md p-1.5 text-[#8e9ba8] hover:bg-white/5 hover:text-[#ff5b5f] disabled:opacity-40"
-                                disabled={event.pending || deleteEvent.isPending}
+                                disabled={
+                                  event.pending || deleteEvent.isPending
+                                }
                                 onClick={() => {
                                   if (event.pending) {
                                     return;
@@ -808,8 +851,14 @@ export default function MatchReportPage() {
                             {shirtLabel(row.athlete)}
                           </p>
                           <p className="text-xs text-[#8e9ba8]">
-                            <span className="font-oswald text-[#00d99a]">{row.goals}</span> G ·{" "}
-                            <span className="font-oswald text-[#c084fc]">{row.assists}</span> A
+                            <span className="font-oswald text-[#00d99a]">
+                              {row.goals}
+                            </span>{" "}
+                            G ·{" "}
+                            <span className="font-oswald text-[#c084fc]">
+                              {row.assists}
+                            </span>{" "}
+                            A
                           </p>
                         </li>
                       ))}
@@ -879,9 +928,16 @@ export default function MatchReportPage() {
                             ["Y", row.yellow, "text-[#ffbe2e]"],
                             ["R", row.red, "text-[#ff5b5f]"],
                           ].map(([label, value, color]) => (
-                            <div key={String(label)} className="rounded-lg bg-[#0c1218] px-2 py-1.5">
-                              <p className={cn("font-oswald text-base", color)}>{value}</p>
-                              <p className="text-[8px] font-bold uppercase text-[#8e9ba8]">{label}</p>
+                            <div
+                              key={String(label)}
+                              className="rounded-lg bg-[#0c1218] px-2 py-1.5"
+                            >
+                              <p className={cn("font-oswald text-base", color)}>
+                                {value}
+                              </p>
+                              <p className="text-[8px] font-bold uppercase text-[#8e9ba8]">
+                                {label}
+                              </p>
                             </div>
                           ))}
                         </div>
@@ -889,49 +945,57 @@ export default function MatchReportPage() {
                     ))}
                   </ul>
                   <div className="hidden overflow-x-auto sm:block">
-                  <table className="mt-2 w-full min-w-[28rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#1c2b36] font-oswald text-[10px] uppercase tracking-widest text-[#8e9ba8]">
-                      <th className="px-2 py-2 font-medium">#</th>
-                      <th className="px-2 py-2 font-medium">Player</th>
-                      <th className="px-2 py-2 font-medium">Start</th>
-                      <th className="px-2 py-2 text-right font-medium">G</th>
-                      <th className="px-2 py-2 text-right font-medium">A</th>
-                      <th className="px-2 py-2 text-right font-medium">Y</th>
-                      <th className="px-2 py-2 text-right font-medium">R</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {playerStats.map((row) => (
-                      <tr
-                        key={row.athlete.id}
-                        className="border-b border-[#1c2b36]/70 transition-colors hover:bg-white/[0.02]"
-                      >
-                        <td className="px-2 py-3 font-oswald tabular-nums">
-                          {row.athlete.squadNumber ?? "—"}
-                        </td>
-                        <td className="px-2 py-3 font-medium text-white">
-                          {row.athlete.firstName} {row.athlete.lastName}
-                        </td>
-                        <td className="px-2 py-3 text-[#8e9ba8]">
-                          {row.athlete.started ? "XI" : "Bench"}
-                        </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#00d99a]">
-                          {row.goals}
-                        </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#c084fc]">
-                          {row.assists}
-                        </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#ffbe2e]">
-                          {row.yellow}
-                        </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#ff5b5f]">
-                          {row.red}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  </table>
+                    <table className="mt-2 w-full min-w-[28rem] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-[#1c2b36] font-oswald text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+                          <th className="px-2 py-2 font-medium">#</th>
+                          <th className="px-2 py-2 font-medium">Player</th>
+                          <th className="px-2 py-2 font-medium">Start</th>
+                          <th className="px-2 py-2 text-right font-medium">
+                            G
+                          </th>
+                          <th className="px-2 py-2 text-right font-medium">
+                            A
+                          </th>
+                          <th className="px-2 py-2 text-right font-medium">
+                            Y
+                          </th>
+                          <th className="px-2 py-2 text-right font-medium">
+                            R
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {playerStats.map((row) => (
+                          <tr
+                            key={row.athlete.id}
+                            className="border-b border-[#1c2b36]/70 transition-colors hover:bg-white/[0.02]"
+                          >
+                            <td className="px-2 py-3 font-oswald tabular-nums">
+                              {row.athlete.squadNumber ?? "—"}
+                            </td>
+                            <td className="px-2 py-3 font-medium text-white">
+                              {row.athlete.firstName} {row.athlete.lastName}
+                            </td>
+                            <td className="px-2 py-3 text-[#8e9ba8]">
+                              {row.athlete.started ? "XI" : "Bench"}
+                            </td>
+                            <td className="px-2 py-3 text-right font-oswald text-[#00d99a]">
+                              {row.goals}
+                            </td>
+                            <td className="px-2 py-3 text-right font-oswald text-[#c084fc]">
+                              {row.assists}
+                            </td>
+                            <td className="px-2 py-3 text-right font-oswald text-[#ffbe2e]">
+                              {row.yellow}
+                            </td>
+                            <td className="px-2 py-3 text-right font-oswald text-[#ff5b5f]">
+                              {row.red}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </>
               )}
@@ -1044,7 +1108,10 @@ function FactCard({
       className="rounded-xl bg-[#101920] px-3 py-3"
       style={{ boxShadow: `inset 0 0 0 1px ${color}55` }}
     >
-      <span className="inline-flex text-[color:var(--fact-color)]" style={{ ["--fact-color" as string]: color }}>
+      <span
+        className="inline-flex text-[color:var(--fact-color)]"
+        style={{ ["--fact-color" as string]: color }}
+      >
         {icon}
       </span>
       <p className="mt-2 font-oswald text-2xl leading-none tabular-nums text-white">
@@ -1078,9 +1145,7 @@ function DeleteEventOverlay({
       <p className="mt-2 text-sm text-[#8e9ba8]">
         {event.minute}&apos; {eventDisplayLabel(event)} will be removed from
         this match.
-        {linkedAssistCount > 0
-          ? " The linked assist will be removed too."
-          : ""}
+        {linkedAssistCount > 0 ? " The linked assist will be removed too." : ""}
       </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
@@ -1352,8 +1417,8 @@ function EventComposerOverlay({
           : Boolean(draft.opponentPlayerId || draft.opponentLabel.trim());
       const onOk = Boolean(
         draft.incomingAthleteId ||
-          draft.incomingOpponentPlayerId ||
-          draft.incomingOpponentLabel.trim(),
+        draft.incomingOpponentPlayerId ||
+        draft.incomingOpponentLabel.trim(),
       );
       if (!offOk || !onOk) {
         setFormError("Pick the player coming off and the player coming on.");
@@ -1375,7 +1440,9 @@ function EventComposerOverlay({
             down over the first field. */}
         <div className="sticky top-0 z-10 -mx-5 flex items-start justify-between gap-4 border-b border-[#1c2b36] bg-[#070d12] px-5 pb-4 pt-5 sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-6">
           <div>
-            <p className="font-oswald text-xl tracking-widest sm:text-2xl">{title}</p>
+            <p className="font-oswald text-xl tracking-widest sm:text-2xl">
+              {title}
+            </p>
             <p className="mt-1 text-xs text-[#8e9ba8] sm:text-sm">{subtitle}</p>
           </div>
           <button
@@ -1390,7 +1457,9 @@ function EventComposerOverlay({
 
         {!teamLocked && (
           <fieldset className="pt-1">
-            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
+            <legend
+              className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}
+            >
               Team
             </legend>
             <div className="grid grid-cols-2 gap-2">
@@ -1487,7 +1556,9 @@ function EventComposerOverlay({
 
         {isPenalty ? (
           <fieldset>
-            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
+            <legend
+              className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}
+            >
               Outcome
             </legend>
             <div className="grid grid-cols-2 gap-2">
@@ -1520,7 +1591,9 @@ function EventComposerOverlay({
 
         {team === "own" ? (
           <div>
-            <p className={`${fieldLabelClassName} mb-2`}>{subjectLabel(eventType)}</p>
+            <p className={`${fieldLabelClassName} mb-2`}>
+              {subjectLabel(eventType)}
+            </p>
             <AthletePicker
               squad={squad}
               value={athleteId}
@@ -1545,7 +1618,9 @@ function EventComposerOverlay({
           </div>
         ) : (
           <label className="block">
-            <span className={fieldLabelClassName}>{subjectLabel(eventType)}</span>
+            <span className={fieldLabelClassName}>
+              {subjectLabel(eventType)}
+            </span>
             <input
               type="text"
               value={opponentLabel}
@@ -1585,7 +1660,9 @@ function EventComposerOverlay({
               <input
                 type="text"
                 value={assistOpponentLabel}
-                onChange={(change) => setAssistOpponentLabel(change.target.value)}
+                onChange={(change) =>
+                  setAssistOpponentLabel(change.target.value)
+                }
                 placeholder="Leave blank for no assist"
                 maxLength={50}
                 className={fieldClassName}

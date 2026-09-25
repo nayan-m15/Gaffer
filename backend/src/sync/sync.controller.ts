@@ -6,6 +6,7 @@ import {
   Post,
   ServiceUnavailableException,
   ForbiddenException,
+  HttpException,
   UseGuards,
 } from '@nestjs/common';
 import { createHash, createHmac, createSign } from 'node:crypto';
@@ -284,6 +285,11 @@ export class SyncController {
         `Upload item ${id} failed`,
         error instanceof Error ? error.stack : String(error),
       );
+      // A timeout or database failure may occur after evidence committed.
+      // Leave the item retriable; an immutable observation ID makes retry safe.
+      if (!(error instanceof HttpException) || error.getStatus() >= 500) {
+        throw error;
+      }
       const fallback = {
         id,
         outcome: 'rejected',

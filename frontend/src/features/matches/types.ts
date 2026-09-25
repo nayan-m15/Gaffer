@@ -12,11 +12,7 @@ export type MatchEventType =
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
 export type MatchClockPeriod =
-  | "not_started"
-  | "first_half"
-  | "half_time"
-  | "second_half"
-  | "full_time";
+  "not_started" | "first_half" | "half_time" | "second_half" | "full_time";
 
 export interface OpponentMatchPlayer {
   id: string;
@@ -91,6 +87,7 @@ export interface MatchLogEvent {
   period?: MatchClockPeriod;
   matchElapsedMs?: number | null;
   lifecycleStatus?: "provisional" | "confirmed" | "needs_review" | "voided";
+  projectionRevision?: number;
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;
