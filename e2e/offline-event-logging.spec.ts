@@ -2,6 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const MATCH_ID = "71111111-1111-4111-8111-111111111111";
 const EVENT_ID = "72222222-2222-4222-8222-222222222222";
+const UI_WAIT = { timeout: process.env.CI ? 30_000 : 10_000 };
 
 function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({
@@ -108,7 +109,9 @@ function player(page: Page, number: number) {
 
 async function openEventPicker(page: Page, number: number) {
   await player(page, number).click();
-  await expect(page.getByText("Log match event", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Log match event", { exact: true }),
+  ).toBeVisible(UI_WAIT);
 }
 
 async function expectCalloutAboveBench(page: Page, selector: string) {
@@ -131,7 +134,14 @@ test("all live event workflows remain usable and visible offline", async ({
   page,
   context,
 }) => {
-  test.setTimeout(60_000);
+  // Keep the displayed minute stable while giving queued events distinct
+  // timestamps so same-minute goals retain their insertion order.
+  let wallClockMs = Date.parse("2026-09-18T10:12:34.000Z");
+  const advanceWallClock = async () => {
+    wallClockMs += 1_000;
+    await page.clock.setFixedTime(wallClockMs);
+  };
+  await page.clock.setFixedTime(wallClockMs);
   await mockLiveMatch(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/matches/${MATCH_ID}/live`);
@@ -150,15 +160,20 @@ test("all live event workflows remain usable and visible offline", async ({
   await expect(page.getByText(/Assist saved on this device/i)).toBeVisible();
   await expect(page.locator(".live-match-scoreline")).toContainText("1-0");
 
+  await advanceWallClock();
   await openEventPicker(page, 4);
   await page.getByRole("button", { name: "Yellow" }).click();
-  await expect(page.getByText(/Yellow card saved on this device/i)).toBeVisible();
+  await expect(
+    page.getByText(/Yellow card saved on this device/i),
+  ).toBeVisible();
   await expect(page.getByText(/12' Yellow Card/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 5);
   await page.getByRole("button", { name: "Red" }).click();
   await expect(page.getByText(/12' Red Card/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 1);
   await page.getByRole("button", { name: "Substitution" }).click();
   await expect(page.locator('[data-callout="voluntary-sub-in"]')).toBeVisible();
@@ -166,24 +181,69 @@ test("all live event workflows remain usable and visible offline", async ({
   await page.getByRole("button", { name: /12.*Player12/i }).click();
   await expect(page.getByText(/12' Substitution/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "MISSED" }).click();
   await expect(page.getByText(/12' Penalty Missed/i)).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "SCORED" }).click();
-  await expect(page.getByText("12' Penalty 2-0", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("12' Penalty 2-0", { exact: true }),
+  ).toBeVisible();
 
+  await advanceWallClock();
   await openEventPicker(page, 6);
   await page.getByRole("button", { name: "Injury" }).click();
+  // An own-team injury first asks for a diagnosis, and is deliberately
+  // skippable: the clock is running and the mandatory substitution is
+  // waiting behind this sheet.
+  await expect(page.getByRole("dialog", { name: /injury/i })).toBeVisible();
+  await page.getByRole("button", { name: /skip details/i }).click();
   await expect(page.locator('[data-callout="mandatory-sub"]')).toBeVisible();
   await expectCalloutAboveBench(page, '[data-callout="mandatory-sub"]');
   await page.getByRole("button", { name: /13.*Player13/i }).click();
   await expect(page.getByText(/12' Injury/i)).toBeVisible();
 
   await expect(page.getByText("9 waiting", { exact: true })).toBeVisible();
+});
+
+test("generic opponent events do not request unavailable players", async ({
+  page,
+  context,
+}) => {
+  await mockLiveMatch(page);
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  const resume = page.getByRole("button", { name: "RESUME Match paused" });
+  await expect(resume).toBeVisible(UI_WAIT);
+  await resume.click();
+  await context.setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
+
+  const openOpponentEvent = async () => {
+    await page.getByRole("button", { name: /log opponent/i }).click();
+    await expect(
+      page.getByText("Log match event", { exact: true }),
+    ).toBeVisible(UI_WAIT);
+  };
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.locator('[data-callout="assist-pick"]')).toHaveCount(0);
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Substitution" }).click();
+  await expect(page.locator('[data-callout="voluntary-sub-in"]')).toHaveCount(
+    0,
+  );
+
+  await openOpponentEvent();
+  await page.getByRole("button", { name: "Injury" }).click();
+  await expect(page.locator('[data-callout="mandatory-sub"]')).toHaveCount(0);
+  await expect(page.getByText("3 waiting", { exact: true })).toBeVisible(UI_WAIT);
 });
 
 test("storage exhaustion fails visibly without claiming an event was saved", async ({
@@ -199,11 +259,15 @@ test("storage exhaustion fails visibly without claiming an event was saved", asy
   await context.setOffline(true);
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByRole("alert")).toContainText("Offline storage is full.");
+  await expect(page.getByRole("alert")).toContainText(
+    "Offline storage is full.",
+  );
   await expect(page.getByText(/Goal saved on this device/i)).toHaveCount(0);
 });
 
-test("expired sessions retain queued work for a later retry", async ({ page }) => {
+test("expired sessions retain queued work for a later retry", async ({
+  page,
+}) => {
   await mockLiveMatch(page);
   await page.route("**/api/sync/upload", (route) =>
     json(route, { message: "Sign in required." }, 401),
@@ -239,21 +303,39 @@ test("membership revocation quarantines work instead of deleting it", async ({
   await page.getByRole("button", { name: "RESUME Match paused" }).click();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByText("1 access blocked", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 access blocked", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/retained on this device/i)).toBeVisible();
 });
 
-test("two tabs observe the same durable pending queue", async ({ page, context }) => {
+test("two tabs observe the same durable pending queue", async ({
+  page,
+  context,
+}) => {
   const second = await context.newPage();
   await Promise.all([mockLiveMatch(page), mockLiveMatch(second)]);
   await Promise.all([
     page.goto(`/matches/${MATCH_ID}/live`),
     second.goto(`/matches/${MATCH_ID}/live`),
   ]);
-  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  const resume = page.getByRole("button", { name: "RESUME Match paused" });
+  await expect(resume).toBeVisible(UI_WAIT);
+  await expect(
+    second.getByRole("button", { name: "RESUME Match paused" }),
+  ).toBeVisible(UI_WAIT);
+  await resume.click();
   await context.setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
+  await expect.poll(() => second.evaluate(() => navigator.onLine), UI_WAIT).toBe(false);
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
-  await expect(page.getByText("1 waiting", { exact: true })).toBeVisible();
-  await expect(second.getByText("1 waiting", { exact: true })).toBeVisible();
+  // The writer may still be attempting a sync started just before the
+  // browser went offline; both labels confirm the same queued item exists.
+  await expect(
+    page.getByRole("status", { name: /^(?:Syncing 1|1 waiting)/ }),
+  ).toBeVisible(UI_WAIT);
+  await expect(
+    second.getByRole("status", { name: /^1 waiting/ }),
+  ).toBeVisible(UI_WAIT);
 });

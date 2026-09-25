@@ -1,12 +1,19 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
 import type { Agent } from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
+import {
+  matchEventMemberships,
+  matchEventObservations,
+  matchEvents,
+} from '../src/database/schema';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -24,7 +31,7 @@ describe('Offline collaborative sync (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -185,5 +192,148 @@ describe('Offline collaborative sync (e2e)', () => {
       (retried.body as { receipts: Array<{ outcome: string }> }).receipts[0]
         .outcome,
     ).toBe('accepted');
+  }, 90_000);
+
+  it('rolls back every reconciliation write when processing fails mid-transaction', async () => {
+    const identity = uniqueTestIdentity('offline-rollback');
+    identities.push(identity);
+    const { agent, user } = await registerCoach(app.getHttpServer(), identity);
+    const matchId = await createLiveMatch(agent);
+    const observationId = randomUUID();
+    const payload = {
+      team: 'own',
+      eventType: 'goal',
+      period: 'first_half',
+      matchElapsedMs: 120_000,
+      __testFailure: 'after_membership',
+    };
+    const database = app.get(DatabaseService).database;
+
+    await database.execute(
+      sql.raw(`
+      CREATE OR REPLACE FUNCTION gaffer_test_fail_after_membership()
+      RETURNS trigger LANGUAGE plpgsql AS $test_failure$
+      DECLARE v_payload jsonb;
+      BEGIN
+        SELECT payload INTO v_payload FROM match_event_observations
+         WHERE id = NEW.observation_id;
+        IF v_payload ->> '__testFailure' = 'after_membership' THEN
+          RAISE EXCEPTION 'injected failure after membership';
+        END IF;
+        RETURN NEW;
+      END;
+      $test_failure$
+    `),
+    );
+    await database.execute(
+      sql.raw(`
+      DROP TRIGGER IF EXISTS gaffer_test_fail_after_membership_trigger
+        ON match_event_memberships
+    `),
+    );
+    await database.execute(
+      sql.raw(`
+      CREATE TRIGGER gaffer_test_fail_after_membership_trigger
+      AFTER INSERT ON match_event_memberships
+      FOR EACH ROW EXECUTE FUNCTION gaffer_test_fail_after_membership()
+    `),
+    );
+    try {
+      await expect(
+        database.execute(sql`select ingest_match_event_observation(
+          ${observationId}::uuid,
+          ${matchId}::uuid,
+          ${randomUUID()}::uuid,
+          ${user.id}::text,
+          ${'goal'}::match_event_type,
+          ${'own'}::match_event_team,
+          ${null}::uuid,
+          ${null}::text,
+          ${null}::uuid,
+          ${'first_half'}::text,
+          ${120_000}::integer,
+          ${2}::integer,
+          ${null}::text,
+          ${JSON.stringify(payload)}::jsonb,
+          ${'injected-failure-payload'}::text,
+          ${new Date().toISOString()}::timestamptz,
+          ${false}::boolean
+        )`),
+      ).rejects.toThrow();
+    } finally {
+      await database.execute(
+        sql.raw(`
+        DROP TRIGGER IF EXISTS gaffer_test_fail_after_membership_trigger
+          ON match_event_memberships
+      `),
+      );
+      await database.execute(
+        sql.raw(`
+        DROP FUNCTION IF EXISTS gaffer_test_fail_after_membership()
+      `),
+      );
+    }
+
+    const [observations, memberships, canonicalEvents] = await Promise.all([
+      database
+        .select({ id: matchEventObservations.id })
+        .from(matchEventObservations)
+        .where(eq(matchEventObservations.id, observationId)),
+      database
+        .select({ id: matchEventMemberships.observationId })
+        .from(matchEventMemberships)
+        .where(eq(matchEventMemberships.observationId, observationId)),
+      database
+        .select({ id: matchEvents.id })
+        .from(matchEvents)
+        .where(eq(matchEvents.clientRequestId, observationId)),
+    ]);
+    expect(observations).toHaveLength(0);
+    expect(memberships).toHaveLength(0);
+    expect(canonicalEvents).toHaveLength(0);
+  }, 90_000);
+
+  it('records clock changes once in the immutable operation ledger', async () => {
+    const identity = uniqueTestIdentity('clock-ledger');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    const matchId = await createLiveMatch(agent);
+    const operationId = randomUUID();
+    const command = {
+      operationId,
+      baseRevision: 0,
+      clientCreatedAt: new Date().toISOString(),
+      period: 'first_half',
+      running: true,
+      elapsedMs: 15_000,
+    };
+
+    const first = await agent
+      .patch(`/matches/${matchId}/clock`)
+      .send(command)
+      .expect(200);
+    expect((first.body as { clockRevision: number }).clockRevision).toBe(1);
+
+    const retry = await agent
+      .patch(`/matches/${matchId}/clock`)
+      .send(command)
+      .expect(200);
+    expect((retry.body as { clockRevision: number }).clockRevision).toBe(1);
+
+    const operations = await agent
+      .get(`/matches/${matchId}/clock-operations`)
+      .expect(200);
+    expect(operations.body).toEqual([
+      expect.objectContaining({
+        id: operationId,
+        matchId,
+        baseRevision: 0,
+        appliedRevision: 1,
+        outcome: 'applied',
+        period: 'first_half',
+        running: true,
+        elapsedMs: 15_000,
+      }),
+    ]);
   }, 90_000);
 });

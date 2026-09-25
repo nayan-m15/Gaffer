@@ -12,17 +12,23 @@ import {
   athleteMatchStats,
   athletes,
   competitions,
+  competitionTeams,
   events,
   matchEvents,
   matchEventMemberships,
   matchEventObservations,
   matchEventOperations,
   matchEventReviews,
+  matchClockOperations,
   matchProjectionState,
   matches,
   opponentMatchPlayers,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import {
+  syncFixtureResult,
+  validateFixtureResult,
+} from '../competitions/competition-fixture-results';
 import type {
   CreateMatchLogEventDto,
   ResolveMatchEventReviewDto,
@@ -238,6 +244,24 @@ export class MatchesService {
       .update(JSON.stringify(payload))
       .digest('hex');
 
+    if (event.status === 'completed' && dto.eventType === 'goal') {
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
+      if (current) {
+        const projected = this.adjustFixtureScore(
+          current.result,
+          match.isHome,
+          dto.team,
+          1,
+        );
+        await validateFixtureResult(
+          this.databaseService,
+          current.competitionId,
+          { kind: 'live', id: match.id },
+          projected,
+        );
+      }
+    }
+
     if (process.env.OFFLINE_RECONCILIATION_FUNCTION !== 'disabled') {
       const persistedResult = await this.databaseService.database.execute<{
         canonical_event_id: string;
@@ -266,10 +290,17 @@ export class MatchesService {
           'Could not persist the match observation.',
         );
       }
-      return this.requireCanonicalEventForObservation(
+      const persistedEvent = await this.requireCanonicalEventForObservation(
         match.id,
         dto.clientRequestId,
       );
+      await this.syncCompletedCompetitionFixture(
+        team.id,
+        match,
+        event.status,
+        dto.eventType === 'goal',
+      );
+      return persistedEvent;
     }
 
     const [insertedObservation] = await this.databaseService.database
@@ -316,7 +347,17 @@ export class MatchesService {
         .where(eq(matchEventMemberships.observationId, dto.clientRequestId))
         .limit(1);
       if (membership) {
-        return this.requireMatchEvent(match.id, membership.canonicalEventId);
+        const existingEvent = await this.requireMatchEvent(
+          match.id,
+          membership.canonicalEventId,
+        );
+        await this.syncCompletedCompetitionFixture(
+          team.id,
+          match,
+          event.status,
+          dto.eventType === 'goal',
+        );
+        return existingEvent;
       }
     }
 
@@ -405,7 +446,17 @@ export class MatchesService {
           reason: 'possible_duplicate',
         })
         .onConflictDoNothing();
-      return this.requireMatchEvent(match.id, canonicalEventId);
+      const canonicalEvent = await this.requireMatchEvent(
+        match.id,
+        canonicalEventId,
+      );
+      await this.syncCompletedCompetitionFixture(
+        team.id,
+        match,
+        event.status,
+        dto.eventType === 'goal',
+      );
+      return canonicalEvent;
     }
 
     const [created] = await this.databaseService.database
@@ -465,6 +516,12 @@ export class MatchesService {
       .orderBy(asc(matchEventMemberships.canonicalEventId))
       .limit(1);
     if (!lateCandidate || lateCandidate.canonicalEventId === canonical.id) {
+      await this.syncCompletedCompetitionFixture(
+        team.id,
+        match,
+        event.status,
+        dto.eventType === 'goal',
+      );
       return canonical;
     }
     const winningId = [canonical.id, lateCandidate.canonicalEventId].sort()[0];
@@ -491,7 +548,14 @@ export class MatchesService {
         reason: 'possible_duplicate',
       })
       .onConflictDoNothing();
-    return this.requireMatchEvent(match.id, winningId);
+    const winningEvent = await this.requireMatchEvent(match.id, winningId);
+    await this.syncCompletedCompetitionFixture(
+      team.id,
+      match,
+      event.status,
+      dto.eventType === 'goal',
+    );
+    return winningEvent;
   }
 
   async listEventReviews(userId: string, matchId: string) {
@@ -531,7 +595,7 @@ export class MatchesService {
     causalParentIds: string[] = [],
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
     const [review] = await this.databaseService.database
       .select()
       .from(matchEventReviews)
@@ -548,6 +612,7 @@ export class MatchesService {
       review.canonicalEventId,
     );
 
+    let separatedGoals = false;
     if (dto.resolution === 'separate_events') {
       const observations = await this.databaseService.database
         .select({ observation: matchEventObservations })
@@ -560,6 +625,36 @@ export class MatchesService {
           eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
         )
         .orderBy(asc(matchEventObservations.id));
+
+      const additionalGoals = observations
+        .slice(1)
+        .map(({ observation }) => observation)
+        .filter((observation) => observation.eventType === 'goal');
+      separatedGoals = additionalGoals.length > 0;
+      if (event.status === 'completed' && separatedGoals) {
+        const current = await this.buildCompetitionFixtureResult(
+          team.id,
+          match,
+        );
+        if (current) {
+          let projected = current.result;
+          for (const observation of additionalGoals) {
+            projected = this.adjustFixtureScore(
+              projected,
+              match.isHome,
+              observation.team,
+              1,
+            );
+          }
+          await validateFixtureResult(
+            this.databaseService,
+            current.competitionId,
+            { kind: 'live', id: match.id },
+            projected,
+          );
+        }
+      }
+
       for (const { observation } of observations.slice(1)) {
         const data = observation.payload as CreateMatchLogEventDto & {
           period: string;
@@ -616,6 +711,12 @@ export class MatchesService {
       causalParentIds,
     });
     await this.refreshProjection(matchId);
+    await this.syncCompletedCompetitionFixture(
+      team.id,
+      match,
+      event.status,
+      separatedGoals,
+    );
     return resolved;
   }
 
@@ -659,6 +760,33 @@ export class MatchesService {
       opponentLabel: dto.opponentLabel,
     });
 
+    let goalDelta = 0;
+    if (event.status === 'completed' && logged.lifecycleStatus !== 'voided') {
+      const previousIsGoal = logged.eventType === 'goal';
+      const nextIsGoal = (dto.eventType ?? logged.eventType) === 'goal';
+      goalDelta = Number(nextIsGoal) - Number(previousIsGoal);
+      if (goalDelta !== 0) {
+        const current = await this.buildCompetitionFixtureResult(
+          team.id,
+          match,
+        );
+        if (current) {
+          const projected = this.adjustFixtureScore(
+            current.result,
+            match.isHome,
+            logged.team,
+            goalDelta,
+          );
+          await validateFixtureResult(
+            this.databaseService,
+            current.competitionId,
+            { kind: 'live', id: match.id },
+            projected,
+          );
+        }
+      }
+    }
+
     const [updated] = await this.databaseService.database
       .update(matchEvents)
       .set({
@@ -695,7 +823,12 @@ export class MatchesService {
       causalParentIds,
     });
     await this.refreshProjection(matchId);
-
+    await this.syncCompletedCompetitionFixture(
+      team.id,
+      match,
+      event.status,
+      goalDelta !== 0,
+    );
     return updated;
   }
 
@@ -758,8 +891,31 @@ export class MatchesService {
     reason?: string,
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    const { event } = await this.requireMatch(team.id, matchId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertEditable(event.status);
+    const logged = await this.requireMatchEvent(matchId, eventId);
+
+    const changesScore =
+      event.status === 'completed' &&
+      logged.lifecycleStatus !== 'voided' &&
+      logged.eventType === 'goal';
+    if (changesScore) {
+      const current = await this.buildCompetitionFixtureResult(team.id, match);
+      if (current) {
+        const projected = this.adjustFixtureScore(
+          current.result,
+          match.isHome,
+          logged.team,
+          -1,
+        );
+        await validateFixtureResult(
+          this.databaseService,
+          current.competitionId,
+          { kind: 'live', id: match.id },
+          projected,
+        );
+      }
+    }
 
     const [deleted] = await this.databaseService.database
       .update(matchEvents)
@@ -783,14 +939,33 @@ export class MatchesService {
       reason,
     });
     await this.refreshProjection(matchId);
-
+    await this.syncCompletedCompetitionFixture(
+      team.id,
+      match,
+      event.status,
+      changesScore,
+    );
     return deleted;
   }
 
   async finish(userId: string, matchId: string) {
-    const team = await this.teamsService.requireCoachTeam(userId);
+    const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
+
+    const fixtureContext = await this.buildCompetitionFixtureResult(
+      team.id,
+      match,
+    );
+    const competitionFixtureResult = fixtureContext?.result ?? null;
+    if (fixtureContext) {
+      await validateFixtureResult(
+        this.databaseService,
+        fixtureContext.competitionId,
+        { kind: 'live', id: match.id },
+        fixtureContext.result,
+      );
+    }
 
     const [finishedMatch] = await this.databaseService.database
       .update(matches)
@@ -822,24 +997,61 @@ export class MatchesService {
     if (!finishedMatch) {
       throw new NotFoundException('Match not found.');
     }
+    if (match.competitionId && competitionFixtureResult) {
+      await syncFixtureResult(
+        this.databaseService,
+        match.competitionId,
+        { kind: 'live', id: match.id },
+        competitionFixtureResult,
+      );
+    }
     return this.findOne(userId, matchId);
   }
 
   async updateClock(userId: string, matchId: string, dto: UpdateMatchClockDto) {
-    const team = await this.teamsService.requireCoachTeam(userId);
-    const { event } = await this.requireMatch(team.id, matchId);
+    const team = await this.requireTeam(userId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
-    const [updated] = await this.databaseService.database
-      .update(matches)
-      .set({
-        clockPeriod: dto.period,
-        clockElapsedMs: dto.elapsedMs,
-        clockStartedAt: dto.running ? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(matches.id, matchId))
-      .returning();
-    return updated;
+    const operationId = dto.operationId ?? randomUUID();
+    const clientCreatedAt = dto.clientCreatedAt ?? new Date().toISOString();
+    const baseRevision = dto.baseRevision ?? match.clockRevision;
+    const payloadHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          matchId,
+          period: dto.period,
+          elapsedMs: dto.elapsedMs,
+          running: dto.running,
+          baseRevision,
+          clientCreatedAt,
+        }),
+      )
+      .digest('hex');
+    await this.databaseService.database.execute(sql`
+      select * from apply_match_clock_operation(
+        ${operationId}::uuid,
+        ${matchId}::uuid,
+        ${userId}::text,
+        ${dto.period}::text,
+        ${dto.elapsedMs}::integer,
+        ${dto.running}::boolean,
+        ${baseRevision}::integer,
+        ${payloadHash}::text,
+        ${clientCreatedAt}::timestamptz
+      )
+    `);
+    return this.findOne(userId, matchId);
+  }
+
+  async listClockOperations(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    return this.databaseService.database
+      .select()
+      .from(matchClockOperations)
+      .where(eq(matchClockOperations.matchId, matchId))
+      .orderBy(desc(matchClockOperations.createdAt))
+      .limit(200);
   }
 
   async finaliseProjection(
@@ -941,11 +1153,24 @@ export class MatchesService {
     matchId: string,
     observationId: string,
   ) {
-    const canonicalEventId = await this.canonicalEventIdForObservation(
-      matchId,
-      observationId,
-    );
-    return this.requireMatchEvent(matchId, canonicalEventId);
+    const [logged] = await this.databaseService.database
+      .select({ event: matchEvents })
+      .from(matchEventMemberships)
+      .innerJoin(
+        matchEvents,
+        eq(matchEvents.id, matchEventMemberships.canonicalEventId),
+      )
+      .where(
+        and(
+          eq(matchEventMemberships.observationId, observationId),
+          eq(matchEvents.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    if (!logged) {
+      throw new NotFoundException('Canonical event membership not found.');
+    }
+    return logged.event;
   }
 
   private async recordOperation(input: {
@@ -1050,6 +1275,97 @@ export class MatchesService {
         )`,
       );
     return projection;
+  }
+
+  private async buildCompetitionFixtureResult(
+    teamId: string,
+    match: typeof matches.$inferSelect,
+  ): Promise<{
+    competitionId: string;
+    result: {
+      homeCompetitionTeamId: string;
+      awayCompetitionTeamId: string;
+      homeScore: number;
+      awayScore: number;
+    };
+  } | null> {
+    if (!match.competitionId || !match.opponentCompetitionTeamId) return null;
+
+    const [[ownParticipant], [score]] = await Promise.all([
+      this.databaseService.database
+        .select({ id: competitionTeams.id })
+        .from(competitionTeams)
+        .where(
+          and(
+            eq(competitionTeams.competitionId, match.competitionId),
+            eq(competitionTeams.teamId, teamId),
+          ),
+        )
+        .limit(1),
+      this.databaseService.database
+        .select({
+          teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+        })
+        .from(matchEvents)
+        .where(eq(matchEvents.matchId, match.id)),
+    ]);
+    if (!ownParticipant) return null;
+
+    const teamScore = score?.teamScore ?? 0;
+    const opponentScore = score?.opponentScore ?? 0;
+    return {
+      competitionId: match.competitionId,
+      result: {
+        homeCompetitionTeamId: match.isHome
+          ? ownParticipant.id
+          : match.opponentCompetitionTeamId,
+        awayCompetitionTeamId: match.isHome
+          ? match.opponentCompetitionTeamId
+          : ownParticipant.id,
+        homeScore: match.isHome ? teamScore : opponentScore,
+        awayScore: match.isHome ? opponentScore : teamScore,
+      },
+    };
+  }
+
+  private adjustFixtureScore(
+    result: {
+      homeCompetitionTeamId: string;
+      awayCompetitionTeamId: string;
+      homeScore: number;
+      awayScore: number;
+    },
+    ownTeamIsHome: boolean,
+    eventTeam: 'own' | 'opponent',
+    delta: number,
+  ) {
+    const changesHome = eventTeam === (ownTeamIsHome ? 'own' : 'opponent');
+    return {
+      ...result,
+      homeScore: result.homeScore + (changesHome ? delta : 0),
+      awayScore: result.awayScore + (changesHome ? 0 : delta),
+    };
+  }
+
+  private async syncCompletedCompetitionFixture(
+    teamId: string,
+    match: typeof matches.$inferSelect,
+    eventStatus: string,
+    scoreMayHaveChanged: boolean,
+  ) {
+    if (eventStatus !== 'completed' || !scoreMayHaveChanged) return;
+    const fixtureContext = await this.buildCompetitionFixtureResult(
+      teamId,
+      match,
+    );
+    if (!fixtureContext) return;
+    await syncFixtureResult(
+      this.databaseService,
+      fixtureContext.competitionId,
+      { kind: 'live', id: match.id },
+      fixtureContext.result,
+    );
   }
 
   private async listOpponentPlayers(matchId: string) {
@@ -1221,6 +1537,7 @@ export class MatchesService {
     detail?: string | null,
   ) {
     if (eventType !== 'substitution') return;
+    if (team === 'opponent' && !detail) return;
     if (!detail) {
       throw new BadRequestException('An incoming player is required.');
     }
@@ -1252,9 +1569,9 @@ export class MatchesService {
       if (team === 'own' && !athleteId) {
         throw new BadRequestException('An outgoing squad athlete is required.');
       }
-      if (team === 'opponent' && !opponentPlayerId) {
+      if (team === 'opponent' && !opponentPlayerId && !opponentLabel) {
         throw new BadRequestException(
-          'An outgoing opponent player is required.',
+          'An opponent label is required when no opponent squad is available.',
         );
       }
     }

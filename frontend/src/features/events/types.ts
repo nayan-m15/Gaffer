@@ -17,6 +17,11 @@ export interface TeamEvent {
   weatherTimezone: string | null;
   notes: string | null;
   competitionId: string | null;
+  competitionFixtureId: string | null;
+  fixtureScheduleConfirmedAt: string | null;
+  /** Present on the single-event response for generated competition fixtures. */
+  fixtureOpponentCompetitionTeamId?: string | null;
+  fixtureOpponentName?: string | null;
   matchId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -92,6 +97,7 @@ export interface OpponentMatchPlayer {
 
 export interface StartMatchInput {
   opponentName: string;
+  opponentCompetitionTeamId?: string | null;
   isHome: boolean;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
@@ -107,6 +113,7 @@ export interface MatchRecord {
   id: string;
   eventId: string;
   competitionId: string | null;
+  opponentCompetitionTeamId: string | null;
   opponentName: string;
   isHome: boolean;
   teamScore: number;

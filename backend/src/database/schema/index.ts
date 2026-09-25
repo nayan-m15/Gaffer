@@ -1,6 +1,9 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
+  check,
+  foreignKey,
   date,
   doublePrecision,
   index,
@@ -362,12 +365,25 @@ export const events = pgTable(
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
+    // Generated shared-competition fixtures are surfaced through the normal
+    // team Events calendar. This durable link makes the sync idempotent and
+    // lets schedule/opponent/progression changes update the same event instead
+    // of creating duplicates. Null for ordinary manually-created events.
+    competitionFixtureId: uuid('competition_fixture_id').references(
+      (): AnyPgColumn => competitionFixtures.id,
+      { onDelete: 'cascade' },
+    ),
     ...timestamps,
   },
   (table) => [
     index('events_team_id_index').on(table.teamId),
     index('events_team_scheduled_at_index').on(table.teamId, table.scheduledAt),
     index('events_competition_id_index').on(table.competitionId),
+    index('events_competition_fixture_id_index').on(table.competitionFixtureId),
+    uniqueIndex('events_team_competition_fixture_unique').on(
+      table.teamId,
+      table.competitionFixtureId,
+    ),
   ],
 );
 
@@ -447,6 +463,26 @@ export const opponentSquadVisibility = pgEnum('opponent_squad_visibility', [
   'full',
 ]);
 
+export const competitionFormat = pgEnum('competition_format', [
+  'league',
+  'knockout',
+  'league_knockout',
+]);
+export const fixtureStage = pgEnum('competition_fixture_stage', [
+  'league',
+  'knockout',
+]);
+export const fixtureStatus = pgEnum('competition_fixture_status', [
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled',
+]);
+export const fixtureScheduleResponse = pgEnum(
+  'competition_fixture_schedule_response',
+  ['pending', 'accepted', 'external_confirmed'],
+);
+
 // A league or cup the team is competing in this season.
 export const competitions = pgTable(
   'competitions',
@@ -463,11 +499,149 @@ export const competitions = pgTable(
     // @deprecated — free-text label superseded by seasonId. Still read by the
     // competition form and standings display; dropped in a follow-up.
     season: text('season'), // e.g. "2025/26" — optional
+    // The user who administers this shared competition — normally the coach
+    // who created it. Membership editing is gated on this, not teamId.
+    // Nullable: legacy rows whose owning team has no coach member (and rows
+    // written by older code paths) keep being managed through the team-scoped
+    // statistics endpoints until those are retired.
+    adminUserId: text('admin_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    // Null configuration preserves competitions created by legacy callers.
+    format: competitionFormat('format'),
+    configuredTeamCount: integer('configured_team_count'),
+    maxSubstitutes: integer('max_substitutes').default(5).notNull(),
+    redCardSuspensionMatches: integer('red_card_suspension_matches')
+      .default(1)
+      .notNull(),
+    accumulatedYellowThreshold: integer('accumulated_yellow_threshold')
+      .default(5)
+      .notNull(),
+    yellowSuspensionMatches: integer('yellow_suspension_matches')
+      .default(1)
+      .notNull(),
+    startDate: date('start_date'),
+    // UTC weekdays: Sunday=0 ... Saturday=6; kickoff is explicitly UTC.
+    allowedPlayingDays: integer('allowed_playing_days')
+      .array()
+      .default(sql`ARRAY[6]::integer[]`)
+      .notNull(),
+    defaultKickoffTime: text('default_kickoff_time').default('15:00').notNull(),
+    fixturesPerOpponent: integer('fixtures_per_opponent').default(1).notNull(),
+    pointsWin: integer('points_win').default(3).notNull(),
+    pointsDraw: integer('points_draw').default(1).notNull(),
+    pointsLoss: integer('points_loss').default(0).notNull(),
+    qualifierCount: integer('qualifier_count'),
+    // Marks when result-based standings became authoritative for this
+    // competition. Existing aggregate standings rows act as the baseline;
+    // only matches started after this point are added on top.
+    resultTrackingStartedAt: timestamp('result_tracking_started_at', {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
     ...timestamps,
   },
   (table) => [
+    check(
+      'competitions_settings_valid',
+      sql`
+      (${table.configuredTeamCount} is null or ${table.configuredTeamCount} between 2 and 128)
+      and ${table.maxSubstitutes} between 0 and 99
+      and ${table.redCardSuspensionMatches} between 0 and 99
+      and ${table.accumulatedYellowThreshold} between 1 and 99
+      and ${table.yellowSuspensionMatches} between 0 and 99
+      and cardinality(${table.allowedPlayingDays}) between 1 and 7
+      and ${table.allowedPlayingDays} <@ ARRAY[0,1,2,3,4,5,6]::integer[]
+      and array_position(${table.allowedPlayingDays}, null) is null
+      and ${table.defaultKickoffTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      and ${table.fixturesPerOpponent} in (1,2)
+      and ${table.pointsWin} between 0 and 99 and ${table.pointsDraw} between 0 and 99 and ${table.pointsLoss} between 0 and 99
+      and (${table.format} is null or (${table.type} = 'league' and ${table.format} = 'league') or (${table.type} = 'cup' and ${table.format} in ('knockout','league_knockout')))
+      and (${table.format} is distinct from 'knockout' or ${table.configuredTeamCount} is null or ${table.configuredTeamCount} in (4,8,16,32))
+      and (${table.qualifierCount} is null or (${table.format} is not null and ${table.format} = 'league_knockout' and ${table.qualifierCount} in (4,8,16,32) and ${table.configuredTeamCount} is not null and ${table.qualifierCount} <= ${table.configuredTeamCount}))
+    `,
+    ),
     index('competitions_team_id_index').on(table.teamId),
     index('competitions_season_id_index').on(table.seasonId),
+    index('competitions_admin_user_id_index').on(table.adminUserId),
+    // Competition names are globally unique, case-insensitively. The service
+    // checks first with a friendly message; this index is the race backstop.
+    uniqueIndex('competitions_name_lower_unique').on(sql`lower(${table.name})`),
+  ],
+);
+
+// One participating team slot in a shared competition. A linked participant
+// carries the real application team in `teamId`; a slot the admin added ahead
+// of an invitation keeps it null and is known only by its display name. The
+// creator's team is inserted automatically when the competition is created.
+export const competitionTeams = pgTable(
+  'competition_teams',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    // Nullable until an invited coach accepts and their team is linked.
+    teamId: uuid('team_id').references(() => teams.id, {
+      onDelete: 'set null',
+    }),
+    displayName: text('display_name').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('competition_teams_competition_id_id_unique').on(
+      table.competitionId,
+      table.id,
+    ),
+    index('competition_teams_competition_id_index').on(table.competitionId),
+    index('competition_teams_team_id_index').on(table.teamId),
+    // A linked team can only occupy one slot per competition. Unlinked slots
+    // (teamId null) never collide because the partial index skips them.
+    uniqueIndex('competition_teams_competition_team_unique')
+      .on(table.competitionId, table.teamId)
+      .where(sql`${table.teamId} is not null`),
+    // Display names are unique per competition, case-insensitively, so two
+    // slots can never render the same team name.
+    uniqueIndex('competition_teams_competition_display_name_unique').on(
+      table.competitionId,
+      sql`lower(${table.displayName})`,
+    ),
+  ],
+);
+
+export const competitionInviteStatus = pgEnum('competition_invite_status', [
+  'pending',
+  'used',
+  'revoked',
+]);
+
+export const competitionInvites = pgTable(
+  'competition_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    competitionTeamId: uuid('competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: competitionInviteStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByUserId: text('used_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('competition_invites_competition_id_index').on(table.competitionId),
+    uniqueIndex('competition_invites_pending_slot_unique')
+      .on(table.competitionTeamId)
+      .where(sql`${table.status} = 'pending'`),
   ],
 );
 
@@ -484,6 +658,12 @@ export const matches = pgTable(
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
+    // For shared leagues/cups, identifies the selected competition participant.
+    // Null for friendlies and legacy matches created before participant selection.
+    opponentCompetitionTeamId: uuid('opponent_competition_team_id').references(
+      () => competitionTeams.id,
+      { onDelete: 'set null' },
+    ),
     opponentName: text('opponent_name').notNull(),
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
@@ -504,11 +684,50 @@ export const matches = pgTable(
     clockPeriod: text('clock_period').default('not_started').notNull(),
     clockElapsedMs: integer('clock_elapsed_ms').default(0).notNull(),
     clockStartedAt: timestamp('clock_started_at', { withTimezone: true }),
+    clockRevision: integer('clock_revision').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
     index('matches_competition_id_index').on(table.competitionId),
+    index('matches_opponent_competition_team_id_index').on(
+      table.opponentCompetitionTeamId,
+    ),
     index('matches_game_plan_id_index').on(table.gamePlanId),
+  ],
+);
+
+// Manually entered shared competition results for fixtures that were not
+// completed through the live logger. Live-logged matches stay authoritative
+// in `matches` + `match_events`; standings combine both sources at read time.
+export const competitionMatches = pgTable(
+  'competition_matches',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    homeCompetitionTeamId: uuid('home_competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    awayCompetitionTeamId: uuid('away_competition_team_id')
+      .notNull()
+      .references(() => competitionTeams.id, { onDelete: 'cascade' }),
+    homeScore: integer('home_score').default(0).notNull(),
+    awayScore: integer('away_score').default(0).notNull(),
+    playedAt: timestamp('played_at', { withTimezone: true }).notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('competition_matches_competition_id_index').on(table.competitionId),
+    index('competition_matches_home_team_id_index').on(
+      table.homeCompetitionTeamId,
+    ),
+    index('competition_matches_away_team_id_index').on(
+      table.awayCompetitionTeamId,
+    ),
   ],
 );
 
@@ -593,8 +812,9 @@ export const athleteMatchStats = pgTable(
   ],
 );
 
-// Manually entered/updated by the coach — the app has no way to calculate
-// standings since it doesn't track other teams' results.
+// Legacy manual standings baseline. Shared competitions now calculate future
+// movement from live-logged and admin-entered competition results. Kept for
+// backwards compatibility with standings entered before result tracking.
 export const standings = pgTable(
   'standings',
   {
@@ -685,6 +905,196 @@ export const matchEvents = pgTable(
     uniqueIndex('match_events_match_request_unique')
       .on(table.matchId, table.clientRequestId)
       .where(sql`${table.clientRequestId} is not null`),
+  ],
+);
+
+/* ── Injury & recovery ─────────────────────────────────────────────────────
+ * An injury record is the clinical counterpart to the `injury` match event.
+ * The match event says "something happened at 34'"; the injury record says
+ * what it was, how long the athlete is expected to be out, and how the
+ * recovery actually went. One record may be linked to the match event that
+ * produced it, but records also exist for training and non-match injuries.
+ */
+
+// Sided regions are stored as explicit `_left` / `_right` values rather than
+// a separate side column: every query the UI makes is "which region is hurt",
+// and a nullable side column would make "left hamstring" two fields to match
+// on in every one of them.
+export const injuryBodyRegion = pgEnum('injury_body_region', [
+  'head',
+  'neck',
+  'shoulder_left',
+  'shoulder_right',
+  'upper_arm_left',
+  'upper_arm_right',
+  'forearm_left',
+  'forearm_right',
+  'wrist_hand_left',
+  'wrist_hand_right',
+  'chest',
+  'abdomen',
+  'groin',
+  'back_upper',
+  'back_lower',
+  'glute_left',
+  'glute_right',
+  'hamstring_left',
+  'hamstring_right',
+  'quad_left',
+  'quad_right',
+  'knee_left',
+  'knee_right',
+  'calf_left',
+  'calf_right',
+  'achilles_left',
+  'achilles_right',
+  'ankle_left',
+  'ankle_right',
+  'foot_left',
+  'foot_right',
+]);
+
+export const injuryType = pgEnum('injury_type', [
+  'strain',
+  'sprain',
+  'tear',
+  'fracture',
+  'contusion',
+  'dislocation',
+  'tendinopathy',
+  'concussion',
+  'laceration',
+  'illness',
+  'other',
+]);
+
+// Maps to the grade 1/2/3 language physios use, kept in plain words because
+// the coach logging an injury pitch-side is not grading it clinically.
+export const injurySeverity = pgEnum('injury_severity', [
+  'minor',
+  'moderate',
+  'severe',
+]);
+
+export const injuryStatus = pgEnum('injury_status', [
+  'reported',
+  'assessment',
+  'rehab',
+  'return_to_training',
+  'returned',
+  'season_ending',
+]);
+
+export const injuryContext = pgEnum('injury_context', [
+  'match',
+  'training',
+  'other',
+]);
+
+export const injuries = pgTable(
+  'injuries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athletes.id, { onDelete: 'cascade' }),
+    bodyRegion: injuryBodyRegion('body_region').notNull(),
+    injuryType: injuryType('injury_type').notNull(),
+    severity: injurySeverity('severity').notNull(),
+    status: injuryStatus('status').default('reported').notNull(),
+    context: injuryContext('context').default('other').notNull(),
+    occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
+    // Set only for injuries logged from the live logger. The match event is
+    // the audit trail for "when in the game"; deleting it (a mis-tap being
+    // undone) must not delete the clinical record, hence `set null`.
+    matchId: uuid('match_id').references(() => matches.id, {
+      onDelete: 'set null',
+    }),
+    matchEventId: uuid('match_event_id').references(() => matchEvents.id, {
+      onDelete: 'set null',
+    }),
+    minute: integer('minute'),
+    // Seeded from the protocol table at creation and overridable by a coach,
+    // which is why the day counts are persisted rather than recomputed: a
+    // coach's override has to survive a revision of the protocol table.
+    estimatedReturnMinDays: integer('estimated_return_min_days').notNull(),
+    estimatedReturnMaxDays: integer('estimated_return_max_days').notNull(),
+    estimatedReturnFrom: date('estimated_return_from', {
+      mode: 'string',
+    }).notNull(),
+    estimatedReturnTo: date('estimated_return_to', {
+      mode: 'string',
+    }).notNull(),
+    actualReturnOn: date('actual_return_on', { mode: 'string' }),
+    diagnosedBy: text('diagnosed_by'),
+    description: text('description'),
+    notes: text('notes'),
+    // Protocol phase snapshot, frozen at creation so a later revision of the
+    // protocol table cannot rewrite the plan an athlete is already following.
+    // Not surfaced yet — the rehab-plan UI reads it in a later slice.
+    rehabPhases: jsonb('rehab_phases'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('injuries_team_id_index').on(table.teamId),
+    index('injuries_athlete_id_index').on(table.athleteId),
+    // Serves the open-injury lists and the athlete-status sync, which both
+    // filter on (team_id, status).
+    index('injuries_team_status_index').on(table.teamId, table.status),
+    // Serves the recurrence check, which looks for a prior injury to the same
+    // region on the same athlete.
+    index('injuries_athlete_region_index').on(
+      table.athleteId,
+      table.bodyRegion,
+    ),
+    // One clinical record per logged match event: tapping Injury twice on the
+    // same incident must not produce two records.
+    uniqueIndex('injuries_match_event_unique')
+      .on(table.matchEventId)
+      .where(sql`${table.matchEventId} is not null`),
+  ],
+);
+
+export const injuryTimelineKind = pgEnum('injury_timeline_kind', [
+  'sustained',
+  'assessment',
+  'rehab_started',
+  'reassessment',
+  'setback',
+  'return_to_training',
+  'returned',
+  'note',
+  'estimated_return',
+]);
+
+export const injuryTimelineEntries = pgTable(
+  'injury_timeline_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    injuryId: uuid('injury_id')
+      .notNull()
+      .references(() => injuries.id, { onDelete: 'cascade' }),
+    kind: injuryTimelineKind('kind').notNull(),
+    occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
+    title: text('title').notNull(),
+    detail: text('detail'),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    index('injury_timeline_entries_injury_index').on(
+      table.injuryId,
+      table.occurredOn,
+    ),
   ],
 );
 
@@ -795,6 +1205,42 @@ export const matchEventOperations = pgTable(
   ],
 );
 
+/** Append-only audit trail for shared clock commands. The matches row stores
+ * the latest materialised clock while these rows preserve who requested every
+ * transition and which authoritative revision it produced. */
+export const matchClockOperations = pgTable(
+  'match_clock_operations',
+  {
+    id: uuid('id').primaryKey(),
+    matchId: uuid('match_id')
+      .notNull()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    period: text('period').notNull(),
+    elapsedMs: integer('elapsed_ms').notNull(),
+    running: boolean('running').notNull(),
+    baseRevision: integer('base_revision').notNull(),
+    appliedRevision: integer('applied_revision').notNull(),
+    outcome: text('outcome').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    clientCreatedAt: timestamp('client_created_at', {
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('match_clock_operations_match_revision_index').on(
+      table.matchId,
+      table.appliedRevision,
+    ),
+    index('match_clock_operations_actor_index').on(table.actorUserId),
+  ],
+);
+
 export const matchEventReviews = pgTable(
   'match_event_reviews',
   {
@@ -820,6 +1266,138 @@ export const matchEventReviews = pgTable(
     uniqueIndex('match_event_reviews_open_canonical_unique')
       .on(table.canonicalEventId)
       .where(sql`${table.status} = 'open'`),
+  ],
+);
+
+// One shared fixture per pairing. Later knockout rounds have empty participant
+// slots until winners advance through nextFixtureId + nextFixtureSlot.
+export const competitionFixtures = pgTable(
+  'competition_fixtures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+    stage: fixtureStage('stage').notNull(),
+    round: integer('round').notNull(),
+    position: integer('position').notNull(),
+    homeCompetitionTeamId: uuid('home_competition_team_id'),
+    awayCompetitionTeamId: uuid('away_competition_team_id'),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    status: fixtureStatus('status').default('scheduled').notNull(),
+    homeScore: integer('home_score'),
+    awayScore: integer('away_score'),
+    homePenaltyScore: integer('home_penalty_score'),
+    awayPenaltyScore: integer('away_penalty_score'),
+    winnerCompetitionTeamId: uuid('winner_competition_team_id'),
+    nextFixtureId: uuid('next_fixture_id'),
+    nextFixtureSlot: text('next_fixture_slot'),
+    linkedMatchId: uuid('linked_match_id').references(() => matches.id),
+    legacyResultId: uuid('legacy_result_id').references(
+      () => competitionMatches.id,
+    ),
+    scheduleRevision: integer('schedule_revision').default(1).notNull(),
+    homeScheduleResponse: fixtureScheduleResponse('home_schedule_response')
+      .default('pending')
+      .notNull(),
+    awayScheduleResponse: fixtureScheduleResponse('away_schedule_response')
+      .default('pending')
+      .notNull(),
+    homeScheduleRespondedAt: timestamp('home_schedule_responded_at', {
+      withTimezone: true,
+    }),
+    awayScheduleRespondedAt: timestamp('away_schedule_responded_at', {
+      withTimezone: true,
+    }),
+    homeScheduleRespondedByUserId: text('home_schedule_responded_by_user_id'),
+    awayScheduleRespondedByUserId: text('away_schedule_responded_by_user_id'),
+    scheduleProposedByCompetitionTeamId: uuid(
+      'schedule_proposed_by_competition_team_id',
+    ),
+    scheduleProposalNote: text('schedule_proposal_note'),
+    scheduleConfirmedAt: timestamp('schedule_confirmed_at', {
+      withTimezone: true,
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('competition_fixtures_competition_id_id_unique').on(
+      table.competitionId,
+      table.id,
+    ),
+    uniqueIndex('competition_fixtures_round_position_unique').on(
+      table.competitionId,
+      table.stage,
+      table.round,
+      table.position,
+    ),
+    uniqueIndex('competition_fixtures_pair_unique').on(
+      table.competitionId,
+      table.stage,
+      table.homeCompetitionTeamId,
+      table.awayCompetitionTeamId,
+    ),
+    uniqueIndex('competition_fixtures_next_slot_unique').on(
+      table.nextFixtureId,
+      table.nextFixtureSlot,
+    ),
+    uniqueIndex('competition_fixtures_linked_match_unique').on(
+      table.linkedMatchId,
+    ),
+    uniqueIndex('competition_fixtures_legacy_result_unique').on(
+      table.legacyResultId,
+    ),
+    foreignKey({
+      name: 'competition_fixtures_home_participant_fk',
+      columns: [table.competitionId, table.homeCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_away_participant_fk',
+      columns: [table.competitionId, table.awayCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_winner_participant_fk',
+      columns: [table.competitionId, table.winnerCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_home_schedule_user_fk',
+      columns: [table.homeScheduleRespondedByUserId],
+      foreignColumns: [user.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'competition_fixtures_away_schedule_user_fk',
+      columns: [table.awayScheduleRespondedByUserId],
+      foreignColumns: [user.id],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'competition_fixtures_schedule_proposer_fk',
+      columns: [table.competitionId, table.scheduleProposedByCompetitionTeamId],
+      foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
+    }),
+    foreignKey({
+      name: 'competition_fixtures_next_fixture_fk',
+      columns: [table.competitionId, table.nextFixtureId],
+      foreignColumns: [table.competitionId, table.id],
+    }),
+    check(
+      'competition_fixtures_valid',
+      sql`
+    ${table.round} > 0 and ${table.position} > 0
+    and (${table.homeCompetitionTeamId} is null or ${table.awayCompetitionTeamId} is null or ${table.homeCompetitionTeamId} <> ${table.awayCompetitionTeamId})
+    and (${table.stage} = 'knockout' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.nextFixtureId} is null))
+    and ((${table.nextFixtureId} is null and ${table.nextFixtureSlot} is null) or (${table.nextFixtureId} is not null and ${table.nextFixtureId} <> ${table.id} and ${table.nextFixtureSlot} is not null and ${table.nextFixtureSlot} in ('home','away')))
+    and ((${table.homeScore} is null and ${table.awayScore} is null) or (${table.homeScore} between 0 and 99 and ${table.awayScore} between 0 and 99 and ${table.homeScore} is not null and ${table.awayScore} is not null))
+    and ((${table.homePenaltyScore} is null and ${table.awayPenaltyScore} is null) or (${table.stage} = 'knockout' and ${table.homePenaltyScore} between 0 and 99 and ${table.awayPenaltyScore} between 0 and 99 and ${table.homePenaltyScore} is not null and ${table.awayPenaltyScore} is not null))
+    and (${table.winnerCompetitionTeamId} is null or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.winnerCompetitionTeamId} in (${table.homeCompetitionTeamId}, ${table.awayCompetitionTeamId})))
+    and ${table.scheduleRevision} > 0
+    and (${table.scheduleProposedByCompetitionTeamId} is null or (${table.homeCompetitionTeamId} is not null and ${table.scheduleProposedByCompetitionTeamId} = ${table.homeCompetitionTeamId}) or (${table.awayCompetitionTeamId} is not null and ${table.scheduleProposedByCompetitionTeamId} = ${table.awayCompetitionTeamId}))
+    and (${table.scheduleConfirmedAt} is null or (${table.homeScheduleResponse} in ('accepted','external_confirmed') and ${table.awayScheduleResponse} in ('accepted','external_confirmed')))
+    and (${table.status} <> 'completed' or (${table.homeCompetitionTeamId} is not null and ${table.awayCompetitionTeamId} is not null and ${table.homeScore} is not null and ${table.awayScore} is not null and (${table.stage} <> 'knockout' or ${table.winnerCompetitionTeamId} is not null)))
+  `,
+    ),
   ],
 );
 
@@ -871,6 +1449,7 @@ export const syncUploadReceipts = pgTable(
     payloadHash: text('payload_hash').notNull(),
     outcome: text('outcome').notNull(),
     safeErrorCode: text('safe_error_code'),
+    processingDurationMs: integer('processing_duration_ms'),
     canonicalEventId: uuid('canonical_event_id').references(
       () => matchEvents.id,
       { onDelete: 'set null' },
@@ -882,5 +1461,32 @@ export const syncUploadReceipts = pgTable(
       table.submittedByUserId,
       table.createdAt,
     ),
+  ],
+);
+
+/** Latest non-sensitive queue health reported by each browser installation. */
+export const syncClientTelemetry = pgTable(
+  'sync_client_telemetry',
+  {
+    deviceId: uuid('device_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    pendingCount: integer('pending_count').default(0).notNull(),
+    rejectedCount: integer('rejected_count').default(0).notNull(),
+    oldestPendingAt: timestamp('oldest_pending_at', { withTimezone: true }),
+    lastSuccessfulSyncAt: timestamp('last_successful_sync_at', {
+      withTimezone: true,
+    }),
+    deployment: text('deployment').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('sync_client_telemetry_team_index').on(table.teamId, table.updatedAt),
   ],
 );

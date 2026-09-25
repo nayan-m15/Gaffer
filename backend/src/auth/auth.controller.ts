@@ -40,9 +40,12 @@ const VERIFIED_REDIRECT_URL = `${FRONTEND_URL}/login?verified=1`;
  * survive the verification round trip, even across browsers, without any
  * persisted state.
  */
-function verifiedRedirectUrl(inviteToken?: string): string {
+function verifiedRedirectUrl(
+  inviteToken?: string,
+  inviteKind: 'team' | 'competition' = 'team',
+): string {
   return inviteToken
-    ? `${FRONTEND_URL}/join-team/${inviteToken}`
+    ? `${FRONTEND_URL}/join-${inviteKind}/${inviteToken}`
     : VERIFIED_REDIRECT_URL;
 }
 
@@ -125,7 +128,7 @@ export class AuthController {
           name: dto.name,
           email: dto.email,
           password: dto.password,
-          callbackURL: verifiedRedirectUrl(dto.inviteToken),
+          callbackURL: verifiedRedirectUrl(dto.inviteToken, dto.inviteKind),
         },
         returnHeaders: true,
       });
@@ -151,7 +154,7 @@ export class AuthController {
       await auth.api.sendVerificationEmail({
         body: {
           email: dto.email,
-          callbackURL: verifiedRedirectUrl(dto.inviteToken),
+          callbackURL: verifiedRedirectUrl(dto.inviteToken, dto.inviteKind),
         },
       });
     } catch (error) {

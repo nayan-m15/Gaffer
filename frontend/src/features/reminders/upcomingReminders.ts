@@ -12,6 +12,10 @@ export interface ReminderEvent {
   location?: string;
   /** When present, only `scheduled` events produce reminders. */
   status?: "scheduled" | "cancelled" | "completed";
+  /** Generated competition fixtures stay visible in the calendar while their
+   * date is negotiated, but should not produce match-day reminders yet. */
+  competitionFixtureId?: string | null;
+  fixtureScheduleConfirmedAt?: string | null;
 }
 
 function readDismissedIds(): Set<string> {
@@ -55,6 +59,9 @@ export function getUpcomingReminders(
   return events
     .filter((event) => {
       if (event.status != null && event.status !== "scheduled") return false;
+      if (event.competitionFixtureId && !event.fixtureScheduleConfirmedAt) {
+        return false;
+      }
       if (dismissed.has(event.id)) return false;
 
       const at = new Date(event.scheduledAt).getTime();

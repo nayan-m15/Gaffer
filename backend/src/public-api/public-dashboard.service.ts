@@ -5,6 +5,7 @@ import {
   athleteMatchStats,
   athletes,
   competitions,
+  competitionTeams,
   events,
   matchEvents,
   matches,
@@ -60,40 +61,60 @@ export class PublicDashboardService {
 
   async getFilters() {
     const db = this.databaseService.database;
-    const [teamRows, seasonRows, competitionRows] = await Promise.all([
-      db
-        .select({ id: teams.id, name: teams.name })
-        .from(teams)
-        .orderBy(asc(teams.name)),
-      db
-        .select({
-          id: seasons.id,
-          name: seasons.name,
-          teamId: seasons.teamId,
-          startDate: seasons.startDate,
-          endDate: seasons.endDate,
-          isCurrent: seasons.isCurrent,
-        })
-        .from(seasons)
-        .innerJoin(teams, eq(seasons.teamId, teams.id))
-        .orderBy(asc(seasons.startDate), asc(seasons.name)),
-      db
-        .select({
-          id: competitions.id,
-          name: competitions.name,
-          type: competitions.type,
-          teamId: competitions.teamId,
-          seasonId: competitions.seasonId,
-        })
-        .from(competitions)
-        .innerJoin(teams, eq(competitions.teamId, teams.id))
-        .orderBy(asc(competitions.name)),
-    ]);
+    const [teamRows, seasonRows, competitionRows, participantRows] =
+      await Promise.all([
+        db
+          .select({ id: teams.id, name: teams.name })
+          .from(teams)
+          .orderBy(asc(teams.name)),
+        db
+          .select({
+            id: seasons.id,
+            name: seasons.name,
+            teamId: seasons.teamId,
+            startDate: seasons.startDate,
+            endDate: seasons.endDate,
+            isCurrent: seasons.isCurrent,
+          })
+          .from(seasons)
+          .innerJoin(teams, eq(seasons.teamId, teams.id))
+          .orderBy(asc(seasons.startDate), asc(seasons.name)),
+        db
+          .select({
+            id: competitions.id,
+            name: competitions.name,
+            type: competitions.type,
+            teamId: competitions.teamId,
+            seasonId: competitions.seasonId,
+          })
+          .from(competitions)
+          .innerJoin(teams, eq(competitions.teamId, teams.id))
+          .orderBy(asc(competitions.name)),
+        db
+          .select({
+            competitionId: competitionTeams.competitionId,
+            teamId: competitionTeams.teamId,
+          })
+          .from(competitionTeams),
+      ]);
+
+    const teamIdsByCompetition = new Map<string, string[]>();
+    for (const participant of participantRows) {
+      if (!participant.teamId) continue;
+      const teamIds = teamIdsByCompetition.get(participant.competitionId) ?? [];
+      teamIds.push(participant.teamId);
+      teamIdsByCompetition.set(participant.competitionId, teamIds);
+    }
 
     return {
       teams: teamRows,
       seasons: seasonRows,
-      competitions: competitionRows,
+      competitions: competitionRows.map((competition) => ({
+        ...competition,
+        teamIds: teamIdsByCompetition.get(competition.id) ?? [
+          competition.teamId,
+        ],
+      })),
     };
   }
 
@@ -230,7 +251,15 @@ export class PublicDashboardService {
 
   async getTeamStatistics(query: PublicDashboardQuery) {
     const conditions: SQL[] = [];
-    if (query.teamId) conditions.push(eq(competitions.teamId, query.teamId));
+    if (query.teamId) {
+      conditions.push(
+        sql`exists (
+          select 1 from ${competitionTeams}
+          where ${competitionTeams.competitionId} = ${competitions.id}
+            and ${competitionTeams.teamId} = ${query.teamId}
+        )`,
+      );
+    }
     if (query.competitionId) {
       conditions.push(eq(competitions.id, query.competitionId));
     }
@@ -249,7 +278,15 @@ export class PublicDashboardService {
         goalsFor: standings.goalsFor,
         goalsAgainst: standings.goalsAgainst,
         points: standings.points,
-        isOwnTeam: standings.isOwnTeam,
+        isOwnTeam: query.teamId
+          ? sql<boolean>`lower(${standings.teamName}) = lower(coalesce((
+              select ${competitionTeams.displayName}
+              from ${competitionTeams}
+              where ${competitionTeams.competitionId} = ${competitions.id}
+                and ${competitionTeams.teamId} = ${query.teamId}
+              limit 1
+            ), ''))`
+          : sql<boolean>`false`,
         ownerTeam: { id: teams.id, name: teams.name },
         competition: {
           id: competitions.id,

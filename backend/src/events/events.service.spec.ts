@@ -33,6 +33,7 @@ describe('EventsService', () => {
   function selectChain(result: unknown) {
     const chain: Record<string, unknown> = {
       from: jest.fn(() => chain),
+      innerJoin: jest.fn(() => chain),
       leftJoin: jest.fn(() => chain),
       where: jest.fn(() => chain),
       orderBy: jest.fn(() => chain),
@@ -76,6 +77,38 @@ describe('EventsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('accepts a shared competition linked through competition-team membership', async () => {
+      const membershipQuery = selectChain([{ id: 'competition-id' }]);
+      const returning = jest.fn().mockResolvedValue([
+        {
+          id: 'event-id',
+          teamId: team.id,
+          type: 'match',
+          competitionId: 'competition-id',
+        },
+      ]);
+      const values = jest.fn().mockReturnValue({ returning });
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(membershipQuery),
+        insert: jest.fn().mockReturnValue({ values }),
+      };
+
+      const result = await service.create('user-id', {
+        title: 'League match',
+        type: 'match',
+        scheduledAt: '2026-10-10T15:00:00.000Z',
+        location: 'Home Ground',
+        competitionId: 'competition-id',
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({ competitionId: 'competition-id' }),
+      );
+      expect(membershipQuery.innerJoin).toHaveBeenCalled();
+    });
   });
 
   describe('list', () => {

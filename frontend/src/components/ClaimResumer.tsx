@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { acceptClaim, clearPendingClaimToken, getPendingClaimToken } from "@/services/claims";
 
@@ -16,9 +16,11 @@ import { acceptClaim, clearPendingClaimToken, getPendingClaimToken } from "@/ser
 export function ClaimResumer() {
   const { status, refreshSession } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const attempted = useRef(false);
 
   useEffect(() => {
+    if (pathname.startsWith("/join-competition/")) return;
     if (status !== "authenticated" || attempted.current) return;
     const token = getPendingClaimToken();
     if (!token) return;
@@ -37,7 +39,7 @@ export function ClaimResumer() {
         console.error("Failed to resume claim after verification:", err);
       }
     })();
-  }, [status, refreshSession, navigate]);
+  }, [status, refreshSession, navigate, pathname]);
 
   return null;
 }

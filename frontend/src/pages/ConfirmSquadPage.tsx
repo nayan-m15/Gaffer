@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
-import { Loader2, Pencil, ShieldAlert, Users } from "lucide-react";
+import { Loader2, LockKeyhole, Pencil, ShieldAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAthletes } from "@/features/team-management/api";
@@ -27,6 +27,7 @@ import {
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
+import { useCompetition } from "@/features/competitions/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,32 @@ const cardClassName =
 
 const sectionLabelClassName =
   "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground";
+
+const GENERIC_OPPONENT_PLACEHOLDER = "e.g. Stellenbosch FC";
+
+/** Event titles that are not useful as an opponent-name example. */
+const UNHELPFUL_EVENT_TITLES = new Set([
+  "untitled",
+  "new event",
+  "event",
+  "training",
+  "training session",
+  "saturday training",
+  "match",
+  "meeting",
+  "game",
+  "fixture",
+  "friendly",
+  "practice",
+]);
+
+function opponentNamePlaceholder(eventTitle: string) {
+  const title = eventTitle.trim();
+  if (!title || UNHELPFUL_EVENT_TITLES.has(title.toLowerCase())) {
+    return GENERIC_OPPONENT_PLACEHOLDER;
+  }
+  return `e.g. ${title}`;
+}
 
 function isBeforeMatchDay(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
@@ -370,10 +397,10 @@ export default function ConfirmSquadPage() {
   const opponentOutlet = useOutlet();
   const { team } = useAuth();
   const eventQuery = useEvent(eventId);
+  const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
-
   const [selectedGamePlanId, setSelectedGamePlanId] = useState<string | null>(
     null,
   );
@@ -381,6 +408,7 @@ export default function ConfirmSquadPage() {
     () => new Set(),
   );
   const [opponentName, setOpponentName] = useState("");
+  const [opponentCompetitionTeamId, setOpponentCompetitionTeamId] = useState<string | null>(null);
   const [isHome, setIsHome] = useState(true);
   const [venuePulse, setVenuePulse] = useState(0);
   const [opponentSquadVisibility, setOpponentSquadVisibility] =
@@ -447,17 +475,80 @@ export default function ConfirmSquadPage() {
     });
   }, [selectableRosterIds]);
 
+  const competitionParticipants = useMemo(
+    () =>
+      (competitionQuery.data?.participants ?? []).filter(
+        (participant) => participant.teamId !== eventQuery.data?.teamId,
+      ),
+    [competitionQuery.data?.participants, eventQuery.data?.teamId],
+  );
+  const selectedCompetitionOpponent = useMemo(
+    () =>
+      competitionParticipants.find(
+        (participant) => participant.id === opponentCompetitionTeamId,
+      ) ?? null,
+    [competitionParticipants, opponentCompetitionTeamId],
+  );
+  const generatedFixtureOpponentId =
+    eventQuery.data?.fixtureOpponentCompetitionTeamId ?? null;
+  const generatedFixtureOpponentName =
+    eventQuery.data?.fixtureOpponentName?.trim() ?? "";
+  const generatedFixtureHasOpponent = Boolean(
+    eventQuery.data?.competitionFixtureId &&
+      generatedFixtureOpponentId &&
+      generatedFixtureOpponentName,
+  );
+
+  useEffect(() => {
+    if (eventQuery.data?.competitionFixtureId) {
+      setOpponentCompetitionTeamId(generatedFixtureOpponentId);
+      setOpponentName(generatedFixtureOpponentName);
+      return;
+    }
+    if (!eventQuery.data?.competitionId) {
+      setOpponentCompetitionTeamId(null);
+      return;
+    }
+    if (
+      opponentCompetitionTeamId &&
+      !competitionParticipants.some(
+        (participant) => participant.id === opponentCompetitionTeamId,
+      )
+    ) {
+      setOpponentCompetitionTeamId(null);
+      setOpponentName("");
+    }
+  }, [
+    competitionParticipants,
+    eventQuery.data?.competitionFixtureId,
+    eventQuery.data?.competitionId,
+    generatedFixtureOpponentId,
+    generatedFixtureOpponentName,
+    opponentCompetitionTeamId,
+  ]);
+
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
-  const opponentReady = opponentName.trim().length > 0;
+  const opponentReady = eventQuery.data?.competitionFixtureId
+    ? generatedFixtureHasOpponent
+    : eventQuery.data?.competitionId
+      ? selectedCompetitionOpponent !== null
+      : opponentName.trim().length > 0;
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
+  const fixtureDateConfirmed =
+    !eventQuery.data?.competitionFixtureId ||
+    Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
   const canSubmit =
     startingCount === STARTING_XI_SIZE &&
     opponentReady &&
+    fixtureDateConfirmed &&
     !beforeMatchDay &&
     !startMatch.isPending &&
+    !(eventQuery.data?.competitionId &&
+      !eventQuery.data?.competitionFixtureId &&
+      (competitionQuery.isFetching || competitionQuery.isError)) &&
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
 
   const detailsComplete = opponentReady;
@@ -589,8 +680,17 @@ export default function ConfirmSquadPage() {
     setSubmitError(null);
     setOpponentSquadError(null);
     try {
+      const resolvedCompetitionOpponentId = eventQuery.data?.competitionFixtureId
+        ? generatedFixtureOpponentId
+        : selectedCompetitionOpponent?.id ?? null;
+      const resolvedCompetitionOpponentName = eventQuery.data?.competitionFixtureId
+        ? generatedFixtureOpponentName
+        : selectedCompetitionOpponent?.displayName ?? opponentName.trim();
       const match = await startMatch.mutateAsync({
-        opponentName: opponentName.trim(),
+        opponentName: resolvedCompetitionOpponentName,
+        ...(eventQuery.data?.competitionId && resolvedCompetitionOpponentId
+          ? { opponentCompetitionTeamId: resolvedCompetitionOpponentId }
+          : {}),
         isHome,
         startingAthleteIds: [...startingIds],
         benchAthleteIds: benchIdsFromRoster(
@@ -733,8 +833,11 @@ export default function ConfirmSquadPage() {
   }
 
   const ownName = team?.name ?? "Your team";
-  const oppName = opponentName.trim() || "Opponent";
-  const oppEmpty = !opponentName.trim();
+  const resolvedOpponentName = eventQuery.data?.competitionFixtureId
+    ? generatedFixtureOpponentName
+    : selectedCompetitionOpponent?.displayName ?? opponentName.trim();
+  const oppName = resolvedOpponentName || "Opponent";
+  const oppEmpty = !resolvedOpponentName;
   const homeClub = isHome
     ? {
         name: ownName,
@@ -850,16 +953,79 @@ export default function ConfirmSquadPage() {
           <h2 className={sectionLabelClassName}>Match details</h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="opponent-name">Opponent name</Label>
-              <input
-                id="opponent-name"
-                className={inputClassName}
-                value={opponentName}
-                onChange={(event) => setOpponentName(event.target.value)}
-                placeholder="Opponent name"
-                autoComplete="off"
-                maxLength={100}
-              />
+              <Label htmlFor={event.competitionFixtureId ? undefined : "opponent-name"}>
+                Opponent
+              </Label>
+              {event.competitionFixtureId ? (
+                <>
+                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-sm font-medium",
+                        !generatedFixtureHasOpponent && "text-muted-foreground",
+                      )}
+                    >
+                      {generatedFixtureHasOpponent
+                        ? generatedFixtureOpponentName
+                        : "Opponent not determined yet"}
+                    </span>
+                    <LockKeyhole className="size-4 shrink-0 text-primary" aria-hidden />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {generatedFixtureHasOpponent
+                      ? "This opponent is fixed by the generated competition fixture."
+                      : "The opponent will be filled automatically when the fixture pairing is known."}
+                  </p>
+                </>
+              ) : event.competitionId ? (
+                <>
+                  <select
+                    id="opponent-name"
+                    className={inputClassName}
+                    value={opponentCompetitionTeamId ?? ""}
+                    disabled={competitionQuery.isFetching || competitionQuery.isError}
+                    onChange={(changeEvent) => {
+                      const participant = competitionParticipants.find(
+                        (item) => item.id === changeEvent.target.value,
+                      );
+                      setOpponentCompetitionTeamId(participant?.id ?? null);
+                      setOpponentName(participant?.displayName ?? "");
+                    }}
+                  >
+                    <option value="" disabled>
+                      {competitionQuery.isFetching
+                        ? "Loading participating teams…"
+                        : "Choose an opponent"}
+                    </option>
+                    {competitionParticipants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Opponents are limited to teams participating in{" "}
+                    {competitionQuery.data?.name ?? "this competition"}.
+                  </p>
+                  {competitionQuery.isError && (
+                    <p className="text-xs text-destructive">
+                      Could not load the competition teams. Please retry.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <input
+                  id="opponent-name"
+                  className={inputClassName}
+                  value={opponentName}
+                  onChange={(changeEvent) =>
+                    setOpponentName(changeEvent.target.value)
+                  }
+                  placeholder={opponentNamePlaceholder(event.title)}
+                  autoComplete="off"
+                  maxLength={100}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Venue</p>
@@ -1137,6 +1303,12 @@ export default function ConfirmSquadPage() {
             Bench: {benchCount}
           </p>
         </div>
+
+        {!fixtureDateConfirmed && (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+            This generated fixture is still provisional. Both teams must agree the date in Leagues & Competitions before the match can start.
+          </p>
+        )}
 
         {beforeMatchDay && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">

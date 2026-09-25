@@ -145,6 +145,7 @@ export const startMatchSchema = z
       .trim()
       .min(1, 'Opponent name is required.')
       .max(100, 'Opponent name must be 100 characters or fewer.'),
+    opponentCompetitionTeamId: z.uuid().nullable().optional(),
     isHome: z.boolean(),
     startingAthleteIds: z
       .array(z.uuid())
@@ -257,6 +258,13 @@ export class OpponentSquadPlayerBodyDto {
 export class StartMatchBodyDto {
   @ApiProperty({ example: 'Riverside FC' })
   opponentName!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Required for shared league/cup matches; identifies the selected competition participant.',
+  })
+  opponentCompetitionTeamId?: string | null;
 
   @ApiProperty({ example: true })
   isHome!: boolean;

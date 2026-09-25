@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Ban, ChevronLeft, X } from "lucide-react";
 import { SportLogo } from "@/components/brand/SportLogo";
@@ -12,7 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { OpponentSquadVisibility } from "@/features/events/types";
-import { OpponentFormationPitch } from "@/features/matches/opponent-formation-pitch";
+import {
+  OpponentFormationPitch,
+  OpponentShirtChip,
+  OpponentUnassignedDropZone,
+} from "@/features/matches/opponent-formation-pitch";
+import { applyOpponentShirtDrop } from "@/features/matches/opponent-shirt-drop";
 import {
   applyAssignmentsToPlayers,
   assignmentsFromPlayers,
@@ -22,6 +27,7 @@ import {
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
+import type { DragItem } from "@/features/team-management/types";
 import {
   DEFAULT_FORMATION_ID,
   FORMATION_OPTIONS,
@@ -68,6 +74,7 @@ export default function OpponentSquadSetupPage() {
   const [nameInput, setNameInput] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [formationNotice, setFormationNotice] = useState<string | null>(null);
+  const [dragItem, setDragItem] = useState<DragItem | null>(null);
 
   const oppColor = context.opponentColor;
   const showSquad = visibility !== "none";
@@ -168,15 +175,38 @@ export default function OpponentSquadSetupPage() {
     );
   };
 
-  const handleAssignmentsChange = (next: typeof assignments) => {
-    setAssignments(next);
-    setPlayers((current) =>
-      applyAssignmentsToPlayers(current, formationId, next),
-    );
-    if (unassignedPlayers(players, next).length === 0) {
-      setFormationNotice(null);
-    }
-  };
+  const handleAssignmentsChange = useCallback(
+    (next: typeof assignments) => {
+      setAssignments(next);
+      setPlayers((current) =>
+        applyAssignmentsToPlayers(current, formationId, next),
+      );
+      setFormationNotice((current) =>
+        unassignedPlayers(players, next).length === 0 ? null : current,
+      );
+    },
+    [formationId, players],
+  );
+
+  const startDrag = useCallback((item: DragItem) => {
+    setDragItem(item);
+  }, []);
+  const endDrag = useCallback(() => {
+    setDragItem(null);
+  }, []);
+  const handleShirtDrop = useCallback(
+    (
+      source: DragItem,
+      target: { type: "pitch"; positionId: string } | { type: "subs" },
+    ) => {
+      const next = applyOpponentShirtDrop(assignments, source, target);
+      if (next) {
+        handleAssignmentsChange(next);
+      }
+      setDragItem(null);
+    },
+    [assignments, handleAssignmentsChange],
+  );
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
@@ -255,7 +285,7 @@ export default function OpponentSquadSetupPage() {
           </p>
         </section>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,18rem)_minmax(0,auto)] xl:grid-cols-[minmax(0,22rem)_minmax(0,auto)]">
           <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
             <h2
               className="text-[11px] font-semibold uppercase tracking-[0.18em]"
@@ -274,11 +304,11 @@ export default function OpponentSquadSetupPage() {
               }}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="space-y-2 sm:w-24">
+                <div className="space-y-2 sm:w-24 lg:w-28">
                   <Label htmlFor="opponent-setup-shirt">Number</Label>
                   <input
                     id="opponent-setup-shirt"
-                    className={inputClassName}
+                    className={cn(inputClassName, "lg:h-14 lg:text-base")}
                     value={shirtInput}
                     onChange={(event) => {
                       setShirtInput(event.target.value);
@@ -307,7 +337,11 @@ export default function OpponentSquadSetupPage() {
                     />
                   </div>
                 )}
-                <Button type="submit" variant="outline">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="lg:h-14 lg:px-5 lg:text-base"
+                >
                   + Add {visibility === "full" ? "player" : "number"}
                 </Button>
               </div>
@@ -326,50 +360,77 @@ export default function OpponentSquadSetupPage() {
                   );
                   return (
                     <li key={player.shirtNumber}>
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium text-foreground"
-                        style={{
-                          backgroundColor: onPitch
-                            ? `${oppColor}33`
-                            : "transparent",
-                          boxShadow: `inset 0 0 0 1px ${oppColor}`,
-                          opacity: onPitch ? 1 : 0.7,
-                        }}
-                      >
-                        <span className="font-semibold">
-                          #{player.shirtNumber}
-                        </span>
-                        {onPitch ? null : (
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Bench
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="rounded-full p-0.5 opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                          aria-label={`Remove opponent #${player.shirtNumber}`}
-                          onClick={() => removePlayer(player.shirtNumber)}
+                      {onPitch ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-medium text-foreground lg:gap-2 lg:px-4 lg:py-2 lg:text-lg"
+                          style={{
+                            backgroundColor: `${oppColor}33`,
+                            boxShadow: `inset 0 0 0 1px ${oppColor}`,
+                          }}
                         >
-                          <X className="size-3.5" />
-                        </button>
-                      </span>
+                          <span className="font-semibold">
+                            {player.shirtNumber}
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                            aria-label={`Remove opponent #${player.shirtNumber}`}
+                            onClick={() => removePlayer(player.shirtNumber)}
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          <OpponentShirtChip
+                            player={player}
+                            opponentColor={oppColor}
+                            onDragStart={startDrag}
+                            onDragEnd={endDrag}
+                            onDrop={handleShirtDrop}
+                          />
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+                            aria-label={`Remove opponent #${player.shirtNumber}`}
+                            onClick={() => removePlayer(player.shirtNumber)}
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </span>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             ) : (
               <ul className="mt-4 flex flex-col gap-2">
-                {players.map((player) => (
+                {players.map((player) => {
+                  const unassigned = benchPlayers.some(
+                    (entry) => entry.shirtNumber === player.shirtNumber,
+                  );
+                  return (
                   <li
                     key={player.shirtNumber}
                     className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5"
                   >
-                    <span
-                      className="font-semibold tabular-nums"
-                      style={{ color: oppColor }}
-                    >
-                      #{player.shirtNumber}
-                    </span>
+                    {unassigned ? (
+                      <OpponentShirtChip
+                        player={player}
+                        opponentColor={oppColor}
+                        showName={false}
+                        onDragStart={startDrag}
+                        onDragEnd={endDrag}
+                        onDrop={handleShirtDrop}
+                      />
+                    ) : (
+                      <span
+                        className="font-semibold tabular-nums"
+                        style={{ color: oppColor }}
+                      >
+                        #{player.shirtNumber}
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {player.name}
                     </span>
@@ -397,12 +458,14 @@ export default function OpponentSquadSetupPage() {
                       <X className="size-3.5" />
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
             {players.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">
-                Add shirt numbers, then tap empty pitch slots to place them.
+                Add shirt numbers, then tap empty pitch slots or drag them onto
+                the pitch to place them.
               </p>
             ) : (
               <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -411,7 +474,7 @@ export default function OpponentSquadSetupPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 lg:w-fit lg:max-w-full">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2
                 className="text-[11px] font-semibold uppercase tracking-[0.18em]"
@@ -443,42 +506,55 @@ export default function OpponentSquadSetupPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="mt-4">
-              <OpponentFormationPitch
-                formationId={formationId}
-                assignments={assignments}
-                players={players}
-                opponentColor={oppColor}
-                onAssignmentsChange={handleAssignmentsChange}
-              />
-              {formationNotice ? (
-                <p role="status" className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-                  {formationNotice}
-                </p>
-              ) : null}
-              {benchPlayers.length > 0 ? (
-                <div className="mt-3 rounded-xl border border-dashed border-border bg-background/60 px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                    Unassigned · tap an empty slot to place
+            <div className="mt-4 flex flex-col lg:flex-row lg:items-stretch lg:gap-4">
+              <div className="min-w-0">
+                <OpponentFormationPitch
+                  formationId={formationId}
+                  assignments={assignments}
+                  players={players}
+                  opponentColor={oppColor}
+                  dragItem={dragItem}
+                  onDragStart={startDrag}
+                  onDragEnd={endDrag}
+                  onAssignmentsChange={handleAssignmentsChange}
+                />
+                {formationNotice ? (
+                  <p role="status" className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+                    {formationNotice}
                   </p>
-                  <ul className="mt-2 flex flex-wrap gap-2">
+                ) : null}
+              </div>
+              <OpponentUnassignedDropZone
+                dragItem={dragItem}
+                onDrop={handleShirtDrop}
+                onDragEnd={endDrag}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground lg:hidden">
+                  Unassigned · drag onto the pitch or tap an empty slot
+                </p>
+                <p className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground lg:block">
+                  Bench
+                </p>
+                {benchPlayers.length > 0 ? (
+                  <ul className="mt-2 flex flex-wrap gap-2 lg:flex-col lg:flex-nowrap">
                     {benchPlayers.map((player) => (
-                      <li
-                        key={player.shirtNumber}
-                        className="rounded-full px-2.5 py-1 text-sm font-semibold tabular-nums"
-                        style={{ boxShadow: `inset 0 0 0 1px ${oppColor}` }}
-                      >
-                        #{player.shirtNumber}
-                        {player.name ? (
-                          <span className="ml-1 font-medium text-muted-foreground">
-                            {player.name}
-                          </span>
-                        ) : null}
+                      <li key={player.shirtNumber}>
+                        <OpponentShirtChip
+                          player={player}
+                          opponentColor={oppColor}
+                          onDragStart={startDrag}
+                          onDragEnd={endDrag}
+                          onDrop={handleShirtDrop}
+                        />
                       </li>
                     ))}
                   </ul>
-                </div>
-              ) : null}
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Drop a pitch marker here to unassign.
+                  </p>
+                )}
+              </OpponentUnassignedDropZone>
             </div>
           </section>
         </div>

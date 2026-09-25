@@ -73,6 +73,22 @@ describe('createMatchLogEventSchema', () => {
     });
   });
 
+  it('accepts a generic opponent substitution without squad data', () => {
+    expect(
+      createMatchLogEventSchema.parse({
+        clientRequestId,
+        team: 'opponent',
+        eventType: 'substitution',
+        opponentLabel: 'Rivals',
+        minute: 30,
+      }),
+    ).toMatchObject({
+      team: 'opponent',
+      eventType: 'substitution',
+      opponentLabel: 'Rivals',
+    });
+  });
+
   it('stores a scored penalty as a goal with Penalty detail', () => {
     expect(
       createMatchLogEventSchema.parse({

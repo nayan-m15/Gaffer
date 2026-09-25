@@ -96,10 +96,11 @@ export function useAthleteStatistics(athleteId: string | null) {
   });
 }
 
-export function useCompetitions() {
+export function useCompetitions(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: competitionsQueryKey,
     queryFn: () => getCompetitions().then(toUiCompetitions),
+    enabled: options?.enabled ?? true,
   });
 }
 

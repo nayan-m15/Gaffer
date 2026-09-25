@@ -7,16 +7,20 @@ import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
 import { PlayerShell } from '@/layouts/PlayerShell'
-import LoginPage from '@/pages/LoginPage'
-import SignUpPage from '@/pages/SignUpPage'
-import ClaimPage from '@/pages/ClaimPage'
-import JoinTeamPage from '@/pages/JoinTeamPage'
-import VerifyEmailPendingPage from '@/pages/VerifyEmailPendingPage'
-import LandingPage from '@/pages/LandingPage'
-import PublicDashboard from '@/pages/PublicDashboard'
+import { CompetitionInviteResumer } from '@/components/CompetitionInviteResumer'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 import { Loader2 } from 'lucide-react'
+import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
+
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const SignUpPage = lazy(() => import('@/pages/SignUpPage'))
+const ClaimPage = lazy(() => import('@/pages/ClaimPage'))
+const JoinCompetitionPage = lazy(() => import('@/pages/JoinCompetitionPage'))
+const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage'))
+const VerifyEmailPendingPage = lazy(() => import('@/pages/VerifyEmailPendingPage'))
+const LandingPage = lazy(() => import('@/pages/LandingPage'))
+const PublicDashboard = lazy(() => import('@/pages/PublicDashboard'))
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const AthletesPage = lazy(() => import('@/pages/AthletesPage'))
@@ -27,11 +31,12 @@ const LiveLoggerPage = lazy(() => import('@/pages/LiveLoggerPage'))
 const LiveMatchPage = lazy(() => import('@/pages/LiveMatchPage'))
 const MatchReportPage = lazy(() => import('@/pages/MatchReportPage'))
 const StatisticsPage = lazy(() => import('@/pages/StatisticsPage'))
+const CompetitionsPage = lazy(() => import('@/features/competitions/CompetitionsPage'))
+const InjuryRecoveryPage = lazy(() => import('@/features/injuries/InjuryRecoveryPage'))
 const TeamManagementPage = lazy(() => import('@/features/team-management/TeamManagementPage'))
 const PlayerDashboardPage = lazy(() => import('@/features/player/PlayerDashboardPage'))
 const PlayerTeamPage = lazy(() => import('@/features/player/PlayerTeamPage'))
 const PlayerEventsPage = lazy(() => import('@/features/player/PlayerEventsPage'))
-const PlayerStandingsPage = lazy(() => import('@/features/player/PlayerStandingsPage'))
 
 function RouteFallback() {
   return (
@@ -63,31 +68,56 @@ function App() {
 
   /* Signal that the application is ready once auth has resolved (no longer
    * in the "loading" state) AND the browser's fonts have finished loading.
-   * A maximum timeout prevents the loader from getting stuck indefinitely
-   * if a non-critical resource fails.                                      */
+   * If visiting a public route (e.g. landing page or login), unblock as soon as
+   * fonts are ready without waiting for auth session verification to wake up a
+   * sleeping server. An unconditional timeout prevents the loader from getting
+   * stuck indefinitely regardless of network conditions.                     */
   useEffect(() => {
-    if (status === "loading") return;
-
-    Promise.race([
-      document.fonts?.ready ?? Promise.resolve(),
-      new Promise<void>((r) => setTimeout(r, 3000)),
-    ]).then(() => setAppReady(true));
-
-    // Fallback: force-dismiss the loader after 10 s regardless.
-    const fallback = setTimeout(() => setAppReady(true), 10_000);
-    return () => clearTimeout(fallback);
+    if (status !== 'loading') {
+      Promise.race([
+        document.fonts?.ready ?? Promise.resolve(),
+        new Promise<void>((r) => setTimeout(r, 1500)),
+      ]).then(() => setAppReady(true));
+    }
   }, [status]);
+
+  useEffect(() => {
+    // Fast-path for public routes: do not block landing/auth pages on cold backend starts.
+    const pathname = window.location.pathname;
+    const isPublicRoute =
+      pathname === '/' ||
+      pathname === '/login' ||
+      pathname === '/signup' ||
+      pathname === '/public-dashboard' ||
+      pathname.startsWith('/claim/') ||
+      pathname.startsWith('/join-team/') ||
+      pathname.startsWith('/join-competition/') ||
+      pathname === '/verify-email';
+
+    if (isPublicRoute) {
+      Promise.race([
+        document.fonts?.ready ?? Promise.resolve(),
+        new Promise<void>((r) => setTimeout(r, 1000)),
+      ]).then(() => setAppReady(true));
+    }
+
+    // Safety fallback: force-dismiss the loader after 4 s regardless of network or auth state.
+    const fallback = setTimeout(() => setAppReady(true), 4_000);
+    return () => clearTimeout(fallback);
+  }, []);
 
   const handleLoadingDone = useCallback(() => setLoadingDone(true), []);
 
   return (
     <>
+      <PwaUpdatePrompt />
       {!loadingDone && (
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
       <ClaimResumer />
       <TeamInviteResumer />
+      <CompetitionInviteResumer />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -95,6 +125,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
+        <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
         <Route path="/join-team/:token" element={<JoinTeamPage />} />
         <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
         <Route
@@ -115,6 +146,8 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/competitions" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
+          <Route path="/competitions/:id" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
           <Route
             path="/athletes"
             element={
@@ -169,6 +202,14 @@ function App() {
             }
           />
           <Route
+            path="/injuries"
+            element={
+              <RequireTeam>
+                <InjuryRecoveryPage />
+              </RequireTeam>
+            }
+          />
+          <Route
             path="/team"
             element={
               <RequireTeam>
@@ -199,7 +240,9 @@ function App() {
           <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
           <Route path="/player/team" element={<PlayerTeamPage />} />
           <Route path="/player/events" element={<PlayerEventsPage />} />
-          <Route path="/player/standings" element={<PlayerStandingsPage />} />
+          <Route path="/player/competitions" element={<CompetitionsPage />} />
+          <Route path="/player/competitions/:id" element={<CompetitionsPage />} />
+          <Route path="/player/standings" element={<Navigate to="/player/competitions" replace />} />
         </Route>
       </Routes>
       </Suspense>

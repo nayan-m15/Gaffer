@@ -55,3 +55,12 @@ export const syncUploadSchema = z.object({
 });
 
 export type SyncUploadItem = z.infer<typeof syncUploadSchema>['items'][number];
+
+export const syncTelemetrySchema = z.object({
+  deviceId: z.uuid(),
+  pendingCount: z.number().int().min(0).max(100_000),
+  rejectedCount: z.number().int().min(0).max(100_000),
+  oldestPendingAt: z.iso.datetime().nullable(),
+  lastSuccessfulSyncAt: z.iso.datetime().nullable(),
+  deployment: z.string().trim().min(1).max(64),
+});

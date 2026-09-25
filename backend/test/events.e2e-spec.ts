@@ -6,7 +6,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -55,7 +55,7 @@ describe('Events (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -214,13 +214,18 @@ describe('Events (e2e)', () => {
 
   it('carries match competition assignment through creation and editing', async () => {
     const { agent } = await newCoach();
+    // Competition names are globally unique (case-insensitively), so suffix a
+    // uuid to stay collision-free across repeated runs against the persistent
+    // test database.
+    const leagueName = `Premier League ${randomUUID()}`;
+    const cupName = `County Cup ${randomUUID()}`;
     const league = await agent
       .post('/statistics/competitions')
-      .send({ name: 'Premier League', type: 'league', season: '2026/27' })
+      .send({ name: leagueName, type: 'league', season: '2026/27' })
       .expect(201);
     const cup = await agent
       .post('/statistics/competitions')
-      .send({ name: 'County Cup', type: 'cup', season: '2026/27' })
+      .send({ name: cupName, type: 'cup', season: '2026/27' })
       .expect(201);
     const leagueId = (league.body as IdBody).id;
     const cupId = (cup.body as IdBody).id;
@@ -238,6 +243,30 @@ describe('Events (e2e)', () => {
     const event = created.body as EventBody;
     expect(event.competitionId).toBe(leagueId);
 
+    const updated = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: cupId })
+      .expect(200);
+    expect((updated.body as EventBody).competitionId).toBe(cupId);
+
+    const cleared = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: null })
+      .expect(200);
+    expect((cleared.body as EventBody).competitionId).toBeNull();
+
+    const reassigned = await agent
+      .patch(`/events/${event.id}`)
+      .send({ competitionId: leagueId })
+      .expect(200);
+    expect((reassigned.body as EventBody).competitionId).toBe(leagueId);
+
+    const opponentParticipant = await agent
+      .post(`/competitions/${leagueId}/teams`)
+      .send({ displayName: 'Rivals FC' })
+      .expect(201);
+    const opponentCompetitionTeamId = (opponentParticipant.body as IdBody).id;
+
     const athleteIds = await Promise.all(
       Array.from({ length: 11 }, async (_, index) => {
         const athlete = await agent
@@ -254,6 +283,7 @@ describe('Events (e2e)', () => {
       .post(`/events/${event.id}/start-match`)
       .send({
         opponentName: 'Rivals FC',
+        opponentCompetitionTeamId,
         isHome: true,
         startingAthleteIds: athleteIds,
       })
@@ -261,22 +291,25 @@ describe('Events (e2e)', () => {
     const match = started.body as MatchBody;
     expect(match.competitionId).toBe(leagueId);
 
-    const updated = await agent
+    // After the match has started, the competition cannot be changed
+    await agent
       .patch(`/events/${event.id}`)
       .send({ competitionId: cupId })
-      .expect(200);
-    expect((updated.body as EventBody).competitionId).toBe(cupId);
-    const reassignedMatch = await agent.get(`/matches/${match.id}`).expect(200);
-    expect((reassignedMatch.body as MatchBody).competitionId).toBe(cupId);
+      .expect(400);
 
-    const cleared = await agent
+    // Other fields can still be updated and the match assignment is retained
+    const renamed = await agent
       .patch(`/events/${event.id}`)
-      .send({ competitionId: null })
+      .send({ title: 'Rescheduled League Match' })
       .expect(200);
-    expect((cleared.body as EventBody).competitionId).toBeNull();
-    const clearedMatch = await agent.get(`/matches/${match.id}`).expect(200);
-    expect((clearedMatch.body as MatchBody).competitionId).toBeNull();
-  });
+    expect((renamed.body as EventBody).title).toBe('Rescheduled League Match');
+    expect((renamed.body as EventBody).competitionId).toBe(leagueId);
+
+    const matchAfterUpdate = await agent
+      .get(`/matches/${match.id}`)
+      .expect(200);
+    expect((matchAfterUpdate.body as MatchBody).competitionId).toBe(leagueId);
+  }, 60_000);
 
   it('cancels an event by setting its status, rather than deleting it', async () => {
     const { agent } = await newCoach();

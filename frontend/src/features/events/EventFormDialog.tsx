@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { CalendarIcon, Check, ClockIcon, MapPinned, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatefulButton } from "@/components/ui/stateful-button";
@@ -27,8 +27,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useCompetitions } from "@/features/statistics/hooks";
+import type { CompetitionWithStandings } from "@/features/statistics/types";
 import {
-  EVENT_TYPE_ITEMS,
   EVENT_TYPE_OPTIONS,
   combineScheduledAt,
   formatDateLabel,
@@ -42,6 +42,7 @@ import {
 import { useCreateEvent, useUpdateEvent } from "./hooks";
 import { searchLocations } from "./api";
 import type { EventType, LocationSearchResult, TeamEvent } from "./types";
+import { getEventTypeStyle } from "./event-style";
 
 const inputClassName =
   "h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30";
@@ -52,6 +53,43 @@ const TIME_HOURS = Array.from({ length: 24 }, (_, hour) =>
 const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) =>
   String(minute).padStart(2, "0"),
 );
+
+/** Match first so the type segments follow the calendar's visual grouping. */
+const FORM_EVENT_TYPE_ORDER: EventType[] = ["match", "training", "meeting"];
+
+function competitionOptionLabel(competition: CompetitionWithStandings) {
+  const name = competition.name.trim() || "Unnamed competition";
+  return competition.season ? `${name} (${competition.season})` : name;
+}
+
+function opponentSuggestionsFromStandings(
+  competitions: CompetitionWithStandings[] | undefined,
+  selectedCompetitionId: string,
+) {
+  if (selectedCompetitionId === "none") {
+    return [];
+  }
+  const competition = competitions?.find(
+    (entry) => entry.id === selectedCompetitionId,
+  );
+  if (!competition) {
+    return [];
+  }
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const standing of competition.standings) {
+    if (standing.isOwnTeam) {
+      continue;
+    }
+    const name = standing.teamName.trim();
+    if (!name || seen.has(name.toLowerCase())) {
+      continue;
+    }
+    seen.add(name.toLowerCase());
+    names.push(name);
+  }
+  return names;
+}
 
 interface EventFormDialogProps {
   open: boolean;
@@ -102,8 +140,19 @@ export function EventFormDialog({
   );
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
+  const [opponentPick, setOpponentPick] = useState("");
   const [error, setError] = useState<string | null>(null);
   const locationSearchIdRef = useRef(0);
+
+  const competitionOptions = useMemo(
+    () =>
+      (competitionsQuery.data ?? []).filter(
+        (competition) =>
+          competition.type !== "friendly" ||
+          competition.id === event?.competitionId,
+      ),
+    [competitionsQuery.data, event?.competitionId],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -147,10 +196,34 @@ export function EventFormDialog({
       setNotes("");
       setCompetitionId("none");
     }
+    setOpponentPick("");
     setError(null);
     setLocationResults([]);
     setLocationSearchCompleted(false);
   }, [open, event, initialDate, initialType]);
+
+  const opponentTeams = useMemo(
+    () =>
+      opponentSuggestionsFromStandings(
+        competitionsQuery.data,
+        competitionId,
+      ),
+    [competitionsQuery.data, competitionId],
+  );
+  const showOpponentTeamSelect =
+    type === "match" && opponentTeams.length > 0;
+  const typeStyle = getEventTypeStyle(type);
+  const competitionItems = useMemo(() => {
+    const items: Record<string, string> = { none: "No competition" };
+    for (const competition of competitionOptions) {
+      items[competition.id] = competitionOptionLabel(competition);
+    }
+    return items;
+  }, [competitionOptions]);
+  const opponentItems = useMemo(
+    () => Object.fromEntries(opponentTeams.map((name) => [name, name])),
+    [opponentTeams],
+  );
 
   const useExactCoordinates = () => {
     const latitude = Number(manualLatitude);
@@ -282,6 +355,102 @@ export function EventFormDialog({
         </DialogHeader>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-5">
+          <Field label="Event Type">
+            <div
+              role="radiogroup"
+              aria-label="Event type"
+              className="grid grid-cols-3 gap-2"
+            >
+              {FORM_EVENT_TYPE_ORDER.map((eventType) => {
+                const option = EVENT_TYPE_OPTIONS.find(
+                  (entry) => entry.value === eventType,
+                );
+                if (!option) {
+                  return null;
+                }
+                const selected = type === eventType;
+                return (
+                  <button
+                    key={eventType}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setType(eventType)}
+                    className={cn(
+                      "h-11 rounded-full border px-2 text-sm font-semibold transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      selected
+                        ? cn(
+                            "border-transparent",
+                            getEventTypeStyle(eventType).action,
+                          )
+                        : "border-border bg-transparent text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {type === "match" ? (
+            <Field label="Competition">
+              <Select
+                value={competitionId}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  setCompetitionId(value);
+                  setOpponentPick("");
+                }}
+                items={competitionItems}
+                modal={false}
+              >
+                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
+                  <SelectValue placeholder="Select a competition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No competition</SelectItem>
+                  {competitionOptions.map((competition) => (
+                    <SelectItem key={competition.id} value={competition.id}>
+                      {competitionOptionLabel(competition)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+
+          {showOpponentTeamSelect ? (
+            <Field label="Opponent Team">
+              <Select
+                value={opponentPick || null}
+                onValueChange={(value) => {
+                  if (!value) {
+                    return;
+                  }
+                  setOpponentPick(value);
+                  setTitle(value);
+                }}
+                items={opponentItems}
+                modal={false}
+              >
+                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
+                  <SelectValue placeholder="Choose from competition" />
+                </SelectTrigger>
+                <SelectContent>
+                  {opponentTeams.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+
           <Field htmlFor={`${baseId}-title`} label="Title">
             <input
               id={`${baseId}-title`}
@@ -292,30 +461,6 @@ export function EventFormDialog({
               required
               maxLength={150}
             />
-          </Field>
-
-          <Field label="Type">
-            <Select
-              value={type}
-              onValueChange={(value) => {
-                if (value) {
-                  setType(value);
-                }
-              }}
-              items={EVENT_TYPE_ITEMS}
-              modal={false}
-            >
-              <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EVENT_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </Field>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -499,29 +644,6 @@ export function EventFormDialog({
             </details>
           </Field>
 
-          {type === "match" && (
-            <Field label="Competition">
-              <Select
-                value={competitionId}
-                onValueChange={(value) => value && setCompetitionId(value)}
-                modal={false}
-              >
-                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
-                  <SelectValue placeholder="No competition" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No competition</SelectItem>
-                  {(competitionsQuery.data ?? []).map((competition) => (
-                    <SelectItem key={competition.id} value={competition.id}>
-                      {competition.name}
-                      {competition.season ? ` (${competition.season})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-
           <Field htmlFor={`${baseId}-notes`} label="Notes">
             <Textarea
               id={`${baseId}-notes`}
@@ -543,7 +665,10 @@ export function EventFormDialog({
           <StatefulButton
             type="submit"
             disabled={isPending}
-            className="mt-1 w-full font-semibold tracking-wide"
+            className={cn(
+              "mt-1 w-full font-semibold tracking-wide",
+              typeStyle.action,
+            )}
             status={isPending ? "loading" : "idle"}
             loadingText={isEditing ? "Saving event..." : "Creating event..."}
           >

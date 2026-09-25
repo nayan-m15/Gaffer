@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -110,7 +111,7 @@ describe('Statistics and seasons (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -122,15 +123,15 @@ describe('Statistics and seasons (e2e)', () => {
 
   /** Creates the 11 athletes a starting XI needs, returning their ids. */
   async function createSquad(agent: Agent): Promise<string[]> {
-    const ids: string[] = [];
-    for (let i = 0; i < 11; i += 1) {
-      const response = await agent
-        .post('/athletes')
-        .send({ firstName: `Player${i}`, lastName: `Test${i}` })
-        .expect(201);
-      ids.push((response.body as { id: string }).id);
-    }
-    return ids;
+    const responses = await Promise.all(
+      Array.from({ length: 11 }, (_, index) =>
+        agent
+          .post('/athletes')
+          .send({ firstName: `Player${index}`, lastName: `Test${index}` })
+          .expect(201),
+      ),
+    );
+    return responses.map((response) => (response.body as { id: string }).id);
   }
 
   /**
@@ -702,7 +703,7 @@ describe('Statistics integrity (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -713,7 +714,9 @@ describe('Statistics integrity (e2e)', () => {
 
     const competition = await agent
       .post('/statistics/competitions')
-      .send({ name: 'Premier League', type: 'league' })
+      // Globally unique competition names: suffix a uuid so repeated runs
+      // against the persistent test database never collide.
+      .send({ name: `Premier League ${randomUUID()}`, type: 'league' })
       .expect(201);
     const competitionId = (competition.body as { id: string }).id;
     const standing = await agent

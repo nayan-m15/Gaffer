@@ -11,6 +11,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
   HeartPulse,
+  LayoutDashboard,
   Loader2,
   Pause,
   Play,
@@ -27,7 +28,12 @@ import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
 import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
-import { readClockAnchor, saveClockAnchor } from "@/offline/match-store";
+import {
+  isClockAnchorPending,
+  markClockAnchorSynced,
+  readClockAnchor,
+  saveClockAnchor,
+} from "@/offline/match-store";
 import { useGamePlan } from "@/features/team-tactics/api";
 import {
   useDeleteMatchEvent,
@@ -80,6 +86,12 @@ import {
 } from "@/features/matches/live-match-model";
 import { SoccerBallIcon, BootIcon } from "@/features/matches/match-icons";
 import {
+  LiveInjurySheet,
+  type LiveInjurySpec,
+} from "@/features/matches/LiveInjurySheet";
+import { injuryTitle } from "@/features/injuries/body-regions";
+import { useCreateInjury } from "@/features/injuries/hooks";
+import {
   LiveBenchRow,
   LivePitch,
   LivePitchPlayers,
@@ -87,11 +99,7 @@ import {
 import "./LiveMatchPage.css";
 
 type Period =
-  | "not_started"
-  | "first_half"
-  | "half_time"
-  | "second_half"
-  | "full_time";
+  "not_started" | "first_half" | "half_time" | "second_half" | "full_time";
 
 type LogAction = Exclude<MatchEventType, "assist">;
 
@@ -103,6 +111,15 @@ type LogTarget =
 type Composer =
   | { kind: "closed" }
   | { kind: "penalty-outcome" }
+  | {
+      /**
+       * The injury-specification step. Own-team, on-pitch players only —
+       * an opponent's clinical record is not ours to keep.
+       */
+      kind: "injury-detail";
+      athlete: MatchSquadAthlete;
+      minute: number;
+    }
   | {
       kind: "sub-in";
       team: MatchEventTeam;
@@ -171,6 +188,11 @@ type PersistInput = {
   detail?: string;
   minute?: number;
   reassignId?: string;
+  /**
+   * Diagnosis from the injury sheet. When present, an injury record is
+   * created after the match event lands and linked back to it.
+   */
+  injurySpec?: LiveInjurySpec;
 };
 
 function formatClock(elapsedMs: number) {
@@ -273,8 +295,7 @@ function loggingForLabel(
 }
 
 /**
- * Full-screen live logger. Period/pause/clock are client-side only and reset
- * on refresh — v1 does not persist elapsed time.
+ * Full-screen live logger with a persisted match clock shared across devices.
  */
 export default function LiveMatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -282,6 +303,8 @@ export default function LiveMatchPage() {
   const { team } = useAuth();
 
   const matchQuery = useMatch(matchId);
+  const clockAuthorityRevision = matchQuery.data?.clockRevision ?? 0;
+  const refetchMatch = matchQuery.refetch;
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
@@ -295,7 +318,8 @@ export default function LiveMatchPage() {
   const finishMatch = useFinishMatch(matchId ?? "");
   const finaliseProjection = useFinaliseMatchProjection(matchId ?? "");
   const reopenProjection = useReopenMatchProjection(matchId ?? "");
-  const updateClock = useUpdateMatchClock(matchId ?? "");
+  const { mutateAsync: updateMatchClock } = useUpdateMatchClock(matchId ?? "");
+  const createInjury = useCreateInjury();
 
   const [period, setPeriod] = useState<Period>("not_started");
   const [running, setRunning] = useState(false);
@@ -336,7 +360,7 @@ export default function LiveMatchPage() {
   const persistLockRef = useRef(false);
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
-  const clockHydratedRef = useRef(false);
+  const lastAppliedClockRevisionRef = useRef<string | null>(null);
   const enteringIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -345,13 +369,16 @@ export default function LiveMatchPage() {
 
   useEffect(() => {
     const match = matchQuery.data;
-    if (!match || clockHydratedRef.current) return;
-    clockHydratedRef.current = true;
+    if (!match || lastAppliedClockRevisionRef.current === match.updatedAt)
+      return;
+    let cancelled = false;
     void (async () => {
       const local = matchId ? await readClockAnchor(matchId) : null;
+      if (cancelled) return;
       if (match.eventStatus === "completed") {
         setPeriod("full_time");
         setRunning(false);
+        lastAppliedClockRevisionRef.current = match.updatedAt;
         return;
       }
       const serverElapsed = Math.max(
@@ -362,8 +389,7 @@ export default function LiveMatchPage() {
             : 0),
       );
       const useLocal = Boolean(
-        local &&
-          new Date(local.updatedAt).getTime() > new Date(match.updatedAt).getTime(),
+        matchId && local && isClockAnchorPending(matchId),
       );
       const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
       const nextPeriod = useLocal && local ? local.period : match.clockPeriod;
@@ -386,7 +412,11 @@ export default function LiveMatchPage() {
         checkedMarksRef.current.add(nextPeriod);
       }
       setRunning(nextRunning);
+      lastAppliedClockRevisionRef.current = match.updatedAt;
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [matchId, matchQuery.data]);
 
   useEffect(() => {
@@ -411,10 +441,7 @@ export default function LiveMatchPage() {
   }, [running]);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
-  const timeline = useMemo(
-    () => eventsQuery.data ?? [],
-    [eventsQuery.data],
-  );
+  const timeline = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
   const loggedGoalsOwn = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "own",
   ).length;
@@ -449,10 +476,7 @@ export default function LiveMatchPage() {
       ),
     [timeline],
   );
-  const assistsByGoal = useMemo(
-    () => pairAssistsToGoals(timeline),
-    [timeline],
-  );
+  const assistsByGoal = useMemo(() => pairAssistsToGoals(timeline), [timeline]);
   const opponentSquad = useMemo(
     () => matchQuery.data?.opponentSquad ?? [],
     [matchQuery.data?.opponentSquad],
@@ -577,26 +601,78 @@ export default function LiveMatchPage() {
 
   const persistClock = useCallback(
     (nextPeriod: Period, nextRunning: boolean, elapsed: number) => {
-      if (matchId) {
-        void saveClockAnchor(matchId, {
+      if (!matchId) return;
+      void (async () => {
+        const saved = await saveClockAnchor(matchId, {
           period: nextPeriod,
           running: nextRunning,
           elapsedMs: elapsed,
-          authorityRevision: matchQuery.data?.updatedAt ?? "offline",
+          authorityRevision: String(clockAuthorityRevision),
         });
-      }
-      updateClock.mutate(
-        { period: nextPeriod, running: nextRunning, elapsedMs: elapsed },
-        {
-          onError: (error) =>
+        if (!navigator.onLine) return;
+        try {
+          await updateMatchClock({
+            operationId: saved.operationId,
+            baseRevision: clockAuthorityRevision,
+            clientCreatedAt: saved.clientCreatedAt,
+            period: nextPeriod,
+            running: nextRunning,
+            elapsedMs: elapsed,
+          });
+          markClockAnchorSynced(matchId, saved.version);
+          lastAppliedClockRevisionRef.current = null;
+          await refetchMatch();
+        } catch (error) {
+          if (navigator.onLine) {
             setActionError(
-              error instanceof Error ? error.message : "Could not save the match clock.",
-            ),
-        },
-      );
+              error instanceof Error
+                ? error.message
+                : "Could not save the match clock.",
+            );
+          }
+        }
+      })();
     },
-    [matchId, matchQuery.data?.updatedAt, updateClock],
+    [
+      matchId,
+      clockAuthorityRevision,
+      refetchMatch,
+      updateMatchClock,
+    ],
   );
+
+  useEffect(() => {
+    if (!matchId) return;
+    const flushPendingClock = () => {
+      if (!navigator.onLine || !isClockAnchorPending(matchId)) return;
+      void (async () => {
+        const anchor = await readClockAnchor(matchId);
+        if (!anchor || anchor.uncertain) return;
+        try {
+          await updateMatchClock({
+            operationId: anchor.operationId,
+            baseRevision: Number(anchor.authorityRevision) || 0,
+            clientCreatedAt: anchor.clientCreatedAt,
+            period: anchor.period,
+            running: anchor.running,
+            elapsedMs: anchor.elapsedMs,
+          });
+          markClockAnchorSynced(matchId, anchor.updatedAt);
+          lastAppliedClockRevisionRef.current = null;
+          await refetchMatch();
+        } catch (error) {
+          setActionError(
+            error instanceof Error
+              ? error.message
+              : "Could not synchronise the match clock.",
+          );
+        }
+      })();
+    };
+    window.addEventListener("online", flushPendingClock);
+    flushPendingClock();
+    return () => window.removeEventListener("online", flushPendingClock);
+  }, [matchId, refetchMatch, updateMatchClock]);
 
   const startClock = () => {
     setRunning(true);
@@ -734,7 +810,7 @@ export default function LiveMatchPage() {
         (input.team === "opponent" &&
           Boolean(
             input.opponentPlayerId &&
-              dismissedOppIds.has(input.opponentPlayerId),
+            dismissedOppIds.has(input.opponentPlayerId),
           ));
       if (dismissed) {
         closeComposer();
@@ -763,9 +839,14 @@ export default function LiveMatchPage() {
         detail = SECOND_YELLOW_DETAIL;
       }
 
+      const canSelectOpponentTeammate =
+        input.team !== "opponent" ||
+        (visibility !== "none" && opponentSquad.length > 0);
       const keepComposerForFollowUp =
-        eventType === "injury" ||
-        (eventType === "goal" && detail !== PENALTY_SCORED_DETAIL);
+        (eventType === "injury" && canSelectOpponentTeammate) ||
+        (eventType === "goal" &&
+          detail !== PENALTY_SCORED_DETAIL &&
+          canSelectOpponentTeammate);
       if (!keepComposerForFollowUp) {
         closeComposer();
       }
@@ -798,7 +879,10 @@ export default function LiveMatchPage() {
               : {}),
             ...(detail ? { detail } : {}),
           });
-          const label = eventDisplayLabel({ eventType, detail: detail ?? null });
+          const label = eventDisplayLabel({
+            eventType,
+            detail: detail ?? null,
+          });
           setToast({
             id: created.id,
             label:
@@ -807,11 +891,42 @@ export default function LiveMatchPage() {
                 : `${label} logged`,
           });
           window.setTimeout(() => setToast(null), 5000);
-          if (eventType === "injury") {
+          if (eventType === "injury" && canSelectOpponentTeammate) {
             console.log("[live-callout:persist]", {
               eventType,
               nextKind: "mandatory-sub-in",
             });
+            /* The clinical record is created only after the match event has
+             * landed, and its failure is never allowed to propagate: the
+             * mandatory substitution below is the thing the coach cannot do
+             * without, so a failed record degrades to a toast rather than
+             * swallowing the prompt. */
+            if (input.injurySpec && input.athleteId && matchId) {
+              const spec = input.injurySpec;
+              try {
+                await createInjury.mutateAsync({
+                  athleteId: input.athleteId,
+                  bodyRegion: spec.bodyRegion,
+                  injuryType: spec.injuryType,
+                  severity: spec.severity,
+                  occurredOn: new Date().toISOString().slice(0, 10),
+                  context: "match",
+                  matchId,
+                  matchEventId: created.id,
+                  minute: created.minute,
+                });
+                setToast({
+                  label: `${injuryTitle(spec)} recorded`,
+                });
+                window.setTimeout(() => setToast(null), 5000);
+              } catch {
+                setToast({
+                  label:
+                    "Injury logged, but the details were not saved. Add them on the Injury page.",
+                });
+                window.setTimeout(() => setToast(null), 6000);
+              }
+            }
             if (input.team === "own" && input.athleteId) {
               const outgoing = squad.find(
                 (athlete) => athlete.id === input.athleteId,
@@ -836,7 +951,8 @@ export default function LiveMatchPage() {
             }
           } else if (
             eventType === "goal" &&
-            detail !== PENALTY_SCORED_DETAIL
+            detail !== PENALTY_SCORED_DETAIL &&
+            canSelectOpponentTeammate
           ) {
             console.log("[live-callout:persist]", {
               eventType,
@@ -878,13 +994,19 @@ export default function LiveMatchPage() {
       dismissedOppIds,
       squad,
       opponentSquad,
+      visibility,
       logEvent,
       updateEvent,
+      createInjury,
       closeComposer,
     ],
   );
 
-  const persistFromTarget = (eventType: LogAction, detail?: string) => {
+  const persistFromTarget = (
+    eventType: LogAction,
+    detail?: string,
+    injurySpec?: LiveInjurySpec,
+  ) => {
     if (!target) {
       setActionError("Select a player first.");
       return;
@@ -898,6 +1020,7 @@ export default function LiveMatchPage() {
         eventType,
         athleteId: target.athlete.id,
         detail,
+        ...(injurySpec ? { injurySpec } : {}),
       });
       return;
     }
@@ -936,11 +1059,17 @@ export default function LiveMatchPage() {
         eventType === "penalty" ||
         eventType === "injury")
     ) {
-      setActionError("That event can only be logged for a player on the pitch.");
+      setActionError(
+        "That event can only be logged for a player on the pitch.",
+      );
       return;
     }
     console.log("[live-callout:handleAction]", eventType);
     if (eventType === "substitution") {
+      if (target.kind === "opp-generic") {
+        persistFromTarget("substitution");
+        return;
+      }
       if (target.kind === "own") {
         if (ownPitchIds.has(target.athlete.id)) {
           const next = {
@@ -991,6 +1120,21 @@ export default function LiveMatchPage() {
       return;
     }
     if (eventType === "injury") {
+      /* An own-team injury is specified first, so the record carries a
+       * diagnosis and a return estimate. Opponent injuries keep the original
+       * behaviour: we do not hold their athlete records. */
+      if (target.kind === "own") {
+        setComposer({
+          kind: "injury-detail",
+          athlete: target.athlete,
+          minute: currentMinute,
+        });
+        return;
+      }
+      if (target.kind === "opp-generic") {
+        persistFromTarget("injury");
+        return;
+      }
       const next = mandatorySubInComposer(target);
       console.log("[live-callout:handleAction] opening", next.kind);
       setComposer(next);
@@ -1083,9 +1227,7 @@ export default function LiveMatchPage() {
     }
   };
 
-  const completeSubIn = (
-    incoming: MatchSquadAthlete | OpponentMatchPlayer,
-  ) => {
+  const completeSubIn = (incoming: MatchSquadAthlete | OpponentMatchPlayer) => {
     if (composer.kind !== "sub-in" && composer.kind !== "mandatory-sub-in") {
       return;
     }
@@ -1149,9 +1291,7 @@ export default function LiveMatchPage() {
     }
     setComposer({ kind: "closed" });
     setTarget({ kind: "own", athlete });
-    setEventPickerOpen(
-      period === "first_half" || period === "second_half",
-    );
+    setEventPickerOpen(period === "first_half" || period === "second_half");
     setActionError(null);
   };
 
@@ -1187,9 +1327,7 @@ export default function LiveMatchPage() {
     }
     setComposer({ kind: "closed" });
     setTarget({ kind: "opp", player });
-    setEventPickerOpen(
-      period === "first_half" || period === "second_half",
-    );
+    setEventPickerOpen(period === "first_half" || period === "second_half");
     setActionError(null);
   };
 
@@ -1202,18 +1340,13 @@ export default function LiveMatchPage() {
       for (const assist of linkedAssists) {
         await deleteEvent.mutateAsync(assist.id);
       }
-      if (
-        composer.kind === "assist-pick" &&
-        composer.goalEventId === eventId
-      ) {
+      if (composer.kind === "assist-pick" && composer.goalEventId === eventId) {
         setComposer({ kind: "closed" });
       }
       setToast(null);
     } catch (err) {
       const message =
-        err instanceof ApiError
-          ? err.message
-          : "Could not undo this event.";
+        err instanceof ApiError ? err.message : "Could not undo this event.";
       setActionError(message);
       setToast({ label: message });
       window.setTimeout(() => setToast(null), 5000);
@@ -1227,9 +1360,7 @@ export default function LiveMatchPage() {
       navigate("/events");
     } catch (err) {
       setActionError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not finish this match.",
+        err instanceof ApiError ? err.message : "Could not finish this match.",
       );
     }
   };
@@ -1311,7 +1442,9 @@ export default function LiveMatchPage() {
       <div className="live-match flex min-h-screen items-center justify-center px-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <ShieldAlert className="size-8 text-[#ff5b5f]" />
-          <p className="font-oswald text-xl tracking-wide">FAILED TO LOAD MATCH</p>
+          <p className="font-oswald text-xl tracking-wide">
+            FAILED TO LOAD MATCH
+          </p>
           <p className="text-sm text-[#8e9ba8]">
             {error instanceof Error ? error.message : "Something went wrong."}
           </p>
@@ -1348,6 +1481,14 @@ export default function LiveMatchPage() {
           <h1 className="font-display text-base font-bold tracking-wide text-[#00d99a]">
             GAFFER
           </h1>
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#233747] px-2.5 py-1.5 text-xs font-semibold text-[#c5ced6] hover:border-[#00d99a]/60 hover:text-white"
+          >
+            <LayoutDashboard className="size-3.5" aria-hidden="true" />
+            <span>Dashboard</span>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
@@ -1427,7 +1568,7 @@ export default function LiveMatchPage() {
                     Reopen result
                   </SettingsItem>
                 ) : null}
-                {team?.role === "coach" && period === "not_started" && (
+                {period === "not_started" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1437,7 +1578,7 @@ export default function LiveMatchPage() {
                     Start game
                   </SettingsItem>
                 )}
-                {team?.role === "coach" && liveLogging && !checkIn && (
+                {liveLogging && !checkIn && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1447,7 +1588,7 @@ export default function LiveMatchPage() {
                     {running ? "Pause time" : "Resume time"}
                   </SettingsItem>
                 )}
-                {team?.role === "coach" && period === "first_half" && (
+                {period === "first_half" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1457,7 +1598,7 @@ export default function LiveMatchPage() {
                     Half time
                   </SettingsItem>
                 )}
-                {team?.role === "coach" && period === "half_time" && (
+                {period === "half_time" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1467,7 +1608,7 @@ export default function LiveMatchPage() {
                     Start 2nd half
                   </SettingsItem>
                 )}
-                {team?.role === "coach" && period === "second_half" && (
+                {period === "second_half" && (
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
@@ -1480,7 +1621,7 @@ export default function LiveMatchPage() {
               </div>
             )}
           </div>
-          {team?.role === "coach" && liveLogging && !checkIn && (
+          {liveLogging && !checkIn && (
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#1c2b36] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1500,7 +1641,7 @@ export default function LiveMatchPage() {
               {running ? "Pause" : "Resume"}
             </button>
           )}
-          {team?.role === "coach" && liveLogging && period === "first_half" && (
+          {liveLogging && period === "first_half" && (
             <button
               type="button"
               className="rounded-md bg-[#3b82f6] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
@@ -1509,7 +1650,7 @@ export default function LiveMatchPage() {
               Half Time
             </button>
           )}
-          {team?.role === "coach" ? <button
+          <button
             type="button"
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
             onClick={() => {
@@ -1520,12 +1661,15 @@ export default function LiveMatchPage() {
             }}
           >
             End Match
-          </button> : null}
+          </button>
         </div>
       </header>
 
       {reviewOpen && matchId ? (
-        <EventReviewPanel matchId={matchId} onClose={() => setReviewOpen(false)} />
+        <EventReviewPanel
+          matchId={matchId}
+          onClose={() => setReviewOpen(false)}
+        />
       ) : null}
       {offlineReadinessOpen && matchId ? (
         <OfflineReadinessPanel
@@ -1599,12 +1743,39 @@ export default function LiveMatchPage() {
                 {periodLabel}
               </span>
               {addedStoppageMin > 0 ? (
-                  <span className="rounded-full bg-[#ffbe2e]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#ffbe2e]">
-                    +{addedStoppageMin}
-                  </span>
-                ) : null}
+                <span className="rounded-full bg-[#ffbe2e]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#ffbe2e]">
+                  +{addedStoppageMin}
+                </span>
+              ) : null}
             </span>
           </div>
+          {visibility === "none" ? (
+            <div className="mt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    isAssistCallout(composer.kind) ||
+                    isBenchIncomingCallout(composer.kind) ||
+                    isSubOutCallout(composer.kind)
+                  ) {
+                    return;
+                  }
+                  setComposer({ kind: "closed" });
+                  setTarget({ kind: "opp-generic" });
+                  setEventPickerOpen(liveLogging);
+                  setActionError(null);
+                }}
+                className={cn(
+                  "rounded-lg bg-[#B45309] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-sm sm:px-6 sm:py-3 sm:text-sm",
+                  "hover:bg-[#92400e]",
+                  selectedKey === "opp-generic" && "ring-2 ring-white/80",
+                )}
+              >
+                {oppAbbrev} · log opponent
+              </button>
+            </div>
+          ) : null}
 
           {period === "full_time" && (
             <PeriodSummary
@@ -1657,33 +1828,6 @@ export default function LiveMatchPage() {
                 callToActionOppIds={pitchCallOppIds}
                 callToActionTone={pitchCallTone}
               />
-              {visibility === "none" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      isAssistCallout(composer.kind) ||
-                      isBenchIncomingCallout(composer.kind) ||
-                      isSubOutCallout(composer.kind)
-                    ) {
-                      return;
-                    }
-                    setComposer({ kind: "closed" });
-                    setTarget({ kind: "opp-generic" });
-                    setEventPickerOpen(liveLogging);
-                    setActionError(null);
-                  }}
-                  className={cn(
-                    "absolute top-2 rounded-full border border-white/35 bg-[#123528]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/90 shadow-sm backdrop-blur-[1px]",
-                    "hover:border-white/60 hover:bg-[#1b4d36]/90",
-                    isHome ? "right-2" : "left-2",
-                    selectedKey === "opp-generic" &&
-                      "border-[#00d99a] text-[#00d99a] ring-1 ring-[#00d99a]/70",
-                  )}
-                >
-                  {oppAbbrev} · log opponent
-                </button>
-              )}
             </LivePitch>
           </div>
         </section>
@@ -1818,104 +1962,112 @@ export default function LiveMatchPage() {
                 {timeline
                   .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
                   .map((event) => {
-                  const who = event.athlete
-                    ? shirtLabel(event.athlete)
-                    : event.opponentPlayer
-                      ? opponentShirtLabel(event.opponentPlayer, visibility)
-                      : event.opponentLabel ?? "Unassigned";
-                  const assist = event.eventType === "goal"
-                    ? assistsByGoal.get(event.id)
-                    : undefined;
-                  const assistWho = assist
-                    ? assist.athlete
-                      ? shirtLabel(assist.athlete)
-                      : assist.opponentPlayer
-                        ? opponentShirtLabel(assist.opponentPlayer, visibility)
-                        : assist.opponentLabel ?? "Unassigned"
-                    : null;
-                  const key = rowKey(event);
-                  const teamBorder =
-                    event.team === "own" ? ownColor : oppColor;
-                  const score = runningScores.get(key);
-                  return (
-                    <li
-                      key={key}
-                      className={cn(
-                        "flex items-center justify-between gap-2 rounded-lg border border-[#1c2b36] border-l-4 bg-[#101920] px-3 py-2.5",
-                        event.pending && "opacity-55",
-                        enteringIdsRef.current.has(key) && "live-timeline-enter",
-                      )}
-                      style={{ borderLeftColor: teamBorder }}
-                    >
-                      <div className="flex min-w-0 items-start gap-2">
-                        <EventTypeGlyph
-                          eventType={event.eventType}
-                          secondYellow={isSecondYellow(event)}
-                        />
-                        <div className="min-w-0">
-                          <p className="font-oswald text-sm tracking-wide">
-                            {event.minute}&apos; {eventDisplayLabel(event)}
-                            {event.eventType === "goal" && score
-                              ? `  ${score}`
-                              : ""}
-                          </p>
-                          <p className="truncate text-xs text-[#8e9ba8]">
-                            {event.team === "own" ? ownName : oppName} · {who}
-                            {assistWho ? `, Assist: ${assistWho}` : ""}
-                            {substitutionIncoming(event, squad, opponentSquad)}
-                          </p>
-                          {event.lifecycleStatus === "needs_review" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
-                              Possible duplicate · coach review needed
+                    const who = event.athlete
+                      ? shirtLabel(event.athlete)
+                      : event.opponentPlayer
+                        ? opponentShirtLabel(event.opponentPlayer, visibility)
+                        : (event.opponentLabel ?? "Unassigned");
+                    const assist =
+                      event.eventType === "goal"
+                        ? assistsByGoal.get(event.id)
+                        : undefined;
+                    const assistWho = assist
+                      ? assist.athlete
+                        ? shirtLabel(assist.athlete)
+                        : assist.opponentPlayer
+                          ? opponentShirtLabel(
+                              assist.opponentPlayer,
+                              visibility,
+                            )
+                          : (assist.opponentLabel ?? "Unassigned")
+                      : null;
+                    const key = rowKey(event);
+                    const teamBorder =
+                      event.team === "own" ? ownColor : oppColor;
+                    const score = runningScores.get(key);
+                    return (
+                      <li
+                        key={key}
+                        className={cn(
+                          "flex items-center justify-between gap-2 rounded-lg border border-[#1c2b36] border-l-4 bg-[#101920] px-3 py-2.5",
+                          event.pending && "opacity-55",
+                          enteringIdsRef.current.has(key) &&
+                            "live-timeline-enter",
+                        )}
+                        style={{ borderLeftColor: teamBorder }}
+                      >
+                        <div className="flex min-w-0 items-start gap-2">
+                          <EventTypeGlyph
+                            eventType={event.eventType}
+                            secondYellow={isSecondYellow(event)}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-oswald text-sm tracking-wide">
+                              {event.minute}&apos; {eventDisplayLabel(event)}
+                              {event.eventType === "goal" && score
+                                ? `  ${score}`
+                                : ""}
                             </p>
-                          ) : event.syncStatus === "queued" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
-                              Saved on this device
+                            <p className="truncate text-xs text-[#8e9ba8]">
+                              {event.team === "own" ? ownName : oppName} · {who}
+                              {assistWho ? `, Assist: ${assistWho}` : ""}
+                              {substitutionIncoming(
+                                event,
+                                squad,
+                                opponentSquad,
+                              )}
                             </p>
-                          ) : event.syncStatus === "uploading" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
-                              Uploading
-                            </p>
-                          ) : event.syncStatus === "accepted" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6fb6ff]">
-                              Accepted · awaiting reconciliation
-                            </p>
-                          ) : event.syncStatus === "dependency_pending" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
-                              Waiting for an earlier change
-                            </p>
-                          ) : event.syncStatus === "quarantined" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
-                              Access changed · retained on this device
-                            </p>
-                          ) : event.syncStatus === "reconciled" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#00d99a]">
-                              Reconciled
-                            </p>
-                          ) : event.syncStatus === "rejected" ? (
-                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
-                              Sync rejected · {event.syncError}
-                            </p>
-                          ) : null}
+                            {event.lifecycleStatus === "needs_review" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                                Possible duplicate · coach review needed
+                              </p>
+                            ) : event.syncStatus === "queued" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                                Saved on this device
+                              </p>
+                            ) : event.syncStatus === "uploading" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                                Uploading
+                              </p>
+                            ) : event.syncStatus === "accepted" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6fb6ff]">
+                                Accepted · awaiting reconciliation
+                              </p>
+                            ) : event.syncStatus === "dependency_pending" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                                Waiting for an earlier change
+                              </p>
+                            ) : event.syncStatus === "quarantined" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                                Access changed · retained on this device
+                              </p>
+                            ) : event.syncStatus === "reconciled" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#00d99a]">
+                                Reconciled
+                              </p>
+                            ) : event.syncStatus === "rejected" ? (
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                                Sync rejected · {event.syncError}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                      {period !== "full_time" && !event.pending && (
-                        <button
-                          type="button"
-                          aria-label="Undo event"
-                          className="rounded-md p-2 text-[#8e9ba8]"
-                          onClick={() => void handleUndo(event.id)}
-                        >
-                          <RotateCcw className="size-4" />
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                        {period !== "full_time" && !event.pending && (
+                          <button
+                            type="button"
+                            aria-label="Undo event"
+                            className="rounded-md p-2 text-[#8e9ba8]"
+                            onClick={() => void handleUndo(event.id)}
+                          >
+                            <RotateCcw className="size-4" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
               </ul>
             )}
           </section>
-
         </div>
 
         {period === "half_time" && (
@@ -2093,7 +2245,10 @@ export default function LiveMatchPage() {
                 Log match event
               </p>
               <p className="mt-1 font-oswald text-2xl tracking-widest text-white">
-                {loggingForLabel(target, visibility).replace("LOGGING FOR ", "")}
+                {loggingForLabel(target, visibility).replace(
+                  "LOGGING FOR ",
+                  "",
+                )}
               </p>
             </div>
             <button
@@ -2118,14 +2273,18 @@ export default function LiveMatchPage() {
               color="#f5c518"
               disabled={!logEnabled}
               onClick={() => handleAction("yellow_card")}
-              icon={<span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />}
+              icon={
+                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />
+              }
             />
             <LogButton
               label="Red"
               color="#ff5b5f"
               disabled={!logEnabled}
               onClick={() => handleAction("red_card")}
-              icon={<span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />}
+              icon={
+                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
+              }
             />
             <LogButton
               label="Substitution"
@@ -2161,7 +2320,9 @@ export default function LiveMatchPage() {
         <div
           className={cn(
             "fixed bottom-4 left-1/2 z-40 w-[min(92%,28rem)] -translate-x-1/2 rounded-xl bg-[#101920] px-4 py-3 shadow-lg",
-            toast.id ? "border border-[#00d99a]/40" : "border border-[#ff5b5f]/40",
+            toast.id
+              ? "border border-[#00d99a]/40"
+              : "border border-[#ff5b5f]/40",
           )}
         >
           <div className="flex items-center justify-between gap-3">
@@ -2177,6 +2338,35 @@ export default function LiveMatchPage() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {composer.kind === "injury-detail" && (
+        <LiveInjurySheet
+          athlete={composer.athlete}
+          minute={composer.minute}
+          onConfirm={(spec) => {
+            /* Hand straight over to the mandatory substitution: the coach
+               still has to bring someone on, and the record is created in
+               the background by persistEvent. */
+            setComposer(
+              mandatorySubInComposer({
+                kind: "own",
+                athlete: composer.athlete,
+              }),
+            );
+            persistFromTarget("injury", undefined, spec);
+          }}
+          onSkip={() => {
+            setComposer(
+              mandatorySubInComposer({
+                kind: "own",
+                athlete: composer.athlete,
+              }),
+            );
+            persistFromTarget("injury");
+          }}
+          onClose={closeComposer}
+        />
       )}
 
       {composer.kind === "penalty-outcome" && (
@@ -2256,8 +2446,12 @@ export default function LiveMatchPage() {
             Reconcile the scoreboard with logged goals before saving.
           </p>
           <div className="mt-6 space-y-2 rounded-xl border border-[#1c2b36] bg-[#101920] p-4 font-oswald tracking-wide">
-            <p>Scoreboard: {teamScore} – {oppScore}</p>
-            <p>Logged goals: {loggedGoalsOwn} – {loggedGoalsOpp}</p>
+            <p>
+              Scoreboard: {teamScore} – {oppScore}
+            </p>
+            <p>
+              Logged goals: {loggedGoalsOwn} – {loggedGoalsOpp}
+            </p>
           </div>
           <div className="mt-8 grid gap-3">
             <button
@@ -2512,19 +2706,29 @@ function PeriodSummary({
 
   return (
     <div className="mt-6 rounded-2xl border border-[#1c2b36] bg-[#101920] p-5">
-      <p className="font-oswald text-center text-2xl tracking-widest">{title}</p>
+      <p className="font-oswald text-center text-2xl tracking-widest">
+        {title}
+      </p>
       <div className="mt-5 grid grid-cols-3 text-center text-sm">
         <p className="text-[#8e9ba8]">{ownName}</p>
         <p className="text-[#8e9ba8]"> </p>
         <p className="text-[#8e9ba8]">{oppName}</p>
         <p className="font-oswald text-2xl">{count("goal", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">Goals</p>
+        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+          Goals
+        </p>
         <p className="font-oswald text-2xl">{count("goal", "opponent")}</p>
         <p className="font-oswald text-2xl">{count("yellow_card", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">Yellow</p>
-        <p className="font-oswald text-2xl">{count("yellow_card", "opponent")}</p>
+        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+          Yellow
+        </p>
+        <p className="font-oswald text-2xl">
+          {count("yellow_card", "opponent")}
+        </p>
         <p className="font-oswald text-2xl">{count("red_card", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">Red</p>
+        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+          Red
+        </p>
         <p className="font-oswald text-2xl">{count("red_card", "opponent")}</p>
       </div>
       <button

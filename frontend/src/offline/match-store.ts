@@ -2,14 +2,20 @@ import type { PowerSyncDatabase } from "@powersync/web";
 import type {
   CreateMatchLogEventInput,
   MatchLogEvent,
+  MatchRecord,
+  MatchSquadAthlete,
+  OpponentMatchPlayer,
 } from "@/features/matches/types";
 import { apiUrl } from "@/lib/api-url";
 
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
-let userScope = localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
+let userScope =
+  localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
 
 const deploymentScope = (
-  import.meta.env.VITE_DEPLOYMENT_ENV || window.location.hostname || "local"
+  import.meta.env.VITE_DEPLOYMENT_ENV ||
+  window.location.hostname ||
+  "local"
 )
   .replace(/[^a-zA-Z0-9]/g, "")
   .slice(0, 24);
@@ -55,9 +61,8 @@ export async function setOfflineUserScope(userId: string | null) {
 async function database() {
   if (!databasePromise) {
     databasePromise = (async () => {
-      const { PowerSyncDatabase, Schema, Table, column } = await import(
-        "@powersync/web"
-      );
+      const { PowerSyncDatabase, Schema, Table, column } =
+        await import("@powersync/web");
       const schema = new Schema({
         offline_event_queue: Table.createLocalOnly({
           match_id: column.text,
@@ -79,6 +84,8 @@ async function database() {
           authority_revision: column.text,
           wall_clock_ms: column.integer,
           uncertain: column.integer,
+          operation_id: column.text,
+          client_created_at: column.text,
           updated_at: column.text,
         }),
         match_events: new Table({
@@ -130,6 +137,63 @@ async function database() {
           created_at: column.text,
           updated_at: column.text,
         }),
+        matches: new Table({
+          event_id: column.text,
+          competition_id: column.text,
+          opponent_name: column.text,
+          is_home: column.integer,
+          team_score: column.integer,
+          opponent_score: column.integer,
+          game_plan_id: column.text,
+          game_plan_snapshot: column.text,
+          opponent_squad_visibility: column.text,
+          team_color: column.text,
+          opponent_color: column.text,
+          clock_period: column.text,
+          clock_elapsed_ms: column.integer,
+          clock_started_at: column.text,
+          clock_revision: column.integer,
+          created_at: column.text,
+          updated_at: column.text,
+        }),
+        events: new Table({
+          team_id: column.text,
+          title: column.text,
+          status: column.text,
+          scheduled_at: column.text,
+          location: column.text,
+        }),
+        athletes: new Table({
+          team_id: column.text,
+          first_name: column.text,
+          last_name: column.text,
+          squad_number: column.integer,
+          position: column.text,
+        }),
+        athlete_match_stats: new Table({
+          match_id: column.text,
+          athlete_id: column.text,
+          started: column.integer,
+        }),
+        opponent_match_players: new Table({
+          match_id: column.text,
+          shirt_number: column.integer,
+          name: column.text,
+          position: column.text,
+        }),
+        match_clock_operations: new Table({
+          match_id: column.text,
+          actor_user_id: column.text,
+          period: column.text,
+          elapsed_ms: column.integer,
+          running: column.integer,
+          base_revision: column.integer,
+          applied_revision: column.integer,
+          outcome: column.text,
+          payload_hash: column.text,
+          client_created_at: column.text,
+          created_at: column.text,
+        }),
       });
       const db = new PowerSyncDatabase({
         schema,
@@ -138,9 +202,7 @@ async function database() {
         },
       });
       await db.init();
-      const safeUserScope = userScope
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .slice(0, 24);
+      const safeUserScope = userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
       if (safeUserScope && !localStorage.getItem(migrationKey)) {
         const legacy = new PowerSyncDatabase({
@@ -212,7 +274,10 @@ async function database() {
           });
           localStorage.setItem(migrationKey, new Date().toISOString());
         } catch (error) {
-          console.warn("Could not migrate the legacy offline workspace.", error);
+          console.warn(
+            "Could not migrate the legacy offline workspace.",
+            error,
+          );
         } finally {
           await legacy.close();
         }
@@ -221,33 +286,39 @@ async function database() {
         // Local queue access must never wait for the remote sync connection.
         // PowerSync can remain pending while a device is offline; awaiting it
         // here would block enqueueEvent and leave the live logger locked.
-        void db.connect({
-          fetchCredentials: async () => {
-            const response = await fetch(apiUrl("/sync/token"), {
-              credentials: "include",
-            });
-            if (response.status === 401) return null;
-            if (!response.ok) throw new Error("Could not authenticate PowerSync.");
-            const credentials = (await response.json()) as {
-              endpoint: string;
-              token: string;
-              expiresAt: string;
-            };
-            return {
-              endpoint: credentials.endpoint,
-              token: credentials.token,
-              expiresAt: new Date(credentials.expiresAt),
-            };
-          },
-          uploadData: async (syncDatabase) => {
-            // Match capture uses the typed NestJS queue below. Synced tables
-            // are server-owned, so an unexpected direct write is discarded.
-            const transaction = await syncDatabase.getNextCrudTransaction();
-            if (transaction) await transaction.complete();
-          },
-        }).catch((error: unknown) => {
-          console.warn("PowerSync connection is unavailable; using local storage.", error);
-        });
+        void db
+          .connect({
+            fetchCredentials: async () => {
+              const response = await fetch(apiUrl("/sync/token"), {
+                credentials: "include",
+              });
+              if (response.status === 401) return null;
+              if (!response.ok)
+                throw new Error("Could not authenticate PowerSync.");
+              const credentials = (await response.json()) as {
+                endpoint: string;
+                token: string;
+                expiresAt: string;
+              };
+              return {
+                endpoint: credentials.endpoint,
+                token: credentials.token,
+                expiresAt: new Date(credentials.expiresAt),
+              };
+            },
+            uploadData: async (syncDatabase) => {
+              // Match capture uses the typed NestJS queue below. Synced tables
+              // are server-owned, so an unexpected direct write is discarded.
+              const transaction = await syncDatabase.getNextCrudTransaction();
+              if (transaction) await transaction.complete();
+            },
+          })
+          .catch((error: unknown) => {
+            console.warn(
+              "PowerSync connection is unavailable; using local storage.",
+              error,
+            );
+          });
       }
       return db;
     })();
@@ -274,7 +345,12 @@ export async function enqueueEvent(
     `INSERT OR REPLACE INTO offline_event_queue
       (id, match_id, kind, payload, state, error, canonical_event_id, created_at)
      VALUES (?, ?, 'observation', ?, 'queued', NULL, NULL, ?)`,
-    [input.clientRequestId, matchId, JSON.stringify(input), new Date().toISOString()],
+    [
+      input.clientRequestId,
+      matchId,
+      JSON.stringify(input),
+      new Date().toISOString(),
+    ],
   );
   announceQueueChange();
 }
@@ -404,6 +480,141 @@ export async function readCachedResponse<T>(key: string): Promise<T | null> {
   return row ? (JSON.parse(row.payload) as T) : null;
 }
 
+export async function readSyncedPreparedMatch(
+  matchId: string,
+): Promise<MatchRecord | null> {
+  const db = await database();
+  const row = await db.getOptional<{
+    id: string;
+    event_id: string;
+    competition_id: string | null;
+    opponent_name: string;
+    is_home: number;
+    team_score: number;
+    opponent_score: number;
+    game_plan_id: string | null;
+    game_plan_snapshot: string | null;
+    opponent_squad_visibility: MatchRecord["opponentSquadVisibility"];
+    team_color: string | null;
+    opponent_color: string | null;
+    clock_period: MatchRecord["clockPeriod"];
+    clock_elapsed_ms: number;
+    clock_started_at: string | null;
+    clock_revision: number;
+    created_at: string;
+    updated_at: string;
+    event_title: string;
+    event_status: MatchRecord["eventStatus"];
+    event_scheduled_at: string;
+    event_location: string;
+  }>(
+    `SELECT m.*, e.title AS event_title, e.status AS event_status,
+            e.scheduled_at AS event_scheduled_at,
+            e.location AS event_location
+       FROM matches m
+       JOIN events e ON e.id = m.event_id
+      WHERE m.id = ?`,
+    [matchId],
+  );
+  if (!row) return null;
+  const [projection, opponentSquad] = await Promise.all([
+    readSyncedMatchProjection(matchId),
+    readSyncedOpponentSquad(matchId),
+  ]);
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    competitionId: row.competition_id,
+    opponentName: row.opponent_name,
+    isHome: Boolean(row.is_home),
+    teamScore: projection?.provisionalTeamScore ?? row.team_score,
+    opponentScore: projection?.provisionalOpponentScore ?? row.opponent_score,
+    gamePlanId: row.game_plan_id,
+    gamePlanSnapshot: row.game_plan_snapshot
+      ? (JSON.parse(row.game_plan_snapshot) as MatchRecord["gamePlanSnapshot"])
+      : null,
+    opponentSquadVisibility: row.opponent_squad_visibility,
+    teamColor: row.team_color,
+    opponentColor: row.opponent_color,
+    clockPeriod: row.clock_period,
+    clockElapsedMs: row.clock_elapsed_ms,
+    clockStartedAt: row.clock_started_at,
+    clockRevision: row.clock_revision,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    eventTitle: row.event_title,
+    eventStatus: row.event_status,
+    eventScheduledAt: row.event_scheduled_at,
+    eventLocation: row.event_location,
+    competitionName: null,
+    opponentSquad,
+    projection: projection ?? undefined,
+  };
+}
+
+export async function hasSyncedPreparedMatch(matchId: string) {
+  const db = await database();
+  const row = await db.getOptional<{ id: string }>(
+    "SELECT id FROM matches WHERE id = ?",
+    [matchId],
+  );
+  return Boolean(row);
+}
+
+export async function readSyncedMatchSquad(
+  matchId: string,
+): Promise<MatchSquadAthlete[]> {
+  const db = await database();
+  const rows = await db.getAll<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    squad_number: number | null;
+    position: string | null;
+    started: number;
+  }>(
+    `SELECT a.id, a.first_name, a.last_name, a.squad_number, a.position,
+            s.started
+       FROM athlete_match_stats s
+       JOIN athletes a ON a.id = s.athlete_id
+      WHERE s.match_id = ?
+      ORDER BY a.squad_number, a.last_name`,
+    [matchId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    squadNumber: row.squad_number,
+    position: row.position,
+    started: Boolean(row.started),
+  }));
+}
+
+export async function readSyncedOpponentSquad(
+  matchId: string,
+): Promise<OpponentMatchPlayer[]> {
+  const db = await database();
+  const rows = await db.getAll<{
+    id: string;
+    shirt_number: number;
+    name: string | null;
+    position: string | null;
+  }>(
+    `SELECT id, shirt_number, name, position
+       FROM opponent_match_players
+      WHERE match_id = ?
+      ORDER BY shirt_number`,
+    [matchId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    shirtNumber: row.shirt_number,
+    name: row.name,
+    position: row.position,
+  }));
+}
+
 export interface OfflineClockAnchor {
   period: import("@/features/matches/types").MatchClockPeriod;
   elapsedMs: number;
@@ -411,19 +622,36 @@ export interface OfflineClockAnchor {
   authorityRevision: string;
   wallClockMs: number;
   uncertain: boolean;
+  operationId: string;
+  clientCreatedAt: string;
   updatedAt: string;
+}
+
+function pendingClockKey(matchId: string) {
+  return `gaffer-pending-clock-${deploymentScope}-${userScope}-${matchId}`;
 }
 
 export async function saveClockAnchor(
   matchId: string,
-  anchor: Omit<OfflineClockAnchor, "wallClockMs" | "uncertain" | "updatedAt">,
+  anchor: Omit<
+    OfflineClockAnchor,
+    | "wallClockMs"
+    | "uncertain"
+    | "operationId"
+    | "clientCreatedAt"
+    | "updatedAt"
+  >,
 ) {
   const db = await database();
   const now = Date.now();
+  const updatedAt = new Date(now).toISOString();
+  const operationId = crypto.randomUUID();
+  const clientCreatedAt = updatedAt;
   await db.execute(
     `INSERT OR REPLACE INTO offline_clock_anchors
-      (id, period, elapsed_ms, running, authority_revision, wall_clock_ms, uncertain, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+      (id, period, elapsed_ms, running, authority_revision, wall_clock_ms,
+       uncertain, operation_id, client_created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     [
       matchId,
       anchor.period,
@@ -431,9 +659,23 @@ export async function saveClockAnchor(
       anchor.running ? 1 : 0,
       anchor.authorityRevision,
       now,
-      new Date(now).toISOString(),
+      operationId,
+      clientCreatedAt,
+      updatedAt,
     ],
   );
+  localStorage.setItem(pendingClockKey(matchId), updatedAt);
+  return { version: updatedAt, operationId, clientCreatedAt };
+}
+
+export function isClockAnchorPending(matchId: string) {
+  return localStorage.getItem(pendingClockKey(matchId)) !== null;
+}
+
+export function markClockAnchorSynced(matchId: string, version: string) {
+  if (localStorage.getItem(pendingClockKey(matchId)) === version) {
+    localStorage.removeItem(pendingClockKey(matchId));
+  }
 }
 
 export async function readClockAnchor(
@@ -447,6 +689,8 @@ export async function readClockAnchor(
     authority_revision: string;
     wall_clock_ms: number;
     uncertain: number;
+    operation_id: string | null;
+    client_created_at: string | null;
     updated_at: string;
   }>("SELECT * FROM offline_clock_anchors WHERE id = ?", [matchId]);
   if (!row) return null;
@@ -460,6 +704,8 @@ export async function readClockAnchor(
     authorityRevision: row.authority_revision,
     wallClockMs: row.wall_clock_ms,
     uncertain,
+    operationId: row.operation_id ?? crypto.randomUUID(),
+    clientCreatedAt: row.client_created_at ?? row.updated_at,
     updatedAt: row.updated_at,
   };
 }
@@ -517,7 +763,9 @@ interface SyncedEventRow {
   updated_at: string;
 }
 
-export async function readSyncedMatchEvents(matchId: string): Promise<MatchLogEvent[]> {
+export async function readSyncedMatchEvents(
+  matchId: string,
+): Promise<MatchLogEvent[]> {
   const db = await database();
   const rows = await db.getAll<SyncedEventRow>(
     "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute DESC, created_at DESC",
@@ -576,7 +824,9 @@ export async function checkOfflineReadiness(
     );
     localDatabaseWritable = probe?.payload === JSON.stringify({ ok: true });
   } finally {
-    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [probeId]);
+    await db.execute("DELETE FROM offline_response_cache WHERE id = ?", [
+      probeId,
+    ]);
   }
   const [match, squad, events, registration, persisted, estimate] =
     await Promise.all([
@@ -671,7 +921,9 @@ export async function importUnsentObservations(raw: string) {
         [item.id],
       );
       if (existing && existing.payload !== payload) {
-        throw new Error(`Queued item ${item.id} already exists with different data.`);
+        throw new Error(
+          `Queued item ${item.id} already exists with different data.`,
+        );
       }
       if (!existing) {
         await tx.execute(
@@ -706,7 +958,9 @@ export async function subscribeToSyncedMatchEventChanges(
 
 export async function readSyncedMatchProjection(
   matchId: string,
-): Promise<import("@/features/matches/types").MatchRecord["projection"] | null> {
+): Promise<
+  import("@/features/matches/types").MatchRecord["projection"] | null
+> {
   const db = await database();
   const row = await db.getOptional<{
     revision: number;
