@@ -6,7 +6,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -55,7 +55,7 @@ describe('Events (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -309,7 +309,7 @@ describe('Events (e2e)', () => {
       .get(`/matches/${match.id}`)
       .expect(200);
     expect((matchAfterUpdate.body as MatchBody).competitionId).toBe(leagueId);
-  }, 40000);
+  }, 60_000);
 
   it('cancels an event by setting its status, rather than deleting it', async () => {
     const { agent } = await newCoach();

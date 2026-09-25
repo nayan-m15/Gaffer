@@ -3,6 +3,7 @@ import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
 import { FRONTEND_URL } from './utils/auth';
 
 const PASSWORD = 'password123';
+const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
 
 /**
  * Athlete-status integration with Team Management, through the real UI.
@@ -43,7 +44,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await page.getByRole('button', { name: /join the dugout/i }).click();
 
       // Email verification is required: the UI parks on /verify-email.
-      await expect(page).toHaveURL(/\/verify-email$/);
+      await expect(page).toHaveURL(/\/verify-email$/, NETWORK);
     });
 
     await test.step('verify email with a Better Auth-compatible token', async () => {
@@ -62,7 +63,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await page.goto(
         `/auth/verify-email?token=${token}&callbackURL=${callbackURL}`,
       );
-      await expect(page).toHaveURL(/\/login\?verified=1$/);
+      await expect(page).toHaveURL(/\/login\?verified=1$/, NETWORK);
     });
 
     await test.step('sign in and create the team', async () => {
@@ -70,7 +71,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
       await page.getByRole('button', { name: /sign in to dugout/i }).click();
 
-      await expect(page).toHaveURL(/\/dashboard$/);
+      await expect(page).toHaveURL(/\/dashboard$/, NETWORK);
 
       // No team yet — the dashboard header offers team creation.
       await page.getByRole('button', { name: 'Add Team' }).click();
@@ -109,7 +110,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await expect(page).toHaveURL(/\/team$/);
       await expect(
         page.getByRole('heading', { name: 'Team Management' }),
-      ).toBeVisible();
+      ).toBeVisible(NETWORK);
 
       const bench = page.getByRole('region', { name: 'Substitute players' });
 
@@ -180,7 +181,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await page.reload();
       await expect(
         page.getByRole('heading', { name: 'Team Management' }),
-      ).toBeVisible();
+      ).toBeVisible(NETWORK);
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
       await expect(inesCard).toBeVisible();

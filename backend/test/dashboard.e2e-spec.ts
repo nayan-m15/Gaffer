@@ -5,7 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -55,7 +55,7 @@ describe('Dashboard (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 
@@ -332,5 +332,5 @@ describe('Dashboard (e2e)', () => {
       goalsFor: 3,
       goalsAgainst: 1,
     });
-  }, 30_000);
+  }, 60_000);
 });

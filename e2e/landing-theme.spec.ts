@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 type Rgb = [number, number, number];
+const UI_WAIT = { timeout: process.env.CI ? 30_000 : 10_000 };
 
 function channel(value: number) {
   const normalized = value / 255;
@@ -26,13 +27,17 @@ function parseRgb(value: string): Rgb {
 }
 
 async function openLandingPage(page: Page, theme: "light" | "dark") {
+  // Contrast and navigation do not need the animated WebGL background;
+  // landing-scene.spec.ts separately verifies that rendering path.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript((selectedTheme) => {
     window.localStorage.setItem("sport-coaching-theme", selectedTheme);
   }, theme);
   await page.route("**/auth/session", (route) => route.fulfill({ status: 401, body: "{}" }));
   await page.goto("/");
-  await expect(page.locator("#root .loading-overlay")).toBeHidden({ timeout: 10_000 });
-  await expect(page.locator("#preloader")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible(UI_WAIT);
+  await expect(page.locator("#root .loading-overlay")).toBeHidden(UI_WAIT);
+  await expect(page.locator("#preloader")).toHaveCount(0, UI_WAIT);
 }
 
 for (const theme of ["light", "dark"] as const) {
