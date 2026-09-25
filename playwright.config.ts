@@ -22,17 +22,20 @@ export default defineConfig({
   // Bound the suite independently so CI still has time to run PWA checks and
   // upload diagnostics before the enclosing job deadline (.gitea/workflows/
   // test.yml). The suite has grown past what a single worker clears in 25
-  // minutes even with every test passing, so this both raises the budget
-  // and, via `workers`, spreads spec files (each already isolated by unique
-  // test identities) across two workers to bring wall-clock time back down.
-  globalTimeout: process.env.CI ? 34 * 60_000 : undefined,
+  // minutes even with every test passing, so this raises the budget instead.
+  // Two workers were tried to cut wall-clock time, but several specs render a
+  // real WebGL scene with software rendering (swiftshader) and drive a real
+  // backend/DB — running two Chromium instances concurrently on a shared
+  // runner starved both, turning normally-fast assertions (a plain reload)
+  // into timeouts. One worker is slower but reliable.
+  globalTimeout: process.env.CI ? 42 * 60_000 : undefined,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,
   },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : 1,
+  workers: 1,
   reporter: process.env.CI
     ? [
         ['list'],

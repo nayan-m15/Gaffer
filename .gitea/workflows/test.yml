@@ -130,12 +130,12 @@ jobs:
     name: UI tests
     runs-on: ubuntu-latest
     needs: api-tests
-    # Includes installs/builds, the bounded 34-minute Playwright suite, PWA
+    # Includes installs/builds, the bounded 42-minute Playwright suite, PWA
     # verification, and artifact upload. The old job deadline killed
     # Playwright mid-test; keep this comfortably above the suite's own
     # globalTimeout (playwright.config.ts) so Playwright always gets to exit
     # on its own terms and upload diagnostics.
-    timeout-minutes: 55
+    timeout-minutes: 60
     env:
       CI: "true"
       DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
