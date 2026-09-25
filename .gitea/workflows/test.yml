@@ -126,21 +126,20 @@ jobs:
           path: .scannerwork/quality-gate.json
           if-no-files-found: ignore
 
-  ui-tests:
-    name: UI tests (shard ${{ matrix.shard }}/2)
+  ui-tests-shard-1:
+    name: UI tests (shard 1/2)
     runs-on: ubuntu-latest
     needs: api-tests
     # Two workers on one runner was tried to cut wall-clock time, but several
     # specs render a real WebGL scene with software rendering (swiftshader)
     # and drive a real backend/DB — two Chromium instances sharing one
     # runner's CPU starved both, turning normally-fast assertions into
-    # timeouts. Splitting the suite across two independent runners (matrix +
-    # Playwright's own --shard) gets the same wall-clock win without that
-    # contention, since each shard gets its own CPU.
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
+    # timeouts. Splitting the suite across two independent runners gets the
+    # same wall-clock win without that contention, since each shard gets its
+    # own CPU. This is two explicit jobs rather than a `strategy: matrix` —
+    # this Gitea instance's Actions runner silently drops the whole workflow
+    # (no run is even queued) for any push while a job uses `matrix`.
+    #
     # Includes installs/builds, the bounded 30-minute Playwright shard, PWA
     # verification (shard 1 only), and artifact upload. Keep this
     # comfortably above the suite's own globalTimeout (playwright.config.ts)
@@ -186,11 +185,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui -- --shard=${{ matrix.shard }}/2
+        run: npm run test:e2e:ui -- --shard=1/2
 
-      # PWA checks don't need sharding — run them once, on shard 1.
       - name: Run production PWA tests
-        if: ${{ matrix.shard == 1 && !cancelled() && steps.browser-build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: npm run test:e2e:pwa
 
       - name: Upload Playwright failure artifacts
@@ -198,7 +196,62 @@ jobs:
         # v3 is compatible with Gitea's artifact service across more server versions.
         uses: actions/upload-artifact@v3
         with:
-          name: playwright-failure-artifacts-${{ matrix.shard }}
+          name: playwright-failure-artifacts-1
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  ui-tests-shard-2:
+    name: UI tests (shard 2/2)
+    runs-on: ubuntu-latest
+    needs: api-tests
+    timeout-minutes: 50
+    env:
+      CI: "true"
+      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
+      PORT: "3100"
+      BETTER_AUTH_URL: http://localhost:3100
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+          npm --prefix backend ci
+
+      - name: Migrate the test database
+        run: npm --prefix backend run db:migrate
+
+      - name: Build application for browser tests
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e:ui -- --shard=2/2
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-failure-artifacts-2
           path: |
             playwright-report/
             test-results/
