@@ -164,6 +164,8 @@ interface DressingRoomKit {
   boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material;
 }
 
+//based on the original locker layout, but with a few tweaks to make it more compact and less expensive to render.
+
 const LOCKER_CONFIG = { count: 7, startX: -77.8, endX: -63.1, width: 1.82, depth: 1.12, height: 3.62 };
 
 function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
