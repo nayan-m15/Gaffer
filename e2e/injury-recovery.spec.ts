@@ -127,10 +127,16 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
         dialog.getByText(/Choose a region, kind and severity/),
       ).toBeVisible();
 
-      // The player field is a combobox whose listbox portals to <body>, so
-      // the option is looked up on the page rather than scoped to the dialog.
+      // The player field's popup aligns its item under the pointer when it
+      // opens (Base UI Select's `alignItemWithTrigger`), which the
+      // component's own guard against accidental activation can read as a
+      // click that never genuinely landed on the option — clicking it is
+      // racy as a result. Keyboard selection isn't subject to that guard and
+      // is how the same listbox is driven by real keyboard/AT users, so it's
+      // both more reliable here and a closer match to actual usage.
       await dialog.getByLabel('Player').click();
-      await page.getByRole('option', { name: '#7 Rosa Hamstring' }).click();
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Enter');
       await dialog
         .getByRole('button', { name: 'Right hamstring', exact: true })
         .click();
