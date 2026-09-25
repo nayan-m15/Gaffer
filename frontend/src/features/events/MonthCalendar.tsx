@@ -69,7 +69,7 @@ export function MonthCalendar({
     <div
       role="grid"
       aria-label={`${formatMonthYear(month)} calendar`}
-      className="overflow-hidden rounded-xl border border-border bg-card"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card"
     >
       {/* Weekday header */}
       <div role="row" className="grid grid-cols-7 border-b border-border bg-muted/30">
@@ -90,7 +90,7 @@ export function MonthCalendar({
         <div
           key={week[0]?.toISOString()}
           role="row"
-          className="grid grid-cols-7 border-b border-border last:border-b-0"
+          className="grid min-h-0 flex-1 grid-cols-7 border-b border-border last:border-b-0"
         >
           {week.map((day) => (
             <DayCell
@@ -154,7 +154,7 @@ function DayCell({
       aria-label={`${dayLabel}${events.length > 0 ? `, ${events.length} event${events.length === 1 ? "" : "s"}` : ""}`}
       onClick={() => onCreateEvent(day)}
       className={cn(
-        "flex min-h-[72px] sm:min-h-[86px] lg:min-h-[94px] cursor-pointer flex-col gap-1 border-r border-border p-1 sm:p-1.5 transition-colors last:border-r-0",
+        "flex min-h-0 min-w-0 cursor-pointer flex-col gap-1 overflow-hidden border-r border-border p-1 sm:p-1.5 transition-colors last:border-r-0",
         "hover:bg-muted/30 focus-within:bg-muted/20",
         outside && "bg-muted/25",
         isSelected && !outside && "bg-accent/40",

@@ -218,13 +218,14 @@ export default function EventsPage() {
   );
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <PageHeader
         title="Events"
         subtitle="Matches, training sessions, and meetings on one calendar."
+        className="shrink-0 pb-3 lg:pt-5 lg:pb-3"
       />
 
-      <div className="mx-auto flex w-full max-w-[1800px] min-w-0 flex-col gap-3 px-3 pb-6 sm:gap-4 sm:px-5 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1800px] min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 pb-3 sm:gap-4 sm:px-5 lg:px-8">
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
@@ -276,7 +277,7 @@ export default function EventsPage() {
         )}
 
         {/* Desktop & Tablet View: Google-Calendar style layout */}
-        <div className="hidden min-w-0 sm:flex sm:flex-col sm:gap-5">
+        <div className="hidden min-h-0 min-w-0 sm:flex sm:flex-1 sm:flex-col sm:gap-3">
           <CalendarToolbar
             view={view}
             label={label}
@@ -293,8 +294,8 @@ export default function EventsPage() {
 
           {/* Calendar + floating sidebar */}
           {events && (
-            <div className="flex min-w-0 items-stretch gap-6">
-              <div className="min-w-0 flex-1">{viewContent}</div>
+            <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-6">
+              <div className="min-h-0 min-w-0 flex-1">{viewContent}</div>
 
               <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
                 {renderSidebar(
@@ -377,6 +378,6 @@ export default function EventsPage() {
         }}
         onEdit={(event) => setPanel({ kind: "edit", eventId: event.id })}
       />
-    </>
+    </div>
   );
 }

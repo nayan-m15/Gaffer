@@ -44,6 +44,7 @@ function AppShellContent() {
   const { pathname } = useLocation();
   const showDashboardScene =
     pathname === "/dashboard" || pathname === "/dashboard/";
+  const isEventsPage = pathname === "/events" || pathname === "/events/";
 
   return (
     <div className="relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
@@ -65,7 +66,8 @@ function AppShellContent() {
 
       <main
         className={cn(
-          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto transition-[padding] duration-300 motion-reduce:transition-none",
+          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col transition-[padding] duration-300 motion-reduce:transition-none",
+          isEventsPage ? "overflow-hidden" : "overflow-y-auto",
           expanded ? "lg:pl-72" : "lg:pl-24",
         )}
       >
@@ -78,10 +80,10 @@ function AppShellContent() {
             </span>
           </div>
         </div>
-        <div className="flex-1">
+        <div className={cn("flex-1", isEventsPage && "min-h-0")}>
           <Outlet />
         </div>
-        <Footer />
+        {!isEventsPage && <Footer />}
       </main>
     </div>
   );
