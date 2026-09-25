@@ -611,42 +611,25 @@ export class MatchesService {
       }
     }
 
-    const [updated] = await this.databaseService.database
-      .update(matchEvents)
-      .set({
-        ...(dto.athleteId !== undefined ? { athleteId: dto.athleteId } : {}),
-        ...(attribution.opponentLabel !== undefined
-          ? { opponentLabel: attribution.opponentLabel }
-          : dto.opponentLabel !== undefined
-            ? { opponentLabel: dto.opponentLabel }
-            : {}),
-        ...(attribution.opponentPlayerId !== undefined
-          ? { opponentPlayerId: attribution.opponentPlayerId }
-          : {}),
-        ...(dto.minute !== undefined ? { minute: dto.minute } : {}),
-        ...(dto.eventType !== undefined ? { eventType: dto.eventType } : {}),
-        ...(dto.detail !== undefined ? { detail: dto.detail } : {}),
-        manuallyAdjusted: event.status === 'completed' ? true : true,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
-      .returning();
-
-    if (!updated) {
-      throw new NotFoundException('Match event not found.');
-    }
-
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'correct',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { replacement: dto },
+      effective: {
+        ...dto,
+        ...(attribution.opponentLabel !== undefined
+          ? { opponentLabel: attribution.opponentLabel }
+          : {}),
+        ...(attribution.opponentPlayerId !== undefined
+          ? { opponentPlayerId: attribution.opponentPlayerId }
+          : {}),
+      },
       causalParentIds,
     });
-    await this.refreshProjection(matchId);
+    const updated = await this.requireMatchEvent(matchId, eventId);
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
@@ -691,31 +674,15 @@ export class MatchesService {
     const { event } = await this.requireMatch(team.id, matchId);
     this.assertEditable(event.status);
     const canonical = await this.requireMatchEvent(matchId, eventId);
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'propose_correction',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { replacement: dto },
       causalParentIds,
     });
-    await this.databaseService.database
-      .insert(matchEventReviews)
-      .values({
-        matchId,
-        canonicalEventId: eventId,
-        reason: 'assistant_proposed_correction',
-      })
-      .onConflictDoNothing();
-    await this.databaseService.database
-      .update(matchEvents)
-      .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
-      .where(
-        and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)),
-      );
-    await this.refreshProjection(matchId);
     return canonical;
   }
 
@@ -762,28 +729,17 @@ export class MatchesService {
       }
     }
 
-    const [deleted] = await this.databaseService.database
-      .update(matchEvents)
-      .set({ lifecycleStatus: 'voided', updatedAt: new Date() })
-      .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
-      .returning();
-
-    if (!deleted) {
-      throw new NotFoundException('Match event not found.');
-    }
-
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'void',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { lifecycleStatus: 'voided' },
       causalParentIds,
       reason,
     });
-    await this.refreshProjection(matchId);
+    const deleted = await this.requireMatchEvent(matchId, eventId);
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
@@ -1087,6 +1043,29 @@ export class MatchesService {
         reason: input.reason ?? null,
       })
       .onConflictDoNothing({ target: matchEventOperations.id });
+  }
+
+  private async applyEventMutation(input: {
+    id: string;
+    matchId: string;
+    actorUserId: string;
+    canonicalEventId: string;
+    operationType: 'correct' | 'propose_correction' | 'void';
+    decision: Record<string, unknown>;
+    effective?: Record<string, unknown>;
+    causalParentIds: string[];
+    reason?: string;
+  }) {
+    await this.databaseService.database.execute(sql`
+      select apply_match_event_mutation(
+        ${input.id}::uuid, ${input.matchId}::uuid,
+        ${input.actorUserId}::text, ${input.canonicalEventId}::uuid,
+        ${input.operationType}::text, ${JSON.stringify(input.decision)}::jsonb,
+        ${JSON.stringify(input.effective ?? {})}::jsonb,
+        ${JSON.stringify(input.causalParentIds)}::jsonb,
+        ${input.reason ?? null}::text
+      )
+    `);
   }
 
   private async refreshProjection(matchId: string) {

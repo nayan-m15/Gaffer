@@ -267,6 +267,13 @@
       "when": 1790368515000,
       "tag": "0036_concurrent_event_candidates",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790368520000,
+      "tag": "0037_concurrent_event_resolution",
+      "breakpoints": true
     }
   ]
 }

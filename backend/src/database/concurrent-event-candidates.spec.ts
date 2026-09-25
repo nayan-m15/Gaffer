@@ -368,4 +368,260 @@ describe('concurrent event candidates', () => {
       1,
     );
   }, 120_000);
+
+  it('splits a three-witness merge without losing the other pair or correction', async () => {
+    const a = '00000000-0000-4000-8000-000000000012';
+    const b = '00000000-0000-4000-8000-000000000011';
+    const c = '00000000-0000-4000-8000-000000000013';
+    await observe(a, 1_800_000);
+    await observe(b, 1_802_000);
+    await observe(c, 1_804_000);
+    await pg.query(
+      `UPDATE match_events SET detail = 'Corrected first witness' WHERE id = $1`,
+      [a],
+    );
+    await pg.query(
+      `INSERT INTO match_event_operations
+       (id, match_id, actor_user_id, operation_type, target_observation_ids,
+        canonical_event_id, decision)
+       VALUES ($1, $2, $3, 'correct', $4::jsonb, $5, $6::jsonb)`,
+      [
+        randomUUID(),
+        matchId,
+        coachId,
+        JSON.stringify([a]),
+        a,
+        JSON.stringify({ replacement: { detail: 'Corrected first witness' } }),
+      ],
+    );
+    const reviewFor = async (left: string, right: string) => {
+      const rows = await pg.query<{ id: string }>(
+        `SELECT id FROM match_event_reviews
+         WHERE observation_ids ? $1::text AND observation_ids ? $2::text`,
+        [left, right],
+      );
+      return rows.rows[0].id;
+    };
+    const ab = await reviewFor(a, b);
+    const bc = await reviewFor(b, c);
+    const decide = async (
+      reviewId: string,
+      resolution: 'same_event' | 'separate_events',
+      parents: string[] = [],
+    ) => {
+      const id = randomUUID();
+      await pg.query(
+        `SELECT resolve_match_event_candidate(
+          $1::uuid, $2::uuid, $3::text, $4::uuid, $5::text, $6::jsonb)`,
+        [reviewId, matchId, coachId, id, resolution, JSON.stringify(parents)],
+      );
+      return id;
+    };
+    const abMerge = await decide(ab, 'same_event');
+    await decide(bc, 'same_event');
+    const abChallenge = await decide(ab, 'separate_events');
+    await decide(ab, 'separate_events', [abMerge, abChallenge]);
+    const memberships = await pg.query<{
+      observation_id: string;
+      canonical_event_id: string;
+    }>(
+      `SELECT observation_id, canonical_event_id FROM match_event_memberships
+       WHERE observation_id IN ($1, $2, $3)`,
+      [a, b, c],
+    );
+    const byObservation = new Map(
+      memberships.rows.map((row) => [
+        row.observation_id,
+        row.canonical_event_id,
+      ]),
+    );
+    expect(byObservation.get(b)).toBe(byObservation.get(c));
+    expect(byObservation.get(a)).not.toBe(byObservation.get(b));
+    const details = await pg.query<{ id: string; detail: string | null }>(
+      `SELECT id, detail FROM match_events WHERE id IN ($1, $2)`,
+      [a, b],
+    );
+    expect(new Map(details.rows.map((row) => [row.id, row.detail]))).toEqual(
+      new Map([
+        [a, 'Corrected first witness'],
+        [b, null],
+      ]),
+    );
+  }, 120_000);
+
+  it('commits corrections, voids and their audit operations together', async () => {
+    const observationId = randomUUID();
+    await observe(observationId, 2_400_000);
+    const correctionId = randomUUID();
+    const correction = {
+      replacement: { detail: 'Corrected atomically' },
+    };
+    const mutate = (
+      operationId: string,
+      actorId: string,
+      type: 'correct' | 'void',
+      decision: object,
+      effective: object = {},
+    ) =>
+      pg.query(
+        `SELECT apply_match_event_mutation(
+        $1::uuid, $2::uuid, $3::text, $4::uuid, $5::text,
+        $6::jsonb, $7::jsonb, '[]'::jsonb, NULL::text)`,
+        [
+          operationId,
+          matchId,
+          actorId,
+          observationId,
+          type,
+          JSON.stringify(decision),
+          JSON.stringify(effective),
+        ],
+      );
+    await mutate(
+      correctionId,
+      coachId,
+      'correct',
+      correction,
+      correction.replacement,
+    );
+    await mutate(
+      correctionId,
+      coachId,
+      'correct',
+      correction,
+      correction.replacement,
+    );
+    const corrected = await pg.query<{
+      detail: string;
+      operation_count: number;
+    }>(
+      `SELECT event.detail,
+        (SELECT count(*)::int FROM match_event_operations WHERE id = $2) AS operation_count
+       FROM match_events event WHERE event.id = $1`,
+      [observationId, correctionId],
+    );
+    expect(corrected.rows[0]).toEqual({
+      detail: 'Corrected atomically',
+      operation_count: 1,
+    });
+    await expect(
+      mutate(randomUUID(), 'missing-user', 'void', {
+        lifecycleStatus: 'voided',
+      }),
+    ).rejects.toThrow();
+    const afterFailure = await pg.query<{ lifecycle_status: string }>(
+      `SELECT lifecycle_status FROM match_events WHERE id = $1`,
+      [observationId],
+    );
+    expect(afterFailure.rows[0].lifecycle_status).not.toBe('voided');
+    const voidId = randomUUID();
+    await mutate(voidId, coachId, 'void', { lifecycleStatus: 'voided' });
+    const voided = await pg.query<{ lifecycle_status: string }>(
+      `SELECT lifecycle_status FROM match_events WHERE id = $1`,
+      [observationId],
+    );
+    expect(voided.rows[0].lifecycle_status).toBe('voided');
+  }, 120_000);
+
+  it('converges three witnesses for every arrival order', async () => {
+    const orders = [
+      [0, 1, 2],
+      [0, 2, 1],
+      [1, 0, 2],
+      [1, 2, 0],
+      [2, 0, 1],
+      [2, 1, 0],
+    ];
+    for (const [scenario, order] of orders.entries()) {
+      const ids = [randomUUID(), randomUUID(), randomUUID()];
+      const elapsed = 3_000_000 + scenario * 60_000;
+      for (const index of order) {
+        await observe(ids[index], elapsed + index * 1_000);
+      }
+      for (const [left, right] of [
+        [ids[0], ids[1]],
+        [ids[1], ids[2]],
+      ]) {
+        const review = await pg.query<{ id: string }>(
+          `SELECT id FROM match_event_reviews
+           WHERE observation_ids ? $1::text AND observation_ids ? $2::text`,
+          [left, right],
+        );
+        await pg.query(
+          `SELECT resolve_match_event_candidate(
+            $1::uuid, $2::uuid, $3::text, $4::uuid, 'same_event'::text,
+            '[]'::jsonb)`,
+          [review.rows[0].id, matchId, coachId, randomUUID()],
+        );
+      }
+      const members = await pg.query<{ canonical_event_id: string }>(
+        `SELECT canonical_event_id FROM match_event_memberships
+         WHERE observation_id IN ($1, $2, $3)`,
+        ids,
+      );
+      expect(
+        new Set(members.rows.map((row) => row.canonical_event_id)),
+      ).toEqual(new Set([ids.sort()[0]]));
+    }
+  }, 120_000);
+
+  it('resolves a cycle after the coach reconsiders its redundant same edges', async () => {
+    const ids = [randomUUID(), randomUUID(), randomUUID()];
+    for (const [index, id] of ids.entries()) {
+      await observe(id, 4_000_000 + index * 1_000);
+    }
+    const pairs = [
+      [0, 1],
+      [0, 2],
+      [1, 2],
+    ];
+    const reviews: string[] = [];
+    for (const [left, right] of pairs) {
+      const rows = await pg.query<{ id: string }>(
+        `SELECT id FROM match_event_reviews
+         WHERE observation_ids ? $1::text AND observation_ids ? $2::text`,
+        [ids[left], ids[right]],
+      );
+      reviews.push(rows.rows[0].id);
+    }
+    const decide = async (
+      reviewId: string,
+      resolution: 'same_event' | 'separate_events',
+      parents: string[] = [],
+    ) => {
+      const operationId = randomUUID();
+      await pg.query(
+        `SELECT resolve_match_event_candidate(
+          $1::uuid, $2::uuid, $3::text, $4::uuid, $5::text, $6::jsonb)`,
+        [
+          reviewId,
+          matchId,
+          coachId,
+          operationId,
+          resolution,
+          JSON.stringify(parents),
+        ],
+      );
+      return operationId;
+    };
+    const same = [];
+    for (const review of reviews) same.push(await decide(review, 'same_event'));
+    const challengeAB = await decide(reviews[0], 'separate_events');
+    const challengeAC = await decide(reviews[1], 'separate_events');
+    await decide(reviews[0], 'separate_events', [same[0], challengeAB]);
+    await decide(reviews[1], 'separate_events', [same[1], challengeAC]);
+    const rows = await pg.query<{
+      observation_id: string;
+      canonical_event_id: string;
+    }>(
+      `SELECT observation_id, canonical_event_id FROM match_event_memberships
+       WHERE observation_id IN ($1, $2, $3)`,
+      ids,
+    );
+    const canonical = new Map(
+      rows.rows.map((row) => [row.observation_id, row.canonical_event_id]),
+    );
+    expect(canonical.get(ids[0])).not.toBe(canonical.get(ids[1]));
+    expect(canonical.get(ids[1])).toBe(canonical.get(ids[2]));
+  }, 120_000);
 });
