@@ -101,9 +101,10 @@ describe('InsightsService', () => {
   describe('generateForMatch', () => {
     it('writes a ready insight on success', async () => {
       queueGenerationSelects();
-      mockGeminiClient.generateNarrative.mockResolvedValue(
-        'Rovers won 2-1 against City.',
-      );
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'Rovers won 2-1 against City.',
+        model: 'gemini-3.6-flash',
+      });
 
       await service.generateForMatch('match-1', { projectionRevision: 3 });
 
@@ -114,6 +115,9 @@ describe('InsightsService', () => {
           status: 'ready',
           narrativeText: 'Rovers won 2-1 against City.',
           projectionRevision: 3,
+          // Recorded from the model that actually answered, not from
+          // GEMINI_MODEL — the client may have fallen back.
+          model: 'gemini-3.6-flash',
         }),
       );
       expect(onConflictDoUpdateSpy).toHaveBeenCalledWith(
@@ -175,13 +179,21 @@ describe('InsightsService', () => {
       ]); // match/team/event row
       selectResults.push([]); // match events
       selectResults.push([
-        { firstName: 'Sam', lastName: 'Rivers', goals: 1, assists: 0, yellowCards: 0, redCards: 0 },
+        {
+          firstName: 'Sam',
+          lastName: 'Rivers',
+          goals: 1,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0,
+        },
       ]); // per-athlete performance
       selectResults.push([]); // team matches (season trends)
       selectResults.push([]); // existing insight digest check
-      mockGeminiClient.generateNarrative.mockResolvedValue(
-        'SUMMARY: Rovers won 2-1.\nPLAYER_OF_THE_MATCH: Sam Rivers - scored the winner.',
-      );
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'SUMMARY: Rovers won 2-1.\nPLAYER_OF_THE_MATCH: Sam Rivers - scored the winner.',
+        model: 'gemini-3.6-flash',
+      });
 
       await service.generateForMatch('match-1', { projectionRevision: 1 });
 
@@ -215,9 +227,10 @@ describe('InsightsService', () => {
       selectResults.push([]); // per-athlete performance — nobody scored/carded
       selectResults.push([]); // team matches
       selectResults.push([]); // existing insight digest check
-      mockGeminiClient.generateNarrative.mockResolvedValue(
-        'SUMMARY: A quiet win.\nPLAYER_OF_THE_MATCH: Someone Invented - played well.',
-      );
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'SUMMARY: A quiet win.\nPLAYER_OF_THE_MATCH: Someone Invented - played well.',
+        model: 'gemini-3.6-flash',
+      });
 
       await service.generateForMatch('match-1', { projectionRevision: 1 });
 
@@ -230,11 +243,16 @@ describe('InsightsService', () => {
       // Compute the digest the same way loadContext + buildInsightPrompt will,
       // by running once to observe the payload, then reusing it as "existing".
       queueGenerationSelects();
-      mockGeminiClient.generateNarrative.mockResolvedValue('First summary.');
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'First summary.',
+        model: 'gemini-3.6-flash',
+      });
       await service.generateForMatch('match-1', { projectionRevision: 1 });
-      const firstDigest = (insertValuesSpy.mock.calls[0][0] as {
-        inputDigest: string;
-      }).inputDigest;
+      const firstDigest = (
+        insertValuesSpy.mock.calls[0][0] as {
+          inputDigest: string;
+        }
+      ).inputDigest;
 
       jest.clearAllMocks();
       selectResults.length = 0;
@@ -251,7 +269,10 @@ describe('InsightsService', () => {
 
   describe('answerQuestion', () => {
     it('returns a ready answer on success', async () => {
-      mockGeminiClient.generateNarrative.mockResolvedValue('Sam Rivers, with 5 goals.');
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'Sam Rivers, with 5 goals.',
+        model: 'gemini-3.6-flash',
+      });
 
       const result = await service.answerQuestion('Who scored the most?');
 
@@ -261,65 +282,38 @@ describe('InsightsService', () => {
       });
     });
 
+    /**
+     * Retrying and cross-model fallback are `GeminiClient`'s job now (see
+     * `gemini-client.spec.ts`); by the time an error reaches the service every
+     * model has already been exhausted, so it must not retry again — it just
+     * has to degrade to `failed` rather than throwing a 500 at the coach.
+     */
     it('returns a failed status without throwing when Gemini errors', async () => {
-      mockGeminiClient.generateNarrative.mockRejectedValue(
-        new Error('Gemini provider returned 429.'),
-      );
-
-      const result = await service.answerQuestion('Who scored the most?');
-
-      expect(result).toEqual({ status: 'failed', answer: null });
-      expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(1);
-    });
-
-    it('retries once after a short delay on a 503 and succeeds', async () => {
-      jest.useFakeTimers();
-      mockGeminiClient.generateNarrative
-        .mockRejectedValueOnce(
-          new GoogleGenerativeAIFetchError('high demand', 503),
-        )
-        .mockResolvedValueOnce('Second attempt answer.');
-
-      const promise = service.answerQuestion('Who scored the most?');
-      await jest.advanceTimersByTimeAsync(1_000);
-      const result = await promise;
-
-      expect(result).toEqual({
-        status: 'ready',
-        answer: 'Second attempt answer.',
-      });
-      expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(2);
-      jest.useRealTimers();
-    });
-
-    it('gives up as failed if the retry also 503s', async () => {
-      jest.useFakeTimers();
       mockGeminiClient.generateNarrative.mockRejectedValue(
         new GoogleGenerativeAIFetchError('high demand', 503),
       );
 
-      const promise = service.answerQuestion('Who scored the most?');
-      await jest.advanceTimersByTimeAsync(1_000);
-      const result = await promise;
-
-      expect(result).toEqual({ status: 'failed', answer: null });
-      expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(2);
-      jest.useRealTimers();
-    });
-
-    it('does not retry a non-503 error', async () => {
-      mockGeminiClient.generateNarrative.mockRejectedValue(
-        new GoogleGenerativeAIFetchError('bad request', 400),
-      );
-
       const result = await service.answerQuestion('Who scored the most?');
 
       expect(result).toEqual({ status: 'failed', answer: null });
       expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(1);
     });
 
+    it('returns a failed status when Gemini is not configured', async () => {
+      mockGeminiClient.generateNarrative.mockRejectedValue(
+        new GeminiNotConfiguredError(),
+      );
+
+      const result = await service.answerQuestion('Who scored the most?');
+
+      expect(result).toEqual({ status: 'failed', answer: null });
+    });
+
     it('does not write to the database', async () => {
-      mockGeminiClient.generateNarrative.mockResolvedValue('An answer.');
+      mockGeminiClient.generateNarrative.mockResolvedValue({
+        text: 'An answer.',
+        model: 'gemini-3.6-flash',
+      });
 
       await service.answerQuestion('Who scored the most?');
 
@@ -395,9 +389,16 @@ describe('InsightsService — season insights', () => {
 
   it('generates a ready season insight for the all-time overview', async () => {
     queueSeasonGenerationSelects();
-    mockGeminiClient.generateNarrative.mockResolvedValue('Solid season overall.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'Solid season overall.',
+      model: 'gemini-3.6-flash',
+    });
 
-    const result = await service.generateSeasonInsight('team-1', null, 'user-1');
+    const result = await service.generateSeasonInsight(
+      'team-1',
+      null,
+      'user-1',
+    );
 
     expect(result.status).toBe('ready');
     expect(result.narrativeText).toBe('Solid season overall.');
@@ -420,7 +421,10 @@ describe('InsightsService — season insights', () => {
       },
     });
     queueSeasonGenerationSelects();
-    mockGeminiClient.generateNarrative.mockResolvedValue('Good season.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'Good season.',
+      model: 'gemini-3.6-flash',
+    });
 
     await service.generateSeasonInsight('team-1', 'season-1', 'user-1');
 
@@ -440,7 +444,11 @@ describe('InsightsService — season insights', () => {
     );
     selectResults.push([]); // findSeasonInsightRow inside markSeasonFailed
 
-    const result = await service.generateSeasonInsight('team-1', null, 'user-1');
+    const result = await service.generateSeasonInsight(
+      'team-1',
+      null,
+      'user-1',
+    );
 
     expect(result.status).toBe('failed');
     expect(result.failureReason).toBe('Gemini provider returned 429.');
@@ -448,7 +456,10 @@ describe('InsightsService — season insights', () => {
 
   it('skips calling Gemini when the input digest matches the last ready run', async () => {
     queueSeasonGenerationSelects();
-    mockGeminiClient.generateNarrative.mockResolvedValue('First season summary.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'First season summary.',
+      model: 'gemini-3.6-flash',
+    });
     const first = await service.generateSeasonInsight('team-1', null, 'user-1');
     const firstDigest = (
       insertValuesSpy.mock.calls[0][0] as { inputDigest: string }
@@ -470,7 +481,11 @@ describe('InsightsService — season insights', () => {
       },
     });
 
-    const second = await service.generateSeasonInsight('team-1', null, 'user-1');
+    const second = await service.generateSeasonInsight(
+      'team-1',
+      null,
+      'user-1',
+    );
 
     expect(mockGeminiClient.generateNarrative).not.toHaveBeenCalled();
     expect(insertValuesSpy).not.toHaveBeenCalled();

@@ -159,9 +159,10 @@ describe('Match insights (e2e)', () => {
     const { agent } = await registerCoach(app.getHttpServer(), identity);
     const squad = await createSquad(agent);
     const matchId = await seedFinishedMatch(agent, squad, 'Rivals FC');
-    mockGeminiClient.generateNarrative.mockResolvedValue(
-      'A hard-fought win for the home side.',
-    );
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'A hard-fought win for the home side.',
+      model: 'gemini-3.6-flash',
+    });
 
     await finalise(agent, matchId);
 
@@ -193,7 +194,10 @@ describe('Match insights (e2e)', () => {
     const { agent } = await registerCoach(app.getHttpServer(), identity);
     const squad = await createSquad(agent);
     const matchId = await seedFinishedMatch(agent, squad, 'Rivals FC');
-    mockGeminiClient.generateNarrative.mockResolvedValue('Great result today.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'Great result today.',
+      model: 'gemini-3.6-flash',
+    });
 
     await finalise(agent, matchId);
     await waitForInsightStatus(agent, matchId, 'ready');
@@ -270,7 +274,10 @@ describe('Season insights (e2e)', () => {
     const identity = uniqueTestIdentity('season-insight-generate');
     identities.push(identity);
     const { agent } = await registerCoach(app.getHttpServer(), identity);
-    mockGeminiClient.generateNarrative.mockResolvedValue('A promising campaign so far.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'A promising campaign so far.',
+      model: 'gemini-3.6-flash',
+    });
 
     const generated = await agent
       .post('/statistics/season-insight')
@@ -353,9 +360,10 @@ describe('Stats assistant (e2e)', () => {
     const identity = uniqueTestIdentity('assistant-answers');
     identities.push(identity);
     const { agent } = await registerCoach(app.getHttpServer(), identity);
-    mockGeminiClient.generateNarrative.mockResolvedValue(
-      'No matches have been played yet.',
-    );
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'No matches have been played yet.',
+      model: 'gemini-3.6-flash',
+    });
 
     const response = await agent
       .post('/statistics/assistant')
@@ -409,7 +417,10 @@ describe('Stats assistant (e2e)', () => {
       coachAgent,
       assistantIdentity,
     );
-    mockGeminiClient.generateNarrative.mockResolvedValue('An answer.');
+    mockGeminiClient.generateNarrative.mockResolvedValue({
+      text: 'An answer.',
+      model: 'gemini-3.6-flash',
+    });
 
     await assistantAgent
       .post('/statistics/assistant')

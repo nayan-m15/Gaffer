@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GoogleGenerativeAIFetchError } from '@google/generative-ai';
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -33,16 +32,7 @@ import {
   type SeasonInsightTopPlayer,
 } from './season-insight-prompt';
 
-const DEFAULT_MODEL = 'gemini-3.8-flash';
 const PROMPT_VERSION = 1;
-const ASSISTANT_RETRY_DELAY_MS = 1_000;
-
-/** 503s from Gemini's free tier ("currently experiencing high demand") are
- * transient capacity issues, not something retrying with the same prompt
- * will avoid triggering again on a genuinely broken request. */
-function isRetryableGeminiError(error: unknown): boolean {
-  return error instanceof GoogleGenerativeAIFetchError && error.status === 503;
-}
 
 function matchGoalCount(team: 'own' | 'opponent') {
   return sql<number>`coalesce((
@@ -151,34 +141,20 @@ export class InsightsService {
    * as `{ status: 'failed', answer: null }` for the caller to render as a
    * friendly "couldn't answer that" message.
    *
-   * Unlike the match/season insight generators, this retries once on a 503
-   * ("high demand") — it's a single user-initiated click rather than an
-   * automatic background job, so one extra attempt is cheap and meaningfully
-   * improves the odds of a real answer instead of asking the coach to
-   * manually retype the same question.
+   * `GeminiClient` already retries and falls back across models, so a failure
+   * here means every model was saturated (or the request itself is bad) —
+   * there is nothing left for this layer to retry.
    */
   async answerQuestion(prompt: string): Promise<AssistantAnswer> {
     try {
-      const answer = await this.generateNarrativeWithRetry(prompt);
-      return { status: 'ready', answer };
+      const { text } = await this.geminiClient.generateNarrative(prompt);
+      return { status: 'ready', answer: text };
     } catch (error) {
       if (!(error instanceof GeminiNotConfiguredError)) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(`Assistant query failed: ${message}`);
       }
       return { status: 'failed', answer: null };
-    }
-  }
-
-  private async generateNarrativeWithRetry(prompt: string): Promise<string> {
-    try {
-      return await this.geminiClient.generateNarrative(prompt);
-    } catch (error) {
-      if (!isRetryableGeminiError(error)) throw error;
-      await new Promise((resolve) =>
-        setTimeout(resolve, ASSISTANT_RETRY_DELAY_MS),
-      );
-      return this.geminiClient.generateNarrative(prompt);
     }
   }
 
@@ -299,8 +275,8 @@ export class InsightsService {
       return this.toSeasonSummary(existing);
     }
 
-    const narrativeText = await this.geminiClient.generateNarrative(prompt);
-    const modelName = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+    const { text: narrativeText, model: modelName } =
+      await this.geminiClient.generateNarrative(prompt);
 
     const values = {
       teamId,
@@ -473,13 +449,13 @@ export class InsightsService {
       return; // nothing changed since the last successful generation
     }
 
-    const rawResponse = await this.geminiClient.generateNarrative(prompt);
+    const { text: rawResponse, model: modelName } =
+      await this.geminiClient.generateNarrative(prompt);
     const parsed = parseInsightResponse(rawResponse);
     const playerOfTheMatch = sanitizePlayerOfTheMatch(
       parsed.playerOfTheMatch,
       context.athletePerformances,
     );
-    const modelName = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
 
     const values = {
       matchId,
