@@ -31,6 +31,20 @@ function baseInput(): BuildAssistantPromptInput {
     players: [
       { name: 'Sam Rivers', appearances: 6, goals: 5, assists: 1, yellowCards: 1, redCards: 0 },
     ],
+    matches: [
+      {
+        matchId: 'match-1',
+        eventId: 'event-1',
+        date: '2025-09-06T14:00:00.000Z',
+        opponent: 'Chelsea FC',
+        isHome: true,
+        result: 'W',
+        goalsFor: 4,
+        goalsAgainst: 0,
+        points: 3,
+      },
+    ],
+    recentNarratives: ['Rovers cruised past Chelsea FC 4-0 at home.'],
   };
 }
 
@@ -77,14 +91,49 @@ describe('buildAssistantPrompt', () => {
     expect(prompt).toContain('never guess one from a name');
   });
 
-  it('degrades gracefully with no deltas or players', () => {
+  it('includes match results', () => {
+    const prompt = buildAssistantPrompt(baseInput());
+
+    expect(prompt).toContain('- 2025-09-06 vs Chelsea FC: W 4-0');
+  });
+
+  it('includes recent match reports', () => {
+    const prompt = buildAssistantPrompt(baseInput());
+
+    expect(prompt).toContain('- Rovers cruised past Chelsea FC 4-0 at home.');
+  });
+
+  it('caps the match list to the most recent 20', () => {
+    const matches = Array.from({ length: 25 }, (_, i) => ({
+      matchId: `match-${i}`,
+      eventId: `event-${i}`,
+      date: `2025-09-${String((i % 28) + 1).padStart(2, '0')}T14:00:00.000Z`,
+      opponent: `Opponent ${i}`,
+      isHome: true,
+      result: 'W' as const,
+      goalsFor: 1,
+      goalsAgainst: 0,
+      points: 3,
+    }));
+
+    const prompt = buildAssistantPrompt({ ...baseInput(), matches });
+
+    expect(prompt).not.toContain('Opponent 0');
+    expect(prompt).toContain('Opponent 24');
+  });
+
+  it('degrades gracefully with no deltas, players, matches, or reports', () => {
     const prompt = buildAssistantPrompt({
       ...baseInput(),
       deltas: [],
       players: [],
+      matches: [],
+      recentNarratives: [],
     });
 
     expect(prompt).toContain('(not enough matches yet for a trend comparison)');
     expect(prompt).toContain('(no player statistics recorded yet)');
+    expect(prompt).toContain('(no match results recorded yet)');
+    expect(prompt).toContain('(no match reports generated yet)');
   });
 });

@@ -302,9 +302,10 @@ export class StatisticsService {
 
   /**
    * Answers a free-text stats question via Gemini, scoped to the same
-   * season totals, trend deltas, and player table `getOverview` already
-   * computes — no separate data path to keep in sync. Fully stateless: the
-   * question and answer are never persisted, only returned to the caller.
+   * season totals, trend deltas, player table, match list, and recent match
+   * reports `getOverview` already computes — no separate data path to keep
+   * in sync. Fully stateless: the question and answer are never persisted,
+   * only returned to the caller.
    */
   async askAssistant(
     userId: string,
@@ -335,6 +336,10 @@ export class StatisticsService {
         yellowCards: player.yellowCards,
         redCards: player.redCards,
       })),
+      matches: overview.trends,
+      recentNarratives: overview.recentInsights
+        .map((insight) => insight.narrativeText)
+        .filter((text): text is string => Boolean(text)),
     });
 
     return this.insightsService.answerQuestion(prompt);

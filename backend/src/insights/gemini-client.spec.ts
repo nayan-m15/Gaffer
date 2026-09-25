@@ -67,19 +67,6 @@ describe('GeminiClient', () => {
     expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
-  it('retries the same model once on a capacity 503 before moving on', async () => {
-    generateContent
-      .mockRejectedValueOnce(capacityError())
-      .mockResolvedValueOnce(reply('Second attempt.'));
-
-    await expect(client.generateNarrative('prompt')).resolves.toEqual({
-      text: 'Second attempt.',
-      model: 'gemini-3.6-flash',
-    });
-    expect(requestedModels).toEqual(['gemini-3.6-flash']);
-    expect(generateContent).toHaveBeenCalledTimes(2);
-  });
-
   /**
    * The bug this chain exists for: a free-tier model can 503 every single call
    * for minutes, which made the stats assistant look permanently broken.
@@ -87,15 +74,35 @@ describe('GeminiClient', () => {
   it('falls back to the next model when one is saturated', async () => {
     generateContent
       .mockRejectedValueOnce(capacityError())
-      .mockRejectedValueOnce(capacityError())
       .mockResolvedValueOnce(reply('Fallback answer.'));
 
     await expect(client.generateNarrative('prompt')).resolves.toEqual({
       text: 'Fallback answer.',
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
     });
-    expect(requestedModels).toEqual(['gemini-3.6-flash', 'gemini-3.8-flash']);
-    expect(generateContent).toHaveBeenCalledTimes(3);
+    expect(requestedModels).toEqual(['gemini-3.6-flash', 'gemini-3.1-flash-lite']);
+    expect(generateContent).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * A model gets exactly one attempt: retrying the same saturated model just
+   * burns more of its quota for essentially no chance of success within the
+   * span of a single request (a 429 window or a 503 outage both last far
+   * longer than an immediate retry).
+   */
+  it('does not retry the same model — moves to the next one immediately', async () => {
+    generateContent
+      .mockRejectedValueOnce(
+        new GoogleGenerativeAIFetchError('rate limited', 429),
+      )
+      .mockResolvedValueOnce(reply('Answered by the next model.'));
+
+    await expect(client.generateNarrative('prompt')).resolves.toEqual({
+      text: 'Answered by the next model.',
+      model: 'gemini-3.1-flash-lite',
+    });
+    expect(requestedModels).toEqual(['gemini-3.6-flash', 'gemini-3.1-flash-lite']);
+    expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
   it('throws the last capacity error once every model is exhausted', async () => {
@@ -104,23 +111,11 @@ describe('GeminiClient', () => {
     await expect(client.generateNarrative('prompt')).rejects.toThrow(
       'high demand',
     );
-    // Three models in the default chain, two attempts each.
-    expect(generateContent).toHaveBeenCalledTimes(6);
+    // Five models in the default chain, one attempt each.
+    expect(generateContent).toHaveBeenCalledTimes(5);
   });
 
-  it('retries a 429 rate limit but not a 400 bad request', async () => {
-    generateContent
-      .mockRejectedValueOnce(
-        new GoogleGenerativeAIFetchError('rate limited', 429),
-      )
-      .mockResolvedValueOnce(reply('Answered after backoff.'));
-
-    await expect(client.generateNarrative('prompt')).resolves.toEqual({
-      text: 'Answered after backoff.',
-      model: 'gemini-3.6-flash',
-    });
-
-    jest.clearAllMocks();
+  it('does not retry or fall back on a 400 bad request', async () => {
     generateContent.mockRejectedValue(
       new GoogleGenerativeAIFetchError('bad request', 400),
     );
@@ -150,14 +145,13 @@ describe('GeminiClient', () => {
     );
     expect(requestedModels).toEqual(['gemini-3.8-flash']);
     // Pinned means pinned: no silent fallback to the built-in chain.
-    expect(generateContent).toHaveBeenCalledTimes(2);
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
   it('uses a comma-separated GEMINI_MODEL as the whole chain', async () => {
     process.env.GEMINI_MODEL = 'model-a, model-b';
     client = new GeminiClient();
     generateContent
-      .mockRejectedValueOnce(capacityError())
       .mockRejectedValueOnce(capacityError())
       .mockResolvedValueOnce(reply('From model-b.'));
 
