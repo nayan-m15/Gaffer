@@ -1,4 +1,4 @@
-ALTER TABLE "competitions" ADD COLUMN "players_per_side" integer DEFAULT 11 NOT NULL;
+ALTER TABLE "competitions" ADD COLUMN IF NOT EXISTS "players_per_side" integer DEFAULT 11 NOT NULL;
 --> statement-breakpoint
 ALTER TABLE "competitions" DROP CONSTRAINT IF EXISTS "competitions_settings_valid";
 --> statement-breakpoint
