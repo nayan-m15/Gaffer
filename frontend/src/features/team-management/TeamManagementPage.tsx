@@ -17,6 +17,8 @@ import { AnimatedTabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import {
+  Check,
+  Move,
   RotateCcw,
   Wand2,
   Users,
@@ -28,6 +30,7 @@ import {
 import { useAthletes } from "./api";
 import { FootballPitch } from "./FootballPitch";
 import { PitchPlayer } from "./PitchPlayer";
+import { CustomFormationHandle } from "./CustomFormationHandle";
 import { FormationSelector } from "./FormationSelector";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
@@ -203,10 +206,40 @@ export default function TeamManagementPage() {
                   onChange={lineup.setFormation}
                 />
 
+                {lineup.isCustomFormation && (
+                  <Button
+                    variant={lineup.customEditMode ? "default" : "outline"}
+                    size="sm"
+                    onClick={lineup.toggleCustomEditMode}
+                    className="gap-1.5"
+                    aria-pressed={lineup.customEditMode}
+                  >
+                    {lineup.customEditMode ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Move className="size-3.5" />
+                    )}
+                    {lineup.customEditMode ? "Done" : "Edit shape"}
+                  </Button>
+                )}
+
+                {lineup.isCustomFormation && lineup.customEditMode && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={lineup.resetCustomPositions}
+                    className="gap-1.5"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Reset shape
+                  </Button>
+                )}
+
                 <Button
                   variant={lineup.autoFillEnabled ? "default" : "outline"}
                   size="sm"
                   onClick={lineup.toggleAutoFill}
+                  disabled={lineup.customEditMode}
                   className="gap-1.5"
                   aria-pressed={lineup.autoFillEnabled}
                 >
@@ -325,6 +358,13 @@ export default function TeamManagementPage() {
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
+        {lineup.isCustomFormation && lineup.customEditMode && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+            Drag the outfield position handles to build your shape. Positions snap
+            gently to the pitch grid and automatically become DEF, MID, or FWD
+            based on depth. The goalkeeper stays fixed.
+          </div>
+        )}
         <FootballPitch horizontal={isDesktop}>
           {lineup.formation?.positions.map((pos) => (
             <PitchPlayer
@@ -333,12 +373,21 @@ export default function TeamManagementPage() {
               athlete={getAthlete(lineup.assignments[pos.id] ?? null)}
               dragItem={lineup.dragItem}
               horizontal={isDesktop}
-              readOnly={!canManageTeam}
+              readOnly={!canManageTeam || lineup.customEditMode}
               onDragStart={lineup.startDrag}
               onDragEnd={lineup.endDrag}
               onDrop={lineup.handleDrop}
             />
           ))}
+          {canManageTeam && lineup.isCustomFormation && lineup.customEditMode &&
+            lineup.formation?.positions.map((pos) => (
+              <CustomFormationHandle
+                key={`custom-handle-${pos.id}`}
+                position={pos}
+                horizontal={isDesktop}
+                onMove={lineup.moveCustomPosition}
+              />
+            ))}
         </FootballPitch>
       </div>
 
@@ -346,7 +395,7 @@ export default function TeamManagementPage() {
       <SubstitutesArea
         athletes={substituteAthletes}
         dragItem={lineup.dragItem}
-        readOnly={!canManageTeam}
+        readOnly={!canManageTeam || lineup.customEditMode}
         onDragStart={lineup.startDrag}
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}

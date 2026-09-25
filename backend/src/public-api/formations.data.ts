@@ -7,8 +7,9 @@ import type { FormationPlayerCount } from '../common/formations';
  * This is intentionally separate from the tactical/squad data behind
  * `GamePlansService` — it is generic coaching reference content with no
  * team, athlete, or account association, so it is safe to publish without
- * authentication. IDs mirror `FORMATION_IDS` in `../common/formations.ts`;
- * keep the two in sync if a formation is ever added or renamed.
+ * authentication. Preset IDs mirror the preset entries in `FORMATION_IDS` in
+ * `../common/formations.ts`. Coach-defined custom formations are saved per game
+ * plan and intentionally are not part of this static public reference catalog.
  */
 export interface PublicFormation {
   id: string;

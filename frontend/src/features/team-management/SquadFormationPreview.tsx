@@ -7,9 +7,8 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_FORMATION_ID,
-  FORMATIONS,
   getPositionRole,
+  resolveFormation,
 } from "./formations";
 import {
   connectorSegments,
@@ -39,6 +38,7 @@ const LABEL_WIDTH_MAX = 20;
 interface SquadFormationPreviewProps {
   formationId: string;
   assignments: PitchAssignments;
+  customPositions?: FormationPosition[] | null;
   athletes: BackendAthlete[];
   className?: string;
 }
@@ -46,11 +46,11 @@ interface SquadFormationPreviewProps {
 export function SquadFormationPreview({
   formationId,
   assignments,
+  customPositions,
   athletes,
   className,
 }: SquadFormationPreviewProps) {
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const formation = resolveFormation(formationId, customPositions);
   const athleteById = useMemo(
     () => new Map(athletes.map((athlete) => [athlete.id, athlete])),
     [athletes],

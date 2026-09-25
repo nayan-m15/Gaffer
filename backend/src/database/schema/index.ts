@@ -263,6 +263,14 @@ export const offensiveStyle = pgEnum('offensive_style', [
   'long_ball',
 ]);
 
+export interface GamePlanFormationPosition {
+  id: string;
+  label: string;
+  role: 'GK' | 'DEF' | 'MID' | 'FWD';
+  x: number;
+  y: number;
+}
+
 // A named tactical profile ("game plan") for a team, modeled on FIFA 20's
 // Custom Tactics. A team keeps several (e.g. "Balanced", "Cup final low
 // block") and swaps between them per fixture; names are unique per team. Each
@@ -283,6 +291,10 @@ export const gamePlans = pgTable(
       .notNull()
       .default({})
       .$type<Record<string, string | null>>(),
+    // Coach-defined slot coordinates for custom formations. Preset formations
+    // leave this null and continue to use the static formation catalog.
+    customPositions: jsonb('custom_positions')
+      .$type<GamePlanFormationPosition[] | null>(),
     // Athlete IDs on the substitutes bench.
     substituteIds: jsonb('substitute_ids')
       .notNull()
@@ -327,6 +339,7 @@ export interface GamePlanSnapshot {
   name: string;
   formationId: string;
   assignments: Record<string, string | null>;
+  customPositions: GamePlanFormationPosition[] | null;
   substituteIds: string[];
   defensiveStyle: (typeof defensiveStyle.enumValues)[number];
   defensiveWidth: number;

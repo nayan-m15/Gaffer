@@ -9,6 +9,7 @@
  */
 
 import type {
+  CustomFormationId,
   Formation,
   FormationPlayerCount,
   FormationPosition,
@@ -287,6 +288,139 @@ const sevenVSevenTwoTwoTwo: Formation = {
   ],
 };
 
+/* ─── Coach-defined custom formations ───────────────────────────────────── */
+
+export const CUSTOM_FORMATION_BY_PLAYER_COUNT: Record<
+  FormationPlayerCount,
+  CustomFormationId
+> = {
+  5: "custom-5",
+  7: "custom-7",
+  11: "custom-11",
+};
+
+const CUSTOM_FORMATION_IDS = new Set<string>(
+  Object.values(CUSTOM_FORMATION_BY_PLAYER_COUNT),
+);
+
+/** Broad role inferred from a custom slot's vertical location. */
+export function inferCustomPositionRole(y: number): Exclude<PositionRole, "GK"> {
+  if (y >= 63) return "DEF";
+  if (y >= 34) return "MID";
+  return "FWD";
+}
+
+function customSlotLabel(role: PositionRole): string {
+  return role;
+}
+
+export function createCustomPositionsFromFormation(
+  source: Formation,
+): FormationPosition[] {
+  let outfieldIndex = 0;
+  return source.positions.map((position) => {
+    if (position.role === "GK") {
+      return {
+        id: `custom-${source.playerCount}-gk`,
+        label: "GK",
+        role: "GK" as const,
+        x: 50,
+        y: 94,
+      };
+    }
+    outfieldIndex += 1;
+    return {
+      id: `custom-${source.playerCount}-${outfieldIndex}`,
+      label: customSlotLabel(position.role),
+      role: position.role,
+      x: position.x,
+      y: position.y,
+    };
+  });
+}
+
+function buildDefaultCustomFormation(
+  playerCount: FormationPlayerCount,
+  source: Formation,
+): Formation {
+  return {
+    id: CUSTOM_FORMATION_BY_PLAYER_COUNT[playerCount],
+    name: "Custom",
+    playerCount,
+    positions: createCustomPositionsFromFormation(source),
+  };
+}
+
+const fiveCustom = buildDefaultCustomFormation(5, fiveVFiveOneTwoOne);
+const sevenCustom = buildDefaultCustomFormation(7, sevenVSevenTwoThreeOne);
+const elevenCustom = buildDefaultCustomFormation(11, fourThreeThree);
+
+export function isCustomFormationId(
+  formationId: string | null | undefined,
+): formationId is CustomFormationId {
+  return Boolean(formationId && CUSTOM_FORMATION_IDS.has(formationId));
+}
+
+export function getCustomFormationIdForPlayerCount(
+  playerCount: FormationPlayerCount,
+): CustomFormationId {
+  return CUSTOM_FORMATION_BY_PLAYER_COUNT[playerCount];
+}
+
+export function getDefaultCustomPositions(
+  playerCount: FormationPlayerCount,
+): FormationPosition[] {
+  const formation =
+    playerCount === 5 ? fiveCustom : playerCount === 7 ? sevenCustom : elevenCustom;
+  return formation.positions.map((position) => ({ ...position }));
+}
+
+/**
+ * Resolve a formation, applying saved custom coordinates when the selected
+ * formation is coach-defined. Invalid/missing custom coordinates fall back to
+ * that format's neutral custom shape so old or partial data stays renderable.
+ */
+export function resolveFormation(
+  formationId: string | null | undefined,
+  customPositions?: FormationPosition[] | null,
+): Formation {
+  const base = FORMATIONS[formationId ?? ""] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  if (!isCustomFormationId(base.id)) {
+    return base;
+  }
+
+  const expectedCount = base.playerCount;
+  if (!customPositions || customPositions.length !== expectedCount) {
+    return base;
+  }
+
+  const baseIds = new Set(base.positions.map((position) => position.id));
+  const suppliedIds = new Set(customPositions.map((position) => position.id));
+  if (
+    suppliedIds.size !== expectedCount ||
+    [...baseIds].some((id) => !suppliedIds.has(id))
+  ) {
+    return base;
+  }
+
+  const normalized = customPositions.map((position) => {
+    const isGoalkeeper = position.id === `custom-${expectedCount}-gk`;
+    if (isGoalkeeper) {
+      return { ...position, label: "GK", role: "GK" as const, x: 50, y: 94 };
+    }
+    const role = inferCustomPositionRole(position.y);
+    return {
+      ...position,
+      label: customSlotLabel(role),
+      role,
+      x: Math.min(93, Math.max(7, position.x)),
+      y: Math.min(86, Math.max(8, position.y)),
+    };
+  });
+
+  return { ...base, positions: normalized };
+}
+
 /* ─── Public API ─────────────────────────────────────────────────────────── */
 
 /** All supported formations, keyed by ID. */
@@ -294,9 +428,11 @@ export const FORMATIONS: Record<string, Formation> = {
   "5v5-1-2-1": fiveVFiveOneTwoOne,
   "5v5-2-1-1": fiveVFiveTwoOneOne,
   "5v5-1-1-2": fiveVFiveOneOneTwo,
+  "custom-5": fiveCustom,
   "7v7-2-3-1": sevenVSevenTwoThreeOne,
   "7v7-3-2-1": sevenVSevenThreeTwoOne,
   "7v7-2-2-2": sevenVSevenTwoTwoTwo,
+  "custom-7": sevenCustom,
   "4-3-3": fourThreeThree,
   "4-4-2": fourFourTwo,
   "4-2-3-1": fourTwoThreeOne,
@@ -305,6 +441,7 @@ export const FORMATIONS: Record<string, Formation> = {
   "3-4-3": threeFourThree,
   "5-3-2": fiveThreeTwo,
   "5-4-1": fiveFourOne,
+  "custom-11": elevenCustom,
 };
 
 /** Ordered format choices shown to coaches. */
@@ -374,9 +511,13 @@ export function inferFormationIdFromPositions(
       : null;
   const candidates = hintedPlayerCount
     ? Object.values(FORMATIONS).filter(
-        (formation) => formation.playerCount === hintedPlayerCount,
+        (formation) =>
+          formation.playerCount === hintedPlayerCount &&
+          !isCustomFormationId(formation.id),
       )
-    : Object.values(FORMATIONS);
+    : Object.values(FORMATIONS).filter(
+        (formation) => !isCustomFormationId(formation.id),
+      );
 
   if (labels.length === 0) {
     return hintedPlayerCount
@@ -428,13 +569,11 @@ export function remapPlayers(
   oldFormationId: string,
   newFormationId: string,
   currentAssignments: PitchAssignments,
+  oldCustomPositions?: FormationPosition[] | null,
+  newCustomPositions?: FormationPosition[] | null,
 ): { assignments: PitchAssignments; overflowToSubs: string[] } {
-  const oldFormation = FORMATIONS[oldFormationId];
-  const newFormation = FORMATIONS[newFormationId];
-
-  if (!oldFormation || !newFormation) {
-    return { assignments: {}, overflowToSubs: [] };
-  }
+  const oldFormation = resolveFormation(oldFormationId, oldCustomPositions);
+  const newFormation = resolveFormation(newFormationId, newCustomPositions);
 
   // Collect currently assigned players grouped by role
   const playersByRole: Record<PositionRole, { athleteId: string; label: string }[]> = {
@@ -542,15 +681,9 @@ export function autoFillFormation(
   formationId: string,
   athleteIds: string[],
   getPosition: (athleteId: string) => string | null,
+  customPositions?: FormationPosition[] | null,
 ): { assignments: PitchAssignments; substituteIds: string[] } {
-  const formation = FORMATIONS[formationId];
-
-  if (!formation) {
-    return {
-      assignments: {},
-      substituteIds: [...athleteIds],
-    };
-  }
+  const formation = resolveFormation(formationId, customPositions);
 
   const assignments: PitchAssignments = {};
   const assigned = new Set<string>();
@@ -644,9 +777,9 @@ export function previewAssignmentsForStarters(
   starterIds: string[],
   getPosition: (athleteId: string) => string | null,
   preferredAssignments?: PitchAssignments,
+  customPositions?: FormationPosition[] | null,
 ): PitchAssignments {
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const formation = resolveFormation(formationId, customPositions);
   const starterSet = new Set(starterIds);
   const assignments: PitchAssignments = {};
   const used = new Set<string>();

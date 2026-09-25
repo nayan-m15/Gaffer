@@ -13,6 +13,9 @@ export type PositionRole = "GK" | "DEF" | "MID" | "FWD";
 /** Supported match formats, expressed as the number of players on the pitch. */
 export type FormationPlayerCount = 5 | 7 | 11;
 
+/** Internal IDs used for coach-defined shapes in each supported match format. */
+export type CustomFormationId = "custom-5" | "custom-7" | "custom-11";
+
 /**
  * A single position slot within a formation.
  *
@@ -62,6 +65,8 @@ export interface LineupState {
   formationId: string;
   /** Position-to-athlete mapping for the starting lineup. */
   assignments: PitchAssignments;
+  /** Coach-defined slot coordinates when `formationId` is a custom formation. */
+  customPositions: FormationPosition[] | null;
   /** Athlete IDs currently on the substitutes bench. */
   substituteIds: string[];
 }

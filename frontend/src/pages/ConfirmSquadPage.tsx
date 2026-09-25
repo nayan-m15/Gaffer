@@ -10,7 +10,9 @@ import {
   getDefaultFormationIdForPlayerCount,
   getFormationPlayerCount,
   getPositionRole,
+  isCustomFormationId,
   previewAssignmentsForStarters,
+  resolveFormation,
 } from "@/features/team-management/formations";
 import { SquadFormationPreview } from "@/features/team-management/SquadFormationPreview";
 import type { PositionRole } from "@/features/team-management/types";
@@ -196,9 +198,14 @@ function roleStyle(position: string | null) {
   return ROLE_STYLE[role];
 }
 
-function MiniPitch({ formationId }: { formationId: string }) {
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+function MiniPitch({
+  formationId,
+  customPositions,
+}: {
+  formationId: string;
+  customPositions?: BackendGamePlan["customPositions"];
+}) {
+  const formation = resolveFormation(formationId, customPositions);
 
   return (
     <div
@@ -642,8 +649,15 @@ export default function ConfirmSquadPage() {
       [...startingIds],
       (id) => athleteById.get(id)?.position ?? null,
       gamePlanQuery.data?.assignments,
+      gamePlanQuery.data?.customPositions,
     );
-  }, [athletes, gamePlanQuery.data?.assignments, previewFormationId, startingIds]);
+  }, [
+    athletes,
+    gamePlanQuery.data?.assignments,
+    gamePlanQuery.data?.customPositions,
+    previewFormationId,
+    startingIds,
+  ]);
 
   const opponentSummary = useMemo(() => {
     const modeLabel =
@@ -1305,7 +1319,10 @@ export default function ConfirmSquadPage() {
                       : "border-border",
                   )}
                 >
-                  <MiniPitch formationId={plan.formationId} />
+                  <MiniPitch
+                    formationId={plan.formationId}
+                    customPositions={plan.customPositions}
+                  />
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
                       <span className="truncate text-sm font-semibold text-foreground">
@@ -1318,7 +1335,9 @@ export default function ConfirmSquadPage() {
                       )}
                     </span>
                     <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      {plan.formationId}
+                      {isCustomFormationId(plan.formationId)
+                        ? "Custom"
+                        : plan.formationId}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
                       {getFormationPlayerCount(plan.formationId)}-a-side · {counts.starters} starters · {counts.subs} subs
@@ -1467,6 +1486,7 @@ export default function ConfirmSquadPage() {
             className="lg:sticky lg:top-4"
             formationId={previewFormationId}
             assignments={previewAssignments}
+            customPositions={gamePlanQuery.data?.customPositions}
             athletes={athletes}
           />
         </div>

@@ -46,6 +46,7 @@ export function toSquad(plan: BackendGamePlan): GamePlanSquad {
   return {
     formationId: plan.formationId,
     assignments: plan.assignments,
+    customPositions: plan.customPositions,
     substituteIds: plan.substituteIds,
   };
 }
@@ -152,6 +153,7 @@ export function useGamePlanEditor(
     ...content,
     formationId: lineup.formationId,
     assignments: lineup.assignments,
+    customPositions: lineup.customPositions,
     substituteIds: lineup.substituteIds,
   });
 

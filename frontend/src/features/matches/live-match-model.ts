@@ -4,6 +4,7 @@ import {
   getDefaultFormationIdForPlayerCount,
   inferFormationIdFromPositions,
   previewAssignmentsForStarters,
+  resolveFormation,
 } from "@/features/team-management/formations";
 import type { FormationPlayerCount } from "@/features/team-management/types";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
@@ -325,8 +326,10 @@ export function placeOwnPlayers(
   const formationId =
     gamePlan?.formationId ??
     getDefaultFormationIdForPlayerCount(inferredPlayerCount);
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const formation = resolveFormation(
+    formationId,
+    gamePlan?.customPositions,
+  );
   const byId = new Map(uniqueOnPitch.map((athlete) => [athlete.id, athlete]));
 
   const preferred: Record<string, string | null> = {
@@ -355,6 +358,7 @@ export function placeOwnPlayers(
     uniqueOnPitch.map((athlete) => athlete.id),
     (id) => byId.get(id)?.position ?? null,
     preferred,
+    gamePlan?.customPositions,
   );
 
   const placed: PlacedOwnPlayer[] = [];

@@ -2,9 +2,11 @@ export const FORMATION_IDS = [
   '5v5-1-2-1',
   '5v5-2-1-1',
   '5v5-1-1-2',
+  'custom-5',
   '7v7-2-3-1',
   '7v7-3-2-1',
   '7v7-2-2-2',
+  'custom-7',
   '4-3-3',
   '4-4-2',
   '4-2-3-1',
@@ -13,10 +15,12 @@ export const FORMATION_IDS = [
   '3-4-3',
   '5-3-2',
   '5-4-1',
+  'custom-11',
 ] as const;
 
 export type FormationId = (typeof FORMATION_IDS)[number];
 export type FormationPlayerCount = 5 | 7 | 11;
+export type CustomFormationId = 'custom-5' | 'custom-7' | 'custom-11';
 
 export const DEFAULT_FORMATION_ID: FormationId = '4-3-3';
 
@@ -27,9 +31,11 @@ export const FORMATION_PLAYER_COUNTS: Record<
   '5v5-1-2-1': 5,
   '5v5-2-1-1': 5,
   '5v5-1-1-2': 5,
+  'custom-5': 5,
   '7v7-2-3-1': 7,
   '7v7-3-2-1': 7,
   '7v7-2-2-2': 7,
+  'custom-7': 7,
   '4-3-3': 11,
   '4-4-2': 11,
   '4-2-3-1': 11,
@@ -38,7 +44,18 @@ export const FORMATION_PLAYER_COUNTS: Record<
   '3-4-3': 11,
   '5-3-2': 11,
   '5-4-1': 11,
+  'custom-11': 11,
 };
+
+export function isCustomFormationId(
+  formationId: string | null | undefined,
+): formationId is CustomFormationId {
+  return (
+    formationId === 'custom-5' ||
+    formationId === 'custom-7' ||
+    formationId === 'custom-11'
+  );
+}
 
 export function getFormationPlayerCount(
   formationId: string | null | undefined,

@@ -267,6 +267,13 @@
       "when": 1790347080000,
       "tag": "0036_competition_players_per_side",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790347200000,
+      "tag": "0037_game_plan_custom_formations",
+      "breakpoints": true
     }
   ]
 }

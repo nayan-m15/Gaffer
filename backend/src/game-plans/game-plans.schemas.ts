@@ -32,6 +32,14 @@ const nameSchema = z
   .min(1, 'Game plan name is required.')
   .max(100, 'Game plan name must be 100 characters or fewer.');
 
+const customPositionSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+  label: z.string().trim().min(1).max(20),
+  role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+});
+
 const gamePlanContentSchema = z.object({
   formationId: z.enum(FORMATION_IDS, { error: 'Formation is not supported.' }),
   // Squad selection — position ID -> athlete ID (or null for an empty slot).
@@ -44,6 +52,7 @@ const gamePlanContentSchema = z.object({
     },
     { message: 'A starting lineup must contain unique athletes.' },
   ),
+  customPositions: z.array(customPositionSchema).max(11).nullable(),
   substituteIds: z
     .array(z.string().uuid())
     .max(15, 'Maximum 15 substitutes allowed.')

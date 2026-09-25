@@ -460,6 +460,7 @@ export class EventsService {
             name: gamePlan.name,
             formationId: gamePlan.formationId,
             assignments: gamePlan.assignments,
+            customPositions: gamePlan.customPositions,
             substituteIds: gamePlan.substituteIds,
             defensiveStyle: gamePlan.defensiveStyle,
             defensiveWidth: gamePlan.defensiveWidth,
