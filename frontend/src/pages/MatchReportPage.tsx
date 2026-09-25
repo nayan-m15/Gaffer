@@ -20,6 +20,7 @@ import { Timeline } from "@/components/ui/timeline";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { useGamePlan } from "@/features/team-tactics/api";
 import { getFormationPlayerCount } from "@/features/team-management/formations";
+import type { FormationPlayerCount } from "@/features/team-management/types";
 import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
   useDeleteMatchEvent,
@@ -234,9 +235,14 @@ export default function MatchReportPage() {
     () => ownPitchState(squad, timeline),
     [squad, timeline],
   );
+  const matchPlayerCount: FormationPlayerCount = gamePlan
+    ? getFormationPlayerCount(gamePlan.formationId)
+    : ownState.onPitch.length === 5 || ownState.onPitch.length === 7
+      ? ownState.onPitch.length
+      : 11;
   const oppState = useMemo(
-    () => opponentPitchState(match?.opponentSquad ?? [], timeline, getFormationPlayerCount(gamePlan?.formationId)),
-    [gamePlan?.formationId, match?.opponentSquad, timeline],
+    () => opponentPitchState(match?.opponentSquad ?? [], timeline, matchPlayerCount),
+    [match?.opponentSquad, matchPlayerCount, timeline],
   );
   const ownPlaced = useMemo(
     () =>
@@ -254,9 +260,9 @@ export default function MatchReportPage() {
         oppState.onPitch,
         oppHalf,
         timeline,
-        getFormationPlayerCount(gamePlan?.formationId),
+        matchPlayerCount,
       ),
-    [gamePlan?.formationId, oppState.onPitch, oppHalf, timeline],
+    [matchPlayerCount, oppState.onPitch, oppHalf, timeline],
   );
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),

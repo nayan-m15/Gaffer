@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCompetitionMutation } from "./hooks";
 import { createCompetition, updateCompetition } from "./api";
-import type { CompetitionDetail, CompetitionFormat, CompetitionInput, CompetitionType } from "./types";
+import type { CompetitionDetail, CompetitionFormat, CompetitionInput, CompetitionPlayersPerSide, CompetitionType } from "./types";
 
 export function RequestError({ error }: { error: Error | null }) {
   return error ? <p role="alert" className="text-sm text-destructive">{error.message}</p> : null;
@@ -59,6 +59,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
   const [format, setFormat] = useState<CompetitionFormat>(inferredFormat(competition));
   const [season, setSeason] = useState(competition?.season ?? "");
   const [configuredTeamCount, setConfiguredTeamCount] = useState(initialTeamCount(competition));
+  const [playersPerSide, setPlayersPerSide] = useState<CompetitionPlayersPerSide>(competition?.playersPerSide ?? 11);
   const [maxSubstitutes, setMaxSubstitutes] = useState(competition?.maxSubstitutes ?? 5);
   const [redCardSuspensionMatches, setRedCardSuspensionMatches] = useState(competition?.redCardSuspensionMatches ?? 1);
   const [accumulatedYellowThreshold, setAccumulatedYellowThreshold] = useState(competition?.accumulatedYellowThreshold ?? 5);
@@ -125,6 +126,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
       season: season.trim(),
       format,
       configuredTeamCount,
+      playersPerSide,
       maxSubstitutes,
       redCardSuspensionMatches,
       accumulatedYellowThreshold,
@@ -184,6 +186,18 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
           </>}
 
           {step === 2 && <>
+            <div className="grid gap-2 text-sm">
+              <label htmlFor="players-per-side">Players per side</label>
+              <Select disabled={locked} value={String(playersPerSide)} onValueChange={(value) => setPlayersPerSide(Number(value) as CompetitionPlayersPerSide)}>
+                <SelectTrigger id="players-per-side" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5-a-side</SelectItem>
+                  <SelectItem value="7">7-a-side</SelectItem>
+                  <SelectItem value="11">11-a-side</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Every match in this competition requires exactly {playersPerSide} starters per team. Compatible formations are enforced on match day.</p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <NumberField label="Maximum substitutes allowed" min={0} disabled={locked} value={maxSubstitutes} onChange={setMaxSubstitutes} />
               <NumberField label="Red-card suspension (matches)" min={0} disabled={locked} value={redCardSuspensionMatches} onChange={setRedCardSuspensionMatches} />

@@ -218,9 +218,9 @@ describe('Competition fixtures (PostgreSQL)', () => {
           [f.homeCompetitionTeamId, f.awayCompetitionTeamId].includes(p.id),
         ),
       ).toHaveLength(3);
-    expect(
-      (await service.findOne('admin', competitionId)).configuredTeamCount,
-    ).toBe(4);
+    const detail = await service.findOne('admin', competitionId);
+    expect(detail.configuredTeamCount).toBe(4);
+    expect(detail.playersPerSide).toBe(11);
   });
 
   it('generates reversed second legs and handles odd league sizes', async () => {
@@ -559,11 +559,35 @@ describe('Competition fixtures (PostgreSQL)', () => {
     ).rejects.toThrow();
   });
 
+  it('stores 5/7/11-a-side competition formats before fixtures are generated', async () => {
+    await expect(
+      service.update('admin', competitionId, { playersPerSide: 7 }),
+    ).resolves.toMatchObject({ playersPerSide: 7 });
+    expect((await row()).playersPerSide).toBe(7);
+
+    const parsed = createCompetitionSchema.parse({
+      name: 'Five-a-side League',
+      type: 'league',
+      playersPerSide: 5,
+    });
+    expect(parsed.playersPerSide).toBe(5);
+    expect(() =>
+      createCompetitionSchema.parse({
+        name: 'Invalid format',
+        type: 'league',
+        playersPerSide: 9,
+      }),
+    ).toThrow();
+  });
+
   it('locks structural settings and roster but permits rename and invitation linking', async () => {
     await fill();
     await service.generateFixtures('admin', competitionId);
     await expect(
       service.update('admin', competitionId, { pointsWin: 5 }),
+    ).rejects.toThrow('Structural settings');
+    await expect(
+      service.update('admin', competitionId, { playersPerSide: 7 }),
     ).rejects.toThrow('Structural settings');
     await expect(
       service.update('admin', competitionId, { name: 'Renamed' }),

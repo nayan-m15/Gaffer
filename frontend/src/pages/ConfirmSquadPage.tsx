@@ -439,6 +439,18 @@ export default function ConfirmSquadPage() {
     () => gamePlansQuery.data ?? [],
     [gamePlansQuery.data],
   );
+  const competitionPlayerCount = eventQuery.data?.competitionId
+    ? (competitionQuery.data?.playersPerSide ?? null)
+    : null;
+  const compatibleGamePlans = useMemo(() => {
+    if (competitionPlayerCount) {
+      return gamePlans.filter(
+        (plan) =>
+          getFormationPlayerCount(plan.formationId) === competitionPlayerCount,
+      );
+    }
+    return eventQuery.data?.competitionId ? [] : gamePlans;
+  }, [competitionPlayerCount, eventQuery.data?.competitionId, gamePlans]);
   const selectedPlanSummary = useMemo(
     () =>
       selectedGamePlanId
@@ -446,11 +458,13 @@ export default function ConfirmSquadPage() {
         : null,
     [gamePlans, selectedGamePlanId],
   );
-  const startingTarget = getFormationPlayerCount(
-    gamePlanQuery.data?.formationId ??
-      selectedPlanSummary?.formationId ??
-      DEFAULT_FORMATION_ID,
-  );
+  const startingTarget =
+    competitionPlayerCount ??
+    getFormationPlayerCount(
+      gamePlanQuery.data?.formationId ??
+        selectedPlanSummary?.formationId ??
+        DEFAULT_FORMATION_ID,
+    );
   const selectableAthletes = useMemo(
     () => athletes.filter((athlete) => athlete.status !== "injured"),
     [athletes],
@@ -462,6 +476,21 @@ export default function ConfirmSquadPage() {
 
   const ownColor = resolveOwnColor(teamColor, team?.primaryColor);
   const oppColor = resolveOppColor(opponentColor);
+
+  useEffect(() => {
+    if (!competitionPlayerCount || !selectedGamePlanId) {
+      return;
+    }
+    const selectedPlan = gamePlans.find((plan) => plan.id === selectedGamePlanId);
+    if (
+      selectedPlan &&
+      getFormationPlayerCount(selectedPlan.formationId) !== competitionPlayerCount
+    ) {
+      appliedGamePlanIdRef.current = null;
+      setSelectedGamePlanId(null);
+      setStartingIds(new Set());
+    }
+  }, [competitionPlayerCount, gamePlans, selectedGamePlanId]);
 
   useEffect(() => {
     if (!selectedGamePlanId) {
@@ -566,13 +595,12 @@ export default function ConfirmSquadPage() {
     Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
   const canSubmit =
     startingCount === startingTarget &&
+    selectableAthletes.length >= startingTarget &&
     opponentReady &&
     fixtureDateConfirmed &&
     !beforeMatchDay &&
     !startMatch.isPending &&
-    !(eventQuery.data?.competitionId &&
-      !eventQuery.data?.competitionFixtureId &&
-      (competitionQuery.isFetching || competitionQuery.isError)) &&
+    (!eventQuery.data?.competitionId || competitionQuery.isSuccess) &&
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
 
   const detailsComplete = opponentReady;
@@ -603,7 +631,8 @@ export default function ConfirmSquadPage() {
   }, [athletes]);
 
   const previewFormationId =
-    gamePlanQuery.data?.formationId ?? DEFAULT_FORMATION_ID;
+    gamePlanQuery.data?.formationId ??
+    getDefaultFormationIdForPlayerCount(startingTarget);
   const previewAssignments = useMemo(() => {
     const athleteById = new Map(
       athletes.map((athlete) => [athlete.id, athlete]),
@@ -1200,7 +1229,9 @@ export default function ConfirmSquadPage() {
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <h2 className={sectionLabelClassName}>Saved game plan</h2>
           <p className="text-sm text-muted-foreground">
-            Pick a plan to pre-fill your starting lineup, then adjust below
+            {competitionPlayerCount
+              ? `This competition is ${competitionPlayerCount}-a-side. Only compatible plans are shown.`
+              : "Pick a plan to pre-fill your starting lineup, then adjust below"}
           </p>
         </div>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1240,7 +1271,7 @@ export default function ConfirmSquadPage() {
               </span>
             </button>
           </li>
-          {gamePlans.map((plan) => {
+          {compatibleGamePlans.map((plan) => {
             const selected = selectedGamePlanId === plan.id;
             const counts = planCounts(plan);
             return (
@@ -1298,6 +1329,22 @@ export default function ConfirmSquadPage() {
             );
           })}
         </ul>
+        {competitionPlayerCount && compatibleGamePlans.length === 0 && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            You do not have a saved {competitionPlayerCount}-a-side game plan yet. Use <span className="font-medium text-foreground">Pick from roster</span> to choose the required starters manually.
+          </p>
+        )}
+        {event.competitionId && competitionQuery.isFetching && (
+          <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading competition match format…
+          </p>
+        )}
+        {event.competitionId && competitionQuery.isError && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            Could not load the competition match format. Please retry before confirming the squad.
+          </p>
+        )}
         {selectedGamePlanId && gamePlanQuery.isFetching && (
           <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
@@ -1329,6 +1376,12 @@ export default function ConfirmSquadPage() {
           </p>
         </div>
 
+        {competitionPlayerCount && (
+          <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+            Competition format: <span className="font-semibold">{competitionPlayerCount}-a-side</span>. Exactly {competitionPlayerCount} available players must be selected as starters.
+          </p>
+        )}
+
         {!fixtureDateConfirmed && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
             This generated fixture is still provisional. Both teams must agree the date in Leagues & Competitions before the match can start.
@@ -1343,7 +1396,7 @@ export default function ConfirmSquadPage() {
 
         {selectableAthletes.length < startingTarget && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            Need at least {startingTarget} players for a full lineup.
+            Your team needs at least {startingTarget} available players to confirm this {competitionPlayerCount ? `${competitionPlayerCount}-a-side competition` : "match"} squad.
           </p>
         )}
 

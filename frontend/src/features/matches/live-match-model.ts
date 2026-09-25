@@ -317,10 +317,16 @@ export function placeOwnPlayers(
   timeline: MatchLogEvent[],
   layout: "full" | "own" = "full",
 ): PlacedOwnPlayer[] {
-  const formationId = gamePlan?.formationId ?? DEFAULT_FORMATION_ID;
+  const uniqueOnPitch = uniqueAthletes(onPitch);
+  const inferredPlayerCount: FormationPlayerCount =
+    uniqueOnPitch.length === 5 || uniqueOnPitch.length === 7
+      ? uniqueOnPitch.length
+      : 11;
+  const formationId =
+    gamePlan?.formationId ??
+    getDefaultFormationIdForPlayerCount(inferredPlayerCount);
   const formation =
     FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
-  const uniqueOnPitch = uniqueAthletes(onPitch);
   const byId = new Map(uniqueOnPitch.map((athlete) => [athlete.id, athlete]));
 
   const preferred: Record<string, string | null> = {

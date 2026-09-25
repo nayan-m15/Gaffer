@@ -36,6 +36,7 @@ import {
 } from "@/offline/match-store";
 import { useGamePlan } from "@/features/team-tactics/api";
 import { getFormationPlayerCount } from "@/features/team-management/formations";
+import type { FormationPlayerCount } from "@/features/team-management/types";
 import {
   useDeleteMatchEvent,
   useFinishMatch,
@@ -504,9 +505,14 @@ export default function LiveMatchPage() {
     () => ownPitchState(squad, timeline),
     [squad, timeline],
   );
+  const matchPlayerCount: FormationPlayerCount = gamePlan
+    ? getFormationPlayerCount(gamePlan.formationId)
+    : ownState.onPitch.length === 5 || ownState.onPitch.length === 7
+      ? ownState.onPitch.length
+      : 11;
   const oppState = useMemo(
-    () => opponentPitchState(opponentSquad, timeline, getFormationPlayerCount(gamePlan?.formationId)),
-    [gamePlan?.formationId, opponentSquad, timeline],
+    () => opponentPitchState(opponentSquad, timeline, matchPlayerCount),
+    [matchPlayerCount, opponentSquad, timeline],
   );
 
   const ownName = team?.name ?? "US";
@@ -569,9 +575,9 @@ export default function LiveMatchPage() {
         oppState.onPitch,
         oppHalf,
         timeline,
-        getFormationPlayerCount(gamePlan?.formationId),
+        matchPlayerCount,
       ),
-    [gamePlan?.formationId, oppState.onPitch, oppHalf, timeline],
+    [matchPlayerCount, oppState.onPitch, oppHalf, timeline],
   );
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),

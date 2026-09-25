@@ -510,6 +510,8 @@ export const competitions = pgTable(
     // Null configuration preserves competitions created by legacy callers.
     format: competitionFormat('format'),
     configuredTeamCount: integer('configured_team_count'),
+    // Match format enforced for every fixture/event linked to this competition.
+    playersPerSide: integer('players_per_side').default(11).notNull(),
     maxSubstitutes: integer('max_substitutes').default(5).notNull(),
     redCardSuspensionMatches: integer('red_card_suspension_matches')
       .default(1)
@@ -547,6 +549,7 @@ export const competitions = pgTable(
       'competitions_settings_valid',
       sql`
       (${table.configuredTeamCount} is null or ${table.configuredTeamCount} between 2 and 128)
+      and ${table.playersPerSide} in (5,7,11)
       and ${table.maxSubstitutes} between 0 and 99
       and ${table.redCardSuspensionMatches} between 0 and 99
       and ${table.accumulatedYellowThreshold} between 1 and 99

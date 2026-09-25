@@ -379,11 +379,31 @@ export class EventsService {
     const gamePlan = dto.gamePlanId
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
       : null;
-
-    const formationId = gamePlan?.formationId ?? DEFAULT_FORMATION_ID;
-    const requiredStarterCount = getFormationPlayerCount(formationId);
-    if (!requiredStarterCount) {
+    const gamePlanPlayerCount = gamePlan
+      ? getFormationPlayerCount(gamePlan.formationId)
+      : null;
+    if (gamePlan && !gamePlanPlayerCount) {
       throw new BadRequestException('Formation is not supported.');
+    }
+
+    const competition = event.competitionId
+      ? await this.requireTeamCompetition(team.id, event.competitionId)
+      : null;
+    const requiredStarterCount =
+      competition?.playersPerSide ??
+      gamePlanPlayerCount ??
+      getFormationPlayerCount(DEFAULT_FORMATION_ID);
+    if (!requiredStarterCount) {
+      throw new BadRequestException('Match format is not supported.');
+    }
+    if (
+      competition &&
+      gamePlanPlayerCount &&
+      gamePlanPlayerCount !== requiredStarterCount
+    ) {
+      throw new BadRequestException(
+        `This competition is ${requiredStarterCount}-a-side. Choose a compatible game plan.`,
+      );
     }
     if (dto.startingAthleteIds.length !== requiredStarterCount) {
       throw new BadRequestException(
@@ -395,6 +415,15 @@ export class EventsService {
       .select()
       .from(athletes)
       .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
+
+    const eligibleAthleteCount = teamAthletes.filter(
+      (athlete) => athlete.status !== 'injured',
+    ).length;
+    if (eligibleAthleteCount < requiredStarterCount) {
+      throw new BadRequestException(
+        `Your team needs at least ${requiredStarterCount} available athletes to start this match.`,
+      );
+    }
 
     const teamAthletesById = new Map(
       teamAthletes.map((athlete) => [athlete.id, athlete]),
@@ -690,7 +719,10 @@ export class EventsService {
 
   private async requireTeamCompetition(teamId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
-      .select({ id: competitions.id })
+      .select({
+        id: competitions.id,
+        playersPerSide: competitions.playersPerSide,
+      })
       .from(competitionTeams)
       .innerJoin(
         competitions,
@@ -708,6 +740,7 @@ export class EventsService {
     if (!competition) {
       throw new BadRequestException('Competition not found.');
     }
+    return competition;
   }
 
   private async requireTeam(userId: string) {
