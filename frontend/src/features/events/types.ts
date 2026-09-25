@@ -42,7 +42,16 @@ export interface TeamEvent {
   friendlyFixtureStatus?: FriendlyFixtureStatus | null;
   friendlyOpponentTeamId?: string | null;
   friendlyOpponentTeamName?: string | null;
+  /**
+   * The team that created the friendly-fixture request. Compare with `teamId`
+   * to tell whether this calendar belongs to the requester or the recipient
+   * side of the fixture.
+   */
+  friendlyRequesterTeamId?: string | null;
+  friendlyRequesterTeamName?: string | null;
   matchId?: string | null;
+  /** Set once a pre-match lineup is confirmed for this event. */
+  lineupConfirmedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,4 +159,20 @@ export interface MatchRecord {
   opponentColor: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The team's confirmed pre-match lineup for one event (GET/PUT
+ * /events/:eventId/lineup). It exists only before kick-off: starting the
+ * match retires it in favour of the live squad.
+ */
+export interface EventLineup {
+  startingAthleteIds: string[];
+  benchAthleteIds: string[];
+  confirmedAt: string;
+}
+
+export interface ConfirmLineupInput {
+  startingAthleteIds: string[];
+  benchAthleteIds?: string[];
 }

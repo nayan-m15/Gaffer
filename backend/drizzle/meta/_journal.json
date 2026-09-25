@@ -267,6 +267,13 @@
       "when": 1790180000012,
       "tag": "0036_friendly_fixtures",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790180000013,
+      "tag": "0037_event_lineups",
+      "breakpoints": true
     }
   ]
 }

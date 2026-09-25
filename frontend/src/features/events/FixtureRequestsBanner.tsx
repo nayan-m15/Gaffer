@@ -76,7 +76,8 @@ export function FixtureRequestsBanner() {
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-foreground">
-                {request.requesterTeamName}
+                {request.requesterTeamName} has invited your team to a friendly
+                fixture
               </p>
               <p className="text-xs text-muted-foreground">
                 {request.scheduledAt

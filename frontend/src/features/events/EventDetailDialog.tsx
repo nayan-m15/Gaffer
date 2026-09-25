@@ -83,8 +83,19 @@ export function EventDetailDialog({
   // A manual match against another Gaffer team only counts as confirmed for
   // this team once the opponent accepted the friendly-fixture request.
   const friendlyFixtureLinked = Boolean(event?.friendlyFixtureStatus);
-  const friendlyOpponentName =
-    event?.friendlyOpponentTeamName ?? event?.title ?? "the opponent";
+  // The backend resolves the opponent per side, so it is always the *other*
+  // team; fall back to the event title if a response ever violates that.
+  const friendlyOpponentIsSelf = Boolean(
+    event?.friendlyOpponentTeamId && event.friendlyOpponentTeamId === event.teamId,
+  );
+  const friendlyOpponentName = friendlyOpponentIsSelf
+    ? event?.title ?? "the opponent"
+    : event?.friendlyOpponentTeamName ?? event?.title ?? "the opponent";
+  // Which side of the fixture is viewing: the requester's calendar or the
+  // recipient's. Null when an older response omits the requester marker.
+  const viewerIsRequester = event?.friendlyRequesterTeamId
+    ? event.friendlyRequesterTeamId === event.teamId
+    : null;
   const friendlyFixtureConfirmed =
     !friendlyFixtureLinked || event?.friendlyFixtureStatus === "accepted";
   const canConfirmSquad = fixtureDateConfirmed && friendlyFixtureConfirmed;
@@ -146,13 +157,34 @@ export function EventDetailDialog({
                 )}
               >
                 {event.friendlyFixtureStatus === "accepted" &&
-                  `Friendly fixture confirmed with ${friendlyOpponentName}. The match appears on both teams' calendars.`}
+                  `Friendly fixture confirmed with ${friendlyOpponentName}. The match appears on both teams' calendars.${
+                    event.lineupConfirmedAt
+                      ? " Your team's lineup is confirmed and visible to them."
+                      : ""
+                  }`}
                 {event.friendlyFixtureStatus === "pending" &&
+                  viewerIsRequester === false &&
+                  `${friendlyOpponentName} has invited your team to a friendly fixture — accept or decline it from the requests banner on your Events page.`}
+                {event.friendlyFixtureStatus === "pending" &&
+                  viewerIsRequester === true &&
                   `Friendly fixture request sent to ${friendlyOpponentName} — waiting for them to accept.`}
+                {/* No requester marker (older response): stay side-neutral
+                    instead of guessing, so a recipient is never told they
+                    sent the request. */}
+                {event.friendlyFixtureStatus === "pending" &&
+                  viewerIsRequester === null &&
+                  `A friendly fixture request with ${friendlyOpponentName} is awaiting a response.`}
                 {event.friendlyFixtureStatus === "declined" &&
+                  viewerIsRequester === false &&
+                  `You declined this friendly fixture against ${friendlyOpponentName}. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
+                {event.friendlyFixtureStatus === "declined" &&
+                  viewerIsRequester === true &&
                   `${friendlyOpponentName} declined this friendly fixture. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
+                {event.friendlyFixtureStatus === "declined" &&
+                  viewerIsRequester === null &&
+                  `This friendly fixture with ${friendlyOpponentName} was declined. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
                 {event.friendlyFixtureStatus === "cancelled" &&
-                  "This friendly fixture has been cancelled."}
+                  `This friendly fixture with ${friendlyOpponentName} has been cancelled.`}
               </div>
             )}
             {event.status !== "cancelled" && !readOnly && (

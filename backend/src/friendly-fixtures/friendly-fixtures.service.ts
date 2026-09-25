@@ -3,9 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { events, friendlyFixtures, teams } from '../database/schema';
+import {
+  athleteMatchStats,
+  athletes,
+  eventLineups,
+  events,
+  friendlyFixtures,
+  matches,
+  teams,
+} from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 
 export interface IncomingFriendlyFixture {
@@ -17,6 +25,35 @@ export interface IncomingFriendlyFixture {
   location: string | null;
   notes: string | null;
   createdAt: Date;
+}
+
+/** One member of the opponent's confirmed squad, shaped like the rows of
+ * `GET /matches/:matchId/squad` so the frontend reuses its squad model. */
+export interface FriendlyOpponentLineupPlayer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  squadNumber: number | null;
+  position: string | null;
+  started: boolean;
+}
+
+/**
+ * The opposition lineup shared for an accepted friendly fixture between two
+ * Gaffer teams. `available` stays false while the fixture is not accepted
+ * or the opponent has not confirmed a squad yet; `teamId`/`teamName` are
+ * null when the event is not a Gaffer-friendly at all.
+ */
+export interface FriendlyOpponentLineup {
+  available: boolean;
+  teamId: string | null;
+  teamName: string | null;
+  players: FriendlyOpponentLineupPlayer[];
+}
+
+/** The neutral result for lookups where no shared lineup can exist. */
+export function unavailableFriendlyOpponentLineup(): FriendlyOpponentLineup {
+  return { available: false, teamId: null, teamName: null, players: [] };
 }
 
 /**
@@ -173,6 +210,172 @@ export class FriendlyFixturesService {
         .where(eq(friendlyFixtures.id, fixture.id));
       throw error;
     }
+  }
+
+  /**
+   * The opponent's confirmed squad for a friendly fixture — read live:
+   * from the opponent's match (`athlete_match_stats`, the same rows that
+   * power their squad view) once it exists, otherwise from their confirmed
+   * pre-match lineup (`event_lineups`) so an accepted opponent can share
+   * their XI before kickoff; nothing is copied or stored here. The caller
+   * passes the team the lookup is made for, and the fixture itself decides
+   * which side is the opponent — never request input. When
+   * `expectedOpponentTeamId` is given (the match-scoped path) the fixture
+   * must independently resolve to that same opponent, so a match row can
+   * never point the lookup at an unrelated team.
+   */
+  async resolveOpponentLineup(
+    fixtureId: string,
+    ownTeamId: string,
+    expectedOpponentTeamId?: string,
+  ): Promise<FriendlyOpponentLineup> {
+    const [fixture] = await this.databaseService.database
+      .select()
+      .from(friendlyFixtures)
+      .where(eq(friendlyFixtures.id, fixtureId))
+      .limit(1);
+
+    if (!fixture) {
+      return unavailableFriendlyOpponentLineup();
+    }
+
+    const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, ownTeamId);
+    if (!opponentTeamId) {
+      return unavailableFriendlyOpponentLineup();
+    }
+    if (expectedOpponentTeamId && expectedOpponentTeamId !== opponentTeamId) {
+      return unavailableFriendlyOpponentLineup();
+    }
+
+    const [opponentTeam] = await this.databaseService.database
+      .select({ name: teams.name })
+      .from(teams)
+      .where(eq(teams.id, opponentTeamId))
+      .limit(1);
+
+    const base: FriendlyOpponentLineup = {
+      available: false,
+      teamId: opponentTeamId,
+      teamName: opponentTeam?.name ?? null,
+      players: [],
+    };
+
+    if (fixture.status !== 'accepted') {
+      return base;
+    }
+
+    const [opponentEvent] = await this.databaseService.database
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.friendlyFixtureId, fixture.id),
+          eq(events.teamId, opponentTeamId),
+        ),
+      )
+      .limit(1);
+
+    if (!opponentEvent) {
+      return base;
+    }
+
+    const [opponentMatch] = await this.databaseService.database
+      .select({ id: matches.id })
+      .from(matches)
+      .where(eq(matches.eventId, opponentEvent.id))
+      .limit(1);
+
+    if (opponentMatch) {
+      const players = await this.databaseService.database
+        .select({
+          id: athletes.id,
+          firstName: athletes.firstName,
+          lastName: athletes.lastName,
+          squadNumber: athletes.squadNumber,
+          position: athletes.position,
+          started: athleteMatchStats.started,
+        })
+        .from(athleteMatchStats)
+        .innerJoin(athletes, eq(athleteMatchStats.athleteId, athletes.id))
+        .where(eq(athleteMatchStats.matchId, opponentMatch.id))
+        .orderBy(
+          asc(athletes.squadNumber),
+          asc(athletes.lastName),
+          asc(athletes.firstName),
+        );
+
+      if (players.length > 0) {
+        return { ...base, available: true, players };
+      }
+    }
+
+    // Pre-kickoff fallback: before the opponent starts their match its
+    // squad does not exist yet, so their confirmed lineup (event_lineups)
+    // is the shared squad. Starting a match retires that record, which
+    // keeps the match squad as the single post-kickoff source of truth.
+    const [opponentLineup] = await this.databaseService.database
+      .select()
+      .from(eventLineups)
+      .where(eq(eventLineups.eventId, opponentEvent.id))
+      .limit(1);
+
+    if (!opponentLineup) {
+      return base;
+    }
+
+    const lineupAthleteIds = [
+      ...new Set([
+        ...opponentLineup.startingAthleteIds,
+        ...opponentLineup.benchAthleteIds,
+      ]),
+    ];
+    if (lineupAthleteIds.length === 0) {
+      return base;
+    }
+
+    const lineupAthletes = await this.databaseService.database
+      .select({
+        id: athletes.id,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        squadNumber: athletes.squadNumber,
+        position: athletes.position,
+      })
+      .from(athletes)
+      .where(inArray(athletes.id, lineupAthleteIds))
+      .orderBy(
+        asc(athletes.squadNumber),
+        asc(athletes.lastName),
+        asc(athletes.firstName),
+      );
+
+    if (lineupAthletes.length === 0) {
+      return base;
+    }
+
+    const startingIds = new Set(opponentLineup.startingAthleteIds);
+    return {
+      ...base,
+      available: true,
+      players: lineupAthletes.map((athlete) => ({
+        ...athlete,
+        started: startingIds.has(athlete.id),
+      })),
+    };
+  }
+
+  /** The other team on a friendly fixture, from `teamId`'s perspective. */
+  private friendlyOpponentTeamIdFor(
+    fixture: typeof friendlyFixtures.$inferSelect,
+    teamId: string,
+  ): string | null {
+    if (fixture.requesterTeamId === teamId) {
+      return fixture.opponentTeamId;
+    }
+    if (fixture.opponentTeamId === teamId) {
+      return fixture.requesterTeamId;
+    }
+    return null;
   }
 
   /** Declines an inbound request; the requester's own event is left alone. */

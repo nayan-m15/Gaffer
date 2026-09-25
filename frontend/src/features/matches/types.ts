@@ -50,6 +50,8 @@ export interface MatchRecord {
   eventLocation: string;
   competitionName: string | null;
   opponentSquad: OpponentMatchPlayer[];
+  /** Present on GET /matches/:id for accepted Gaffer friendly fixtures. */
+  friendlyOpponentLineup?: FriendlyOpponentLineup;
   projection?: {
     revision: number;
     confirmedTeamScore: number;
@@ -73,6 +75,18 @@ export interface MatchSquadAthlete {
   squadNumber: number | null;
   position: string | null;
   started?: boolean;
+}
+
+/**
+ * The opposing Gaffer team's confirmed lineup, shared only for an accepted
+ * friendly fixture between two Gaffer teams. `available` stays false while
+ * the fixture is pending/declined or the opponent has not confirmed theirs.
+ */
+export interface FriendlyOpponentLineup {
+  available: boolean;
+  teamId: string | null;
+  teamName: string | null;
+  players: MatchSquadAthlete[];
 }
 
 export interface MatchLogEvent {

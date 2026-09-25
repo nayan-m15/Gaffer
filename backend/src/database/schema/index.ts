@@ -477,6 +477,36 @@ export const eventRsvps = pgTable(
   ],
 );
 
+// The coach's confirmed pre-match lineup for one event (one row per event).
+// Confirming a lineup is a separate step from starting the match: the XI is
+// stored here so an accepted Gaffer friendly opponent can see it before
+// kickoff. startMatch keeps its own athlete_match_stats squad and clears this
+// row once the match exists, so the live match squad stays the single source
+// for everything after kickoff.
+export const eventLineups = pgTable(
+  'event_lineups',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .unique()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    startingAthleteIds: jsonb('starting_athlete_ids')
+      .$type<string[]>()
+      .notNull(),
+    benchAthleteIds: jsonb('bench_athlete_ids').$type<string[]>().notNull(),
+    confirmedByUserId: text('confirmed_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('event_lineups_team_id_index').on(table.teamId)],
+);
+
 // A coach-defined date range that groups a team's matches for aggregate
 // statistics. A match belongs to the season whose [startDate, endDate] contains
 // its event's scheduledAt — matches carry no competition link of their own

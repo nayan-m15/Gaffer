@@ -7,5 +7,6 @@ import { FriendlyFixturesService } from './friendly-fixtures.service';
   imports: [TeamsModule],
   controllers: [FriendlyFixturesController],
   providers: [FriendlyFixturesService],
+  exports: [FriendlyFixturesService],
 })
 export class FriendlyFixturesModule {}

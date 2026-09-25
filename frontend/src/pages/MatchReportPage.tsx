@@ -71,6 +71,8 @@ import {
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
 import {
+  friendlyLineupPlayers,
+  friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
@@ -233,9 +235,23 @@ export default function MatchReportPage() {
     () => ownPitchState(squad, timeline),
     [squad, timeline],
   );
+  const opponentDisplaySquad = useMemo(
+    () =>
+      (match?.opponentSquad ?? []).length > 0
+        ? (match?.opponentSquad ?? [])
+        : friendlyLineupPlayers(match?.friendlyOpponentLineup),
+    [match?.friendlyOpponentLineup, match?.opponentSquad],
+  );
   const oppState = useMemo(
-    () => opponentPitchState(match?.opponentSquad ?? [], timeline),
-    [match?.opponentSquad, timeline],
+    () =>
+      opponentPitchState(
+        opponentDisplaySquad,
+        timeline,
+        (match?.opponentSquad ?? []).length > 0
+          ? undefined
+          : friendlyLineupStarterIds(match?.friendlyOpponentLineup),
+      ),
+    [match?.friendlyOpponentLineup, match?.opponentSquad, opponentDisplaySquad, timeline],
   );
   const ownPlaced = useMemo(
     () =>

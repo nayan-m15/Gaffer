@@ -26,6 +26,10 @@ import {
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import {
+  FriendlyFixturesService,
+  unavailableFriendlyOpponentLineup,
+} from '../friendly-fixtures/friendly-fixtures.service';
+import {
   syncFixtureResult,
   validateFixtureResult,
 } from '../competitions/competition-fixture-results';
@@ -46,6 +50,7 @@ export class MatchesService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly friendlyFixturesService: FriendlyFixturesService,
   ) {}
 
   async findOne(userId: string, matchId: string) {
@@ -65,6 +70,19 @@ export class MatchesService {
     const opponentSquad = await this.listOpponentPlayers(match.id);
     const projection = await this.refreshProjection(match.id);
 
+    // Accepted Gaffer friendlies only: surface the opposing team's actual
+    // confirmed lineup alongside the manually logged opponent squad. The
+    // expected opponent team is verified against the match row so a match
+    // can never resolve an unrelated team's lineup.
+    const friendlyOpponentLineup =
+      event.friendlyFixtureId && match.opponentTeamId
+        ? await this.friendlyFixturesService.resolveOpponentLineup(
+            event.friendlyFixtureId,
+            team.id,
+            match.opponentTeamId,
+          )
+        : unavailableFriendlyOpponentLineup();
+
     return {
       ...match,
       teamScore: projection.provisionalTeamScore,
@@ -76,6 +94,7 @@ export class MatchesService {
       eventLocation: event.location,
       competitionName,
       opponentSquad,
+      friendlyOpponentLineup,
     };
   }
 

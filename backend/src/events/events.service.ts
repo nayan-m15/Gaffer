@@ -24,6 +24,7 @@ import {
   competitions,
   competitionFixtures,
   competitionTeams,
+  eventLineups,
   eventRsvps,
   events,
   friendlyFixtures,
@@ -32,8 +33,13 @@ import {
   opponentMatchPlayers,
   teams,
 } from '../database/schema';
+import {
+  FriendlyFixturesService,
+  unavailableFriendlyOpponentLineup,
+} from '../friendly-fixtures/friendly-fixtures.service';
 import { TeamsService } from '../teams/teams.service';
 import type {
+  ConfirmLineupDto,
   CreateEventDto,
   CreateRsvpDto,
   StartMatchDto,
@@ -51,6 +57,7 @@ export class EventsService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly athletesService: AthletesService,
+    private readonly friendlyFixturesService: FriendlyFixturesService,
   ) {}
 
   async create(userId: string, dto: CreateEventDto) {
@@ -133,6 +140,7 @@ export class EventsService {
         event: events,
         matchId: matches.id,
         fixtureScheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
+        lineupConfirmedAt: eventLineups.confirmedAt,
         friendlyFixtureStatus: friendlyFixtures.status,
         friendlyRequesterTeamId: friendlyFixtures.requesterTeamId,
         friendlyRequesterTeamName: requesterTeams.name,
@@ -141,6 +149,7 @@ export class EventsService {
       })
       .from(events)
       .leftJoin(matches, eq(matches.eventId, events.id))
+      .leftJoin(eventLineups, eq(eventLineups.eventId, events.id))
       .leftJoin(
         competitionFixtures,
         eq(competitionFixtures.id, events.competitionFixtureId),
@@ -180,7 +189,10 @@ export class EventsService {
         ...row.event,
         matchId: row.matchId,
         fixtureScheduleConfirmedAt: row.fixtureScheduleConfirmedAt,
+        lineupConfirmedAt: row.lineupConfirmedAt,
         friendlyFixtureStatus: row.friendlyFixtureStatus,
+        friendlyRequesterTeamId: row.friendlyRequesterTeamId,
+        friendlyRequesterTeamName: row.friendlyRequesterTeamName,
         friendlyOpponentTeamId: friendlyOpponentTeam.id,
         friendlyOpponentTeamName: friendlyOpponentTeam.name,
       };
@@ -282,16 +294,33 @@ export class EventsService {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
 
-    const friendlyContext = event.friendlyFixtureId
-      ? await this.resolveFriendlyFixtureContext(
-          team.id,
-          event.friendlyFixtureId,
-        )
-      : null;
+    const [friendlyContext, matchRows, lineupRows] = await Promise.all([
+      event.friendlyFixtureId
+        ? this.resolveFriendlyFixtureContext(team.id, event.friendlyFixtureId)
+        : Promise.resolve(null),
+      this.databaseService.database
+        .select({ id: matches.id })
+        .from(matches)
+        .where(eq(matches.eventId, event.id))
+        .limit(1),
+      this.databaseService.database
+        .select({ confirmedAt: eventLineups.confirmedAt })
+        .from(eventLineups)
+        .where(eq(eventLineups.eventId, event.id))
+        .limit(1),
+    ]);
+    // Side-aware friendly fields: the opponent is always the *other* team,
+    // and the requester identity lets the UI tell which side is viewing.
     const friendlyFields = {
       friendlyFixtureStatus: friendlyContext?.status ?? null,
+      friendlyRequesterTeamId: friendlyContext?.requester?.id ?? null,
+      friendlyRequesterTeamName: friendlyContext?.requester?.name ?? null,
       friendlyOpponentTeamId: friendlyContext?.opponent?.id ?? null,
       friendlyOpponentTeamName: friendlyContext?.opponent?.name ?? null,
+    };
+    const lineupFields = {
+      matchId: matchRows[0]?.id ?? null,
+      lineupConfirmedAt: lineupRows[0]?.confirmedAt ?? null,
     };
 
     if (!event.competitionFixtureId) {
@@ -301,6 +330,7 @@ export class EventsService {
         fixtureOpponentCompetitionTeamId: null,
         fixtureOpponentName: null,
         ...friendlyFields,
+        ...lineupFields,
       };
     }
 
@@ -316,6 +346,117 @@ export class EventsService {
       fixtureOpponentCompetitionTeamId: fixtureContext.opponent?.id ?? null,
       fixtureOpponentName: fixtureContext.opponent?.displayName ?? null,
       ...friendlyFields,
+      ...lineupFields,
+    };
+  }
+
+  /**
+   * The opposing Gaffer team's confirmed match lineup for an accepted
+   * friendly fixture on this event, so coaches never have to re-enter the
+   * opposition by hand. Only the event's own team is ever resolved as the
+   * other side of the shared fixture; every other case returns the neutral
+   * "not available" shape.
+   */
+  async getFriendlyOpponentLineup(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    const event = await this.requireEvent(team.id, eventId);
+    if (!event.friendlyFixtureId) {
+      return unavailableFriendlyOpponentLineup();
+    }
+    return this.friendlyFixturesService.resolveOpponentLineup(
+      event.friendlyFixtureId,
+      team.id,
+    );
+  }
+
+  /**
+   * Saves (or replaces) the pre-match lineup for a scheduled match so the
+   * squad is on record before kickoff — in particular for accepted friendly
+   * fixtures, where the opponent sees it through the friendly-opponent
+   * lookup. Open to every team member, mirroring the start-match access
+   * model; once the match starts, its own squad supersedes this record.
+   */
+  async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
+    const team = await this.requireTeam(userId);
+    const event = await this.requireEvent(team.id, eventId);
+
+    if (event.type !== 'match') {
+      throw new NotFoundException('Event not found.');
+    }
+
+    if (event.status !== 'scheduled') {
+      throw new BadRequestException(
+        'Only scheduled matches can have a confirmed lineup.',
+      );
+    }
+
+    const [existingMatch] = await this.databaseService.database
+      .select({ id: matches.id })
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+
+    if (existingMatch) {
+      throw new ConflictException(
+        'This match has already started — the squad is managed from the Live Logger.',
+      );
+    }
+
+    await this.loadSelectableTeamAthletes(
+      team.id,
+      dto.startingAthleteIds,
+      dto.benchAthleteIds,
+    );
+
+    const confirmedAt = new Date();
+    const [lineup] = await this.databaseService.database
+      .insert(eventLineups)
+      .values({
+        eventId: event.id,
+        teamId: team.id,
+        startingAthleteIds: dto.startingAthleteIds,
+        benchAthleteIds: dto.benchAthleteIds ?? [],
+        confirmedByUserId: userId,
+        confirmedAt,
+      })
+      .onConflictDoUpdate({
+        target: eventLineups.eventId,
+        set: {
+          startingAthleteIds: dto.startingAthleteIds,
+          benchAthleteIds: dto.benchAthleteIds ?? [],
+          confirmedByUserId: userId,
+          confirmedAt,
+          updatedAt: confirmedAt,
+        },
+      })
+      .returning();
+
+    return this.toLineupResponse(lineup);
+  }
+
+  /**
+   * The team's currently confirmed pre-match lineup for this event, or null
+   * when nothing has been confirmed (or the match has started and its live
+   * squad superseded the pre-match record).
+   */
+  async getLineup(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    const event = await this.requireEvent(team.id, eventId);
+
+    const [lineup] = await this.databaseService.database
+      .select()
+      .from(eventLineups)
+      .where(eq(eventLineups.eventId, event.id))
+      .limit(1);
+
+    return lineup ? this.toLineupResponse(lineup) : null;
+  }
+
+  private toLineupResponse(lineup: typeof eventLineups.$inferSelect) {
+    return {
+      startingAthleteIds: lineup.startingAthleteIds,
+      benchAthleteIds: lineup.benchAthleteIds,
+      confirmedAt: lineup.confirmedAt,
     };
   }
 
@@ -662,33 +803,12 @@ export class EventsService {
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
       : null;
 
-    const teamAthletes = await this.databaseService.database
-      .select()
-      .from(athletes)
-      .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
-
-    const teamAthletesById = new Map(
-      teamAthletes.map((athlete) => [athlete.id, athlete]),
-    );
-    const requestedIds = dto.benchAthleteIds
-      ? [...dto.startingAthleteIds, ...dto.benchAthleteIds]
-      : dto.startingAthleteIds;
-
-    for (const athleteId of requestedIds) {
-      const athlete = teamAthletesById.get(athleteId);
-      if (!athlete) {
-        throw new BadRequestException(
-          dto.benchAthleteIds
-            ? 'One or more selected athletes are not on this team.'
-            : 'One or more starting athletes are not on this team.',
-        );
-      }
-      if (athlete.status === 'injured') {
-        throw new BadRequestException(
-          'Injured athletes cannot be selected for a match.',
-        );
-      }
-    }
+    const { teamAthletes, requestedIds } =
+      await this.loadSelectableTeamAthletes(
+        team.id,
+        dto.startingAthleteIds,
+        dto.benchAthleteIds,
+      );
 
     const startingIds = new Set(dto.startingAthleteIds);
     const teamColor = dto.teamColor ?? team.primaryColor ?? null;
@@ -731,6 +851,10 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
+      // The live match squad supersedes any pre-match lineup record.
+      await this.databaseService.database
+        .delete(eventLineups)
+        .where(eq(eventLineups.eventId, event.id));
       return existingMatch;
     }
 
@@ -798,6 +922,13 @@ export class EventsService {
       }
 
       await this.replaceOpponentSquad(match.id, dto);
+
+      // The match's own squad (athlete_match_stats) is now the source of
+      // truth; the pre-match lineup record is retired so the lineup
+      // endpoint and event details stop reporting a stale pre-kickoff XI.
+      await this.databaseService.database
+        .delete(eventLineups)
+        .where(eq(eventLineups.eventId, event.id));
     } catch (error) {
       // Compensate for Neon HTTP's lack of interactive transactions so a
       // partially-created match can be retried from the confirmation screen.
@@ -829,6 +960,48 @@ export class EventsService {
         position: player.position ?? null,
       })),
     );
+  }
+
+  /**
+   * Loads the team's active athletes and validates a requested squad
+   * (starters plus optional bench) against them — shared by the pre-match
+   * lineup confirmation and the start-match squad write so both entry
+   * points enforce identical selection rules.
+   */
+  private async loadSelectableTeamAthletes(
+    teamId: string,
+    startingAthleteIds: string[],
+    benchAthleteIds?: string[],
+  ) {
+    const teamAthletes = await this.databaseService.database
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)));
+
+    const teamAthletesById = new Map(
+      teamAthletes.map((athlete) => [athlete.id, athlete]),
+    );
+    const requestedIds = benchAthleteIds
+      ? [...startingAthleteIds, ...benchAthleteIds]
+      : startingAthleteIds;
+
+    for (const athleteId of requestedIds) {
+      const athlete = teamAthletesById.get(athleteId);
+      if (!athlete) {
+        throw new BadRequestException(
+          benchAthleteIds
+            ? 'One or more selected athletes are not on this team.'
+            : 'One or more starting athletes are not on this team.',
+        );
+      }
+      if (athlete.status === 'injured') {
+        throw new BadRequestException(
+          'Injured athletes cannot be selected for a match.',
+        );
+      }
+    }
+
+    return { teamAthletes, requestedIds };
   }
 
   private async resolveGeneratedFixtureOpponent(
@@ -1038,26 +1211,40 @@ export class EventsService {
     return opponent;
   }
 
+  /**
+   * Side-aware friendly context for one viewer: the requester is always
+   * identified so the UI can tell which side of the fixture is viewing,
+   * and the opponent is always the *other* team — never the viewer itself.
+   */
   private async resolveFriendlyFixtureContext(
     teamId: string,
     fixtureId: string,
   ): Promise<{
     status: (typeof friendlyFixtures.status.enumValues)[number];
+    requester: { id: string; name: string } | null;
     opponent: { id: string; name: string } | null;
   }> {
     const fixture = await this.requireFriendlyFixture(fixtureId);
     const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, teamId);
-    if (!opponentTeamId) {
-      return { status: fixture.status, opponent: null };
-    }
+    const teamIds = [
+      ...new Set(
+        [fixture.requesterTeamId, opponentTeamId].filter((id): id is string =>
+          Boolean(id),
+        ),
+      ),
+    ];
 
-    const [opponent] = await this.databaseService.database
+    const teamRows = await this.databaseService.database
       .select({ id: teams.id, name: teams.name })
       .from(teams)
-      .where(eq(teams.id, opponentTeamId))
-      .limit(1);
+      .where(inArray(teams.id, teamIds));
+    const teamsById = new Map(teamRows.map((row) => [row.id, row]));
 
-    return { status: fixture.status, opponent: opponent ?? null };
+    return {
+      status: fixture.status,
+      requester: teamsById.get(fixture.requesterTeamId) ?? null,
+      opponent: opponentTeamId ? (teamsById.get(opponentTeamId) ?? null) : null,
+    };
   }
 
   private async requireTeam(userId: string) {

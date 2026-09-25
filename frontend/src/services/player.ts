@@ -33,6 +33,14 @@ export interface PlayerEvent {
   friendlyFixtureStatus?: FriendlyFixtureStatus | null;
   friendlyOpponentTeamId?: string | null;
   friendlyOpponentTeamName?: string | null;
+  /**
+   * The team that created the friendly-fixture request — compare with
+   * `teamId` to tell which side of the fixture this calendar belongs to.
+   */
+  friendlyRequesterTeamId?: string | null;
+  friendlyRequesterTeamName?: string | null;
+  /** Set once the team confirms its pre-match lineup for this event. */
+  lineupConfirmedAt?: string | null;
   matchId: string | null;
   createdAt: string;
   updatedAt: string;
