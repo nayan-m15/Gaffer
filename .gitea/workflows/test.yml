@@ -127,15 +127,26 @@ jobs:
           if-no-files-found: ignore
 
   ui-tests:
-    name: UI tests
+    name: UI tests (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     needs: api-tests
-    # Includes installs/builds, the bounded 42-minute Playwright suite, PWA
-    # verification, and artifact upload. The old job deadline killed
-    # Playwright mid-test; keep this comfortably above the suite's own
-    # globalTimeout (playwright.config.ts) so Playwright always gets to exit
-    # on its own terms and upload diagnostics.
-    timeout-minutes: 60
+    # Two workers on one runner was tried to cut wall-clock time, but several
+    # specs render a real WebGL scene with software rendering (swiftshader)
+    # and drive a real backend/DB — two Chromium instances sharing one
+    # runner's CPU starved both, turning normally-fast assertions into
+    # timeouts. Splitting the suite across two independent runners (matrix +
+    # Playwright's own --shard) gets the same wall-clock win without that
+    # contention, since each shard gets its own CPU.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Includes installs/builds, the bounded 30-minute Playwright shard, PWA
+    # verification (shard 1 only), and artifact upload. Keep this
+    # comfortably above the suite's own globalTimeout (playwright.config.ts)
+    # so Playwright always gets to exit on its own terms and upload
+    # diagnostics rather than being hard-killed by the job deadline.
+    timeout-minutes: 50
     env:
       CI: "true"
       DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -175,10 +186,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui
+        run: npm run test:e2e:ui -- --shard=${{ matrix.shard }}/2
 
+      # PWA checks don't need sharding — run them once, on shard 1.
       - name: Run production PWA tests
-        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
+        if: ${{ matrix.shard == 1 && !cancelled() && steps.browser-build.outcome == 'success' }}
         run: npm run test:e2e:pwa
 
       - name: Upload Playwright failure artifacts
@@ -186,7 +198,7 @@ jobs:
         # v3 is compatible with Gitea's artifact service across more server versions.
         uses: actions/upload-artifact@v3
         with:
-          name: playwright-failure-artifacts
+          name: playwright-failure-artifacts-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

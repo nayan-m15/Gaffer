@@ -19,16 +19,15 @@ export default defineConfig({
   // Full-stack flows perform several real database round trips. Shared CI
   // runners can take well over 90 seconds even when every assertion passes.
   timeout: process.env.CI ? 180_000 : 90_000,
-  // Bound the suite independently so CI still has time to run PWA checks and
+  // Bound each shard independently so CI still has time to run PWA checks and
   // upload diagnostics before the enclosing job deadline (.gitea/workflows/
-  // test.yml). The suite has grown past what a single worker clears in 25
-  // minutes even with every test passing, so this raises the budget instead.
-  // Two workers were tried to cut wall-clock time, but several specs render a
-  // real WebGL scene with software rendering (swiftshader) and drive a real
-  // backend/DB — running two Chromium instances concurrently on a shared
-  // runner starved both, turning normally-fast assertions (a plain reload)
-  // into timeouts. One worker is slower but reliable.
-  globalTimeout: process.env.CI ? 42 * 60_000 : undefined,
+  // test.yml). The full suite no longer fits one worker's 25-minute budget,
+  // so CI now splits it across two shards (`--shard`, one per job/runner) —
+  // each shard still runs single-worker (see `workers` below: two Chromium
+  // instances sharing one runner's CPU for software-rendered WebGL tests
+  // starved both and turned fast assertions into timeouts), so this budget
+  // only needs to cover roughly half the suite, not all of it.
+  globalTimeout: process.env.CI ? 30 * 60_000 : undefined,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,
   },
