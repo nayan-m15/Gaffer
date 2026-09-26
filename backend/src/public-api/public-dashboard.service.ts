@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
@@ -149,14 +149,51 @@ export class PublicDashboardService {
       .leftJoin(competitions, eq(matches.competitionId, competitions.id))
       .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
       .where(and(...conditions))
-      .orderBy(asc(events.scheduledAt))
+      .orderBy(asc(events.scheduledAt), asc(matches.id))
       .limit(query.limit)
       .offset(query.offset);
   }
 
   async getPlayers(query: PublicPlayersQuery) {
     const conditions: SQL[] = [isNull(athletes.archivedAt)];
-    this.addCommonConditions(conditions, query);
+    if (query.teamId) conditions.push(eq(athletes.teamId, query.teamId));
+    if (query.competitionId || query.seasonId) {
+      conditions.push(sql`exists (
+        select 1 from ${athleteMatchStats}
+        inner join ${matches} on ${athleteMatchStats.matchId} = ${matches.id}
+        left join ${competitions} on ${matches.competitionId} = ${competitions.id}
+        where ${athleteMatchStats.athleteId} = ${athletes.id}
+          ${query.competitionId ? sql`and ${matches.competitionId} = ${query.competitionId}` : sql``}
+          ${query.seasonId ? sql`and ${competitions.seasonId} = ${query.seasonId}` : sql``}
+      )`);
+    }
+
+    const page = await this.databaseService.database
+      .select({ id: athletes.id })
+      .from(athletes)
+      .innerJoin(teams, eq(athletes.teamId, teams.id))
+      .where(and(...conditions))
+      .orderBy(
+        asc(teams.name),
+        asc(athletes.squadNumber),
+        asc(athletes.lastName),
+        asc(athletes.firstName),
+        asc(athletes.id),
+      )
+      .limit(query.limit)
+      .offset(query.offset);
+    if (page.length === 0) return [];
+
+    const matchConditions: SQL[] = [
+      inArray(
+        athletes.id,
+        page.map((athlete) => athlete.id),
+      ),
+    ];
+    if (query.competitionId) {
+      matchConditions.push(eq(matches.competitionId, query.competitionId));
+    }
+    if (query.seasonId) matchConditions.push(eq(seasons.id, query.seasonId));
 
     const rows = await this.databaseService.database
       .select({
@@ -183,7 +220,7 @@ export class PublicDashboardService {
       .leftJoin(events, eq(matches.eventId, events.id))
       .leftJoin(competitions, eq(matches.competitionId, competitions.id))
       .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
-      .where(and(...conditions))
+      .where(and(...matchConditions))
       .orderBy(
         asc(teams.name),
         asc(athletes.squadNumber),
@@ -243,10 +280,7 @@ export class PublicDashboardService {
       }
     }
 
-    return Array.from(byAthlete.values()).slice(
-      query.offset,
-      query.offset + query.limit,
-    );
+    return page.map(({ id }) => byAthlete.get(id)!);
   }
 
   async getTeamStatistics(query: PublicDashboardQuery) {

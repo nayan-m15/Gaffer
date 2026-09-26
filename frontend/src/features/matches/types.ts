@@ -44,7 +44,9 @@ export interface MatchRecord {
   eventStatus: "scheduled" | "cancelled" | "completed";
   eventScheduledAt: string;
   eventLocation: string;
+  eventNotes?: string | null;
   competitionName: string | null;
+  competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
   projection?: {
     revision: number;
