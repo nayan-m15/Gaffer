@@ -9,6 +9,7 @@ import {
   startMatch,
   updateEvent,
 } from "./api";
+import { fetchEventRsvps } from "@/services/rsvps";
 import type { StartMatchInput, UpdateEventInput } from "./types";
 
 export const eventsQueryKey = ["events"] as const;
@@ -37,6 +38,20 @@ export function useEvent(eventId: string | undefined) {
     queryKey: [...eventsQueryKey, eventId],
     queryFn: () => fetchEvent(eventId!),
     enabled: Boolean(eventId),
+  });
+}
+
+/**
+ * Coach-only RSVP roster breakdown (`GET /events/:id/rsvps`). Shares the
+ * `["events", eventId, "rsvps"]` cache key with EventDetailDialog, so the
+ * squad page and the event dialog reuse a single fetch. Pass `enabled =
+ * false` for assistants, whose role cannot read the coach-only endpoint.
+ */
+export function useEventRsvps(eventId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["events", eventId, "rsvps"],
+    queryFn: () => fetchEventRsvps(eventId!),
+    enabled: enabled && Boolean(eventId),
   });
 }
 

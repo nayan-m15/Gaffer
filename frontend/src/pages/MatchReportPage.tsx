@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
   ChevronLeft,
+  Download,
   Loader2,
   Lock,
   Plus,
@@ -72,6 +73,7 @@ import {
   TeamComparisonChart,
 } from "@/features/matches/match-report-charts";
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
+import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
 import {
   LiveBenchRow,
   LivePitch,
@@ -216,6 +218,7 @@ export default function MatchReportPage() {
   );
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
@@ -384,6 +387,28 @@ export default function MatchReportPage() {
     }
   };
 
+  const exportPdf = async () => {
+    if (!match) return;
+    setExportingPdf(true);
+    setShareNote(null);
+    try {
+      await exportLiveMatchReportPdf({
+        match,
+        teamName: ownName,
+        squad,
+        events: timeline,
+        generatedAt: new Date(),
+      });
+      setShareNote("PDF report exported");
+    } catch (error) {
+      console.error("Match report PDF export failed", error);
+      setShareNote("Could not export PDF");
+    } finally {
+      setExportingPdf(false);
+      window.setTimeout(() => setShareNote(null), 3000);
+    }
+  };
+
   const confirmDeleteEvent = async () => {
     if (!deleting || deleting.pending) {
       return;
@@ -513,6 +538,17 @@ export default function MatchReportPage() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {team?.role === "coach" && (
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#00d99a]/50 px-3 font-oswald text-xs tracking-wider text-[#00d99a] transition-colors hover:bg-[#00d99a]/10 disabled:opacity-50"
+                  onClick={() => void exportPdf()}
+                  disabled={exportingPdf}
+                >
+                  <Download className="size-4" />
+                  <span className="hidden sm:inline">{exportingPdf ? "EXPORTING…" : "EXPORT PDF"}</span>
+                </button>
+              )}
               {canManageResult && (
                 <button
                   type="button"
