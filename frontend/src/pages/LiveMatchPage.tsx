@@ -1400,7 +1400,7 @@ export default function LiveMatchPage() {
     setActionError(null);
     try {
       await finishMatch.mutateAsync();
-      navigate("/events");
+      navigate(`/matches/${matchId}/report`);
     } catch (err) {
       setActionError(
         err instanceof ApiError ? err.message : "Could not finish this match.",

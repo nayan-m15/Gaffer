@@ -48,7 +48,9 @@ export interface MatchRecord {
   eventStatus: "scheduled" | "cancelled" | "completed";
   eventScheduledAt: string;
   eventLocation: string;
+  eventNotes?: string | null;
   competitionName: string | null;
+  competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
   /** Present on GET /matches/:id for accepted Gaffer friendly fixtures. */
   friendlyOpponentLineup?: FriendlyOpponentLineup;

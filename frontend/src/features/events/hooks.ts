@@ -17,6 +17,7 @@ import {
   declineFriendlyFixture,
   getIncomingFriendlyFixtures,
 } from "@/services/friendly-fixtures";
+import { fetchEventRsvps } from "@/services/rsvps";
 import type {
   ConfirmLineupInput,
   StartMatchInput,
@@ -81,6 +82,20 @@ export function useEventLineup(eventId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: [...eventsQueryKey, eventId, "lineup"],
     queryFn: () => fetchEventLineup(eventId!),
+    enabled: enabled && Boolean(eventId),
+  });
+}
+
+/**
+ * Coach-only RSVP roster breakdown (`GET /events/:id/rsvps`). Shares the
+ * `["events", eventId, "rsvps"]` cache key with EventDetailDialog, so the
+ * squad page and the event dialog reuse a single fetch. Pass `enabled =
+ * false` for assistants, whose role cannot read the coach-only endpoint.
+ */
+export function useEventRsvps(eventId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["events", eventId, "rsvps"],
+    queryFn: () => fetchEventRsvps(eventId!),
     enabled: enabled && Boolean(eventId),
   });
 }
