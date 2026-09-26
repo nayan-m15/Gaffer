@@ -553,19 +553,21 @@ function EventItem({
             · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}
           </span>
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-          <span>{event.location}</span>
-          <span aria-hidden="true">·</span>
-          <a
-            className="font-medium text-primary hover:underline"
-            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(clickEvent) => clickEvent.stopPropagation()}
-          >
-            Directions
-          </a>
-        </div>
+        {destination && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <span>{event.location || event.venueAddress}</span>
+            <span aria-hidden="true">·</span>
+            <a
+              className="font-medium text-primary hover:underline"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(clickEvent) => clickEvent.stopPropagation()}
+            >
+              Directions
+            </a>
+          </div>
+        )}
         <div className="mt-1.5">
           <EventWeatherCard event={event} compact />
         </div>

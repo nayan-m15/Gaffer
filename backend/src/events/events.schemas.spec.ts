@@ -1,4 +1,5 @@
 import {
+  confirmLineupSchema,
   createEventSchema,
   startMatchSchema,
   updateEventSchema,
@@ -101,6 +102,51 @@ describe('event venue coordinates', () => {
     ).toThrow();
     expect(() =>
       updateEventSchema.parse({ weatherLongitude: 18.8602 }),
+    ).toThrow();
+  });
+});
+
+describe('confirmLineupSchema', () => {
+  const benchId = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+
+  it('accepts exactly 11 unique starters with an optional bench', () => {
+    const parsed = confirmLineupSchema.parse({
+      startingAthleteIds: starterIds,
+      benchAthleteIds: [benchId],
+    });
+    expect(parsed.startingAthleteIds).toHaveLength(11);
+    expect(parsed.benchAthleteIds).toEqual([benchId]);
+  });
+
+  it('accepts a confirm without a bench (legacy single-step flow)', () => {
+    const parsed = confirmLineupSchema.parse({
+      startingAthleteIds: starterIds,
+    });
+    expect(parsed.benchAthleteIds).toBeUndefined();
+  });
+
+  it('rejects a starting list that is not exactly 11', () => {
+    expect(() =>
+      confirmLineupSchema.parse({
+        startingAthleteIds: starterIds.slice(0, 10),
+      }),
+    ).toThrow();
+  });
+
+  it('rejects duplicate starters', () => {
+    expect(() =>
+      confirmLineupSchema.parse({
+        startingAthleteIds: [...starterIds.slice(0, 10), starterIds[0]],
+      }),
+    ).toThrow();
+  });
+
+  it('rejects the same athlete as starter and on the bench', () => {
+    expect(() =>
+      confirmLineupSchema.parse({
+        startingAthleteIds: starterIds,
+        benchAthleteIds: [starterIds[0]],
+      }),
     ).toThrow();
   });
 });

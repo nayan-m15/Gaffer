@@ -74,6 +74,8 @@ import {
   isSubOutCallout,
 } from "@/features/matches/live-callouts";
 import {
+  friendlyLineupPlayers,
+  friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
@@ -497,6 +499,16 @@ export default function LiveMatchPage() {
     [matchQuery.data?.opponentSquad],
   );
   const visibility = matchQuery.data?.opponentSquadVisibility ?? "none";
+  // Pitch and bench display only: manual entries win, otherwise show the
+  // shared lineup of an accepted Gaffer friendly. Event attribution keeps
+  // using the manual `opponentSquad` above, whose ids are real rows.
+  const opponentDisplaySquad = useMemo(
+    () =>
+      opponentSquad.length > 0
+        ? opponentSquad
+        : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
+    [matchQuery.data?.friendlyOpponentLineup, opponentSquad],
+  );
   const currentMinute = Math.floor(elapsedMs / 60_000);
 
   const rowKey = (event: MatchLogEvent) => event.optimisticKey ?? event.id;
@@ -519,8 +531,20 @@ export default function LiveMatchPage() {
     [squad, timeline],
   );
   const oppState = useMemo(
-    () => opponentPitchState(opponentSquad, timeline),
-    [opponentSquad, timeline],
+    () =>
+      opponentPitchState(
+        opponentDisplaySquad,
+        timeline,
+        opponentSquad.length > 0
+          ? undefined
+          : friendlyLineupStarterIds(matchQuery.data?.friendlyOpponentLineup),
+      ),
+    [
+      matchQuery.data?.friendlyOpponentLineup,
+      opponentDisplaySquad,
+      opponentSquad,
+      timeline,
+    ],
   );
 
   const ownName = team?.name ?? "US";

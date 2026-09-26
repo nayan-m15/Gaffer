@@ -38,6 +38,8 @@ describe('EventsController', () => {
     create: jest.fn(),
     list: jest.fn(),
     startMatch: jest.fn(),
+    confirmLineup: jest.fn(),
+    getLineup: jest.fn(),
     rsvp: jest.fn(),
     listRsvps: jest.fn(),
     findOne: jest.fn(),
@@ -234,6 +236,37 @@ describe('EventsController', () => {
         'event-id',
         { ...body, opponentSquadVisibility: 'none' },
       );
+    });
+
+    it('lets any team member confirm the pre-match lineup without the coach gate', async () => {
+      mockEventsService.confirmLineup.mockResolvedValue({
+        startingAthleteIds,
+        benchAthleteIds: [],
+        confirmedAt: '2026-09-20T10:00:00.000Z',
+      });
+      const body = { startingAthleteIds };
+
+      await controller.confirmLineup(user, 'event-id', body);
+
+      expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
+      expect(mockEventsService.confirmLineup).toHaveBeenCalledWith(
+        'user-id',
+        'event-id',
+        body,
+      );
+    });
+
+    it('reads the confirmed lineup without the coach gate', async () => {
+      mockEventsService.getLineup.mockResolvedValue(null);
+
+      const result = await controller.lineup(user, 'event-id');
+
+      expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
+      expect(mockEventsService.getLineup).toHaveBeenCalledWith(
+        'user-id',
+        'event-id',
+      );
+      expect(result).toBeNull();
     });
 
     it('lets a claimed player submit an RSVP without the coach gate', async () => {
