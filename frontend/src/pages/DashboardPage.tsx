@@ -23,7 +23,6 @@ import {
   Mail,
   Plus,
   RefreshCw,
-  Sparkles,
   TrendingUp,
   Trophy,
   BarChart3,
@@ -660,37 +659,6 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
   );
 }
 
-/** Most recent AI-generated match narrative, linking through to its full report. */
-function LatestInsightCard({ insights }: { insights: DashboardInsight[] }) {
-  const latest = insights.find((insight) => insight.narrativeText);
-
-  return (
-    <Card aria-label="Latest match insight">
-      <SectionTitle icon={<Sparkles className="size-4 text-muted-foreground" />}>
-        Latest Insight
-      </SectionTitle>
-      {latest ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm leading-relaxed text-foreground">
-            {latest.narrativeText}
-          </p>
-          <Link
-            to={`/matches/${latest.matchId}/report`}
-            className="text-xs font-semibold text-primary hover:underline"
-          >
-            View full match report
-          </Link>
-        </div>
-      ) : (
-        <EmptyState
-          message="No AI match insights yet"
-          icon={<Sparkles className="size-6" />}
-        />
-      )}
-    </Card>
-  );
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -816,7 +784,6 @@ export default function DashboardPage() {
     seasonSummary,
     recentForm,
     recentStats,
-    recentInsights,
   } = data ?? {
     activeAthletesCount: 0,
     totalEventsCount: 0,
@@ -950,8 +917,6 @@ export default function DashboardPage() {
           <SeasonSummaryCard summary={seasonSummary ?? null} />
           <RecentStatsCard stats={recentStats ?? []} />
         </BentoGrid>
-
-        <LatestInsightCard insights={recentInsights ?? []} />
       </div>
       <EventDetailDialog
         open={Boolean(selectedEventId)}
