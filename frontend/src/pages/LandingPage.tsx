@@ -582,7 +582,7 @@ function TacticalPitchMockup() {
                 cy={p.y}
                 r="3.5"
                 fill="#10B981"
-                stroke="#07110F"
+                stroke="#06120e"
                 strokeWidth="0.6"
               />
               <text
@@ -590,7 +590,7 @@ function TacticalPitchMockup() {
                 y={p.y + 0.4}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill="#07110F"
+                fill="#06120e"
                 fontSize="2.4"
                 fontWeight="bold"
               >

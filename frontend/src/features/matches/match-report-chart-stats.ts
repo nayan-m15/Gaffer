@@ -1,8 +1,8 @@
 import type { MatchLogEvent } from "./types";
 
 const BREAKDOWN_COLORS = {
-  goals: "#00d99a",
-  cards: "#f5c518",
+  goals: "#16d99a",
+  cards: "#d7ba55",
   subs: "#c084fc",
   assists: "#5b9fff",
 } as const;
@@ -100,7 +100,7 @@ export function cardProgressionMarks(events: MatchLogEvent[]) {
       minute: event.minute,
       lane: -0.35,
       kind: event.eventType === "red_card" ? "red" : "yellow",
-      color: event.eventType === "red_card" ? "#ff5b5f" : "#f5c518",
+      color: event.eventType === "red_card" ? "#e36a6d" : "#d7ba55",
     }));
 }
 

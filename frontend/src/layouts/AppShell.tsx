@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
@@ -20,18 +20,6 @@ const StadiumScene = lazy(() =>
  * present after sign-in.
  */
 export function AppShell() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains("dark");
-    root.classList.add("dark");
-
-    return () => {
-      if (!wasDark) {
-        root.classList.remove("dark");
-      }
-    };
-  }, []);
-
   return (
     <SidebarProvider>
       <AppShellContent />
@@ -49,11 +37,11 @@ function AppShellContent() {
   return (
     <div className="relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
       <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_5%,transparent),transparent_30%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--foreground)_3%,transparent),transparent_26%)]"
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none fixed inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
+        className="pointer-events-none fixed inset-0 opacity-[0.022] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
         aria-hidden="true"
       />
       {showDashboardScene && (
@@ -72,7 +60,7 @@ function AppShellContent() {
         )}
       >
       
-        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border/60 bg-background/75 backdrop-blur-xl lg:hidden">
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border-subtle bg-surface-header/92 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-2">
             <SportLogo size={26} className="rounded-md" />
             <span className="font-display text-sm font-bold tracking-wide text-foreground">

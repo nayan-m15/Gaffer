@@ -161,7 +161,7 @@ function minuteOrDash(value: number | null) {
 
 function AdjustedBadge() {
   return (
-    <span className="inline-flex rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#ffbe2e] bg-[#ffbe2e]/15">
+    <span className="inline-flex rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#d6a447] bg-[#d6a447]/15">
       Manually adjusted
     </span>
   );
@@ -390,7 +390,7 @@ export default function MatchReportPage() {
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
       <div className="match-report flex min-h-[70dvh] items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-[#00d99a]" />
+        <Loader2 className="size-6 animate-spin text-[#16d99a]" />
       </div>
     );
   }
@@ -400,14 +400,14 @@ export default function MatchReportPage() {
     return (
       <div className="match-report flex min-h-[70dvh] items-center justify-center px-4">
         <div className="flex flex-col items-center gap-3 text-center">
-          <ShieldAlert className="size-8 text-[#ff5b5f]" />
+          <ShieldAlert className="size-8 text-[#e36a6d]" />
           <p className="font-oswald text-xl tracking-wide">FAILED TO LOAD REPORT</p>
-          <p className="text-sm text-[#8e9ba8]">
+          <p className="text-sm text-[#9ca39f]">
             {error instanceof Error ? error.message : "Something went wrong."}
           </p>
           <button
             type="button"
-            className="rounded-lg border border-[#233747] px-4 py-2 text-sm"
+            className="rounded-lg border border-[#3e4448] px-4 py-2 text-sm"
             onClick={() => {
               void matchQuery.refetch();
               void squadQuery.refetch();
@@ -440,11 +440,11 @@ export default function MatchReportPage() {
 
   return (
     <div className="match-report min-h-full overflow-x-hidden">
-      <header className="border-b border-[#1c2b36]">
+      <header className="border-b border-[#2a2e31]">
         <div className="w-full px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[#8e9ba8] transition-colors hover:text-white"
+            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[#9ca39f] transition-colors hover:text-white"
             onClick={() => navigate("/live-logger")}
           >
             <ChevronLeft className="size-4" />
@@ -455,13 +455,13 @@ export default function MatchReportPage() {
               <h1 className="font-oswald text-2xl font-semibold uppercase tracking-widest text-white sm:text-3xl">
                 Match Report
               </h1>
-              <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8e9ba8] sm:text-xs">
+              <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9ca39f] sm:text-xs">
                 {metaLine}
               </p>
             </div>
             <button
               type="button"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#16d99a] text-[#06120e] transition-opacity hover:opacity-90"
               onClick={() => void shareReport()}
               aria-label="Share match report"
             >
@@ -469,13 +469,13 @@ export default function MatchReportPage() {
             </button>
           </div>
           {shareNote ? (
-            <p className="mt-2 text-right text-[11px] text-[#00d99a]">{shareNote}</p>
+            <p className="mt-2 text-right text-[11px] text-[#16d99a]">{shareNote}</p>
           ) : null}
         </div>
       </header>
 
       <div className="w-full px-4 pb-12 pt-4 sm:px-6 sm:pt-5 lg:px-8">
-        <div className="mb-5 flex w-full max-w-md justify-center rounded-xl border border-[#1c2b36] bg-[#101920] p-1 shadow-inner">
+        <div className="mb-5 flex w-full max-w-md justify-center rounded-xl border border-[#2a2e31] bg-[#111315] p-1 shadow-inner">
           {TABS.map((item) => (
             <button
               key={item.id}
@@ -484,8 +484,8 @@ export default function MatchReportPage() {
                 "flex-1 rounded-lg px-1 py-2 font-oswald text-[10px] tracking-wide transition-colors sm:text-sm",
                 item.id === "events" && "xl:hidden",
                 tab === item.id
-                  ? "bg-[#0f3d32] font-semibold text-white shadow-sm"
-                  : "bg-transparent text-[#c5ced6] hover:text-white",
+                  ? "bg-[#25292c] font-semibold text-white shadow-sm"
+                  : "bg-transparent text-[#c7ccc9] hover:text-white",
               )}
               onClick={() => setTab(item.id)}
             >
@@ -505,7 +505,7 @@ export default function MatchReportPage() {
                 tab === "events" && "hidden xl:block",
               )}
             >
-              <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4 sm:p-5">
+              <section className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4 sm:p-5">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:gap-3">
                   <div className="min-w-0 text-left">
                     <p className="truncate font-oswald text-lg tracking-wide text-white sm:text-2xl">
@@ -516,7 +516,7 @@ export default function MatchReportPage() {
                       style={{ backgroundColor: homeColor }}
                     />
                   </div>
-                  <div className="rounded-xl border border-[#1c2b36]/60 bg-[#0c1218] px-4 py-2">
+                  <div className="rounded-xl border border-[#2a2e31]/60 bg-[#0d0f10] px-4 py-2">
                     <p className="font-oswald text-3xl leading-none tabular-nums sm:text-5xl">
                       <span style={{ color: homeColor }}>{homeScore}</span>
                       <span className="mx-2 text-2xl text-white">-</span>
@@ -533,26 +533,26 @@ export default function MatchReportPage() {
                     />
                   </div>
                 </div>
-                <p className="mt-5 border-l-2 border-[#00d99a] pl-3 text-sm leading-relaxed text-[#c5ced6]">
+                <p className="mt-5 border-l-2 border-[#16d99a] pl-3 text-sm leading-relaxed text-[#c7ccc9]">
                   {story}
                 </p>
               </section>
 
               <section>
-                <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
                   Match facts
                 </h2>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <FactCard
                     label="First goal"
                     value={minuteOrDash(facts.firstGoalMinute)}
-                    color="#00d99a"
+                    color="#16d99a"
                     icon={<Zap className="size-4" />}
                   />
                   <FactCard
                     label="First card"
                     value={minuteOrDash(facts.firstCardMinute)}
-                    color="#f5c518"
+                    color="#d7ba55"
                     icon={<Square className="size-3.5 fill-current" />}
                   />
                   <FactCard
@@ -571,7 +571,7 @@ export default function MatchReportPage() {
               </section>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+                <div className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
                   <TeamComparisonChart
                     events={timeline}
                     ownName={ownAbbrev}
@@ -580,7 +580,7 @@ export default function MatchReportPage() {
                     oppColor={oppColor}
                   />
                 </div>
-                <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+                <div className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
                   <ScoreProgressionChart
                     events={timeline}
                     ownName={ownAbbrev}
@@ -591,7 +591,7 @@ export default function MatchReportPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+              <div className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
                 <EventBreakdownChart
                   events={timeline}
                   ownName={ownAbbrev}
@@ -609,19 +609,19 @@ export default function MatchReportPage() {
                 tab === "match" && "hidden",
               )}
             >
-              <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
-                <div className="mb-4 flex items-center justify-between border-b border-[#1c2b36] pb-3">
+              <section className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
+                <div className="mb-4 flex items-center justify-between border-b border-[#2a2e31] pb-3">
                   <div>
                     <h2 className="font-oswald text-sm font-semibold uppercase tracking-wider text-white">
                       Match Events
                     </h2>
-                    <p className="text-[11px] text-[#8e9ba8]">
+                    <p className="text-[11px] text-[#9ca39f]">
                       {timeline.length} {timeline.length === 1 ? "event" : "events"} logged
                     </p>
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#00d99a]/40 bg-[#00d99a]/10 px-3 py-1.5 font-oswald text-xs tracking-wider text-[#00d99a] transition-colors hover:bg-[#00d99a]/20"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#16d99a]/40 bg-[#16d99a]/10 px-3 py-1.5 font-oswald text-xs tracking-wider text-[#16d99a] transition-colors hover:bg-[#16d99a]/20"
                     onClick={() => {
                       setAddError(null);
                       setAdding(true);
@@ -634,8 +634,8 @@ export default function MatchReportPage() {
 
                 {timeline.length === 0 ? (
                   <div className="py-8 text-center">
-                    <Timer className="mx-auto mb-2 size-8 text-[#8e9ba8]/40" />
-                    <p className="text-sm text-[#8e9ba8]">No events logged yet.</p>
+                    <Timer className="mx-auto mb-2 size-8 text-[#9ca39f]/40" />
+                    <p className="text-sm text-[#9ca39f]">No events logged yet.</p>
                   </div>
                 ) : (
                   <div className="max-h-[32rem] overflow-y-auto pr-1 xl:max-h-[38rem]">
@@ -650,7 +650,7 @@ export default function MatchReportPage() {
                             <div className="flex min-w-0 flex-1 items-stretch gap-1.5">
                               <button
                                 type="button"
-                                className="min-w-0 flex-1 rounded-xl border border-[#1c2b36] bg-[#0c1218] px-3 py-2.5 text-left transition-colors hover:border-[#00d99a]/40 hover:bg-[#101920]"
+                                className="min-w-0 flex-1 rounded-xl border border-[#2a2e31] bg-[#0d0f10] px-3 py-2.5 text-left transition-colors hover:border-[#16d99a]/40 hover:bg-[#111315]"
                                 onClick={() => {
                                   if (event.pending) {
                                     return;
@@ -669,7 +669,7 @@ export default function MatchReportPage() {
                                       <p className="font-oswald text-xs tracking-wide text-white sm:text-sm">
                                         {event.minute}&apos; {eventDisplayLabel(event)}
                                       </p>
-                                      <p className="truncate text-[11px] text-[#8e9ba8]">
+                                      <p className="truncate text-[11px] text-[#9ca39f]">
                                         {event.team === "own" ? ownName : oppName} ·{" "}
                                         {whoLabel(event, squad)}
                                         {event.eventType === "goal" &&
@@ -684,7 +684,7 @@ export default function MatchReportPage() {
                                         event.eventType !== "goal" &&
                                         event.eventType !== "penalty" &&
                                         !isSecondYellow(event) && (
-                                          <p className="mt-0.5 text-[11px] text-[#8e9ba8]">
+                                          <p className="mt-0.5 text-[11px] text-[#9ca39f]">
                                             {event.detail}
                                           </p>
                                         )}
@@ -696,7 +696,7 @@ export default function MatchReportPage() {
                               <button
                                 type="button"
                                 aria-label="Delete event"
-                                className="shrink-0 self-center rounded-md p-1.5 text-[#8e9ba8] hover:bg-white/5 hover:text-[#ff5b5f] disabled:opacity-40"
+                                className="shrink-0 self-center rounded-md p-1.5 text-[#9ca39f] hover:bg-white/5 hover:text-[#e36a6d] disabled:opacity-40"
                                 disabled={event.pending || deleteEvent.isPending}
                                 onClick={() => {
                                   if (event.pending) {
@@ -743,7 +743,7 @@ export default function MatchReportPage() {
                   />
                 </LivePitch>
 
-                <div className="match-report-bench grid grid-cols-1 gap-1 rounded-xl border border-[#1c2b36] bg-[#0c1218] px-3 py-1.5 sm:grid-cols-2 sm:gap-3">
+                <div className="match-report-bench grid grid-cols-1 gap-1 rounded-xl border border-[#2a2e31] bg-[#0d0f10] px-3 py-1.5 sm:grid-cols-2 sm:gap-3">
                   {ownHalf === "left" ? (
                     <>
                       <LiveBenchRow
@@ -794,21 +794,21 @@ export default function MatchReportPage() {
 
               <div className="space-y-4 xl:col-span-4">
                 {topPerformers.length > 0 ? (
-                  <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
-                    <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                  <section className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
                       Top performers
                     </h2>
                     <ul className="mt-3 space-y-2">
                       {topPerformers.map((row) => (
                         <li
                           key={row.athlete.id}
-                          className="flex items-center justify-between rounded-xl border border-[#1c2b36]/60 bg-[#0c1218] px-3 py-2.5"
+                          className="flex items-center justify-between rounded-xl border border-[#2a2e31]/60 bg-[#0d0f10] px-3 py-2.5"
                         >
                           <p className="font-oswald tracking-wide text-white">
                             {shirtLabel(row.athlete)}
                           </p>
-                          <p className="text-xs text-[#8e9ba8]">
-                            <span className="font-oswald text-[#00d99a]">{row.goals}</span> G ·{" "}
+                          <p className="text-xs text-[#9ca39f]">
+                            <span className="font-oswald text-[#16d99a]">{row.goals}</span> G ·{" "}
                             <span className="font-oswald text-[#c084fc]">{row.assists}</span> A
                           </p>
                         </li>
@@ -817,24 +817,24 @@ export default function MatchReportPage() {
                   </section>
                 ) : null}
 
-                <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
-                  <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+                <section className="rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
                     Squad Overview
                   </h2>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-                    <div className="rounded-xl border border-[#1c2b36]/60 bg-[#0c1218] p-3">
+                    <div className="rounded-xl border border-[#2a2e31]/60 bg-[#0d0f10] p-3">
                       <p className="font-oswald text-2xl text-white">
                         {squad.filter((p) => p.started).length}
                       </p>
-                      <p className="text-[10px] uppercase tracking-wider text-[#8e9ba8]">
+                      <p className="text-[10px] uppercase tracking-wider text-[#9ca39f]">
                         Starting XI
                       </p>
                     </div>
-                    <div className="rounded-xl border border-[#1c2b36]/60 bg-[#0c1218] p-3">
+                    <div className="rounded-xl border border-[#2a2e31]/60 bg-[#0d0f10] p-3">
                       <p className="font-oswald text-2xl text-white">
                         {squad.filter((p) => !p.started).length}
                       </p>
-                      <p className="text-[10px] uppercase tracking-wider text-[#8e9ba8]">
+                      <p className="text-[10px] uppercase tracking-wider text-[#9ca39f]">
                         Substitutes
                       </p>
                     </div>
@@ -843,45 +843,45 @@ export default function MatchReportPage() {
               </div>
             </div>
 
-            <section className="overflow-hidden rounded-2xl border border-[#1c2b36] bg-[#101920] p-4">
+            <section className="overflow-hidden rounded-2xl border border-[#2a2e31] bg-[#111315] p-4">
               <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="font-oswald text-xs font-semibold uppercase tracking-wider text-white">
                   Squad Match Stats
                 </h2>
-                <span className="text-xs text-[#8e9ba8]">
+                <span className="text-xs text-[#9ca39f]">
                   {playerStats.length} athletes
                 </span>
               </div>
               {playerStats.length === 0 ? (
-                <p className="mt-3 text-center text-sm text-[#8e9ba8]">
+                <p className="mt-3 text-center text-sm text-[#9ca39f]">
                   No squad recorded for this match.
                 </p>
               ) : (
                 <>
-                  <ul className="mt-3 divide-y divide-[#1c2b36] sm:hidden">
+                  <ul className="mt-3 divide-y divide-[#2a2e31] sm:hidden">
                     {playerStats.map((row) => (
                       <li key={row.athlete.id} className="py-3 first:pt-1">
                         <div className="flex items-center justify-between gap-3">
                           <p className="min-w-0 truncate text-sm font-medium text-white">
-                            <span className="mr-2 font-oswald text-[#8e9ba8]">
+                            <span className="mr-2 font-oswald text-[#9ca39f]">
                               #{row.athlete.squadNumber ?? "—"}
                             </span>
                             {row.athlete.firstName} {row.athlete.lastName}
                           </p>
-                          <span className="shrink-0 rounded bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#8e9ba8]">
+                          <span className="shrink-0 rounded bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#9ca39f]">
                             {row.athlete.started ? "Starting XI" : "Bench"}
                           </span>
                         </div>
                         <div className="mt-2 grid grid-cols-4 gap-2 text-center">
                           {[
-                            ["G", row.goals, "text-[#00d99a]"],
+                            ["G", row.goals, "text-[#16d99a]"],
                             ["A", row.assists, "text-[#c084fc]"],
-                            ["Y", row.yellow, "text-[#ffbe2e]"],
-                            ["R", row.red, "text-[#ff5b5f]"],
+                            ["Y", row.yellow, "text-[#d6a447]"],
+                            ["R", row.red, "text-[#e36a6d]"],
                           ].map(([label, value, color]) => (
-                            <div key={String(label)} className="rounded-lg bg-[#0c1218] px-2 py-1.5">
+                            <div key={String(label)} className="rounded-lg bg-[#0d0f10] px-2 py-1.5">
                               <p className={cn("font-oswald text-base", color)}>{value}</p>
-                              <p className="text-[8px] font-bold uppercase text-[#8e9ba8]">{label}</p>
+                              <p className="text-[8px] font-bold uppercase text-[#9ca39f]">{label}</p>
                             </div>
                           ))}
                         </div>
@@ -891,7 +891,7 @@ export default function MatchReportPage() {
                   <div className="hidden overflow-x-auto sm:block">
                   <table className="mt-2 w-full min-w-[28rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-[#1c2b36] font-oswald text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+                    <tr className="border-b border-[#2a2e31] font-oswald text-[10px] uppercase tracking-widest text-[#9ca39f]">
                       <th className="px-2 py-2 font-medium">#</th>
                       <th className="px-2 py-2 font-medium">Player</th>
                       <th className="px-2 py-2 font-medium">Start</th>
@@ -905,7 +905,7 @@ export default function MatchReportPage() {
                     {playerStats.map((row) => (
                       <tr
                         key={row.athlete.id}
-                        className="border-b border-[#1c2b36]/70 transition-colors hover:bg-white/[0.02]"
+                        className="border-b border-[#2a2e31]/70 transition-colors hover:bg-white/[0.02]"
                       >
                         <td className="px-2 py-3 font-oswald tabular-nums">
                           {row.athlete.squadNumber ?? "—"}
@@ -913,19 +913,19 @@ export default function MatchReportPage() {
                         <td className="px-2 py-3 font-medium text-white">
                           {row.athlete.firstName} {row.athlete.lastName}
                         </td>
-                        <td className="px-2 py-3 text-[#8e9ba8]">
+                        <td className="px-2 py-3 text-[#9ca39f]">
                           {row.athlete.started ? "XI" : "Bench"}
                         </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#00d99a]">
+                        <td className="px-2 py-3 text-right font-oswald text-[#16d99a]">
                           {row.goals}
                         </td>
                         <td className="px-2 py-3 text-right font-oswald text-[#c084fc]">
                           {row.assists}
                         </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#ffbe2e]">
+                        <td className="px-2 py-3 text-right font-oswald text-[#d6a447]">
                           {row.yellow}
                         </td>
-                        <td className="px-2 py-3 text-right font-oswald text-[#ff5b5f]">
+                        <td className="px-2 py-3 text-right font-oswald text-[#e36a6d]">
                           {row.red}
                         </td>
                       </tr>
@@ -1041,7 +1041,7 @@ function FactCard({
 }) {
   return (
     <div
-      className="rounded-xl bg-[#101920] px-3 py-3"
+      className="rounded-xl bg-[#111315] px-3 py-3"
       style={{ boxShadow: `inset 0 0 0 1px ${color}55` }}
     >
       <span className="inline-flex text-[color:var(--fact-color)]" style={{ ["--fact-color" as string]: color }}>
@@ -1050,7 +1050,7 @@ function FactCard({
       <p className="mt-2 font-oswald text-2xl leading-none tabular-nums text-white">
         {value}
       </p>
-      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]">
+      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-[#9ca39f]">
         {label}
       </p>
     </div>
@@ -1075,7 +1075,7 @@ function DeleteEventOverlay({
   return (
     <Overlay onClose={onClose}>
       <p className="font-oswald text-2xl tracking-widest">DELETE EVENT?</p>
-      <p className="mt-2 text-sm text-[#8e9ba8]">
+      <p className="mt-2 text-sm text-[#9ca39f]">
         {event.minute}&apos; {eventDisplayLabel(event)} will be removed from
         this match.
         {linkedAssistCount > 0
@@ -1083,7 +1083,7 @@ function DeleteEventOverlay({
           : ""}
       </p>
       {error && (
-        <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
+        <p role="alert" className="mt-3 text-sm text-[#e36a6d]">
           {error}
         </p>
       )}
@@ -1097,7 +1097,7 @@ function DeleteEventOverlay({
       </button>
       <button
         type="button"
-        className="mt-2 w-full rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
+        className="mt-2 w-full rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
         disabled={pending}
         onClick={onClose}
       >
@@ -1203,9 +1203,9 @@ function AddEventOverlay({
 }
 
 const fieldClassName =
-  "mt-2 w-full rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-2.5 text-sm leading-normal text-white";
+  "mt-2 w-full rounded-lg border border-[#2a2e31] bg-[#111315] px-3 py-2.5 text-sm leading-normal text-white";
 const fieldLabelClassName =
-  "block text-xs font-semibold uppercase tracking-widest text-[#8e9ba8]";
+  "block text-xs font-semibold uppercase tracking-widest text-[#9ca39f]";
 
 function subjectLabel(eventType: MatchEventType) {
   if (eventType === "goal") {
@@ -1373,14 +1373,14 @@ function EventComposerOverlay({
         {/* Vertical padding lives on the sticky header/footer, not the form: a
             negative margin here would be swallowed by `top-0`, pushing the bar
             down over the first field. */}
-        <div className="sticky top-0 z-10 -mx-5 flex items-start justify-between gap-4 border-b border-[#1c2b36] bg-[#070d12] px-5 pb-4 pt-5 sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-6">
+        <div className="sticky top-0 z-10 -mx-5 flex items-start justify-between gap-4 border-b border-[#2a2e31] bg-[#090a0b] px-5 pb-4 pt-5 sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-6">
           <div>
             <p className="font-oswald text-xl tracking-widest sm:text-2xl">{title}</p>
-            <p className="mt-1 text-xs text-[#8e9ba8] sm:text-sm">{subtitle}</p>
+            <p className="mt-1 text-xs text-[#9ca39f] sm:text-sm">{subtitle}</p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-1.5 text-[#8e9ba8] transition-colors hover:bg-white/5 hover:text-white"
+            className="rounded-lg p-1.5 text-[#9ca39f] transition-colors hover:bg-white/5 hover:text-white"
             onClick={onClose}
             aria-label="Close event form"
           >
@@ -1406,8 +1406,8 @@ function EventComposerOverlay({
                   className={cn(
                     "rounded-lg border px-3 py-2 font-oswald text-xs tracking-widest",
                     team === option.id
-                      ? "border-[#00d99a]/70 bg-[#00d99a]/10 text-[#00d99a]"
-                      : "border-[#1c2b36] text-[#c5ced6]",
+                      ? "border-[#16d99a]/70 bg-[#16d99a]/10 text-[#16d99a]"
+                      : "border-[#2a2e31] text-[#c7ccc9]",
                   )}
                   onClick={() => {
                     setTeam(option.id);
@@ -1503,8 +1503,8 @@ function EventComposerOverlay({
                   className={cn(
                     "rounded-lg border px-3 py-2.5 font-oswald text-xs tracking-widest",
                     penaltyOutcome === option.id
-                      ? "border-[#00d99a]/70 bg-[#00d99a]/10 text-[#00d99a]"
-                      : "border-[#1c2b36] text-[#c5ced6]",
+                      ? "border-[#16d99a]/70 bg-[#16d99a]/10 text-[#16d99a]"
+                      : "border-[#2a2e31] text-[#c7ccc9]",
                   )}
                   onClick={() => {
                     setPenaltyOutcome(option.id);
@@ -1595,7 +1595,7 @@ function EventComposerOverlay({
         ) : null}
 
         {isInjury ? (
-          <label className="flex items-center gap-2 text-sm text-[#e8ecef]">
+          <label className="flex items-center gap-2 text-sm text-[#ecefed]">
             <input
               type="checkbox"
               checked={injuryLedToSub}
@@ -1607,7 +1607,7 @@ function EventComposerOverlay({
                   setIncomingOpponentLabel("");
                 }
               }}
-              className="size-4 accent-[#00d99a]"
+              className="size-4 accent-[#16d99a]"
             />
             This injury led to a substitution
           </label>
@@ -1673,22 +1673,22 @@ function EventComposerOverlay({
         ) : null}
 
         {(error || formError) && (
-          <p role="alert" className="text-sm text-[#ff5b5f]">
+          <p role="alert" className="text-sm text-[#e36a6d]">
             {error ?? formError}
           </p>
         )}
 
-        <div className="sticky bottom-0 z-10 -mx-5 grid grid-cols-2 gap-2 border-t border-[#1c2b36] bg-[#070d12] px-5 py-4 sm:-mx-6 sm:px-6 sm:py-5">
+        <div className="sticky bottom-0 z-10 -mx-5 grid grid-cols-2 gap-2 border-t border-[#2a2e31] bg-[#090a0b] px-5 py-4 sm:-mx-6 sm:px-6 sm:py-5">
           <button
             type="button"
-            className="w-full rounded-xl border border-[#233747] py-2.5 font-oswald text-sm tracking-widest"
+            className="w-full rounded-xl border border-[#3e4448] py-2.5 font-oswald text-sm tracking-widest"
             onClick={onClose}
           >
             CANCEL
           </button>
           <StatefulButton
             type="submit"
-            className="h-auto w-full rounded-xl bg-[#00d99a] py-2.5 font-oswald text-sm tracking-widest text-[#07110f] hover:bg-[#00d99a]/90 disabled:opacity-40"
+            className="h-auto w-full rounded-xl bg-[#16d99a] py-2.5 font-oswald text-sm tracking-widest text-[#06120e] hover:bg-[#16d99a]/90 disabled:opacity-40"
             disabled={pending}
             status={pending ? "loading" : "idle"}
             loadingText={pendingLabel}
@@ -1725,7 +1725,7 @@ function Overlay({
       />
       <div
         className={cn(
-          "relative z-10 w-full max-w-md border border-[#1c2b36] bg-[#070d12]",
+          "relative z-10 w-full max-w-md border border-[#2a2e31] bg-[#090a0b]",
           sheet
             ? "max-h-[88dvh] overflow-hidden rounded-t-2xl sm:max-h-[90vh] sm:rounded-2xl"
             : "max-h-[90vh] overflow-y-auto rounded-2xl p-5",

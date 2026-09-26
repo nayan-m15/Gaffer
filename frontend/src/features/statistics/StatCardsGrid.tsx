@@ -8,7 +8,7 @@ export function StatCardsGrid({ overview }: { overview: TeamOverview }) {
   return (
     <BentoGrid className="max-w-none grid-cols-2 gap-4 sm:grid-cols-3 md:auto-rows-auto md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
       <StatCard label="Matches Played" value={overview.matchesPlayed} />
-      <StatCard label="Wins" value={overview.wins} variant="positive" />
+      <StatCard label="Wins" value={overview.wins} />
       <StatCard label="Draws" value={overview.draws} />
       <StatCard label="Losses" value={overview.losses} variant="negative" />
       <StatCard label="Win Rate" value={formatRate(overview.winRate)} />
@@ -19,11 +19,7 @@ export function StatCardsGrid({ overview }: { overview: TeamOverview }) {
         value={overview.goalsAgainst}
         variant="negative"
       />
-      <StatCard
-        label="Goal Diff"
-        value={formatDiff(overview.goalDifference)}
-        variant={overview.goalDifference >= 0 ? "positive" : "negative"}
-      />
+      <StatCard label="Goal Diff" value={formatDiff(overview.goalDifference)} />
       <StatCard label="Clean Sheets" value={overview.cleanSheets} />
       <StatCard label="Avg GF" value={formatAvg(overview.avgGoalsFor)} />
       <StatCard

@@ -121,7 +121,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
           !expanded && "lg:justify-center lg:px-2",
         )}
       >
-        <div className="rounded-xl border border-primary/20 bg-primary/10 p-1.5 shadow-[0_0_28px_-10px_var(--primary)]">
+        <div className="rounded-lg border border-sidebar-border bg-surface-nested p-1.5">
           <SportLogo size={32} className="rounded-md" />
         </div>
         <div className={cn(!expanded && "lg:hidden")}>
@@ -163,10 +163,10 @@ export function Sidebar({ className, variant }: SidebarProps) {
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-sm font-medium transition-all duration-200 motion-reduce:transition-none",
+                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
                   isActive || isRelatedMatchReport
-                    ? "border-primary/25 bg-primary/12 text-sidebar-foreground shadow-[inset_0_1px_rgba(255,255,255,0.06)]"
-                    : "border-transparent text-sidebar-foreground/70 hover:border-sidebar-border hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                    ? "border-sidebar-border bg-surface-active text-sidebar-foreground"
+                    : "border-transparent text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )
               }
             >
@@ -176,7 +176,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 )}
                 aria-hidden="true"
               />
-              <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+              <Icon className="size-[18px] shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground group-aria-[current=page]:text-primary" aria-hidden="true" />
               <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
             </NavLink>
           );
@@ -259,8 +259,8 @@ export function Sidebar({ className, variant }: SidebarProps) {
             : { type: "spring", stiffness: 280, damping: 28 }
         }
         className={cn(
-          "hidden lg:fixed lg:inset-y-3 lg:left-3 lg:z-20 lg:flex lg:flex-col lg:overflow-hidden lg:rounded-2xl",
-          "border border-sidebar-border/80 bg-sidebar/85 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.75)] backdrop-blur-xl",
+          "hidden lg:fixed lg:inset-y-3 lg:left-3 lg:z-20 lg:flex lg:flex-col lg:overflow-hidden lg:rounded-xl",
+          "border border-sidebar-border bg-sidebar/96 shadow-[0_20px_60px_-36px_rgba(0,0,0,0.95)] backdrop-blur-xl",
           className,
         )}
       >
@@ -279,7 +279,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Mobile toggle button ──────────────────────────────────────────── */}
       <button
         onClick={() => setIsMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-xl border border-border/70 bg-card/80 p-2 shadow-lg backdrop-blur-xl lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-lg border border-border-subtle bg-surface-elevated p-2 shadow-lg lg:hidden"
         aria-label="Open navigation menu"
       >
         <Menu className="size-5 text-foreground" aria-hidden="true" />
@@ -299,7 +299,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
           <aside
             className={cn(
               "fixed inset-y-0 left-0 flex w-72 flex-col",
-              "border-r border-sidebar-border bg-sidebar/95 shadow-2xl backdrop-blur-xl",
+              "border-r border-sidebar-border bg-sidebar shadow-2xl",
             )}
           >
             {/* Close button */}

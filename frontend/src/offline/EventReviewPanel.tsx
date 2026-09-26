@@ -66,21 +66,21 @@ export function EventReviewPanel({
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#070d12]/80 p-4 backdrop-blur-sm">
-      <section className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#1c2b36] bg-[#101920] p-5 shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#090a0b]/80 p-4 backdrop-blur-sm">
+      <section className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#2a2e31] bg-[#111315] p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-oswald text-xl tracking-wide text-white">Duplicate review</h2>
-          <button type="button" onClick={onClose} className="text-sm text-[#c5ced6]">Close</button>
+          <button type="button" onClick={onClose} className="text-sm text-[#c7ccc9]">Close</button>
         </div>
-        {error ? <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-[#e36a6d]">{error}</p> : null}
         {!error && reviews.length === 0 ? (
-          <p className="mt-5 text-sm text-[#8e9ba8]">No events need review.</p>
+          <p className="mt-5 text-sm text-[#9ca39f]">No events need review.</p>
         ) : null}
         <div className="mt-4 space-y-3">
           {reviews.map((review) => (
-            <article key={review.id} className="rounded-xl border border-[#ffbe2e]/35 bg-[#0c1218] p-4">
-              <p className="text-sm font-semibold text-[#ffbe2e]">Possible duplicate event</p>
-              <ul className="mt-2 space-y-1 text-xs text-[#c5ced6]">
+            <article key={review.id} className="rounded-xl border border-[#d6a447]/35 bg-[#0d0f10] p-4">
+              <p className="text-sm font-semibold text-[#d6a447]">Possible duplicate event</p>
+              <ul className="mt-2 space-y-1 text-xs text-[#c7ccc9]">
                 {review.observations.map((observation) => (
                   <li key={observation.id}>
                     {observation.eventType.replaceAll("_", " ")} · {Math.floor(observation.matchElapsedMs / 60_000)}:{String(Math.floor((observation.matchElapsedMs % 60_000) / 1000)).padStart(2, "0")}
