@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isSameMonth, startOfWeek } from "date-fns";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { cn } from "@/lib/utils";
 import { AgendaView } from "@/features/events/AgendaView";
 import { CalendarSidebar } from "@/features/events/CalendarSidebar";
 import { CalendarToolbar } from "@/features/events/CalendarToolbar";
@@ -219,8 +220,45 @@ export default function EventsPage() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <PageHeader
         title="Events"
-        subtitle="Matches, training sessions, and meetings on one calendar."
-        className="shrink-0 pb-3 lg:pt-5 lg:pb-3"
+        mobileInline
+        actions={
+          <div className="flex items-center gap-1.5 sm:hidden">
+            <div
+              role="group"
+              aria-label="Calendar view"
+              className="flex items-center rounded-md border border-border bg-background p-0.5"
+            >
+              {(["month", "week", "agenda"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setView(option)}
+                  aria-pressed={view === option}
+                  className={cn(
+                    "rounded-[min(var(--radius-md),10px)] px-1.5 py-1 text-[10px] font-medium capitalize transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    view === option
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            {canManageEvents && (
+              <Button
+                size="icon-sm"
+                onClick={() => setPanel({ kind: "create" })}
+                aria-label="Add new event"
+                className="rounded-full"
+              >
+                <Plus className="size-4" />
+              </Button>
+            )}
+          </div>
+        }
+        className="shrink-0 pt-5 pb-4 pl-4 pr-4 lg:px-8 lg:pt-2 lg:pb-1"
       />
 
       <div className="mx-auto flex w-full max-w-[1800px] min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 sm:gap-4 sm:px-5 lg:px-8">
@@ -262,7 +300,6 @@ export default function EventsPage() {
             hiddenTypes={hiddenTypes}
             readOnly={!canManageEvents}
             onToggleType={handleToggleType}
-            onViewChange={setView}
             onSelectDate={handleDayClick}
             onNavigate={navigate}
             onToday={goToToday}
