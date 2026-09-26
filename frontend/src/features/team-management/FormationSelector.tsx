@@ -37,7 +37,7 @@ export function FormationSelector({ value, onChange }: FormationSelectorProps) {
         <SelectTrigger id="formation-select" aria-label="Select formation">
           <SelectValue placeholder="Select formation" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent alignItemWithTrigger={false} className="max-h-[min(20rem,var(--available-height))]">
           {FORMATION_OPTIONS.map((option) => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}

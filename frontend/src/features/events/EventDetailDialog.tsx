@@ -32,7 +32,7 @@ interface EventDetailDialogProps {
   rsvpQueryKey?: readonly string[];
   /**
    * Assistant mode: hides the coach-only Edit/Cancel actions while keeping
-   * the RSVP breakdown and the "Confirm squad" live-logging entry. The
+   * the RSVP breakdown and match navigation. The
    * backend independently enforces 403 on event mutations.
    */
   canManage?: boolean;
@@ -99,6 +99,7 @@ export function EventDetailDialog({
   const friendlyFixtureConfirmed =
     !friendlyFixtureLinked || event?.friendlyFixtureStatus === "accepted";
   const canConfirmSquad = fixtureDateConfirmed && friendlyFixtureConfirmed;
+  const reportableMatch = event?.type === "match" && event.status === "completed" && Boolean(event.matchId);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) setError(null); onOpenChange(nextOpen); }}>
@@ -238,12 +239,12 @@ export function EventDetailDialog({
                 {cancelEvent.isPending ? "Cancelling…" : "Cancel Event"}
               </Button>
             )}
-            {event && event.type === "match" && event.status !== "cancelled" && (
+            {event && event.type === "match" && (event.status === "scheduled" || reportableMatch) && (
               <Button
-                disabled={!canConfirmSquad}
-                onClick={() => navigate(`/events/${event.id}/confirm-squad`)}
+                disabled={!reportableMatch && !canConfirmSquad}
+                onClick={() => navigate(reportableMatch ? `/matches/${event.matchId}/report` : `/events/${event.id}/confirm-squad`)}
               >
-                {canConfirmSquad ? "Confirm squad" : "Awaiting fixture confirmation"}
+                {reportableMatch ? "View Match Report" : canConfirmSquad ? "Confirm squad" : "Awaiting fixture confirmation"}
               </Button>
             )}
             {canManage && event && !generatedFixture && (

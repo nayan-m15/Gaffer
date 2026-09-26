@@ -204,6 +204,20 @@ function formatClock(elapsedMs: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function LiveClockTime({ elapsedMs, running }: { elapsedMs: number; running: boolean }) {
+  const [displayMs, setDisplayMs] = useState(elapsedMs);
+
+  useEffect(() => {
+    setDisplayMs(elapsedMs);
+    if (!running) return;
+    const origin = Date.now() - elapsedMs;
+    const id = window.setInterval(() => setDisplayMs(Date.now() - origin), 1_000);
+    return () => window.clearInterval(id);
+  }, [elapsedMs, running]);
+
+  return formatClock(displayMs);
+}
+
 const FIRST_HALF_MS = 45 * 60_000;
 const SECOND_HALF_MS = 90 * 60_000;
 
@@ -428,8 +442,10 @@ export default function LiveMatchPage() {
     const origin = Date.now() - baseRef.current;
     const id = window.setInterval(() => {
       const next = Date.now() - origin;
+      const minuteChanged =
+        Math.floor(elapsedRef.current / 60_000) !== Math.floor(next / 60_000);
       elapsedRef.current = next;
-      setElapsedMs(next);
+      if (minuteChanged) setElapsedMs(next);
     }, 200);
     return () => window.clearInterval(id);
   }, [running]);
@@ -706,6 +722,7 @@ export default function LiveMatchPage() {
   const pauseClock = () => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    setElapsedMs(elapsedRef.current);
     persistClock(period, false, elapsedRef.current);
   };
 
@@ -723,6 +740,7 @@ export default function LiveMatchPage() {
   const goHalfTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    setElapsedMs(elapsedRef.current);
     setCheckIn(null);
     setPeriod("half_time");
     persistClock("half_time", false, elapsedRef.current);
@@ -745,6 +763,7 @@ export default function LiveMatchPage() {
   const goFullTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
+    setElapsedMs(elapsedRef.current);
     setCheckIn(null);
     setPeriod("full_time");
     persistClock("full_time", false, elapsedRef.current);
@@ -802,7 +821,7 @@ export default function LiveMatchPage() {
     const tick = () =>
       setCheckInLeftMs(Math.max(0, checkIn.endsAt - Date.now()));
     tick();
-    const id = window.setInterval(tick, 200);
+    const id = window.setInterval(tick, 1_000);
     return () => window.clearInterval(id);
   }, [checkIn]);
 
@@ -1761,7 +1780,7 @@ export default function LiveMatchPage() {
                 )}
               />
               <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
-                {formatClock(elapsedMs)}
+                <LiveClockTime elapsedMs={elapsedMs} running={running} />
               </span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
                 {periodLabel}
