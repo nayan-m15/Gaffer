@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { CompetitionsModule } from './competitions/competitions.module';
 import { CompetitionInvitesModule } from './competition-invites/competition-invites.module';
@@ -46,6 +47,7 @@ import { SyncModule } from './sync/sync.module';
     WeatherModule,
     PublicApiModule,
     SyncModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
