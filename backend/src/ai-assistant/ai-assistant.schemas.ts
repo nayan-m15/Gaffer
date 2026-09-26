@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * The three pages the assistant currently supports. Kept in sync with the
+ * The pages the assistant currently supports. Kept in sync with the
  * frontend's `AssistantContext` type in
  * `frontend/src/features/ai-assistant/types.ts`.
  */
@@ -9,6 +9,7 @@ export const assistantContextSchema = z.enum([
   'roster',
   'injuries',
   'competitions',
+  'lineup',
 ]);
 export type AssistantContext = z.infer<typeof assistantContextSchema>;
 

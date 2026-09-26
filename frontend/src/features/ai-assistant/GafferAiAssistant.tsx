@@ -15,8 +15,10 @@ import {
   useSendAssistantMessage,
 } from "./hooks";
 import type {
+  AssistantAppliedLineup,
   AssistantContext,
   AssistantCreatedEntity,
+  AssistantFormationOption,
   AssistantPlayerOption,
   AssistantProposedAction,
 } from "./types";
@@ -27,6 +29,7 @@ interface ChatMessage {
   text: string;
   isError?: boolean;
   playerOptions?: AssistantPlayerOption[];
+  formationOptions?: AssistantFormationOption[];
 }
 
 interface ContextConfig {
@@ -55,6 +58,17 @@ const CONTEXT_CONFIG: Record<AssistantContext, ContextConfig> = {
     welcome: "I can create a new league or competition for your team through a quick chat.",
     suggestions: ["Create a league", "Create a competition / tournament"],
   },
+  lineup: {
+    subtitle: "Team Assistant",
+    placeholder: "Ask me to suggest a lineup…",
+    welcome: "I can help you build a lineup using your squad's positions, availability and performance data.",
+    suggestions: [
+      "Suggest my best lineup",
+      "Choose a formation",
+      "Compare two players",
+      "Improve my current lineup",
+    ],
+  },
 };
 
 /** Shown instead of `CONTEXT_CONFIG.competitions` when `competitionId` is set — the assistant is on an existing competition's own page, where creating a new league/competition doesn't make sense. */
@@ -77,6 +91,8 @@ interface GafferAiAssistantProps {
   competitionId?: string;
   /** Called after a create action is confirmed, so the host page can refresh/navigate. */
   onEntityCreated?: (entity: AssistantCreatedEntity) => void;
+  /** Called after a lineup suggestion is confirmed — the host page loads it onto its own editable board; nothing is persisted by the assistant itself. */
+  onLineupApplied?: (lineup: AssistantAppliedLineup) => void;
 }
 
 /**
@@ -89,6 +105,7 @@ export function GafferAiAssistant({
   selectedPlayerId,
   competitionId,
   onEntityCreated,
+  onLineupApplied,
 }: GafferAiAssistantProps) {
   const config = competitionId ? ADD_TEAM_CONFIG : CONTEXT_CONFIG[context];
 
@@ -129,6 +146,7 @@ export function GafferAiAssistant({
             role: "assistant",
             text: result.message,
             playerOptions: result.playerOptions,
+            formationOptions: result.formationOptions,
           });
           if (result.requiresConfirmation && result.proposedAction) {
             setActiveProposal(result.proposedAction);
@@ -155,6 +173,7 @@ export function GafferAiAssistant({
           pushMessage({ id: createId(), role: "assistant", text: result.message });
           setActiveProposal(null);
           if (result.createdEntity) onEntityCreated?.(result.createdEntity);
+          if (result.appliedLineup) onLineupApplied?.(result.appliedLineup);
         },
         onError: () => {
           pushMessage({
@@ -310,6 +329,22 @@ export function GafferAiAssistant({
                               {option.position && (
                                 <span className="text-muted-foreground">{option.position}</span>
                               )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {entry.formationOptions && entry.formationOptions.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {entry.formationOptions.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => handleSend(option.label)}
+                              disabled={isPending}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {option.label}
                             </button>
                           ))}
                         </div>

@@ -128,8 +128,13 @@ const POSITION_ABBREVIATIONS = new Set([
   'ST',
 ]);
 
-/** Maps a spelled-out or already-abbreviated position to the standard abbreviation, falling back to the original text if unrecognised. */
-function normalizePosition(raw: string): string {
+/**
+ * Maps a spelled-out or already-abbreviated position to the standard
+ * abbreviation, falling back to the original text if unrecognised. Exported
+ * for `lineup-assistant.ts`, which reuses it to resolve a formation slot
+ * from free text (e.g. "striker" -> "ST").
+ */
+export function normalizePosition(raw: string): string {
   const trimmed = raw.trim();
   if (POSITION_ABBREVIATIONS.has(trimmed.toUpperCase()))
     return trimmed.toUpperCase();

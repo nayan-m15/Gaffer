@@ -8,7 +8,8 @@ export interface ProposedAction {
     | 'CREATE_INJURY'
     | 'CREATE_LEAGUE'
     | 'CREATE_COMPETITION'
-    | 'ADD_COMPETITION_TEAM';
+    | 'ADD_COMPETITION_TEAM'
+    | 'APPLY_LINEUP_SUGGESTION';
   payload: Record<string, unknown>;
   displaySummary: Array<{ label: string; value: string }>;
 }

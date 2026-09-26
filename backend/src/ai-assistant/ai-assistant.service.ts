@@ -16,8 +16,13 @@ import {
   type AssistantConversationState,
 } from './conversation-store';
 import { InjuriesAssistant } from './injuries-assistant';
+import { LineupAssistant } from './lineup-assistant';
 import { RosterAssistant } from './roster-assistant';
-import type { AssistantPlayerOption, AssistantTurnResult } from './types';
+import type {
+  AssistantFormationOption,
+  AssistantPlayerOption,
+  AssistantTurnResult,
+} from './types';
 
 export interface AssistantResponse {
   conversationId: string;
@@ -26,7 +31,13 @@ export interface AssistantResponse {
   requiresConfirmation: boolean;
   proposedAction?: AssistantConversationState['proposedAction'];
   playerOptions?: AssistantPlayerOption[];
+  formationOptions?: AssistantFormationOption[];
   createdEntity?: { type: string; id: string; label: string };
+  appliedLineup?: {
+    formationId: string;
+    assignments: Record<string, string | null>;
+    substituteIds: string[];
+  };
 }
 
 function extractHttpMessage(error: unknown): string {
@@ -63,6 +74,7 @@ export class AiAssistantService {
     private readonly rosterAssistant: RosterAssistant,
     private readonly injuriesAssistant: InjuriesAssistant,
     private readonly competitionsAssistant: CompetitionsAssistant,
+    private readonly lineupAssistant: LineupAssistant,
   ) {}
 
   async handleMessage(
@@ -107,6 +119,13 @@ export class AiAssistantService {
           dto.competitionId,
         );
         break;
+      case 'lineup':
+        result = await this.lineupAssistant.handleMessage(
+          state,
+          dto.message,
+          teamId,
+        );
+        break;
     }
 
     state.status = result.requiresConfirmation ? 'review' : 'collecting';
@@ -120,6 +139,7 @@ export class AiAssistantService {
       requiresConfirmation: result.requiresConfirmation,
       proposedAction: state.proposedAction ?? undefined,
       playerOptions: result.playerOptions,
+      formationOptions: result.formationOptions,
     };
   }
 
@@ -167,6 +187,10 @@ export class AiAssistantService {
               userId,
               action.payload,
             );
+          case 'APPLY_LINEUP_SUGGESTION': {
+            const teamId = await requireCoachTeamId(this.teamsService, userId);
+            return this.lineupAssistant.execute(teamId, action.payload);
+          }
           default:
             throw new BadRequestException('Unsupported action type.');
         }
@@ -177,7 +201,9 @@ export class AiAssistantService {
           ? 'updated'
           : action.type === 'ADD_COMPETITION_TEAM'
             ? 'added'
-            : 'created';
+            : action.type === 'APPLY_LINEUP_SUGGESTION'
+              ? 'applied'
+              : 'created';
       this.logger.log(
         `AI_ASSISTANT ${verb} ${execResult.entityType} ${execResult.entityId} ` +
           `(user_id=${userId}, conversation_id=${dto.conversationId})`,
@@ -197,6 +223,7 @@ export class AiAssistantService {
           id: execResult.entityId,
           label: execResult.entityLabel,
         },
+        appliedLineup: execResult.appliedLineup,
       };
     } catch (error) {
       // A failed write must never destroy the coach's draft: stay in

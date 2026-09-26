@@ -5,6 +5,7 @@ import { AiAssistantService } from './ai-assistant.service';
 import { CompetitionsAssistant } from './competitions-assistant';
 import { ConversationStore } from './conversation-store';
 import { InjuriesAssistant } from './injuries-assistant';
+import { LineupAssistant } from './lineup-assistant';
 import { RosterAssistant } from './roster-assistant';
 
 const conversationId = '11111111-1111-1111-1111-111111111111';
@@ -23,6 +24,7 @@ describe('AiAssistantService', () => {
   let rosterAssistant: { handleMessage: jest.Mock; execute: jest.Mock };
   let injuriesAssistant: { handleMessage: jest.Mock; execute: jest.Mock };
   let competitionsAssistant: { handleMessage: jest.Mock; execute: jest.Mock };
+  let lineupAssistant: { handleMessage: jest.Mock; execute: jest.Mock };
 
   beforeEach(async () => {
     teamsService = {
@@ -36,6 +38,7 @@ describe('AiAssistantService', () => {
     rosterAssistant = { handleMessage: jest.fn(), execute: jest.fn() };
     injuriesAssistant = { handleMessage: jest.fn(), execute: jest.fn() };
     competitionsAssistant = { handleMessage: jest.fn(), execute: jest.fn() };
+    lineupAssistant = { handleMessage: jest.fn(), execute: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -45,6 +48,7 @@ describe('AiAssistantService', () => {
         { provide: RosterAssistant, useValue: rosterAssistant },
         { provide: InjuriesAssistant, useValue: injuriesAssistant },
         { provide: CompetitionsAssistant, useValue: competitionsAssistant },
+        { provide: LineupAssistant, useValue: lineupAssistant },
       ],
     }).compile();
 
@@ -180,5 +184,57 @@ describe('AiAssistantService', () => {
       service.confirm('user-1', { conversationId, context: 'roster' }),
     ).rejects.toThrow(BadRequestException);
     expect(rosterAssistant.execute).not.toHaveBeenCalled();
+  });
+
+  it('dispatches the lineup context to LineupAssistant and applies it only on confirm', async () => {
+    lineupAssistant.handleMessage.mockResolvedValue({
+      reply: 'Here is a suggested 4-3-3 lineup...',
+      requiresConfirmation: true,
+      proposedAction: {
+        type: 'APPLY_LINEUP_SUGGESTION',
+        payload: {
+          formationId: '4-3-3',
+          assignments: { '433-gk': 'athlete-1' },
+          substituteIds: [],
+        },
+        displaySummary: [{ label: 'GK', value: 'Alex Keeper' }],
+      },
+    });
+    lineupAssistant.execute.mockResolvedValue({
+      reply: 'The 4-3-3 lineup has been loaded onto the tactical board.',
+      entityType: 'lineup',
+      entityId: '4-3-3',
+      entityLabel: '4-3-3 lineup',
+      appliedLineup: {
+        formationId: '4-3-3',
+        assignments: { '433-gk': 'athlete-1' },
+        substituteIds: [],
+      },
+    });
+
+    const messageResponse = await service.handleMessage('user-1', {
+      conversationId,
+      context: 'lineup',
+      message: 'Suggest my best lineup in a 4-3-3',
+    });
+    expect(messageResponse.requiresConfirmation).toBe(true);
+    expect(lineupAssistant.execute).not.toHaveBeenCalled();
+
+    const confirmResponse = await service.confirm('user-1', {
+      conversationId,
+      context: 'lineup',
+    });
+
+    expect(teamsService.requireCoachTeam).toHaveBeenCalledWith('user-1');
+    expect(lineupAssistant.execute).toHaveBeenCalledWith('team-1', {
+      formationId: '4-3-3',
+      assignments: { '433-gk': 'athlete-1' },
+      substituteIds: [],
+    });
+    expect(confirmResponse.appliedLineup).toEqual({
+      formationId: '4-3-3',
+      assignments: { '433-gk': 'athlete-1' },
+      substituteIds: [],
+    });
   });
 });
