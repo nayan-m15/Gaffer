@@ -74,6 +74,9 @@ const createEventBaseSchema = z.object({
     .max(2000, 'Notes must be 2000 characters or fewer.')
     .optional(),
   competitionId: z.uuid().nullable().optional(),
+  // Manual match events only: the Gaffer team to request a friendly fixture
+  // against. Null/omitted keeps free-text (non-Gaffer) opponents working.
+  friendlyOpponentTeamId: z.uuid().nullable().optional(),
   ...venueFieldsSchema.shape,
 });
 
@@ -239,6 +242,42 @@ export const startMatchSchema = z
     }
   });
 export type StartMatchDto = z.infer<typeof startMatchSchema>;
+
+/**
+ * Body for PUT /events/:eventId/lineup — confirming the pre-match lineup is
+ * its own step (sharable with an accepted Gaffer friendly opponent before
+ * kickoff) and reuses the same XI/bench rules as starting the match.
+ */
+export const confirmLineupSchema = z
+  .object({
+    startingAthleteIds: z
+      .array(z.uuid())
+      .length(11, 'A starting XI must contain exactly 11 athletes.')
+      .refine((ids) => new Set(ids).size === 11, {
+        message: 'Starting athletes must be unique.',
+      }),
+    benchAthleteIds: z
+      .array(z.uuid())
+      .max(20, 'A match bench cannot exceed 20 athletes.')
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: 'Bench athletes must be unique.',
+      })
+      .optional(),
+  })
+  .refine(
+    (value) => {
+      if (!value.benchAthleteIds) {
+        return true;
+      }
+      const starters = new Set(value.startingAthleteIds);
+      return !value.benchAthleteIds.some((id) => starters.has(id));
+    },
+    {
+      message: 'An athlete cannot be both a starter and on the bench.',
+      path: ['benchAthleteIds'],
+    },
+  );
+export type ConfirmLineupDto = z.infer<typeof confirmLineupSchema>;
 
 /**
  * Swagger/OpenAPI body shape for POST /events/:eventId/start-match.

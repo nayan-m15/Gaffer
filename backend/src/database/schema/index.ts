@@ -342,6 +342,50 @@ export interface GamePlanSnapshot {
   cornerTakerId: string | null;
 }
 
+export const friendlyFixtureStatus = pgEnum('friendly_fixture_status', [
+  'pending',
+  'accepted',
+  'declined',
+  'cancelled',
+]);
+
+// A friendly fixture agreed between two Gaffer teams outside of a league/cup
+// competition. The requesting coach proposes the match (status 'pending'); the
+// opponent coach accepts or declines it. Once accepted, both teams get their
+// own events row linked back to this fixture so the two sides always describe
+// the same match instead of drifting into unrelated duplicates.
+// Null `friendly_fixture_id` on events keeps free-text (non-Gaffer) friendly
+// opponents working exactly as before.
+export const friendlyFixtures = pgTable(
+  'friendly_fixtures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    requesterTeamId: uuid('requester_team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    opponentTeamId: uuid('opponent_team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    status: friendlyFixtureStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    respondedByUserId: text('responded_by_user_id').references(() => user.id),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('friendly_fixtures_requester_team_id_index').on(
+      table.requesterTeamId,
+    ),
+    index('friendly_fixtures_opponent_team_id_index').on(table.opponentTeamId),
+    index('friendly_fixtures_opponent_status_index').on(
+      table.opponentTeamId,
+      table.status,
+    ),
+  ],
+);
+
 export const events = pgTable(
   'events',
   {
@@ -373,6 +417,14 @@ export const events = pgTable(
       (): AnyPgColumn => competitionFixtures.id,
       { onDelete: 'cascade' },
     ),
+    // Friendly fixtures live outside the generated competition fixture
+    // pipeline: both teams' events point at the same friendly_fixtures row.
+    // The per-team unique index below guarantees each team only ever has one
+    // event for a given friendly fixture (idempotent accept, no duplicates).
+    friendlyFixtureId: uuid('friendly_fixture_id').references(
+      (): AnyPgColumn => friendlyFixtures.id,
+      { onDelete: 'cascade' },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -384,6 +436,10 @@ export const events = pgTable(
       table.teamId,
       table.competitionFixtureId,
     ),
+    index('events_friendly_fixture_id_index').on(table.friendlyFixtureId),
+    uniqueIndex('events_team_friendly_fixture_unique')
+      .on(table.teamId, table.friendlyFixtureId)
+      .where(sql`${table.friendlyFixtureId} is not null`),
   ],
 );
 
@@ -419,6 +475,36 @@ export const eventRsvps = pgTable(
       table.athleteId,
     ),
   ],
+);
+
+// The coach's confirmed pre-match lineup for one event (one row per event).
+// Confirming a lineup is a separate step from starting the match: the XI is
+// stored here so an accepted Gaffer friendly opponent can see it before
+// kickoff. startMatch keeps its own athlete_match_stats squad and clears this
+// row once the match exists, so the live match squad stays the single source
+// for everything after kickoff.
+export const eventLineups = pgTable(
+  'event_lineups',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .unique()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    startingAthleteIds: jsonb('starting_athlete_ids')
+      .$type<string[]>()
+      .notNull(),
+    benchAthleteIds: jsonb('bench_athlete_ids').$type<string[]>().notNull(),
+    confirmedByUserId: text('confirmed_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('event_lineups_team_id_index').on(table.teamId)],
 );
 
 // A coach-defined date range that groups a team's matches for aggregate
@@ -664,6 +750,12 @@ export const matches = pgTable(
       () => competitionTeams.id,
       { onDelete: 'set null' },
     ),
+    // For friendly fixtures against another Gaffer team: links the match to
+    // that team so its squad/lineup can be retrieved later. Null for
+    // free-text friendlies and competition matches.
+    opponentTeamId: uuid('opponent_team_id').references(() => teams.id, {
+      onDelete: 'set null',
+    }),
     opponentName: text('opponent_name').notNull(),
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
@@ -692,6 +784,7 @@ export const matches = pgTable(
     index('matches_opponent_competition_team_id_index').on(
       table.opponentCompetitionTeamId,
     ),
+    index('matches_opponent_team_id_index').on(table.opponentTeamId),
     index('matches_game_plan_id_index').on(table.gamePlanId),
   ],
 );
