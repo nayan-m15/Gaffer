@@ -929,7 +929,7 @@ export default function ConfirmSquadPage() {
               VS
             </p>
             <p className="mt-1 max-w-[10rem] truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-              {event.location}
+              {event.location || "Venue not set"}
             </p>
           </div>
           <HeroClub

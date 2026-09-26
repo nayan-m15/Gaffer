@@ -31,7 +31,7 @@ export interface CreateEventInput {
   title: string;
   type: EventType;
   scheduledAt: string;
-  location: string;
+  location?: string;
   venueAddress?: string | null;
   weatherLocation?: string | null;
   weatherLatitude?: number | null;

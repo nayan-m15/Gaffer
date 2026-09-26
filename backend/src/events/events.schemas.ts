@@ -66,8 +66,9 @@ const createEventBaseSchema = z.object({
   location: z
     .string()
     .trim()
-    .min(1, 'Location is required.')
-    .max(200, 'Location must be 200 characters or fewer.'),
+    .max(200, 'Location must be 200 characters or fewer.')
+    .optional()
+    .default(''),
   notes: z
     .string()
     .trim()
