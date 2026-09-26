@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { config } from 'dotenv';
 
-config({ path: resolve(__dirname, '../../.env') });
+config({ path: resolve(__dirname, '../../.env'), quiet: true });
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const developmentDatabaseUrl = process.env.DATABASE_URL;
@@ -19,3 +19,5 @@ if (testDatabaseUrl === developmentDatabaseUrl) {
 }
 
 process.env.DATABASE_URL = testDatabaseUrl;
+// Verification is performed by the test helpers; never send real test emails.
+process.env.BREVO_API_KEY = '';

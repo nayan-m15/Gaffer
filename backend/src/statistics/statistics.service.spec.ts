@@ -428,7 +428,6 @@ describe('StatisticsService', () => {
     );
   });
 
-
   it('loads member competitions and fills missing participant standings with zeroes', async () => {
     mockTeamsService.findTeamForUser.mockResolvedValue({
       id: 'team-2',
@@ -587,7 +586,15 @@ describe('StatisticsService', () => {
       mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
 
       mockDatabaseService.database.select.mockImplementationOnce(() =>
-        thenable([{ competition: { id: 'comp-1', adminUserId: 'user-1', teamId: 'team-1' } }]),
+        thenable([
+          {
+            competition: {
+              id: 'comp-1',
+              adminUserId: 'user-1',
+              teamId: 'team-1',
+            },
+          },
+        ]),
       );
       mockDatabaseService.database.select.mockImplementationOnce(() =>
         thenable([{ position: 1, teamName: 'Other FC' }]),
@@ -612,7 +619,15 @@ describe('StatisticsService', () => {
       mockTeamsService.findTeamForUser.mockResolvedValue({ id: 'team-1' });
 
       mockDatabaseService.database.select.mockImplementationOnce(() =>
-        thenable([{ competition: { id: 'comp-1', adminUserId: 'user-1', teamId: 'team-1' } }]),
+        thenable([
+          {
+            competition: {
+              id: 'comp-1',
+              adminUserId: 'user-1',
+              teamId: 'team-1',
+            },
+          },
+        ]),
       );
       mockDatabaseService.database.select.mockImplementationOnce(() =>
         thenable([{ position: 2, teamName: 'My Team' }]),

@@ -1269,7 +1269,6 @@ export const matchEventReviews = pgTable(
   ],
 );
 
-
 // One shared fixture per pairing. Later knockout rounds have empty participant
 // slots until winners advance through nextFixtureId + nextFixtureSlot.
 export const competitionFixtures = pgTable(
@@ -1375,10 +1374,7 @@ export const competitionFixtures = pgTable(
     }).onDelete('set null'),
     foreignKey({
       name: 'competition_fixtures_schedule_proposer_fk',
-      columns: [
-        table.competitionId,
-        table.scheduleProposedByCompetitionTeamId,
-      ],
+      columns: [table.competitionId, table.scheduleProposedByCompetitionTeamId],
       foreignColumns: [competitionTeams.competitionId, competitionTeams.id],
     }),
     foreignKey({
@@ -1404,7 +1400,6 @@ export const competitionFixtures = pgTable(
     ),
   ],
 );
-
 
 /** One authoritative projection revision for every consumer of a match. */
 export const matchProjectionState = pgTable('match_projection_state', {

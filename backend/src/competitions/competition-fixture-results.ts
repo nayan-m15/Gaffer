@@ -22,8 +22,7 @@ export interface FixtureResultInput {
 }
 
 type ResultSource =
-  | { kind: 'manual'; id: string }
-  | { kind: 'live'; id: string };
+  { kind: 'manual'; id: string } | { kind: 'live'; id: string };
 
 type FixtureRow = typeof competitionFixtures.$inferSelect;
 
@@ -315,7 +314,9 @@ async function ensureHybridKnockoutStage(
   );
   const qualified = table
     .slice(0, competition.qualifierCount)
-    .map((row) => participantByName.get(row.teamName.trim().toLocaleLowerCase()))
+    .map((row) =>
+      participantByName.get(row.teamName.trim().toLocaleLowerCase()),
+    )
     .filter((id): id is string => Boolean(id));
 
   if (qualified.length !== competition.qualifierCount) {

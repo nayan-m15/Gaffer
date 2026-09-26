@@ -349,7 +349,9 @@ describe('Competition fixtures (PostgreSQL)', () => {
 
     const updated = await service.listFixtures('admin', competitionId);
     const completed = updated.find((fixture) => fixture.id === opening.id)!;
-    const next = updated.find((fixture) => fixture.id === opening.nextFixtureId)!;
+    const next = updated.find(
+      (fixture) => fixture.id === opening.nextFixtureId,
+    )!;
     expect(completed.status).toBe('completed');
     expect(completed.winnerCompetitionTeamId).toBe(
       opening.homeCompetitionTeamId,
@@ -407,7 +409,9 @@ describe('Competition fixtures (PostgreSQL)', () => {
 
     await service.removeManualResult('admin', competitionId, first.id);
     const resetFixtures = await service.listFixtures('admin', competitionId);
-    const resetSemi = resetFixtures.find((fixture) => fixture.id === semis[0].id)!;
+    const resetSemi = resetFixtures.find(
+      (fixture) => fixture.id === semis[0].id,
+    )!;
     progressed = resetFixtures.find((fixture) => fixture.id === final.id)!;
     expect(resetSemi.status).toBe('scheduled');
     expect(
@@ -430,9 +434,9 @@ describe('Competition fixtures (PostgreSQL)', () => {
       awayScore: 0,
       playedAt: semis[1].scheduledAt.toISOString(),
     });
-    const readyFinal = (await service.listFixtures('admin', competitionId)).find(
-      (fixture) => fixture.id === final.id,
-    )!;
+    const readyFinal = (
+      await service.listFixtures('admin', competitionId)
+    ).find((fixture) => fixture.id === final.id)!;
     await service.createManualResult('admin', competitionId, {
       homeCompetitionTeamId: readyFinal.homeCompetitionTeamId!,
       awayCompetitionTeamId: readyFinal.awayCompetitionTeamId!,
@@ -460,7 +464,10 @@ describe('Competition fixtures (PostgreSQL)', () => {
       qualifierCount: 4,
     });
     await fill(5);
-    const leagueFixtures = await service.generateFixtures('admin', competitionId);
+    const leagueFixtures = await service.generateFixtures(
+      'admin',
+      competitionId,
+    );
     const slots = await participants();
     const bottom = slots.find((slot) => slot.displayName === 'External 4')!;
 
@@ -477,7 +484,9 @@ describe('Competition fixtures (PostgreSQL)', () => {
     }
 
     const allFixtures = await service.listFixtures('admin', competitionId);
-    const knockout = allFixtures.filter((fixture) => fixture.stage === 'knockout');
+    const knockout = allFixtures.filter(
+      (fixture) => fixture.stage === 'knockout',
+    );
     expect(knockout).toHaveLength(3);
     const openingIds = knockout
       .filter((fixture) => fixture.round === 1)
@@ -488,12 +497,13 @@ describe('Competition fixtures (PostgreSQL)', () => {
     expect(openingIds).toHaveLength(4);
     expect(openingIds).not.toContain(bottom.id);
 
-    const tableBeforeKnockout = (await service.findOne('admin', competitionId))
-      .standings.map((row) => ({
-        teamName: row.teamName,
-        played: row.played,
-        points: row.points,
-      }));
+    const tableBeforeKnockout = (
+      await service.findOne('admin', competitionId)
+    ).standings.map((row) => ({
+      teamName: row.teamName,
+      played: row.played,
+      points: row.points,
+    }));
     const semi = knockout.find((fixture) => fixture.round === 1)!;
     await service.createManualResult('admin', competitionId, {
       homeCompetitionTeamId: semi.homeCompetitionTeamId!,
@@ -716,7 +726,10 @@ describe('Competition fixtures (PostgreSQL)', () => {
     const slots = await participants();
     const owner = slots.find((participant) => participant.teamId === teamId)!;
     const fixture = fixtures.find((candidate) =>
-      [candidate.homeCompetitionTeamId, candidate.awayCompetitionTeamId].includes(owner.id),
+      [
+        candidate.homeCompetitionTeamId,
+        candidate.awayCompetitionTeamId,
+      ].includes(owner.id),
     )!;
     const externalId =
       fixture.homeCompetitionTeamId === owner.id
@@ -759,7 +772,10 @@ describe('Competition fixtures (PostgreSQL)', () => {
     const slots = await participants();
     const owner = slots.find((participant) => participant.teamId === teamId)!;
     const fixture = fixtures.find((candidate) =>
-      [candidate.homeCompetitionTeamId, candidate.awayCompetitionTeamId].includes(owner.id),
+      [
+        candidate.homeCompetitionTeamId,
+        candidate.awayCompetitionTeamId,
+      ].includes(owner.id),
     )!;
     const opponentId =
       fixture.homeCompetitionTeamId === owner.id
@@ -893,10 +909,15 @@ describe('Competition fixtures (PostgreSQL)', () => {
       .where(eq(schema.competitionTeams.id, otherId));
 
     await expect(
-      service.acceptFixtureSchedule('admin', competitionId, externalFixture.id, {
-        competitionTeamId: otherId,
-        expectedRevision: confirmed.scheduleRevision,
-      }),
+      service.acceptFixtureSchedule(
+        'admin',
+        competitionId,
+        externalFixture.id,
+        {
+          competitionTeamId: otherId,
+          expectedRevision: confirmed.scheduleRevision,
+        },
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 

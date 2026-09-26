@@ -261,7 +261,8 @@ export class StartMatchBodyDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Required for shared league/cup matches; identifies the selected competition participant.',
+    description:
+      'Required for shared league/cup matches; identifies the selected competition participant.',
   })
   opponentCompetitionTeamId?: string | null;
 

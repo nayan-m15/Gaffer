@@ -13,7 +13,7 @@ import {
 } from '../src/database/schema';
 import { registerCoach } from './utils/auth-helpers';
 import {
-  cleanupUser,
+  cleanupUsers,
   uniqueTestIdentity,
   type TestIdentity,
 } from './utils/test-db';
@@ -31,7 +31,7 @@ describe('Offline collaborative sync (e2e)', () => {
   });
 
   afterAll(async () => {
-    await Promise.all(identities.map(cleanupUser));
+    await cleanupUsers(identities);
     await app.close();
   });
 

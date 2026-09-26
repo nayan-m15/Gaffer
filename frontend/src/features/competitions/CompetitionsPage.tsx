@@ -16,6 +16,7 @@ import type { CompetitionDetail, CompetitionFixture, CompetitionFormat, Competit
 const contentClass = "mx-auto w-full max-w-[1600px] space-y-6 px-6 pb-10 sm:px-8 lg:px-10";
 const badgeClass = "rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary";
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const emptyFixtures: CompetitionFixture[] = [];
 
 function competitionBasePath(accountKind: "coach" | "player" | "new") {
   return accountKind === "player" ? "/player/competitions" : "/competitions";
@@ -126,7 +127,7 @@ function CompetitionDetails({ id }: { id: string }) {
   const detail = useCompetition(id);
   const fixturesQuery = useCompetitionFixtures(id);
   const competition = detail.data;
-  const fixtures = fixturesQuery.data ?? [];
+  const fixtures = fixturesQuery.data ?? emptyFixtures;
   const isShared = competition?.type === "league" || competition?.type === "cup";
   const invites = useCompetitionInvites(id, !!competition?.isAdmin && isShared);
   const [editing, setEditing] = useState(false);
