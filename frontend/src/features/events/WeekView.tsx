@@ -20,7 +20,6 @@ interface WeekViewProps {
   selectedDate: Date;
   now: Date;
   onCreateEvent: (date: Date) => void;
-  onOpenEvent: (event: TeamEvent) => void;
 }
 
 const weekdayLabels = getWeekdayLabels();
@@ -36,7 +35,6 @@ export function WeekView({
   selectedDate,
   now,
   onCreateEvent,
-  onOpenEvent,
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(weekOf), [weekOf]);
 
@@ -85,7 +83,6 @@ export function WeekView({
               isToday={isSameCalendarDay(day, now)}
               now={now}
               onCreateEvent={onCreateEvent}
-              onOpenEvent={onOpenEvent}
             />
           ))}
         </div>
@@ -101,7 +98,6 @@ function WeekDayColumn({
   isToday,
   now,
   onCreateEvent,
-  onOpenEvent,
 }: {
   day: Date;
   events: TeamEvent[];
@@ -109,7 +105,6 @@ function WeekDayColumn({
   isToday: boolean;
   now: Date;
   onCreateEvent: (date: Date) => void;
-  onOpenEvent: (event: TeamEvent) => void;
 }) {
   return (
     <div
@@ -128,7 +123,7 @@ function WeekDayColumn({
       )}
     >
       {events.map((event) => (
-        <WeekEventCard key={event.id} event={event} now={now} onOpenEvent={onOpenEvent} />
+        <WeekEventCard key={event.id} event={event} now={now} onSelectDay={() => onCreateEvent(day)} />
       ))}
     </div>
   );
@@ -137,11 +132,11 @@ function WeekDayColumn({
 function WeekEventCard({
   event,
   now,
-  onOpenEvent,
+  onSelectDay,
 }: {
   event: TeamEvent;
   now: Date;
-  onOpenEvent: (event: TeamEvent) => void;
+  onSelectDay: () => void;
 }) {
   const style = getEventTypeStyle(event.type);
   const Icon = style.icon;
@@ -153,7 +148,7 @@ function WeekEventCard({
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        onOpenEvent(event);
+        onSelectDay();
       }}
       className={cn(
         "flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2 sm:p-2.5 text-left transition-all shadow-xs",

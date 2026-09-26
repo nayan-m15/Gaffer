@@ -83,7 +83,7 @@ function AppShellContent() {
         <div className={cn("flex-1", isEventsPage && "min-h-0")}>
           <Outlet />
         </div>
-        {!isEventsPage && <Footer />}
+        <Footer className={isEventsPage ? "mt-0 shrink-0 py-3" : undefined} />
       </main>
     </div>
   );

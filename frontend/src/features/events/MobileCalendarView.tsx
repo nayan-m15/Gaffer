@@ -211,7 +211,7 @@ export function MobileCalendarView({
           now={now}
           eventsByDay={eventsByDay}
           onSelectDate={onSelectDate}
-          onOpenEvent={onOpenEvent}
+          onOpenEvent={onSelectDate}
         />
       )}
 
@@ -282,7 +282,7 @@ function MobileMonthGrid({
   now: Date;
   eventsByDay: Map<string, TeamEvent[]>;
   onSelectDate: (date: Date) => void;
-  onOpenEvent: (event: TeamEvent) => void;
+  onOpenEvent: (date: Date) => void;
 }) {
   return (
     <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
@@ -352,7 +352,7 @@ function MobileMonthGrid({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenEvent(evt);
+                        onOpenEvent(day);
                       }}
                       title={evt.title}
                       className={cn(
