@@ -77,7 +77,7 @@ export function RollingFormChart({
   const rows = rollingChartRows(rolling, rollingWindow);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -101,6 +101,7 @@ export function RollingFormChart({
             stroke={GOALS_FOR}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             type="monotone"
@@ -109,6 +110,7 @@ export function RollingFormChart({
             stroke={GOALS_AGAINST}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             yAxisId="ppg"
@@ -119,6 +121,7 @@ export function RollingFormChart({
             strokeWidth={2}
             strokeDasharray="4 3"
             dot={false}
+            isAnimationActive={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -135,7 +138,7 @@ export function CumulativePointsChart({
   const rows = cumulativeChartRows(cumulative);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <defs>
@@ -155,6 +158,7 @@ export function CumulativePointsChart({
             stroke={POINTS}
             strokeWidth={2}
             fill="url(#cumulativePointsFill)"
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -175,14 +179,20 @@ export function PeriodSplitChart({
   const rows = periodChartRows(splits, metric);
 
   return (
-    <div className="h-56">
+    <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="label" axisLine={false} tickLine={false} tick={AXIS} />
           <YAxis axisLine={false} tickLine={false} tick={AXIS} />
           <Tooltip {...tooltipStyle} />
-          <Bar dataKey="value" name={label} fill={GOALS_FOR} radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="value"
+            name={label}
+            fill={GOALS_FOR}
+            radius={[4, 4, 0, 0]}
+            isAnimationActive={false}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -198,7 +208,7 @@ export function AthleteComparisonChart({
   const rows = comparisonChartRows(athletes);
 
   return (
-    <div className="h-60">
+    <div className="stats-chart h-60">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -212,6 +222,7 @@ export function AthleteComparisonChart({
               dataKey={athlete.name}
               fill={SERIES[index % SERIES.length]}
               radius={[4, 4, 0, 0]}
+              isAnimationActive={false}
             />
           ))}
         </BarChart>
