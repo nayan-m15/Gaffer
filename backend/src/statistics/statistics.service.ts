@@ -27,7 +27,7 @@ import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
 
-const RECENT_INSIGHTS_LIMIT = 3;
+const RECENT_INSIGHTS_LIMIT = 1;
 import type {
   AskAssistantDto,
   CompareAthletesDto,
