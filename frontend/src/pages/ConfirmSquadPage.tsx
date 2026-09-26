@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
-import { Loader2, LockKeyhole, Pencil, ShieldAlert, Users } from "lucide-react";
+import {
+  Loader2,
+  LockKeyhole,
+  Pencil,
+  ShieldAlert,
+  Users,
+  Wand2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAthletes } from "@/features/team-management/api";
@@ -11,10 +18,11 @@ import {
   previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
 import { SquadFormationPreview } from "@/features/team-management/SquadFormationPreview";
+import { suggestStartingXi } from "@/features/team-management/suggestions";
 import type { PositionRole } from "@/features/team-management/types";
 import { useGamePlan, useGamePlans } from "@/features/team-tactics/api";
 import { formatLocalDate } from "@/features/events/event-utils";
-import { useEvent, useStartMatch } from "@/features/events/hooks";
+import { useEvent, useEventRsvps, useStartMatch } from "@/features/events/hooks";
 import type { OpponentSquadVisibility } from "@/features/events/types";
 import {
   contrastText,
@@ -401,6 +409,9 @@ export default function ConfirmSquadPage() {
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
+  // Assistants cannot read the coach-only RSVP endpoint; their suggestions
+  // simply run without the RSVP signal.
+  const rsvpQuery = useEventRsvps(eventId, team?.role === "coach");
   const [selectedGamePlanId, setSelectedGamePlanId] = useState<string | null>(
     null,
   );
@@ -425,6 +436,9 @@ export default function ConfirmSquadPage() {
   const [teamColor, setTeamColor] = useState<string | null>(null);
   const [opponentColor, setOpponentColor] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [suggestionReasons, setSuggestionReasons] = useState<
+    Record<string, string> | null
+  >(null);
 
   const gamePlanQuery = useGamePlan(selectedGamePlanId ?? undefined);
   const appliedGamePlanIdRef = useRef<string | null>(null);
@@ -465,6 +479,12 @@ export default function ConfirmSquadPage() {
       startingIdsFromGamePlan(gamePlanQuery.data, selectableRosterIds),
     );
   }, [selectedGamePlanId, gamePlanQuery.data, selectableRosterIds]);
+
+  // Suggestion chips only describe the suggestion they came from; switching
+  // the game plan replaces the XI, so the stale reasons are dropped too.
+  useEffect(() => {
+    setSuggestionReasons(null);
+  }, [selectedGamePlanId, gamePlanQuery.data?.id]);
 
   useEffect(() => {
     setStartingIds((current) => {
@@ -651,6 +671,22 @@ export default function ConfirmSquadPage() {
       }
       return next;
     });
+  };
+
+  const handleSuggestXI = () => {
+    const suggestion = suggestStartingXi({
+      formationId: previewFormationId,
+      athletes,
+      rsvpByAthleteId: rsvpQuery.data
+        ? Object.fromEntries(
+            rsvpQuery.data.map((row) => [row.id, row.rsvpStatus]),
+          )
+        : undefined,
+      gamePlanAssignments: gamePlanQuery.data?.assignments,
+      gamePlanSubstituteIds: gamePlanQuery.data?.substituteIds,
+    });
+    setStartingIds(new Set(suggestion.startingIds));
+    setSuggestionReasons(suggestion.reasons);
   };
 
   const handleSubmit = async () => {
@@ -1291,18 +1327,37 @@ export default function ConfirmSquadPage() {
       <section className={cardClassName}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className={sectionLabelClassName}>Your squad</h2>
-          <p className="text-sm text-muted-foreground">
-            <span
-              className={cn(
-                xiComplete ? "text-primary" : "text-muted-foreground",
-              )}
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              <span
+                className={cn(
+                  xiComplete ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                Starting XI: {startingCount} / {STARTING_XI_SIZE}
+              </span>
+              <span className="mx-2 text-border">·</span>
+              Bench: {benchCount}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleSuggestXI}
+              disabled={selectableAthletes.length === 0}
+              className="shrink-0 gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
             >
-              Starting XI: {startingCount} / {STARTING_XI_SIZE}
-            </span>
-            <span className="mx-2 text-border">·</span>
-            Bench: {benchCount}
-          </p>
+              <Wand2 className="size-3.5" aria-hidden />
+              Suggest XI
+            </Button>
+          </div>
         </div>
+
+        {suggestionReasons && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Suggested XI applied — tap any player to replace or remove them.
+          </p>
+        )}
 
         {!fixtureDateConfirmed && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
@@ -1367,6 +1422,11 @@ export default function ConfirmSquadPage() {
                           {positionLabel}
                         </span>
                       </span>
+                      {selected && suggestionReasons?.[athlete.id] && (
+                        <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">
+                          {suggestionReasons[athlete.id]}
+                        </span>
+                      )}
                     </span>
                     <span
                       className={cn(
