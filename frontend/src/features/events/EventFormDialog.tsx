@@ -41,7 +41,14 @@ import {
 } from "./event-utils";
 import { useCreateEvent, useUpdateEvent } from "./hooks";
 import { searchLocations } from "./api";
-import type { EventType, LocationSearchResult, TeamEvent } from "./types";
+import type {
+  EventType,
+  FriendlyFixtureStatus,
+  LocationSearchResult,
+  TeamEvent,
+} from "./types";
+import { searchGafferTeams } from "@/services/teams";
+import type { GafferTeamSearchResult } from "@/services/teams";
 import { getEventTypeStyle } from "./event-style";
 
 const inputClassName =
@@ -149,9 +156,20 @@ export function EventFormDialog({
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [opponentPick, setOpponentPick] = useState("");
+  const [gafferOpponentPick, setGafferOpponentPick] =
+    useState<GafferTeamSearchResult | null>(null);
+  const [gafferOpponentQuery, setGafferOpponentQuery] = useState("");
+  const [gafferOpponentResults, setGafferOpponentResults] = useState<
+    GafferTeamSearchResult[]
+  >([]);
+  const [isSearchingGafferOpponent, setIsSearchingGafferOpponent] =
+    useState(false);
+  const [gafferOpponentSearchCompleted, setGafferOpponentSearchCompleted] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
   const locationSearchIdRef = useRef(0);
   const venueSearchIdRef = useRef(0);
+  const gafferOpponentSearchIdRef = useRef(0);
 
   const competitionOptions = useMemo(
     () =>
@@ -195,6 +213,15 @@ export function EventFormDialog({
       setManualTimezone(event.weatherTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
+      setGafferOpponentPick(
+        event.friendlyOpponentTeamId && event.friendlyOpponentTeamName
+          ? {
+              id: event.friendlyOpponentTeamId,
+              name: event.friendlyOpponentTeamName,
+              primaryColor: null,
+            }
+          : null,
+      );
     } else {
       setTitle("");
       setType(initialType ?? "training");
@@ -214,11 +241,15 @@ export function EventFormDialog({
       setManualTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes("");
       setCompetitionId("none");
+      setGafferOpponentPick(null);
     }
     setOpponentPick("");
     setError(null);
     setLocationResults([]);
     setLocationSearchCompleted(false);
+    setGafferOpponentQuery("");
+    setGafferOpponentResults([]);
+    setGafferOpponentSearchCompleted(false);
   }, [open, event, initialDate, initialType]);
 
   useEffect(() => {
@@ -266,6 +297,21 @@ export function EventFormDialog({
   );
   const showOpponentTeamSelect =
     type === "match" && opponentTeams.length > 0;
+  /**
+   * Friendly-fixture picker: manual match events (no competition) can
+   * request another Gaffer team as the opponent. The pick is locked once
+   * the fixture has been accepted — both calendars then share the same
+   * fixture, so the opponent must not be swapped from one side only.
+   */
+  const showGafferOpponentPicker =
+    type === "match" && competitionId === "none" && !event?.competitionFixtureId;
+  const friendlyFixtureLocked = event?.friendlyFixtureStatus === "accepted";
+  // A pick that matches the event's existing link shows that request's live
+  // status (pending / declined); a fresh pick has no status yet.
+  const gafferOpponentStatus: FriendlyFixtureStatus | null =
+    gafferOpponentPick && event?.friendlyOpponentTeamId === gafferOpponentPick.id
+      ? (event?.friendlyFixtureStatus ?? null)
+      : null;
   const typeStyle = getEventTypeStyle(type);
   const competitionItems = useMemo(() => {
     const items: Record<string, string> = { none: "No competition" };
@@ -317,6 +363,35 @@ export function EventFormDialog({
     setError(null);
   };
 
+  const searchGafferOpponent = () => {
+    const query = gafferOpponentQuery.trim();
+    const searchId = ++gafferOpponentSearchIdRef.current;
+    setIsSearchingGafferOpponent(true);
+    setGafferOpponentSearchCompleted(false);
+    setError(null);
+    void searchGafferTeams(query)
+      .then((results) => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setGafferOpponentResults(results);
+          setGafferOpponentSearchCompleted(true);
+        }
+      })
+      .catch((err) => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : "Could not search Gaffer teams.",
+          );
+        }
+      })
+      .finally(() => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setIsSearchingGafferOpponent(false);
+        }
+      });
+  };
+
   const isPending = createEvent.isPending || updateEvent.isPending;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -366,6 +441,16 @@ export function EventFormDialog({
             notes: notesValue.length > 0 ? notesValue : null,
             competitionId:
               type === "match" && competitionId !== "none" ? competitionId : null,
+            // Accepted fixtures keep their opponent link (send nothing) —
+            // a pending request can still be swapped or removed.
+            ...(friendlyFixtureLocked
+              ? {}
+              : {
+                  friendlyOpponentTeamId:
+                    type === "match" && competitionId === "none"
+                      ? (gafferOpponentPick?.id ?? null)
+                      : null,
+                }),
           },
         });
       } else {
@@ -382,6 +467,10 @@ export function EventFormDialog({
           ...(notesValue.length > 0 ? { notes: notesValue } : {}),
           competitionId:
             type === "match" && competitionId !== "none" ? competitionId : null,
+          friendlyOpponentTeamId:
+            type === "match" && competitionId === "none"
+              ? (gafferOpponentPick?.id ?? null)
+              : null,
         });
       }
       onOpenChange(false);
@@ -505,6 +594,108 @@ export function EventFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+          ) : null}
+
+          {showGafferOpponentPicker ? (
+            <Field
+              htmlFor={`${baseId}-gaffer-opponent`}
+              label="Gaffer opponent (optional)"
+            >
+              {friendlyFixtureLocked ? (
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
+                  <p className="flex items-center gap-1 font-medium text-emerald-500">
+                    <Check className="size-3" />
+                    Friendly fixture confirmed
+                  </p>
+                  <p className="mt-1">
+                    {event?.friendlyOpponentTeamName ?? title}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Accepted fixtures are the same match on both calendars, so
+                    the opponent cannot be changed here.
+                  </p>
+                </div>
+              ) : gafferOpponentPick ? (
+                <>
+                  <GafferOpponentCard
+                    name={gafferOpponentPick.name}
+                    status={gafferOpponentStatus}
+                    onRemove={() => {
+                      setGafferOpponentPick(null);
+                      setGafferOpponentQuery("");
+                      setGafferOpponentResults([]);
+                      setGafferOpponentSearchCompleted(false);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave this empty to play an opponent without a Gaffer
+                    account instead.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      id={`${baseId}-gaffer-opponent`}
+                      value={gafferOpponentQuery}
+                      onChange={(e) => {
+                        gafferOpponentSearchIdRef.current += 1;
+                        setGafferOpponentQuery(e.target.value);
+                        setIsSearchingGafferOpponent(false);
+                        setGafferOpponentResults([]);
+                        setGafferOpponentSearchCompleted(false);
+                      }}
+                      placeholder="Search teams or coach names"
+                      className={inputClassName}
+                      maxLength={100}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        isSearchingGafferOpponent ||
+                        gafferOpponentQuery.trim().length < 2
+                      }
+                      onClick={searchGafferOpponent}
+                    >
+                      <Search className="size-4" />
+                      {isSearchingGafferOpponent ? "Searching…" : "Search"}
+                    </Button>
+                  </div>
+                  {gafferOpponentResults.length > 0 && (
+                    <div className="rounded-md border border-border bg-background p-1">
+                      {gafferOpponentResults.map((team) => (
+                        <button
+                          key={team.id}
+                          type="button"
+                          className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                          onClick={() => {
+                            setGafferOpponentPick(team);
+                            setTitle(team.name);
+                            setGafferOpponentResults([]);
+                            setGafferOpponentSearchCompleted(false);
+                          }}
+                        >
+                          {team.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {gafferOpponentSearchCompleted &&
+                    gafferOpponentResults.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No Gaffer teams found. Leave this empty to enter a
+                        free-text opponent instead.
+                      </p>
+                    )}
+                  <p className="text-xs text-muted-foreground">
+                    Pick another team on Gaffer to send them a friendly fixture
+                    request — they confirm before the match appears on their
+                    calendar. Your own team is never listed.
+                  </p>
+                </>
+              )}
             </Field>
           ) : null}
 
@@ -1113,6 +1304,67 @@ function Field({
         {label}
       </Label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Selected-Gaffer-opponent summary card. `status` is null for a fresh pick,
+ * or the live fixture status when the pick matches the event's existing
+ * link, so the coach sees whether the request is awaiting, declined, etc.
+ */
+function GafferOpponentCard({
+  name,
+  status,
+  onRemove,
+}: {
+  name: string;
+  status: FriendlyFixtureStatus | null;
+  onRemove: () => void;
+}) {
+  const heading =
+    status === "pending"
+      ? "Friendly fixture request sent"
+      : status === "declined"
+        ? "Friendly fixture declined"
+        : status === "cancelled"
+          ? "Friendly fixture cancelled"
+          : "Friendly fixture request will be sent";
+  const tone =
+    status === "declined"
+      ? "border-destructive/30 bg-destructive/5"
+      : status === "cancelled"
+        ? "border-border bg-muted/30"
+        : "border-emerald-500/30 bg-emerald-500/5";
+  const headingTone =
+    status === "declined"
+      ? "text-destructive"
+      : status === "cancelled"
+        ? "text-muted-foreground"
+        : "text-emerald-500";
+  const hint =
+    status === "pending"
+      ? "Waiting for them to accept — you can still change the date, venue, or opponent."
+      : status === "declined"
+        ? "They declined this fixture. Pick another Gaffer team or remove the opponent."
+        : status === "cancelled"
+          ? "This request was cancelled. Pick a team to send a new one."
+          : "They confirm the match before it appears on their calendar.";
+  return (
+    <div className={cn("rounded-md border p-2 text-xs text-foreground", tone)}>
+      <p className={cn("flex items-center gap-1 font-medium", headingTone)}>
+        <Check className="size-3" />
+        {heading}
+      </p>
+      <p className="mt-1">{name}</p>
+      <p className="mt-0.5 text-muted-foreground">{hint}</p>
+      <button
+        type="button"
+        className="mt-1 font-medium text-primary hover:underline"
+        onClick={onRemove}
+      >
+        Remove Gaffer opponent
+      </button>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { CompetitionInvitesModule } from './competition-invites/competition-invi
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
+import { FriendlyFixturesModule } from './friendly-fixtures/friendly-fixtures.module';
 import { GamePlansModule } from './game-plans/game-plans.module';
 import { InjuriesModule } from './injuries/injuries.module';
 import { MatchesModule } from './matches/matches.module';
@@ -32,6 +33,7 @@ import { SyncModule } from './sync/sync.module';
     TeamInvitesModule,
     PlayerModule,
     EventsModule,
+    FriendlyFixturesModule,
     GamePlansModule,
     MatchesModule,
     InjuriesModule,

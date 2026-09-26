@@ -1,6 +1,17 @@
 export type EventType = "training" | "match" | "meeting";
 export type EventStatus = "scheduled" | "cancelled" | "completed";
 
+/**
+ * Lifecycle of a friendly fixture between two Gaffer teams. Only 'accepted'
+ * means the match is confirmed for both sides; a pending request must not be
+ * treated as a real fixture by the opponent.
+ */
+export type FriendlyFixtureStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "cancelled";
+
 /** A team event returned by the backend events API. */
 export interface TeamEvent {
   id: string;
@@ -22,7 +33,25 @@ export interface TeamEvent {
   /** Present on the single-event response for generated competition fixtures. */
   fixtureOpponentCompetitionTeamId?: string | null;
   fixtureOpponentName?: string | null;
+  /**
+   * Friendly-fixture link. `friendlyFixtureId` is the raw column value;
+   * the status and opponent team fields are resolved per side, so each
+   * calendar sees the *other* team as the opponent.
+   */
+  friendlyFixtureId?: string | null;
+  friendlyFixtureStatus?: FriendlyFixtureStatus | null;
+  friendlyOpponentTeamId?: string | null;
+  friendlyOpponentTeamName?: string | null;
+  /**
+   * The team that created the friendly-fixture request. Compare with `teamId`
+   * to tell whether this calendar belongs to the requester or the recipient
+   * side of the fixture.
+   */
+  friendlyRequesterTeamId?: string | null;
+  friendlyRequesterTeamName?: string | null;
   matchId?: string | null;
+  /** Set once a pre-match lineup is confirmed for this event. */
+  lineupConfirmedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +68,11 @@ export interface CreateEventInput {
   weatherTimezone?: string | null;
   notes?: string;
   competitionId?: string | null;
+  /**
+   * Manual match events only: request a friendly fixture against this
+   * Gaffer team. Omitted or null keeps free-text (non-Gaffer) opponents.
+   */
+  friendlyOpponentTeamId?: string | null;
 }
 
 export interface UpdateEventInput {
@@ -54,6 +88,7 @@ export interface UpdateEventInput {
   weatherTimezone?: string | null;
   notes?: string | null;
   competitionId?: string | null;
+  friendlyOpponentTeamId?: string | null;
 }
 
 export interface LocationSearchResult {
@@ -124,4 +159,20 @@ export interface MatchRecord {
   opponentColor: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The team's confirmed pre-match lineup for one event (GET/PUT
+ * /events/:eventId/lineup). It exists only before kick-off: starting the
+ * match retires it in favour of the live squad.
+ */
+export interface EventLineup {
+  startingAthleteIds: string[];
+  benchAthleteIds: string[];
+  confirmedAt: string;
+}
+
+export interface ConfirmLineupInput {
+  startingAthleteIds: string[];
+  benchAthleteIds?: string[];
 }
