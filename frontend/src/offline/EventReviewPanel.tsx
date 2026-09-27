@@ -145,8 +145,8 @@ export function EventReviewPanel({
   const openReviews = reviews.filter((review) => review.status === "open");
   const history = reviews.filter((review) => review.status === "resolved");
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#070d12]/80 p-4 backdrop-blur-sm">
-      <section className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#1c2b36] bg-[#101920] p-5 shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#090a0b]/80 p-4 backdrop-blur-sm">
+      <section className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#2a2e31] bg-[#111315] p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-oswald text-xl tracking-wide text-white">
             Event review

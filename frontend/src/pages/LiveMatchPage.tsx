@@ -1560,7 +1560,7 @@ export default function LiveMatchPage() {
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
       <div className="live-match flex min-h-screen items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-[#00d99a]" />
+        <Loader2 className="size-6 animate-spin text-[#16d99a]" />
       </div>
     );
   }
@@ -1570,16 +1570,16 @@ export default function LiveMatchPage() {
     return (
       <div className="live-match flex min-h-screen items-center justify-center px-4">
         <div className="flex flex-col items-center gap-3 text-center">
-          <ShieldAlert className="size-8 text-[#ff5b5f]" />
+          <ShieldAlert className="size-8 text-[#e36a6d]" />
           <p className="font-oswald text-xl tracking-wide">
             FAILED TO LOAD MATCH
           </p>
-          <p className="text-sm text-[#8e9ba8]">
+          <p className="text-sm text-[#9ca39f]">
             {error instanceof Error ? error.message : "Something went wrong."}
           </p>
           <button
             type="button"
-            className="rounded-lg border border-[#233747] px-4 py-2 text-sm"
+            className="rounded-lg border border-[#3e4448] px-4 py-2 text-sm"
             onClick={() => {
               void matchQuery.refetch();
               void squadQuery.refetch();
@@ -1607,13 +1607,13 @@ export default function LiveMatchPage() {
       <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />
-          <h1 className="font-display text-base font-bold tracking-wide text-[#00d99a]">
+          <h1 className="font-display text-base font-bold tracking-wide text-[#16d99a]">
             GAFFER
           </h1>
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[#233747] px-2.5 py-1.5 text-xs font-semibold text-[#c5ced6] hover:border-[#00d99a]/60 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#3e4448] px-2.5 py-1.5 text-xs font-semibold text-[#c7ccc9] hover:border-[#16d99a]/60 hover:text-white"
           >
             <LayoutDashboard className="size-3.5" aria-hidden="true" />
             <span>Dashboard</span>
@@ -1625,13 +1625,13 @@ export default function LiveMatchPage() {
             <button
               type="button"
               aria-label="Match settings"
-              className="rounded-md p-2 text-[#c5ced6] hover:bg-white/5"
+              className="rounded-md p-2 text-[#c7ccc9] hover:bg-white/5"
               onClick={() => setSettingsOpen((open) => !open)}
             >
               <Settings className="size-5" />
             </button>
             {settingsOpen && (
-              <div className="absolute right-0 z-30 mt-1 w-52 rounded-xl border border-[#1c2b36] bg-[#101920] p-2 shadow-xl">
+              <div className="absolute right-0 z-30 mt-1 w-52 rounded-xl border border-[#2a2e31] bg-[#111315] p-2 shadow-xl">
                 {team?.role === "coach" ? (
                   <SettingsItem
                     onClick={() => {
@@ -1753,7 +1753,7 @@ export default function LiveMatchPage() {
           {liveLogging && !checkIn && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#1c2b36] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#2a2e31] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => {
                 if (running) {
                   pauseClock();
@@ -1773,7 +1773,7 @@ export default function LiveMatchPage() {
           {liveLogging && period === "first_half" && (
             <button
               type="button"
-              className="rounded-md bg-[#3b82f6] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
+              className="rounded-md bg-[#72a7d5] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => setConfirm("half")}
             >
               Half Time
@@ -1821,7 +1821,7 @@ export default function LiveMatchPage() {
             </div>
             <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
               <span style={{ color: homeColor }}>{homeScore}</span>
-              <span className="mx-1.5 text-2xl text-[#8e9ba8]">-</span>
+              <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
               <span style={{ color: awayColor }}>{awayScore}</span>
             </p>
             <div className="flex flex-col items-start">
@@ -1840,11 +1840,11 @@ export default function LiveMatchPage() {
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
                   projection.finalisationState === "finalised"
-                    ? "bg-[#00d99a]/12 text-[#00d99a]"
+                    ? "bg-[#16d99a]/12 text-[#16d99a]"
                     : projection.unresolvedReviewCount > 0 ||
                         projection.finalisationState === "amendment_required"
-                      ? "bg-[#ffbe2e]/12 text-[#ffbe2e]"
-                      : "bg-[#5d6b76]/15 text-[#9fadb8]",
+                      ? "bg-[#d6a447]/12 text-[#d6a447]"
+                      : "bg-[#707773]/15 text-[#9ca39f]",
                 )}
               >
                 {!projectionConsistent
@@ -1860,21 +1860,21 @@ export default function LiveMatchPage() {
             </div>
           ) : null}
           <div className="mt-1.5 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#1c2b36] bg-[#0c1218] px-3 py-0.5">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  running ? "animate-pulse bg-[#ff5b5f]" : "bg-[#5d6b76]",
+                  running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
                 )}
               />
               <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
                 <LiveClockTime elapsedMs={elapsedMs} running={running} />
               </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
                 {periodLabel}
               </span>
               {addedStoppageMin > 0 ? (
-                <span className="rounded-full bg-[#ffbe2e]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#ffbe2e]">
+                <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
                   +{addedStoppageMin}
                 </span>
               ) : null}
@@ -1926,7 +1926,7 @@ export default function LiveMatchPage() {
           {actionError && (
             <p
               role="alert"
-              className="shrink-0 text-center text-xs text-[#ff5b5f]"
+              className="shrink-0 text-center text-xs text-[#e36a6d]"
             >
               {actionError}
             </p>
@@ -1934,7 +1934,7 @@ export default function LiveMatchPage() {
         </div>
 
         <section className="live-match-pitch-area flex min-h-0 flex-col">
-          <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+          <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
             Tactical view
           </h2>
           <div className="relative min-h-0 flex-1">
@@ -1965,12 +1965,12 @@ export default function LiveMatchPage() {
 
         <section
           className={cn(
-            "live-match-bench-area grid min-h-0 grid-cols-2 gap-1 rounded-xl border bg-[#0c1218] px-1.5 py-2",
+            "live-match-bench-area grid min-h-0 grid-cols-2 gap-1 rounded-xl border bg-[#0d0f10] px-1.5 py-2",
             benchIncomingCallout || subOutCallout
-              ? "border-[#ffbe2e]/55"
+              ? "border-[#d6a447]/55"
               : assistPick
-                ? "border-[#00d99a]/40"
-                : "border-[#1c2b36]",
+                ? "border-[#16d99a]/40"
+                : "border-[#2a2e31]",
           )}
         >
           <LiveBenchRow
@@ -2006,7 +2006,7 @@ export default function LiveMatchPage() {
             }
             className="live-match-callout live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
           >
-            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#d6a447]/20 text-[#d6a447]">
               {composer.kind === "mandatory-sub-in" ? (
                 <HeartPulse className="size-5" aria-hidden="true" />
               ) : (
@@ -2014,12 +2014,12 @@ export default function LiveMatchPage() {
               )}
             </span>
             <div className="relative z-[1] min-w-0">
-              <p className="font-oswald text-sm tracking-[0.22em] text-[#ffbe2e]">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#d6a447]">
                 {composer.kind === "mandatory-sub-in"
                   ? "SUBSTITUTION REQUIRED"
                   : "PICK WHO COMES ON"}
               </p>
-              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+              <p className="mt-0.5 text-sm font-semibold text-[#ecefed]">
                 Tap a {composer.team === "own" ? ownAbbrev : oppAbbrev} bench
                 player to come on
                 {composer.team === "opponent" && visibility === "none"
@@ -2037,14 +2037,14 @@ export default function LiveMatchPage() {
             data-callout="voluntary-sub-out"
             className="live-match-callout live-callout-banner flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3"
           >
-            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#ffbe2e]/20 text-[#ffbe2e]">
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#d6a447]/20 text-[#d6a447]">
               <ArrowLeftRight className="size-5" aria-hidden="true" />
             </span>
             <div className="relative z-[1] min-w-0">
-              <p className="font-oswald text-sm tracking-[0.22em] text-[#ffbe2e]">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#d6a447]">
                 PICK WHO COMES OFF
               </p>
-              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+              <p className="mt-0.5 text-sm font-semibold text-[#ecefed]">
                 Tap the {composer.team === "own" ? ownAbbrev : oppAbbrev} player
                 coming off the pitch.
               </p>
@@ -2058,20 +2058,20 @@ export default function LiveMatchPage() {
             data-callout="assist-pick"
             className="live-match-callout live-callout-banner live-callout-banner-assist flex shrink-0 flex-wrap items-center gap-3 rounded-xl px-3.5 py-3"
           >
-            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#3b82f6]/20 text-[#60a5fa]">
+            <span className="relative z-[1] flex size-9 shrink-0 items-center justify-center rounded-full bg-[#72a7d5]/20 text-[#82b2dc]">
               <BootIcon className="size-5" />
             </span>
             <div className="relative z-[1] min-w-0 flex-1">
-              <p className="font-oswald text-sm tracking-[0.22em] text-[#60a5fa]">
+              <p className="font-oswald text-sm tracking-[0.22em] text-[#82b2dc]">
                 GOAL LOGGED — SELECT THE ASSIST
               </p>
-              <p className="mt-0.5 text-sm font-semibold text-[#e8ecef]">
+              <p className="mt-0.5 text-sm font-semibold text-[#ecefed]">
                 Tap the assisting teammate on the pitch, or choose no assist.
               </p>
             </div>
             <button
               type="button"
-              className="relative z-[1] rounded-lg border border-[#60a5fa]/70 px-3 py-1.5 font-oswald text-[10px] tracking-widest text-[#93c5fd]"
+              className="relative z-[1] rounded-lg border border-[#82b2dc]/70 px-3 py-1.5 font-oswald text-[10px] tracking-widest text-[#b1cce4]"
               onClick={skipAssist}
             >
               NO ASSIST
@@ -2080,12 +2080,12 @@ export default function LiveMatchPage() {
         )}
 
         <div className="live-match-activity min-h-0">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[#1c2b36] bg-[#0c1218] p-2.5">
-            <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[#2a2e31] bg-[#0d0f10] p-2.5">
+            <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
               Match log
             </h2>
             {timeline.length === 0 ? (
-              <p className="mt-3 text-center text-sm text-[#8e9ba8]">
+              <p className="mt-3 text-center text-sm text-[#9ca39f]">
                 No events yet.
               </p>
             ) : (
@@ -2120,7 +2120,7 @@ export default function LiveMatchPage() {
                       <li
                         key={key}
                         className={cn(
-                          "flex items-center justify-between gap-2 rounded-lg border border-[#1c2b36] border-l-4 bg-[#101920] px-3 py-2.5",
+                          "flex items-center justify-between gap-2 rounded-lg border border-[#2a2e31] border-l-4 bg-[#111315] px-3 py-2.5",
                           event.pending && "opacity-55",
                           enteringIdsRef.current.has(key) &&
                             "live-timeline-enter",
@@ -2139,7 +2139,7 @@ export default function LiveMatchPage() {
                                 ? `  ${score}`
                                 : ""}
                             </p>
-                            <p className="truncate text-xs text-[#8e9ba8]">
+                            <p className="truncate text-xs text-[#9ca39f]">
                               {event.team === "own" ? ownName : oppName} · {who}
                               {assistWho ? `, Assist: ${assistWho}` : ""}
                               {substitutionIncoming(
@@ -2149,35 +2149,35 @@ export default function LiveMatchPage() {
                               )}
                             </p>
                             {event.lifecycleStatus === "needs_review" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#d6a447]">
                                 Possible duplicate · coach review needed
                               </p>
                             ) : event.syncStatus === "queued" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#d6a447]">
                                 Saved on this device
                               </p>
                             ) : event.syncStatus === "uploading" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#d6a447]">
                                 Uploading
                               </p>
                             ) : event.syncStatus === "accepted" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6fb6ff]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#72a7d5]">
                                 Accepted · awaiting reconciliation
                               </p>
                             ) : event.syncStatus === "dependency_pending" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ffbe2e]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#d6a447]">
                                 Waiting for an earlier change
                               </p>
                             ) : event.syncStatus === "quarantined" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#e36a6d]">
                                 Access changed · retained on this device
                               </p>
                             ) : event.syncStatus === "reconciled" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#00d99a]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#16d99a]">
                                 Reconciled
                               </p>
                             ) : event.syncStatus === "rejected" ? (
-                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ff5b5f]">
+                              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-[#e36a6d]">
                                 Sync rejected · {event.syncError}
                               </p>
                             ) : null}
@@ -2187,7 +2187,7 @@ export default function LiveMatchPage() {
                           <button
                             type="button"
                             aria-label="Undo event"
-                            className="rounded-md p-2 text-[#8e9ba8]"
+                            className="rounded-md p-2 text-[#9ca39f]"
                             onClick={() => void handleUndo(event.id)}
                           >
                             <RotateCcw className="size-4" />
@@ -2203,12 +2203,12 @@ export default function LiveMatchPage() {
 
         {period === "half_time" && (
           <div
-            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#070d12]/70 p-4 backdrop-blur-md"
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#090a0b]/70 p-4 backdrop-blur-md"
             role="dialog"
             aria-modal="true"
             aria-label="Half time"
           >
-            <div className="w-full max-w-md rounded-2xl border border-[#1c2b36] bg-[#101920]/95 p-6 shadow-[0_0_40px_rgba(0,0,0,0.45)]">
+            <div className="w-full max-w-md rounded-2xl border border-[#2a2e31] bg-[#111315]/95 p-6 shadow-[0_0_40px_rgba(0,0,0,0.45)]">
               <p className="font-oswald text-center text-2xl tracking-[0.28em] text-white sm:text-3xl">
                 HALF TIME
               </p>
@@ -2224,7 +2224,7 @@ export default function LiveMatchPage() {
                 </div>
                 <p className="font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
                   <span style={{ color: homeColor }}>{homeScore}</span>
-                  <span className="mx-1.5 text-2xl text-[#8e9ba8]">-</span>
+                  <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
                   <span style={{ color: awayColor }}>{awayScore}</span>
                 </p>
                 <div className="flex flex-col items-start">
@@ -2244,14 +2244,14 @@ export default function LiveMatchPage() {
               />
               <button
                 type="button"
-                className="mt-6 w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f]"
+                className="mt-6 w-full rounded-xl bg-[#16d99a] py-3 font-oswald tracking-widest text-[#06120e]"
                 onClick={startSecondHalf}
               >
                 START SECOND HALF
               </button>
               <button
                 type="button"
-                className="mt-2 w-full py-2 text-center text-xs font-medium tracking-wide text-[#8e9ba8] hover:text-white"
+                className="mt-2 w-full py-2 text-center text-xs font-medium tracking-wide text-[#9ca39f] hover:text-white"
                 onClick={backToFirstHalf}
               >
                 Back to 1st Half
@@ -2261,7 +2261,7 @@ export default function LiveMatchPage() {
         )}
         {checkIn && (
           <div
-            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#070d12]/70 p-4 backdrop-blur-md"
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center overflow-auto bg-[#090a0b]/70 p-4 backdrop-blur-md"
             role="dialog"
             aria-modal="true"
             aria-label={
@@ -2271,13 +2271,13 @@ export default function LiveMatchPage() {
             }
             onClick={dismissCheckIn}
           >
-            <div className="w-full max-w-md rounded-2xl border border-[#ffbe2e]/50 bg-[#101920]/95 p-6 text-center shadow-[0_0_40px_rgba(255,190,46,0.18)]">
-              <p className="font-oswald text-2xl tracking-[0.28em] text-[#ffbe2e] sm:text-3xl">
+            <div className="w-full max-w-md rounded-2xl border border-[#d6a447]/50 bg-[#111315]/95 p-6 text-center shadow-[0_0_40px_rgba(255,190,46,0.18)]">
+              <p className="font-oswald text-2xl tracking-[0.28em] text-[#d6a447] sm:text-3xl">
                 {checkIn.period === "first_half"
                   ? "END OF 1ST HALF"
                   : "END OF MATCH"}
               </p>
-              <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#8e9ba8]">
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.2em] text-[#9ca39f]">
                 {formatClock(
                   checkIn.period === "first_half"
                     ? FIRST_HALF_MS
@@ -2291,19 +2291,19 @@ export default function LiveMatchPage() {
               >
                 {formatClock(checkInLeftMs)}
               </p>
-              <p className="mt-4 text-sm text-[#c5ced6]">
+              <p className="mt-4 text-sm text-[#c7ccc9]">
                 {checkIn.period === "first_half"
                   ? "Half time starts automatically when this reaches zero."
                   : "The match ends automatically when this reaches zero."}
               </p>
               <button
                 type="button"
-                className="mt-6 w-full rounded-xl bg-[#ffbe2e] py-3 font-oswald tracking-widest text-[#07110f]"
+                className="mt-6 w-full rounded-xl bg-[#d6a447] py-3 font-oswald tracking-widest text-[#06120e]"
                 onClick={dismissCheckIn}
               >
                 CONTINUE — PLAYING ADDED TIME
               </button>
-              <p className="mt-3 text-[11px] text-[#8e9ba8]">
+              <p className="mt-3 text-[11px] text-[#9ca39f]">
                 Tap anywhere to keep the clock running. You then end the{" "}
                 {checkIn.period === "first_half" ? "half" : "match"} yourself.
               </p>
@@ -2312,7 +2312,7 @@ export default function LiveMatchPage() {
         )}
         {liveLogging && !running && !checkIn && (
           <div
-            className="live-match-pause-overlay flex min-h-0 items-center justify-center bg-[#070d12]/70 backdrop-blur-md"
+            className="live-match-pause-overlay flex min-h-0 items-center justify-center bg-[#090a0b]/70 backdrop-blur-md"
             role="dialog"
             aria-modal="true"
             aria-label="Match paused"
@@ -2321,19 +2321,19 @@ export default function LiveMatchPage() {
               type="button"
               onClick={startClock}
               className={cn(
-                "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
-                "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
-                "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
+                "flex flex-col items-center gap-3 rounded-2xl border border-[#16d99a]/70 bg-[#111315]/90 px-10 py-7",
+                "shadow-[0_0_40px_rgba(22,217,154,0.12)]",
+                "transition hover:border-[#16d99a] hover:bg-[#111315] hover:shadow-[0_0_48px_rgba(22,217,154,0.18)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
               )}
             >
-              <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
-                <Play className="size-8 fill-[#00d99a] text-[#00d99a]" />
+              <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#16d99a] bg-[#090a0b] sm:size-[4.5rem]">
+                <Play className="size-8 fill-[#16d99a] text-[#16d99a]" />
               </span>
-              <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
+              <span className="font-oswald text-xl tracking-[0.28em] text-[#16d99a] sm:text-2xl">
                 RESUME
               </span>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e9ba8]">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9ca39f]">
                 Match paused
               </span>
             </button>
@@ -2343,7 +2343,7 @@ export default function LiveMatchPage() {
 
       {period === "not_started" && (
         <div
-          className="live-match-kickoff-overlay flex items-center justify-center bg-[#070d12]/70 backdrop-blur-md"
+          className="live-match-kickoff-overlay flex items-center justify-center bg-[#090a0b]/70 backdrop-blur-md"
           role="dialog"
           aria-modal="true"
           aria-label="Start game"
@@ -2352,16 +2352,16 @@ export default function LiveMatchPage() {
             type="button"
             onClick={startFirstHalf}
             className={cn(
-              "flex flex-col items-center gap-3 rounded-2xl border border-[#00d99a]/70 bg-[#101920]/90 px-10 py-7",
-              "shadow-[0_0_40px_rgba(0,217,154,0.28)]",
-              "transition hover:border-[#00d99a] hover:bg-[#101920] hover:shadow-[0_0_48px_rgba(0,217,154,0.4)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
+              "flex flex-col items-center gap-3 rounded-2xl border border-[#16d99a]/70 bg-[#111315]/90 px-10 py-7",
+              "shadow-[0_0_40px_rgba(22,217,154,0.12)]",
+              "transition hover:border-[#16d99a] hover:bg-[#111315] hover:shadow-[0_0_48px_rgba(22,217,154,0.18)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16d99a] focus-visible:ring-offset-2 focus-visible:ring-offset-black/40",
             )}
           >
-            <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#00d99a] bg-[#070d12] sm:size-[4.5rem]">
-              <GiWhistle className="size-9 text-[#00d99a]" aria-hidden />
+            <span className="flex size-16 items-center justify-center rounded-full border-2 border-[#16d99a] bg-[#090a0b] sm:size-[4.5rem]">
+              <GiWhistle className="size-9 text-[#16d99a]" aria-hidden />
             </span>
-            <span className="font-oswald text-xl tracking-[0.28em] text-[#00d99a] sm:text-2xl">
+            <span className="font-oswald text-xl tracking-[0.28em] text-[#16d99a] sm:text-2xl">
               START GAME
             </span>
           </button>
@@ -2372,7 +2372,7 @@ export default function LiveMatchPage() {
         <Overlay onClose={() => setEventPickerOpen(false)} wide>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
                 Log match event
               </p>
               <p className="mt-1 font-oswald text-2xl tracking-widest text-white">
@@ -2385,7 +2385,7 @@ export default function LiveMatchPage() {
             <button
               type="button"
               aria-label="Close event menu"
-              className="rounded-lg border border-[#233747] px-3 py-1.5 text-sm text-[#8e9ba8] hover:text-white"
+              className="rounded-lg border border-[#3e4448] px-3 py-1.5 text-sm text-[#9ca39f] hover:text-white"
               onClick={() => setEventPickerOpen(false)}
             >
               CLOSE
@@ -2394,39 +2394,39 @@ export default function LiveMatchPage() {
           <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
             <LogButton
               label="Goal"
-              color="#00d99a"
+              color="#16d99a"
               disabled={!pitchLogEnabled}
               onClick={() => handleAction("goal")}
               icon={<SoccerBallIcon className="size-7" />}
             />
             <LogButton
               label="Yellow"
-              color="#f5c518"
+              color="#d7ba55"
               disabled={!logEnabled}
               onClick={() => handleAction("yellow_card")}
               icon={
-                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />
+                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#d7ba55] shadow-[0_0_0_1px_rgba(16,32,24,0.7)]" />
               }
             />
             <LogButton
               label="Red"
-              color="#ff5b5f"
+              color="#e36a6d"
               disabled={!logEnabled}
               onClick={() => handleAction("red_card")}
               icon={
-                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
+                <span className="inline-block h-6 w-4 rounded-[2px] bg-[#e36a6d] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
               }
             />
             <LogButton
               label="Substitution"
-              color="#f5c518"
+              color="#d7ba55"
               disabled={!logEnabled}
               onClick={() => handleAction("substitution")}
               icon={<ArrowLeftRight className="size-6" />}
             />
             <LogButton
               label="Penalty"
-              color="#20e6a6"
+              color="#48e3af"
               disabled={!pitchLogEnabled}
               onClick={() => handleAction("penalty")}
               icon={<Target className="size-7" />}
@@ -2449,7 +2449,7 @@ export default function LiveMatchPage() {
             ) : null}
           </div>
           {targetIsBench && (
-            <p className="mt-3 text-xs text-[#8e9ba8]">
+            <p className="mt-3 text-xs text-[#9ca39f]">
               Bench players can receive cards or be selected for a substitution.
             </p>
           )}
@@ -2459,18 +2459,18 @@ export default function LiveMatchPage() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-4 left-1/2 z-40 w-[min(92%,28rem)] -translate-x-1/2 rounded-xl bg-[#101920] px-4 py-3 shadow-lg",
+            "fixed bottom-4 left-1/2 z-40 w-[min(92%,28rem)] -translate-x-1/2 rounded-xl bg-[#111315] px-4 py-3 shadow-lg",
             toast.id
-              ? "border border-[#00d99a]/40"
-              : "border border-[#ff5b5f]/40",
+              ? "border border-[#16d99a]/40"
+              : "border border-[#e36a6d]/40",
           )}
         >
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-[#e8ecef]">{toast.label}</p>
+            <p className="text-sm text-[#ecefed]">{toast.label}</p>
             {toast.id ? (
               <button
                 type="button"
-                className="font-oswald text-xs tracking-widest text-[#00d99a]"
+                className="font-oswald text-xs tracking-widest text-[#16d99a]"
                 onClick={() => void handleUndo(toast.id!)}
               >
                 UNDO
@@ -2512,20 +2512,20 @@ export default function LiveMatchPage() {
       {composer.kind === "penalty-outcome" && (
         <Overlay onClose={closeComposer}>
           <p className="font-oswald text-2xl tracking-widest">PENALTY</p>
-          <p className="mt-1 text-sm text-[#8e9ba8]">
+          <p className="mt-1 text-sm text-[#9ca39f]">
             {loggingForLabel(target, visibility)}
           </p>
           <div className="mt-8 grid gap-3">
             <button
               type="button"
-              className="rounded-2xl border-2 border-[#00d99a] bg-[#00d99a]/10 py-6 font-oswald text-xl tracking-widest text-[#00d99a]"
+              className="rounded-2xl border-2 border-[#16d99a] bg-[#16d99a]/10 py-6 font-oswald text-xl tracking-widest text-[#16d99a]"
               onClick={() => persistFromTarget("goal", PENALTY_SCORED_DETAIL)}
             >
               SCORED
             </button>
             <button
               type="button"
-              className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest"
+              className="rounded-2xl border-2 border-[#9ca39f] bg-[#111315] py-6 font-oswald text-xl tracking-widest"
               onClick={() => setComposer({ kind: "penalty-miss-reason" })}
             >
               MISSED
@@ -2537,13 +2537,13 @@ export default function LiveMatchPage() {
       {composer.kind === "penalty-miss-reason" && (
         <Overlay onClose={closeComposer}>
           <p className="font-oswald text-2xl tracking-widest">MISSED</p>
-          <p className="mt-1 text-sm text-[#8e9ba8]">
+          <p className="mt-1 text-sm text-[#9ca39f]">
             {loggingForLabel(target, visibility)}
           </p>
           <div className="mt-8 grid gap-3">
             <button
               type="button"
-              className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest"
+              className="rounded-2xl border-2 border-[#9ca39f] bg-[#111315] py-6 font-oswald text-xl tracking-widest"
               onClick={() =>
                 persistFromTarget("penalty", PENALTY_MISSED_DETAIL)
               }
@@ -2575,7 +2575,7 @@ export default function LiveMatchPage() {
           <div className="mt-8 grid gap-3">
             <button
               type="button"
-              className="rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f]"
+              className="rounded-xl bg-[#16d99a] py-3 font-oswald tracking-widest text-[#06120e]"
               onClick={() => {
                 if (confirm === "pause") {
                   if (running) {
@@ -2595,7 +2595,7 @@ export default function LiveMatchPage() {
             </button>
             <button
               type="button"
-              className="rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
+              className="rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
               onClick={() => setConfirm(null)}
             >
               NO, GO BACK
@@ -2607,10 +2607,10 @@ export default function LiveMatchPage() {
       {endOpen && (
         <Overlay onClose={() => setEndOpen(false)}>
           <p className="font-oswald text-2xl tracking-widest">SAVE REPORT</p>
-          <p className="mt-4 text-sm text-[#8e9ba8]">
+          <p className="mt-4 text-sm text-[#9ca39f]">
             Reconcile the scoreboard with logged goals before saving.
           </p>
-          <div className="mt-6 space-y-2 rounded-xl border border-[#1c2b36] bg-[#101920] p-4 font-oswald tracking-wide">
+          <div className="mt-6 space-y-2 rounded-xl border border-[#2a2e31] bg-[#111315] p-4 font-oswald tracking-wide">
             <p>
               Scoreboard: {teamScore} – {oppScore}
             </p>
@@ -2621,7 +2621,7 @@ export default function LiveMatchPage() {
           <div className="mt-8 grid gap-3">
             <button
               type="button"
-              className="rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f]"
+              className="rounded-xl bg-[#16d99a] py-3 font-oswald tracking-widest text-[#06120e]"
               onClick={() => void handleFinish()}
               disabled={finishMatch.isPending}
             >
@@ -2629,7 +2629,7 @@ export default function LiveMatchPage() {
             </button>
             <button
               type="button"
-              className="rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
+              className="rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
               onClick={() => setEndOpen(false)}
             >
               NO, GO BACK
@@ -2651,7 +2651,7 @@ function SettingsItem({
   return (
     <button
       type="button"
-      className="w-full rounded-lg px-3 py-2 text-left text-sm text-[#e8ecef] hover:bg-white/5"
+      className="w-full rounded-lg px-3 py-2 text-left text-sm text-[#ecefed] hover:bg-white/5"
       onClick={onClick}
     >
       {children}
@@ -2690,9 +2690,9 @@ function accentIsLight(color: string) {
 
 function logButtonFill(color: string) {
   if (color.replace("#", "").length !== 6) {
-    return mixHex("#00d99a", "#101920", 0.48);
+    return mixHex("#16d99a", "#111315", 0.48);
   }
-  return mixHex(color, "#101920", accentIsLight(color) ? 0.82 : 0.48);
+  return mixHex(color, "#111315", accentIsLight(color) ? 0.82 : 0.48);
 }
 
 function LogButton({
@@ -2757,7 +2757,7 @@ function Overlay({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 w-full rounded-2xl border border-[#1c2b36] bg-[#070d12] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+          "relative z-10 w-full rounded-2xl border border-[#2a2e31] bg-[#090a0b] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
           wide ? "max-w-2xl" : "max-w-md",
         )}
       >
@@ -2795,15 +2795,15 @@ function HalfTimeFacts({
 
   return (
     <div className="mt-5 grid grid-cols-3 text-center text-sm">
-      <p className="text-[#8e9ba8]">{ownName}</p>
-      <p className="text-[#8e9ba8]"> </p>
-      <p className="text-[#8e9ba8]">{oppName}</p>
+      <p className="text-[#9ca39f]">{ownName}</p>
+      <p className="text-[#9ca39f]"> </p>
+      <p className="text-[#9ca39f]">{oppName}</p>
       {rows.map((row) => (
         <Fragment key={row.type}>
           <p className="font-oswald text-2xl">
             {halfTimeCount(timeline, row.type, "own")}
           </p>
-          <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+          <p className="text-[10px] uppercase tracking-widest text-[#9ca39f]">
             {row.label}
           </p>
           <p className="font-oswald text-2xl">
@@ -2844,13 +2844,13 @@ function PeriodSummary({
 
   if (compact) {
     return (
-      <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-[#1c2b36] bg-[#101920] px-3 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-[#2a2e31] bg-[#111315] px-3 py-1.5">
         <p className="font-oswald text-sm tracking-widest">{title}</p>
         <div className="flex shrink-0 gap-2">
           {onBack && (
             <button
               type="button"
-              className="rounded-md border border-[#233747] px-3 py-1 text-xs tracking-wide"
+              className="rounded-md border border-[#3e4448] px-3 py-1 text-xs tracking-wide"
               onClick={onBack}
             >
               {backLabel}
@@ -2858,7 +2858,7 @@ function PeriodSummary({
           )}
           <button
             type="button"
-            className="rounded-md bg-[#00d99a] px-3 py-1 font-oswald text-xs tracking-widest text-[#07110f] disabled:opacity-40"
+            className="rounded-md bg-[#16d99a] px-3 py-1 font-oswald text-xs tracking-widest text-[#06120e] disabled:opacity-40"
             onClick={onContinue}
             disabled={continueDisabled}
           >
@@ -2870,35 +2870,35 @@ function PeriodSummary({
   }
 
   return (
-    <div className="mt-6 rounded-2xl border border-[#1c2b36] bg-[#101920] p-5">
+    <div className="mt-6 rounded-2xl border border-[#2a2e31] bg-[#111315] p-5">
       <p className="font-oswald text-center text-2xl tracking-widest">
         {title}
       </p>
       <div className="mt-5 grid grid-cols-3 text-center text-sm">
-        <p className="text-[#8e9ba8]">{ownName}</p>
-        <p className="text-[#8e9ba8]"> </p>
-        <p className="text-[#8e9ba8]">{oppName}</p>
+        <p className="text-[#9ca39f]">{ownName}</p>
+        <p className="text-[#9ca39f]"> </p>
+        <p className="text-[#9ca39f]">{oppName}</p>
         <p className="font-oswald text-2xl">{count("goal", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+        <p className="text-[10px] uppercase tracking-widest text-[#9ca39f]">
           Goals
         </p>
         <p className="font-oswald text-2xl">{count("goal", "opponent")}</p>
         <p className="font-oswald text-2xl">{count("yellow_card", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+        <p className="text-[10px] uppercase tracking-widest text-[#9ca39f]">
           Yellow
         </p>
         <p className="font-oswald text-2xl">
           {count("yellow_card", "opponent")}
         </p>
         <p className="font-oswald text-2xl">{count("red_card", "own")}</p>
-        <p className="text-[10px] uppercase tracking-widest text-[#8e9ba8]">
+        <p className="text-[10px] uppercase tracking-widest text-[#9ca39f]">
           Red
         </p>
         <p className="font-oswald text-2xl">{count("red_card", "opponent")}</p>
       </div>
       <button
         type="button"
-        className="mt-6 w-full rounded-xl bg-[#00d99a] py-3 font-oswald tracking-widest text-[#07110f] disabled:opacity-40"
+        className="mt-6 w-full rounded-xl bg-[#16d99a] py-3 font-oswald tracking-widest text-[#06120e] disabled:opacity-40"
         onClick={onContinue}
         disabled={continueDisabled}
       >
@@ -2907,7 +2907,7 @@ function PeriodSummary({
       {onBack && (
         <button
           type="button"
-          className="mt-3 w-full rounded-xl border border-[#233747] py-3 font-oswald tracking-widest"
+          className="mt-3 w-full rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
           onClick={onBack}
         >
           {backLabel}

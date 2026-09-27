@@ -3,7 +3,6 @@ import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athletes,
-  athleteMatchStats,
   competitions,
   events,
   matchEvents,
@@ -113,9 +112,7 @@ export class InsightsService {
       .from(matchInsights)
       .innerJoin(matches, eq(matchInsights.matchId, matches.id))
       .innerJoin(events, eq(matches.eventId, events.id))
-      .where(
-        and(eq(events.teamId, teamId), eq(matchInsights.status, 'ready')),
-      )
+      .where(and(eq(events.teamId, teamId), eq(matchInsights.status, 'ready')))
       .orderBy(desc(events.scheduledAt))
       .limit(limit);
     return rows.map((row) => this.toSummary(row.insight));
@@ -185,7 +182,9 @@ export class InsightsService {
     return row ? this.toSeasonSummary(row) : null;
   }
 
-  private toSummary(row: typeof matchInsights.$inferSelect): MatchInsightSummary {
+  private toSummary(
+    row: typeof matchInsights.$inferSelect,
+  ): MatchInsightSummary {
     return {
       matchId: row.matchId,
       status: row.status,
@@ -215,7 +214,9 @@ export class InsightsService {
       .where(
         and(
           eq(seasonInsights.teamId, teamId),
-          seasonId ? eq(seasonInsights.seasonId, seasonId) : isNull(seasonInsights.seasonId),
+          seasonId
+            ? eq(seasonInsights.seasonId, seasonId)
+            : isNull(seasonInsights.seasonId),
         ),
       )
       .limit(1);
@@ -351,7 +352,10 @@ export class InsightsService {
 
   /** Completed matches for a team, optionally windowed to a season's date range. */
   private async loadTeamMatches(teamId: string, window?: SeasonWindow) {
-    const conditions = [eq(events.teamId, teamId), eq(events.status, 'completed')];
+    const conditions = [
+      eq(events.teamId, teamId),
+      eq(events.status, 'completed'),
+    ];
     if (window) {
       conditions.push(
         gte(events.scheduledAt, window.start),

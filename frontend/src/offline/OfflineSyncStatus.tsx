@@ -120,15 +120,15 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       role="status"
       title="Offline event synchronisation status"
       aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#101920] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c5ced6]"
+      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#111315] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c7ccc9]"
     >
       <span
         className={`size-1.5 rounded-full ${
           rejected || quarantined
-            ? "bg-[#ff5b5f]"
+            ? "bg-[#e36a6d]"
             : online
-              ? "bg-[#00d99a]"
-              : "bg-[#ffbe2e]"
+              ? "bg-[#16d99a]"
+              : "bg-[#d6a447]"
         }`}
       />
       {label}

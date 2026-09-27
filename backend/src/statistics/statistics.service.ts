@@ -23,7 +23,10 @@ import {
   standings,
 } from '../database/schema';
 import { buildAssistantPrompt } from '../insights/assistant-prompt';
-import { InsightsService, type AssistantAnswer } from '../insights/insights.service';
+import {
+  InsightsService,
+  type AssistantAnswer,
+} from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';

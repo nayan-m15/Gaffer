@@ -1,13 +1,13 @@
 import type { MatchEventType, MatchLogEvent } from "./types";
 
 export const EVENT_COLOR: Record<MatchEventType, string> = {
-  goal: "#00d99a",
-  assist: "#00d99a",
+  goal: "#16d99a",
+  assist: "#16d99a",
   key_pass: "#5b9fff",
-  yellow_card: "#f5c518",
-  red_card: "#ff5b5f",
+  yellow_card: "#d7ba55",
+  red_card: "#e36a6d",
   substitution: "#c084fc",
-  penalty: "#20e6a6",
+  penalty: "#48e3af",
   injury: "#fb923c",
   goalkeeper_save: "#67e8f9",
 };

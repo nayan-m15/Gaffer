@@ -1,17 +1,21 @@
 @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
 
 .live-match {
-  --lm-bg: #070d12;
-  --lm-panel: #101920;
-  --lm-panel-2: #141e27;
-  --lm-line: #1c2b36;
-  --lm-green: #00d99a;
-  --lm-green-dim: rgba(0, 217, 154, 0.14);
-  --lm-amber: #ffbe2e;
-  --lm-red: #ff5b5f;
-  --lm-yellow: #f5c518;
-  --lm-muted: #8e9ba8;
-  --lm-white: #e8ecef;
+  --lm-bg: #090a0b;
+  --lm-panel: #111315;
+  --lm-panel-2: #17191b;
+  --lm-nested: #0d0f10;
+  --lm-line: #2a2e31;
+  --lm-line-strong: #3e4448;
+  --lm-green: #16d99a;
+  --lm-green-dim: rgba(22, 217, 154, 0.12);
+  --lm-amber: #d6a447;
+  --lm-red: #e36a6d;
+  --lm-yellow: #d7ba55;
+  --lm-info: #72a7d5;
+  --lm-muted: #9ca39f;
+  --lm-secondary: #c7ccc9;
+  --lm-white: #ecefed;
   font-family: "Inter Variable", Inter, system-ui, sans-serif;
   background: var(--lm-bg);
   color: var(--lm-white);
@@ -231,12 +235,10 @@
 }
 
 .live-log-btn {
-  --log-btn-color: #00d99a;
+  --log-btn-color: var(--lm-green);
   border-width: 1px;
   border-style: solid;
-  box-shadow:
-    0 0 12px color-mix(in oklab, var(--log-btn-color) 48%, transparent),
-    0 0 26px color-mix(in oklab, var(--log-btn-color) 26%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   transition:
     transform 0.18s ease-out,
     box-shadow 0.18s ease-out,
@@ -248,18 +250,14 @@
   transform: scale(1.03);
   filter: brightness(1.08);
   box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--log-btn-color) 55%, transparent),
-    0 0 18px color-mix(in oklab, var(--log-btn-color) 72%, transparent),
-    0 0 38px color-mix(in oklab, var(--log-btn-color) 42%, transparent);
+    0 0 0 1px color-mix(in oklab, var(--log-btn-color) 62%, transparent),
+    0 4px 14px rgba(0, 0, 0, 0.34);
 }
 
 .live-log-btn:active:not(:disabled) {
   transform: scale(1.03);
   filter: brightness(1.12);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--log-btn-color) 78%, transparent),
-    0 0 22px color-mix(in oklab, var(--log-btn-color) 82%, transparent),
-    0 0 44px color-mix(in oklab, var(--log-btn-color) 52%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--log-btn-color) 70%, transparent);
 }
 
 .live-log-btn:disabled {
@@ -274,7 +272,7 @@
 }
 
 .live-squad-token {
-  --token-color: #00d99a;
+  --token-color: var(--lm-green);
   transition:
     transform 0.18s ease-out,
     box-shadow 0.18s ease-out,
@@ -381,7 +379,7 @@
   --callout-color: var(--lm-amber);
   position: relative;
   overflow: hidden;
-  background: color-mix(in oklab, var(--callout-color) 16%, #0c1218);
+  background: color-mix(in oklab, var(--callout-color) 14%, var(--lm-nested));
   animation: live-callout-banner-glow 2.4s ease-in-out infinite;
 }
 
@@ -390,7 +388,7 @@
 }
 
 .live-callout-banner-assist {
-  --callout-color: #3b82f6;
+  --callout-color: var(--lm-info);
 }
 
 .live-callout-banner::before {
@@ -419,7 +417,7 @@
 }
 
 .live-token-call-assist {
-  --call-color: #3b82f6;
+  --call-color: var(--lm-info);
 }
 
 @media (prefers-reduced-motion: reduce) {

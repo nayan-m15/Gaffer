@@ -23,7 +23,7 @@ import {
 } from "./match-report-chart-stats";
 import type { MatchLogEvent } from "./types";
 
-const TICK = { fill: "#8e9ba8", fontSize: 10 };
+const TICK = { fill: "#9ca39f", fontSize: 10 };
 
 function ComparisonTick({
   x = 0,
@@ -36,7 +36,7 @@ function ComparisonTick({
 }) {
   const lines = (payload?.value ?? "").split(" ");
   return (
-    <text x={x} y={y + 10} textAnchor="middle" fill="#8e9ba8" fontSize={10}>
+    <text x={x} y={y + 10} textAnchor="middle" fill="#9ca39f" fontSize={10}>
       {lines.map((line, index) => (
         <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : 11}>
           {line}
@@ -63,10 +63,10 @@ export function TeamComparisonChart({
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
           Team comparison
         </h2>
-        <p className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[#8e9ba8]">
+        <p className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca39f]">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full" style={{ background: ownColor }} />
             {ownName}
@@ -80,7 +80,7 @@ export function TeamComparisonChart({
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 18, right: 4, left: -18, bottom: 12 }}>
-            <CartesianGrid stroke="#1c2b36" vertical={false} />
+            <CartesianGrid stroke="#2a2e31" vertical={false} />
             <XAxis
               dataKey="category"
               axisLine={false}
@@ -90,10 +90,10 @@ export function TeamComparisonChart({
             />
             <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={TICK} />
             <Bar dataKey="own" fill={ownColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
-              <LabelList dataKey="own" position="top" fill="#e8ecef" fontSize={11} />
+              <LabelList dataKey="own" position="top" fill="#ecefed" fontSize={11} />
             </Bar>
             <Bar dataKey="opp" fill={oppColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
-              <LabelList dataKey="opp" position="top" fill="#e8ecef" fontSize={11} />
+              <LabelList dataKey="opp" position="top" fill="#ecefed" fontSize={11} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -128,10 +128,10 @@ export function ScoreProgressionChart({
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
           Score progression
         </h2>
-        <p className="flex flex-wrap items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[#8e9ba8]">
+        <p className="flex flex-wrap items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca39f]">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full" style={{ background: ownColor }} />
             {ownName}
@@ -141,11 +141,11 @@ export function ScoreProgressionChart({
             {oppName}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-[#f5c518]" />
+            <span className="size-1.5 rounded-full bg-[#d7ba55]" />
             Yellow
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-[#ff5b5f]" />
+            <span className="size-1.5 rounded-full bg-[#e36a6d]" />
             Red
           </span>
         </p>
@@ -156,7 +156,7 @@ export function ScoreProgressionChart({
             data={points}
             margin={{ top: 12, right: 12, left: -18, bottom: 0 }}
           >
-            <CartesianGrid stroke="#1c2b36" vertical={false} />
+            <CartesianGrid stroke="#2a2e31" vertical={false} />
             <XAxis
               dataKey="minute"
               type="number"
@@ -211,8 +211,8 @@ export function ScoreProgressionChart({
                       cx={cx}
                       cy={cy}
                       r={3}
-                      fill={payload?.color ?? "#f5c518"}
-                      stroke="#070d12"
+                      fill={payload?.color ?? "#d7ba55"}
+                      stroke="#090a0b"
                       strokeWidth={1}
                     />
                   );
@@ -244,11 +244,11 @@ export function EventBreakdownChart({
   const busy = busiestInterval(events);
   return (
     <section>
-      <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
+      <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
         Event breakdown
       </h2>
       {total === 0 ? (
-        <p className="text-sm text-[#8e9ba8]">No events logged.</p>
+        <p className="text-sm text-[#9ca39f]">No events logged.</p>
       ) : (
         <div className="flex flex-wrap items-center gap-4">
           <div className="relative size-44 shrink-0">
@@ -261,7 +261,7 @@ export function EventBreakdownChart({
                   innerRadius={52}
                   outerRadius={76}
                   paddingAngle={2}
-                  stroke="#070d12"
+                  stroke="#090a0b"
                   strokeWidth={2}
                 >
                   {slices.map((slice) => (
@@ -272,7 +272,7 @@ export function EventBreakdownChart({
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <p className="font-oswald text-2xl leading-none tabular-nums">{total}</p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[#8e9ba8]">
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[#9ca39f]">
                 Events
               </p>
             </div>
@@ -283,7 +283,7 @@ export function EventBreakdownChart({
                 key={slice.name}
                 className="flex items-center justify-between gap-2 text-sm"
               >
-                <span className="inline-flex items-center gap-2 text-[#c5ced6]">
+                <span className="inline-flex items-center gap-2 text-[#c7ccc9]">
                   <span
                     className="size-2.5 rounded-full"
                     style={{ background: slice.color }}
@@ -294,26 +294,26 @@ export function EventBreakdownChart({
               </li>
             ))}
           </ul>
-          <div className="min-w-[10rem] flex-1 space-y-4 border-[#1c2b36] sm:border-l sm:pl-4">
+          <div className="min-w-[10rem] flex-1 space-y-4 border-[#2a2e31] sm:border-l sm:pl-4">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8e9ba8]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#9ca39f]">
                 Team event split
               </p>
               <p className="mt-1 font-oswald text-lg tracking-wide">
                 <span className="tabular-nums" style={{ color: ownColor }}>
                   {split.own} {ownName}
                 </span>
-                <span className="mx-1.5 text-[#8e9ba8]">·</span>
+                <span className="mx-1.5 text-[#9ca39f]">·</span>
                 <span className="tabular-nums" style={{ color: oppColor }}>
                   {split.opp} {oppName}
                 </span>
               </p>
             </div>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8e9ba8]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#9ca39f]">
                 Busiest interval
               </p>
-              <p className="mt-1 text-sm text-[#e8ecef]">
+              <p className="mt-1 text-sm text-[#ecefed]">
                 Most action: {busy.start}&apos;–{busy.end}&apos; ({busy.count}{" "}
                 {busy.count === 1 ? "event" : "events"})
               </p>
