@@ -405,7 +405,15 @@ export default function TeamManagementPage() {
       {canManageTeam && (
         <GafferAiAssistant
           context="lineup"
-          onLineupApplied={(suggested) => lineup.loadLineup(suggested)}
+          onLineupApplied={(suggested) =>
+            lineup.loadLineup({
+              ...suggested,
+              customPositions:
+                suggested.formationId === lineup.formationId
+                  ? lineup.customPositions
+                  : null,
+            })
+          }
         />
       )}
           </>

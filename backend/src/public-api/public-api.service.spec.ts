@@ -32,10 +32,10 @@ describe('PublicApiService', () => {
       );
     });
 
-    it('only exposes id, name, shape and description', () => {
+    it('only exposes id, name, shape, description and playerCount', () => {
       for (const formation of service.listFormations()) {
         expect(Object.keys(formation).sort()).toEqual(
-          ['description', 'id', 'name', 'shape'].sort(),
+          ['description', 'id', 'name', 'playerCount', 'shape'].sort(),
         );
       }
     });
