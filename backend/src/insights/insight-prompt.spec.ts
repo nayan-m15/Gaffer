@@ -167,7 +167,13 @@ describe('parseInsightResponse', () => {
 
 describe('sanitizePlayerOfTheMatch', () => {
   const performances: InsightAthletePerformance[] = [
-    { athleteName: 'Sam Rivers', goals: 1, assists: 0, yellowCards: 0, redCards: 0 },
+    {
+      athleteName: 'Sam Rivers',
+      goals: 1,
+      assists: 0,
+      yellowCards: 0,
+      redCards: 0,
+    },
   ];
 
   it('keeps a pick that matches a real contributor', () => {

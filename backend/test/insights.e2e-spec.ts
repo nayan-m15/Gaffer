@@ -132,9 +132,8 @@ describe('Match insights (e2e)', () => {
 
   async function finalise(agent: Agent, matchId: string) {
     const found = await agent.get(`/matches/${matchId}`).expect(200);
-    const revision = (
-      found.body as { projection: { revision: number } }
-    ).projection.revision;
+    const revision = (found.body as { projection: { revision: number } })
+      .projection.revision;
     await agent
       .post(`/matches/${matchId}/finalise`)
       .send({ expectedRevision: revision })
@@ -283,12 +282,12 @@ describe('Season insights (e2e)', () => {
       .post('/statistics/season-insight')
       .send({})
       .expect(201);
-    expect((generated.body as { status: string; narrativeText: string }).status).toBe(
-      'ready',
-    );
     expect(
-      (generated.body as { narrativeText: string }).narrativeText,
-    ).toBe('A promising campaign so far.');
+      (generated.body as { status: string; narrativeText: string }).status,
+    ).toBe('ready');
+    expect((generated.body as { narrativeText: string }).narrativeText).toBe(
+      'A promising campaign so far.',
+    );
 
     const fetched = await agent.get('/statistics/season-insight').expect(200);
     expect((fetched.body as { status: string }).status).toBe('ready');
@@ -326,7 +325,10 @@ describe('Season insights (e2e)', () => {
       assistantIdentity,
     );
 
-    await assistantAgent.post('/statistics/season-insight').send({}).expect(403);
+    await assistantAgent
+      .post('/statistics/season-insight')
+      .send({})
+      .expect(403);
   });
 });
 
@@ -375,7 +377,8 @@ describe('Stats assistant (e2e)', () => {
       answer: 'No matches have been played yet.',
     });
     expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(1);
-    const prompt = mockGeminiClient.generateNarrative.mock.calls[0][0] as string;
+    const prompt = mockGeminiClient.generateNarrative.mock
+      .calls[0][0] as string;
     expect(prompt).toContain('Who has scored the most goals?');
   });
 
@@ -384,7 +387,10 @@ describe('Stats assistant (e2e)', () => {
     identities.push(identity);
     const { agent } = await registerCoach(app.getHttpServer(), identity);
 
-    await agent.post('/statistics/assistant').send({ question: 'hi' }).expect(400);
+    await agent
+      .post('/statistics/assistant')
+      .send({ question: 'hi' })
+      .expect(400);
     expect(mockGeminiClient.generateNarrative).not.toHaveBeenCalled();
   });
 

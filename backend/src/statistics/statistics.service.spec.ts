@@ -706,16 +706,26 @@ describe('StatisticsService', () => {
         question: 'Who scored the most goals?',
       });
 
-      expect(result).toEqual({ status: 'ready', answer: 'Nobody has scored yet.' });
+      expect(result).toEqual({
+        status: 'ready',
+        answer: 'Nobody has scored yet.',
+      });
       expect(mockInsightsService.answerQuestion).toHaveBeenCalledTimes(1);
-      const prompt = mockInsightsService.answerQuestion.mock.calls[0][0] as string;
+      const prompt = mockInsightsService.answerQuestion.mock
+        .calls[0][0] as string;
       expect(prompt).toContain("Rovers's record");
       expect(prompt).toContain('Question: Who scored the most goals?');
     });
 
     it('scopes the prompt to the resolved season when seasonId is given', async () => {
       mockSeasonsService.resolveSeasonWindow.mockResolvedValue({
-        season: { id: 'season-1', name: '2025/26', startDate: '2025-08-01', endDate: '2026-05-31', isCurrent: true },
+        season: {
+          id: 'season-1',
+          name: '2025/26',
+          startDate: '2025-08-01',
+          endDate: '2026-05-31',
+          isCurrent: true,
+        },
         window: { start: new Date('2025-08-01'), end: new Date('2026-05-31') },
       });
       mockInsightsService.answerQuestion.mockResolvedValue({
@@ -728,8 +738,9 @@ describe('StatisticsService', () => {
         seasonId: 'season-1',
       });
 
-      const prompt = mockInsightsService.answerQuestion.mock.calls[0][0] as string;
-      expect(prompt).toContain("record for 2025/26");
+      const prompt = mockInsightsService.answerQuestion.mock
+        .calls[0][0] as string;
+      expect(prompt).toContain('record for 2025/26');
     });
 
     it('propagates a failed status without throwing', async () => {

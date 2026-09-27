@@ -122,7 +122,9 @@ export class GeminiClient {
       } catch (error) {
         if (!isTransientGeminiError(error)) throw error;
         lastError = error;
-        this.logger.warn(`Model ${modelName} unavailable; trying the next one.`);
+        this.logger.warn(
+          `Model ${modelName} unavailable; trying the next one.`,
+        );
       }
     }
 

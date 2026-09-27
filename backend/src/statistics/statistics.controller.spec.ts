@@ -211,7 +211,7 @@ describe('StatisticsController', () => {
   });
 
   describe('season insight', () => {
-    it('reads the season insight for the caller\'s team without requiring a coach', async () => {
+    it("reads the season insight for the caller's team without requiring a coach", async () => {
       mockInsightsService.getSeasonInsight.mockResolvedValue({
         status: 'ready',
       });
@@ -250,9 +250,7 @@ describe('StatisticsController', () => {
 
       await controller.generateSeasonInsight(user, { seasonId });
 
-      expect(mockTeamsService.requireCoachTeam).toHaveBeenCalledWith(
-        'user-1',
-      );
+      expect(mockTeamsService.requireCoachTeam).toHaveBeenCalledWith('user-1');
       expect(mockInsightsService.generateSeasonInsight).toHaveBeenCalledWith(
         'team-1',
         seasonId,
@@ -265,9 +263,9 @@ describe('StatisticsController', () => {
         new ForbiddenException('Only coaches can perform this action.'),
       );
 
-      await expect(
-        controller.generateSeasonInsight(user, {}),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(controller.generateSeasonInsight(user, {})).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(mockInsightsService.generateSeasonInsight).not.toHaveBeenCalled();
     });
   });
@@ -294,7 +292,9 @@ describe('StatisticsController', () => {
     });
 
     it('rejects a question that is too short', async () => {
-      await expect(controller.askAssistant(user, { question: 'hi' })).rejects.toThrow();
+      await expect(
+        controller.askAssistant(user, { question: 'hi' }),
+      ).rejects.toThrow();
       expect(mockStatisticsService.askAssistant).not.toHaveBeenCalled();
     });
 

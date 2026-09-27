@@ -10,7 +10,10 @@
  * invent players, numbers, or events not actually in the team's stats.
  */
 
-import type { MatchTrendEntry, MetricDelta } from '../statistics/statistics.trends';
+import type {
+  MatchTrendEntry,
+  MetricDelta,
+} from '../statistics/statistics.trends';
 
 /** Caps the match list's token cost — a long season shouldn't blow up every prompt. */
 const MAX_MATCH_LINES = 20;

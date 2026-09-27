@@ -80,7 +80,10 @@ describe('GeminiClient', () => {
       text: 'Fallback answer.',
       model: 'gemini-3.1-flash-lite',
     });
-    expect(requestedModels).toEqual(['gemini-3.6-flash', 'gemini-3.1-flash-lite']);
+    expect(requestedModels).toEqual([
+      'gemini-3.6-flash',
+      'gemini-3.1-flash-lite',
+    ]);
     expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
@@ -101,7 +104,10 @@ describe('GeminiClient', () => {
       text: 'Answered by the next model.',
       model: 'gemini-3.1-flash-lite',
     });
-    expect(requestedModels).toEqual(['gemini-3.6-flash', 'gemini-3.1-flash-lite']);
+    expect(requestedModels).toEqual([
+      'gemini-3.6-flash',
+      'gemini-3.1-flash-lite',
+    ]);
     expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
