@@ -10,6 +10,9 @@ import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterPlayerCard } from "@/components/roster/rosterPlayerCard";
+import { MobileRoster, MobileRosterSkeleton } from "@/components/roster/MobileRoster";
+import { MobilePlayerProfile } from "@/components/roster/MobilePlayerProfile";
+import { getPositionLabel } from "@/components/roster/position";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -90,6 +93,9 @@ export default function AthletesPage() {
   const [isDesktopDetail, setIsDesktopDetail] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
   );
+  const [isMobileRoster, setIsMobileRoster] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  );
 
   const [editingBackendAthlete, setEditingBackendAthlete] = useState<BackendAthlete | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -145,6 +151,7 @@ export default function AthletesPage() {
           (athlete) =>
             athlete.name.toLowerCase().includes(query) ||
             athlete.position.toLowerCase().includes(query) ||
+            getPositionLabel(athlete.position).toLowerCase().includes(query) ||
             athlete.status.toLowerCase().includes(query) ||
             athlete.jerseyNumber.toString().includes(query),
         )
@@ -167,6 +174,14 @@ export default function AthletesPage() {
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1280px)");
     const syncViewport = () => setIsDesktopDetail(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const syncViewport = () => setIsMobileRoster(mediaQuery.matches);
     syncViewport();
     mediaQuery.addEventListener("change", syncViewport);
     return () => mediaQuery.removeEventListener("change", syncViewport);
@@ -361,7 +376,7 @@ export default function AthletesPage() {
         />
 
         <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 overflow-x-hidden px-3 pb-24 sm:px-8 sm:pb-8 lg:px-10">
-        <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-4">
+        <div className="hidden min-w-0 grid-cols-3 gap-2 sm:grid sm:gap-4">
           <SummaryCard
             value={activeCount}
             label="Active Athletes"
@@ -379,13 +394,21 @@ export default function AthletesPage() {
           />
         </div>
 
+        <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface-card px-3 py-2.5 text-xs sm:hidden">
+          <span className="font-bold tabular-nums text-foreground">{activeCount} players</span>
+          <span className="h-3 w-px bg-border-default" aria-hidden="true" />
+          <span className={cn("font-semibold tabular-nums", unavailableCount > 0 ? "text-warning" : "text-muted-foreground")}>
+            {unavailableCount} unavailable
+          </span>
+        </div>
+
         {/* Main layout */}
         <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {/* Squad management card */}
             <AppCard className="min-w-0 max-w-full p-3 sm:p-4 md:p-5">
               {/* Toolbar: tabs + search + add athlete */}
               <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1">
+                <div className="order-2 flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1 lg:order-1">
                   <TabButton
                     active={!showArchived}
                     onClick={() => switchTab(false)}
@@ -400,15 +423,16 @@ export default function AthletesPage() {
                   />
                 </div>
 
-                <div className="flex min-w-0 flex-1 items-center gap-2 lg:max-w-md lg:justify-end">
+                <div className="order-1 flex min-w-0 flex-1 items-center gap-2 lg:order-2 lg:max-w-md lg:justify-end">
                   <div className="relative min-w-0 flex-1">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search athletes..."
-                      className="h-9 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
+                      placeholder="Search players..."
+                      aria-label="Search players by name, number, position or status"
+                      className="h-11 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50 sm:h-9"
                     />
                   </div>
 
@@ -426,9 +450,12 @@ export default function AthletesPage() {
               </div>
 
               {isPending || isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <div>
+                  <MobileRosterSkeleton />
+                  <div className="hidden items-center justify-center gap-2 py-12 text-sm text-muted-foreground md:flex">
                   <Loader2 className="size-4 animate-spin" />
                   Loading roster…
+                  </div>
                 </div>
               ) : error ? (
                 <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -440,7 +467,9 @@ export default function AthletesPage() {
                 </div>
               ) : (
                 <>
-                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:hidden">
+                  <MobileRoster athletes={filteredAthletes} onSelect={handleSelect} />
+
+                  <div className="hidden min-w-0 grid-cols-1 gap-3 md:grid md:grid-cols-2 xl:hidden">
                     {filteredAthletes.map((athlete) => (
                       <RosterPlayerCard
                         key={athlete.id}
@@ -514,7 +543,7 @@ export default function AthletesPage() {
             type="button"
             size="icon-lg"
             onClick={openAddForm}
-            className="fixed bottom-20 right-4 z-30 rounded-full shadow-lg sm:hidden"
+            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-30 rounded-full shadow-lg sm:hidden"
             aria-label="Add athlete"
           >
             <Plus className="size-5" />
@@ -671,7 +700,7 @@ export default function AthletesPage() {
           showCloseButton={false}
           className="inset-0 top-0 left-0 flex h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-background p-0 sm:max-w-none"
         >
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+          <div className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-3 pt-[env(safe-area-inset-top)] sm:px-4">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 type="button"
@@ -683,7 +712,7 @@ export default function AthletesPage() {
                 <ArrowLeft className="size-4" />
               </Button>
               <DialogTitle className="truncate text-sm font-bold text-foreground">
-                Player Details
+                {isMobileRoster ? "Player Profile" : "Player Details"}
               </DialogTitle>
             </div>
             <Button
@@ -696,8 +725,19 @@ export default function AthletesPage() {
               <X className="size-4" />
             </Button>
           </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5">
-            {explicitlySelectedAthlete && (
+          <div className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden", isMobileRoster ? "p-0" : "p-3 sm:p-5")}>
+            {explicitlySelectedAthlete && isMobileRoster ? (
+              <MobilePlayerProfile
+                key={explicitlySelectedAthlete.id}
+                athlete={explicitlySelectedAthlete}
+                onEdit={openEditForm}
+                onArchive={openArchiveDialog}
+                onRestore={handleRestore}
+                onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                showClaimStatus={canManageClaims}
+                readOnly={!canManageRoster}
+              />
+            ) : explicitlySelectedAthlete ? (
               <AthleteDetailPanel
                 athlete={explicitlySelectedAthlete}
                 onEdit={openEditForm}
@@ -707,7 +747,7 @@ export default function AthletesPage() {
                 showClaimStatus={canManageClaims}
                 readOnly={!canManageRoster}
               />
-            )}
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
