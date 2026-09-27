@@ -77,6 +77,14 @@ export class MatchesController {
     return this.matchesService.listEventReviews(user.id, matchId);
   }
 
+  @Get(':matchId/event-operations')
+  async listEventOperations(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.listEventOperations(user.id, matchId);
+  }
+
   @Post(':matchId/event-reviews/:reviewId/resolve')
   async resolveEventReview(
     @CurrentUser() user: AuthenticatedRequest['user'],

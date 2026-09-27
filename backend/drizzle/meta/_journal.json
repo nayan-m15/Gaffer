@@ -288,6 +288,20 @@
       "when": 1790285119767,
       "tag": "0039_spicy_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790368520000,
+      "tag": "0036_concurrent_event_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790368525000,
+      "tag": "0037_concurrent_event_resolution",
+      "breakpoints": true
     }
   ]
 }

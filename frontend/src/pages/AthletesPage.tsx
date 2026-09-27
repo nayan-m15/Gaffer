@@ -311,15 +311,6 @@ export default function AthletesPage() {
       <PageHeader
         title="Roster Command"
         subtitle="Manage active squad players, squad status, and athlete archives."
-        actions={
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <span className="relative flex size-2.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-75" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
-            </span>
-            Sideline Active Mode
-          </div>
-        }
       />
 
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">

@@ -199,14 +199,12 @@ function CardSkeleton({ lines = 3 }: { lines?: number }) {
 function DashboardHeader({
   userName,
   teamName,
-  isLive,
   hasTeam,
   pendingInvite,
   onAddTeam,
 }: {
   userName: string | null;
   teamName: string | null;
-  isLive?: boolean;
   hasTeam: boolean;
   /** A team invitation is still awaiting acceptance — hide Add Team so the
    * user doesn't accidentally bootstrap their own coach team mid-invite. */
@@ -229,21 +227,6 @@ function DashboardHeader({
               <Plus className="size-4" aria-hidden="true" />
               Add Team
             </Button>
-          )}
-
-          {isLive !== undefined && (
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "inline-block size-2 rounded-full",
-                  isLive ? "bg-primary" : "bg-muted-foreground/40",
-                )}
-                aria-hidden="true"
-              />
-              <span className="text-xs font-medium text-muted-foreground">
-                Sideline Mode {isLive ? "Active" : "Inactive"}
-              </span>
-            </div>
           )}
         </>
       }
@@ -561,19 +544,21 @@ function EventItem({
             · {formatEventWhen(event.scheduledAt, event.weatherTimezone)}
           </span>
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-          <span>{event.location}</span>
-          <span aria-hidden="true">·</span>
-          <a
-            className="font-medium text-primary hover:underline"
-            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(clickEvent) => clickEvent.stopPropagation()}
-          >
-            Directions
-          </a>
-        </div>
+        {destination && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <span>{event.location || event.venueAddress}</span>
+            <span aria-hidden="true">·</span>
+            <a
+              className="font-medium text-primary hover:underline"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(clickEvent) => clickEvent.stopPropagation()}
+            >
+              Directions
+            </a>
+          </div>
+        )}
         <div className="mt-1.5">
           <EventWeatherCard event={event} compact />
         </div>
@@ -795,7 +780,6 @@ export default function DashboardPage() {
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
-        isLive={liveMatch != null}
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         onAddTeam={() => setAddTeamOpen(true)}

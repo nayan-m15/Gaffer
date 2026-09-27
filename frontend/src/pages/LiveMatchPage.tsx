@@ -58,7 +58,6 @@ import {
   PENALTY_MISSED_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
-  displayedGoalScore,
   eventDisplayLabel,
   hasPriorYellow,
   isPairedAssistEvent,
@@ -560,24 +559,34 @@ export default function LiveMatchPage() {
   const awayColor = isHome ? oppColor : ownColor;
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  // A reloaded offline page restores the last server score and the queued
-  // timeline independently. Include locally queued goals without adding them
-  // twice when the optimistic match cache already contains the same score.
-  const teamScore = displayedGoalScore(
-    matchQuery.data?.teamScore ?? 0,
-    timeline,
-    "own",
-  );
-  const oppScore = displayedGoalScore(
-    matchQuery.data?.opponentScore ?? 0,
-    timeline,
-    "opponent",
-  );
+  // Once the timeline is loaded, its effective rows determine the displayed
+  // score. A cached match total may be from a different projection revision.
+  const teamScore = eventsQuery.isSuccess
+    ? timeline.filter(
+        (event) =>
+          event.team === "own" &&
+          event.eventType === "goal" &&
+          event.lifecycleStatus !== "voided",
+      ).length
+    : (matchQuery.data?.teamScore ?? 0);
+  const oppScore = eventsQuery.isSuccess
+    ? timeline.filter(
+        (event) =>
+          event.team === "opponent" &&
+          event.eventType === "goal" &&
+          event.lifecycleStatus !== "voided",
+      ).length
+    : (matchQuery.data?.opponentScore ?? 0);
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
   const awayScore = isHome ? oppScore : teamScore;
   const projection = matchQuery.data?.projection;
+  const projectionConsistent =
+    !projection ||
+    timeline
+      .filter((event) => event.syncStatus === "reconciled")
+      .every((event) => event.projectionRevision === projection.revision);
   const confirmedHomeScore = isHome
     ? projection?.confirmedTeamScore
     : projection?.confirmedOpponentScore;
@@ -673,12 +682,7 @@ export default function LiveMatchPage() {
         }
       })();
     },
-    [
-      matchId,
-      clockAuthorityRevision,
-      refetchMatch,
-      updateMatchClock,
-    ],
+    [matchId, clockAuthorityRevision, refetchMatch, updateMatchClock],
   );
 
   useEffect(() => {
@@ -1761,13 +1765,15 @@ export default function LiveMatchPage() {
                       : "bg-[#5d6b76]/15 text-[#9fadb8]",
                 )}
               >
-                {projection.finalisationState === "finalised"
-                  ? `Final result · revision ${projection.revision}`
-                  : projection.finalisationState === "amendment_required"
-                    ? "Result changed · amendment review required"
-                    : projection.unresolvedReviewCount > 0
-                      ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
-                      : `Live provisional · revision ${projection.revision}`}
+                {!projectionConsistent
+                  ? "Syncing result and event log"
+                  : projection.finalisationState === "finalised"
+                    ? `Final result · revision ${projection.revision}`
+                    : projection.finalisationState === "amendment_required"
+                      ? "Result changed · amendment review required"
+                      : projection.unresolvedReviewCount > 0
+                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+                        : `Live provisional · revision ${projection.revision}`}
               </span>
             </div>
           ) : null}

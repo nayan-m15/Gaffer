@@ -37,7 +37,6 @@ interface MobileCalendarViewProps {
   hiddenTypes: ReadonlySet<EventType>;
   readOnly?: boolean;
   onToggleType: (type: EventType) => void;
-  onViewChange: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
   onToday: () => void;
@@ -63,7 +62,6 @@ export function MobileCalendarView({
   hiddenTypes,
   readOnly = false,
   onToggleType,
-  onViewChange,
   onSelectDate,
   onNavigate,
   onToday,
@@ -178,28 +176,6 @@ export function MobileCalendarView({
           })}
         </div>
 
-        {/* View Switcher Tabs (Month / Week / Agenda) */}
-        <div className="grid w-full min-w-0 grid-cols-3 rounded-xl bg-muted/60 p-1 text-center">
-          {(["month", "week", "agenda"] as const).map((v) => {
-            const active = view === v;
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onViewChange(v)}
-                aria-pressed={active}
-                className={cn(
-                  "rounded-lg py-1 text-xs font-semibold capitalize transition-all",
-                  active
-                    ? "bg-background text-foreground shadow-xs font-bold"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {v}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* ── 2. Calendar Surfaces ────────────────────────────────────────── */}
@@ -246,19 +222,6 @@ export function MobileCalendarView({
         />
       )}
 
-      {/* ── 4. Floating Action Button (FAB) ────────────────────────────── */}
-      {!readOnly && (
-        <button
-          type="button"
-          onClick={() => onCreateEvent(selectedDate)}
-          aria-label="Add new event"
-          className={cn(
-            "fixed bottom-6 right-5 z-40 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
-          <Plus className="size-6" />
-        </button>
-      )}
     </div>
   );
 }
