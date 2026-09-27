@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { CalendarIcon, Check, ClockIcon, MapPinned, Search } from "lucide-react";
+import { CalendarIcon, Check, ClockIcon, MapPinned, Search, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { Calendar } from "@/components/ui/calendar";
@@ -41,7 +41,14 @@ import {
 } from "./event-utils";
 import { useCreateEvent, useUpdateEvent } from "./hooks";
 import { searchLocations } from "./api";
-import type { EventType, LocationSearchResult, TeamEvent } from "./types";
+import type {
+  EventType,
+  FriendlyFixtureStatus,
+  LocationSearchResult,
+  TeamEvent,
+} from "./types";
+import { searchGafferTeams } from "@/services/teams";
+import type { GafferTeamSearchResult } from "@/services/teams";
 import { getEventTypeStyle } from "./event-style";
 
 const inputClassName =
@@ -128,6 +135,14 @@ export function EventFormDialog({
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
   const [venueAddress, setVenueAddress] = useState("");
+  const [selectedVenueLocation, setSelectedVenueLocation] = useState<LocationSearchResult | null>(null);
+  const [venueResults, setVenueResults] = useState<LocationSearchResult[]>([]);
+  const [isSearchingVenue, setIsSearchingVenue] = useState(false);
+  const [venueSearchCompleted, setVenueSearchCompleted] = useState(false);
+  const [venueSearchEnabled, setVenueSearchEnabled] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [weatherOverride, setWeatherOverride] = useState(false);
   const [weatherLocationQuery, setWeatherLocationQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
@@ -141,8 +156,20 @@ export function EventFormDialog({
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [opponentPick, setOpponentPick] = useState("");
+  const [gafferOpponentPick, setGafferOpponentPick] =
+    useState<GafferTeamSearchResult | null>(null);
+  const [gafferOpponentQuery, setGafferOpponentQuery] = useState("");
+  const [gafferOpponentResults, setGafferOpponentResults] = useState<
+    GafferTeamSearchResult[]
+  >([]);
+  const [isSearchingGafferOpponent, setIsSearchingGafferOpponent] =
+    useState(false);
+  const [gafferOpponentSearchCompleted, setGafferOpponentSearchCompleted] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
   const locationSearchIdRef = useRef(0);
+  const venueSearchIdRef = useRef(0);
+  const gafferOpponentSearchIdRef = useRef(0);
 
   const competitionOptions = useMemo(
     () =>
@@ -167,6 +194,11 @@ export function EventFormDialog({
       setTime(parts.time);
       setLocation(event.location);
       setVenueAddress(event.venueAddress ?? "");
+      setSelectedVenueLocation(null);
+      setVenueResults([]);
+      setVenueSearchCompleted(false);
+      setVenueSearchEnabled(false);
+      setWeatherOverride(event.weatherLatitude != null && event.weatherLongitude != null);
       setWeatherLocationQuery(event.weatherLocation ?? "");
       setSelectedLocation(event.weatherLatitude != null && event.weatherLongitude != null ? {
         id: event.id,
@@ -181,6 +213,15 @@ export function EventFormDialog({
       setManualTimezone(event.weatherTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
+      setGafferOpponentPick(
+        event.friendlyOpponentTeamId && event.friendlyOpponentTeamName
+          ? {
+              id: event.friendlyOpponentTeamId,
+              name: event.friendlyOpponentTeamName,
+              primaryColor: null,
+            }
+          : null,
+      );
     } else {
       setTitle("");
       setType(initialType ?? "training");
@@ -188,6 +229,11 @@ export function EventFormDialog({
       setTime("");
       setLocation("");
       setVenueAddress("");
+      setSelectedVenueLocation(null);
+      setVenueResults([]);
+      setVenueSearchCompleted(false);
+      setVenueSearchEnabled(false);
+      setWeatherOverride(false);
       setWeatherLocationQuery("");
       setSelectedLocation(null);
       setManualLatitude("");
@@ -195,12 +241,51 @@ export function EventFormDialog({
       setManualTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes("");
       setCompetitionId("none");
+      setGafferOpponentPick(null);
     }
     setOpponentPick("");
     setError(null);
     setLocationResults([]);
     setLocationSearchCompleted(false);
+    setGafferOpponentQuery("");
+    setGafferOpponentResults([]);
+    setGafferOpponentSearchCompleted(false);
   }, [open, event, initialDate, initialType]);
+
+  useEffect(() => {
+    const query = location.trim();
+    if (!open || !venueSearchEnabled || selectedVenueLocation || query.length < 3) {
+      setVenueResults([]);
+      setIsSearchingVenue(false);
+      setVenueSearchCompleted(false);
+      return;
+    }
+
+    const searchId = ++venueSearchIdRef.current;
+    const timeout = window.setTimeout(() => {
+      setIsSearchingVenue(true);
+      void searchLocations(query)
+        .then((results) => {
+          if (venueSearchIdRef.current === searchId) {
+            setVenueResults(results);
+            setVenueSearchCompleted(true);
+          }
+        })
+        .catch((err) => {
+          if (venueSearchIdRef.current === searchId) {
+            setError(err instanceof ApiError ? err.message : "Could not search locations.");
+          }
+        })
+        .finally(() => {
+          if (venueSearchIdRef.current === searchId) setIsSearchingVenue(false);
+        });
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeout);
+      venueSearchIdRef.current += 1;
+    };
+  }, [location, open, selectedVenueLocation, venueSearchEnabled]);
 
   const opponentTeams = useMemo(
     () =>
@@ -212,6 +297,21 @@ export function EventFormDialog({
   );
   const showOpponentTeamSelect =
     type === "match" && opponentTeams.length > 0;
+  /**
+   * Friendly-fixture picker: manual match events (no competition) can
+   * request another Gaffer team as the opponent. The pick is locked once
+   * the fixture has been accepted — both calendars then share the same
+   * fixture, so the opponent must not be swapped from one side only.
+   */
+  const showGafferOpponentPicker =
+    type === "match" && competitionId === "none" && !event?.competitionFixtureId;
+  const friendlyFixtureLocked = event?.friendlyFixtureStatus === "accepted";
+  // A pick that matches the event's existing link shows that request's live
+  // status (pending / declined); a fresh pick has no status yet.
+  const gafferOpponentStatus: FriendlyFixtureStatus | null =
+    gafferOpponentPick && event?.friendlyOpponentTeamId === gafferOpponentPick.id
+      ? (event?.friendlyFixtureStatus ?? null)
+      : null;
   const typeStyle = getEventTypeStyle(type);
   const competitionItems = useMemo(() => {
     const items: Record<string, string> = { none: "No competition" };
@@ -263,14 +363,43 @@ export function EventFormDialog({
     setError(null);
   };
 
+  const searchGafferOpponent = () => {
+    const query = gafferOpponentQuery.trim();
+    const searchId = ++gafferOpponentSearchIdRef.current;
+    setIsSearchingGafferOpponent(true);
+    setGafferOpponentSearchCompleted(false);
+    setError(null);
+    void searchGafferTeams(query)
+      .then((results) => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setGafferOpponentResults(results);
+          setGafferOpponentSearchCompleted(true);
+        }
+      })
+      .catch((err) => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : "Could not search Gaffer teams.",
+          );
+        }
+      })
+      .finally(() => {
+        if (gafferOpponentSearchIdRef.current === searchId) {
+          setIsSearchingGafferOpponent(false);
+        }
+      });
+  };
+
   const isPending = createEvent.isPending || updateEvent.isPending;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    if (!title.trim() || !date || !time || !location.trim()) {
-      setError("Title, type, date, time, and venue name are required.");
+    if (!title.trim() || !date || !time) {
+      setError("Title, type, date, and time are required.");
       return;
     }
 
@@ -291,6 +420,9 @@ export function EventFormDialog({
     }
 
     const notesValue = notes.trim();
+    const forecastLocation = weatherOverride
+      ? selectedLocation
+      : selectedVenueLocation;
 
     try {
       if (event) {
@@ -302,13 +434,23 @@ export function EventFormDialog({
             scheduledAt,
             location: location.trim(),
             venueAddress: venueAddress.trim() || null,
-            weatherLocation: selectedLocation?.displayName ?? null,
-            weatherLatitude: selectedLocation?.latitude ?? null,
-            weatherLongitude: selectedLocation?.longitude ?? null,
-            weatherTimezone: selectedLocation?.timezone ?? null,
+            weatherLocation: forecastLocation?.displayName ?? null,
+            weatherLatitude: forecastLocation?.latitude ?? null,
+            weatherLongitude: forecastLocation?.longitude ?? null,
+            weatherTimezone: forecastLocation?.timezone ?? null,
             notes: notesValue.length > 0 ? notesValue : null,
             competitionId:
               type === "match" && competitionId !== "none" ? competitionId : null,
+            // Accepted fixtures keep their opponent link (send nothing) —
+            // a pending request can still be swapped or removed.
+            ...(friendlyFixtureLocked
+              ? {}
+              : {
+                  friendlyOpponentTeamId:
+                    type === "match" && competitionId === "none"
+                      ? (gafferOpponentPick?.id ?? null)
+                      : null,
+                }),
           },
         });
       } else {
@@ -318,13 +460,17 @@ export function EventFormDialog({
           scheduledAt,
           location: location.trim(),
           venueAddress: venueAddress.trim() || null,
-          weatherLocation: selectedLocation?.displayName ?? null,
-          weatherLatitude: selectedLocation?.latitude ?? null,
-          weatherLongitude: selectedLocation?.longitude ?? null,
-          weatherTimezone: selectedLocation?.timezone ?? null,
+          weatherLocation: forecastLocation?.displayName ?? null,
+          weatherLatitude: forecastLocation?.latitude ?? null,
+          weatherLongitude: forecastLocation?.longitude ?? null,
+          weatherTimezone: forecastLocation?.timezone ?? null,
           ...(notesValue.length > 0 ? { notes: notesValue } : {}),
           competitionId:
             type === "match" && competitionId !== "none" ? competitionId : null,
+          friendlyOpponentTeamId:
+            type === "match" && competitionId === "none"
+              ? (gafferOpponentPick?.id ?? null)
+              : null,
         });
       }
       onOpenChange(false);
@@ -451,6 +597,108 @@ export function EventFormDialog({
             </Field>
           ) : null}
 
+          {showGafferOpponentPicker ? (
+            <Field
+              htmlFor={`${baseId}-gaffer-opponent`}
+              label="Gaffer opponent (optional)"
+            >
+              {friendlyFixtureLocked ? (
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
+                  <p className="flex items-center gap-1 font-medium text-emerald-500">
+                    <Check className="size-3" />
+                    Friendly fixture confirmed
+                  </p>
+                  <p className="mt-1">
+                    {event?.friendlyOpponentTeamName ?? title}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Accepted fixtures are the same match on both calendars, so
+                    the opponent cannot be changed here.
+                  </p>
+                </div>
+              ) : gafferOpponentPick ? (
+                <>
+                  <GafferOpponentCard
+                    name={gafferOpponentPick.name}
+                    status={gafferOpponentStatus}
+                    onRemove={() => {
+                      setGafferOpponentPick(null);
+                      setGafferOpponentQuery("");
+                      setGafferOpponentResults([]);
+                      setGafferOpponentSearchCompleted(false);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave this empty to play an opponent without a Gaffer
+                    account instead.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      id={`${baseId}-gaffer-opponent`}
+                      value={gafferOpponentQuery}
+                      onChange={(e) => {
+                        gafferOpponentSearchIdRef.current += 1;
+                        setGafferOpponentQuery(e.target.value);
+                        setIsSearchingGafferOpponent(false);
+                        setGafferOpponentResults([]);
+                        setGafferOpponentSearchCompleted(false);
+                      }}
+                      placeholder="Search teams or coach names"
+                      className={inputClassName}
+                      maxLength={100}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        isSearchingGafferOpponent ||
+                        gafferOpponentQuery.trim().length < 2
+                      }
+                      onClick={searchGafferOpponent}
+                    >
+                      <Search className="size-4" />
+                      {isSearchingGafferOpponent ? "Searching…" : "Search"}
+                    </Button>
+                  </div>
+                  {gafferOpponentResults.length > 0 && (
+                    <div className="rounded-md border border-border bg-background p-1">
+                      {gafferOpponentResults.map((team) => (
+                        <button
+                          key={team.id}
+                          type="button"
+                          className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                          onClick={() => {
+                            setGafferOpponentPick(team);
+                            setTitle(team.name);
+                            setGafferOpponentResults([]);
+                            setGafferOpponentSearchCompleted(false);
+                          }}
+                        >
+                          {team.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {gafferOpponentSearchCompleted &&
+                    gafferOpponentResults.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No Gaffer teams found. Leave this empty to enter a
+                        free-text opponent instead.
+                      </p>
+                    )}
+                  <p className="text-xs text-muted-foreground">
+                    Pick another team on Gaffer to send them a friendly fixture
+                    request — they confirm before the match appears on their
+                    calendar. Your own team is never listed.
+                  </p>
+                </>
+              )}
+            </Field>
+          ) : null}
+
           <Field htmlFor={`${baseId}-title`} label="Title">
             <input
               id={`${baseId}-title`}
@@ -492,154 +740,287 @@ export function EventFormDialog({
             </Field>
           </div>
 
-          <Field htmlFor={`${baseId}-location`} label="Venue name">
+          <Field htmlFor={`${baseId}-location`} label="Location (optional)">
             <input
               id={`${baseId}-location`}
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g. Riverside Sports Ground"
-              className={inputClassName}
-              required
-              maxLength={200}
-            />
-          </Field>
-
-          <Field htmlFor={`${baseId}-address`} label="Street address">
-            <input
-              id={`${baseId}-address`}
-              value={venueAddress}
-              onChange={(e) => setVenueAddress(e.target.value)}
-              placeholder="e.g. 1 Sport Street, Stellenbosch"
-              className={inputClassName}
-              maxLength={300}
-            />
-          </Field>
-
-          <Field htmlFor={`${baseId}-weather-location`} label="Weather location">
-            <div className="flex gap-2">
-              <input
-                id={`${baseId}-weather-location`}
-                value={weatherLocationQuery}
-                onChange={(e) => {
-                  locationSearchIdRef.current += 1;
-                  setWeatherLocationQuery(e.target.value);
-                  setIsSearchingLocation(false);
+              onChange={(e) => {
+                setLocation(e.target.value);
+                setSelectedVenueLocation(null);
+                setVenueSearchEnabled(true);
+                if (!weatherOverride) {
                   setSelectedLocation(null);
-                  setLocationResults([]);
-                  setLocationSearchCompleted(false);
-                }}
-                placeholder="Town, suburb, or postcode"
-                className={inputClassName}
-                maxLength={300}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSearchingLocation || weatherLocationQuery.trim().length < 3}
-                onClick={() => {
-                  const query = weatherLocationQuery.trim();
-                  const searchId = ++locationSearchIdRef.current;
-                  setIsSearchingLocation(true);
-                  setLocationSearchCompleted(false);
-                  setError(null);
-                  void searchLocations(query)
-                    .then((results) => {
-                      if (locationSearchIdRef.current === searchId) {
-                        setLocationResults(results);
-                        setLocationSearchCompleted(true);
-                      }
-                    })
-                    .catch((err) => {
-                      if (locationSearchIdRef.current === searchId) {
-                        setError(err instanceof ApiError ? err.message : "Could not search locations.");
-                      }
-                    })
-                    .finally(() => {
-                      if (locationSearchIdRef.current === searchId) setIsSearchingLocation(false);
-                    });
-                }}
-              >
-                <Search className="size-4" />
-                {isSearchingLocation ? "Searching…" : "Find"}
-              </Button>
-            </div>
-            {selectedLocation && (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
-                <p className="flex items-center gap-1 font-medium text-emerald-500">
-                  <Check className="size-3" />Selected forecast location
-                </p>
-                <p className="mt-1">{selectedLocation.displayName}</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  {selectedLocation.latitude.toFixed(5)}, {selectedLocation.longitude.toFixed(5)}
-                  {selectedLocation.timezone ? ` · ${selectedLocation.timezone}` : ""}
-                </p>
-              </div>
-            )}
-            {locationResults.length > 0 && !selectedLocation && (
-              <div className="rounded-md border border-border bg-background p-1">
-                {locationResults.map((result) => (
+                  setWeatherLocationQuery("");
+                }
+              }}
+              placeholder="Search for a place or area"
+              className={inputClassName}
+              maxLength={200}
+              autoComplete="off"
+              aria-describedby={`${baseId}-location-hint`}
+            />
+            <p id={`${baseId}-location-hint`} className="mt-1 text-xs text-muted-foreground">
+              Choose a place or area, or enter a location manually. The selected location is used for the forecast.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2"
+              disabled={locating || !navigator.geolocation}
+              onClick={() => {
+                if (!navigator.geolocation) return;
+                setLocating(true);
+                setLocationMessage(null);
+                navigator.geolocation.getCurrentPosition(
+                  ({ coords }) => {
+                    const name = `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
+                    const current = {
+                      id: "current-location",
+                      name,
+                      displayName: `Current location (${name})`,
+                      latitude: coords.latitude,
+                      longitude: coords.longitude,
+                      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    };
+                    setLocation(name);
+                    setSelectedVenueLocation(current);
+                    setSelectedLocation(current);
+                    setWeatherOverride(false);
+                    setVenueResults([]);
+                    setVenueSearchEnabled(false);
+                    setManualLatitude(String(coords.latitude));
+                    setManualLongitude(String(coords.longitude));
+                    setManualTimezone(current.timezone);
+                    setLocationMessage("Current location selected for the event and forecast.");
+                    setLocating(false);
+                  },
+                  () => {
+                    setLocationMessage("Could not access your location. Check browser permission or enter a place manually.");
+                    setLocating(false);
+                  },
+                  { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+                );
+              }}
+            >
+              <LocateFixed className="mr-2 size-4" />
+              {locating ? "Getting location…" : "Use my current location"}
+            </Button>
+            {locationMessage && <p role="status" className="mt-1 text-xs text-muted-foreground">{locationMessage}</p>}
+            {isSearchingVenue && <p role="status" className="text-xs text-muted-foreground">Searching places…</p>}
+            {venueResults.length > 0 && !selectedVenueLocation && (
+              <div role="listbox" aria-label="Matching places" className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-background p-1">
+                {venueResults.map((result) => (
                   <button
                     key={result.id}
                     type="button"
-                    className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                    role="option"
+                    aria-selected="false"
+                    className="block w-full rounded px-3 py-2 text-left hover:bg-muted"
                     onClick={() => {
+                      setSelectedVenueLocation(result);
                       setSelectedLocation(result);
+                      setWeatherOverride(false);
+                      setLocation(result.name);
+                      setVenueSearchEnabled(false);
                       setWeatherLocationQuery(result.displayName);
                       setManualLatitude(String(result.latitude));
                       setManualLongitude(String(result.longitude));
                       setManualTimezone(result.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
-                      setLocationResults([]);
-                      setLocationSearchCompleted(false);
+                      setVenueResults([]);
+                      setVenueSearchCompleted(false);
                     }}
-                  >{result.displayName}</button>
+                  >
+                    <span className="block text-sm font-medium text-foreground">{result.name}</span>
+                    {result.displayName !== result.name && (
+                      <span className="block text-xs text-muted-foreground">{result.displayName}</span>
+                    )}
+                  </button>
                 ))}
               </div>
             )}
-            {locationSearchCompleted && locationResults.length === 0 && !selectedLocation && (
-              <p className="text-xs text-muted-foreground">No locations found.</p>
+            {venueSearchCompleted && venueResults.length === 0 && location.trim().length >= 3 && !selectedVenueLocation && (
+              <p className="text-xs text-muted-foreground">No matching place. You can still use this name as the venue.</p>
             )}
-            <p className="text-xs text-muted-foreground">Choose a nearby town or suburb so the forecast uses the correct coordinates.</p>
-            <details className="rounded-md border border-border bg-background p-3 text-sm">
-              <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
-                <MapPinned className="size-4" />Use exact coordinates
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <label className="text-xs text-muted-foreground">
-                  Latitude
+            {selectedVenueLocation && !weatherOverride && (
+              <div className="mt-2 flex items-start justify-between gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
+                <p className="flex items-start gap-2">
+                  <Check className="mt-0.5 size-3 shrink-0 text-emerald-500" />
+                  <span>Forecast will use {selectedVenueLocation.displayName}.</span>
+                </p>
+                <button
+                  type="button"
+                  className="shrink-0 font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setSelectedVenueLocation(null);
+                    setSelectedLocation(null);
+                    setLocation("");
+                    setVenueSearchEnabled(false);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            <details className="mt-2 rounded-md border border-border bg-background p-3 text-sm" open={isEditing && Boolean(event?.venueAddress || event?.weatherLatitude != null)}>
+              <summary className="cursor-pointer font-medium text-foreground">More location options</summary>
+              <div className="mt-3 flex flex-col gap-4">
+                <Field htmlFor={`${baseId}-address`} label="Street address (optional)">
                   <input
-                    type="number"
-                    min="-90"
-                    max="90"
-                    step="any"
-                    value={manualLatitude}
-                    onChange={(e) => setManualLatitude(e.target.value)}
-                    className={cn(inputClassName, "mt-1")}
+                    id={`${baseId}-address`}
+                    value={venueAddress}
+                    onChange={(e) => setVenueAddress(e.target.value)}
+                    placeholder="Add an address for directions"
+                    className={inputClassName}
+                    maxLength={300}
                   />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  Longitude
-                  <input
-                    type="number"
-                    min="-180"
-                    max="180"
-                    step="any"
-                    value={manualLongitude}
-                    onChange={(e) => setManualLongitude(e.target.value)}
-                    className={cn(inputClassName, "mt-1")}
-                  />
-                </label>
-                <label className="col-span-2 text-xs text-muted-foreground">
-                  Venue timezone
-                  <input
-                    value={manualTimezone}
-                    onChange={(e) => setManualTimezone(e.target.value)}
-                    placeholder="Africa/Johannesburg"
-                    className={cn(inputClassName, "mt-1")}
-                  />
-                </label>
-                <Button type="button" variant="outline" className="col-span-2" onClick={useExactCoordinates}>
-                  Use these coordinates
-                </Button>
+                </Field>
+                <div>
+                  <button
+                    type="button"
+                    className="text-left text-sm font-medium text-primary hover:underline"
+                    onClick={() => {
+                      if (weatherOverride) {
+                        setWeatherOverride(false);
+                        setSelectedLocation(selectedVenueLocation);
+                        setWeatherLocationQuery(selectedVenueLocation?.displayName ?? "");
+                      } else {
+                        setWeatherOverride(true);
+                        if (!selectedVenueLocation) setSelectedLocation(null);
+                      }
+                    }}
+                  >
+                    {weatherOverride ? "Use the event location for the forecast" : "Use a different forecast location"}
+                  </button>
+                  {weatherOverride && (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <Field htmlFor={`${baseId}-weather-location`} label="Forecast area">
+                        <div className="flex gap-2">
+                          <input
+                            id={`${baseId}-weather-location`}
+                            value={weatherLocationQuery}
+                            onChange={(e) => {
+                              locationSearchIdRef.current += 1;
+                              setWeatherLocationQuery(e.target.value);
+                              setIsSearchingLocation(false);
+                              setSelectedLocation(null);
+                              setLocationResults([]);
+                              setLocationSearchCompleted(false);
+                            }}
+                            placeholder="Search a town or suburb"
+                            className={inputClassName}
+                            maxLength={300}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isSearchingLocation || weatherLocationQuery.trim().length < 3}
+                            onClick={() => {
+                              const query = weatherLocationQuery.trim();
+                              const searchId = ++locationSearchIdRef.current;
+                              setIsSearchingLocation(true);
+                              setLocationSearchCompleted(false);
+                              setError(null);
+                              void searchLocations(query)
+                                .then((results) => {
+                                  if (locationSearchIdRef.current === searchId) {
+                                    setLocationResults(results);
+                                    setLocationSearchCompleted(true);
+                                  }
+                                })
+                                .catch((err) => {
+                                  if (locationSearchIdRef.current === searchId) {
+                                    setError(err instanceof ApiError ? err.message : "Could not search locations.");
+                                  }
+                                })
+                                .finally(() => {
+                                  if (locationSearchIdRef.current === searchId) setIsSearchingLocation(false);
+                                });
+                            }}
+                          >
+                            <Search className="size-4" />
+                            {isSearchingLocation ? "Searching…" : "Find"}
+                          </Button>
+                        </div>
+                      </Field>
+                      {selectedLocation && (
+                        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
+                          <p className="flex items-center gap-1 font-medium text-emerald-500">
+                            <Check className="size-3" />Selected forecast area
+                          </p>
+                          <p className="mt-1">{selectedLocation.displayName}</p>
+                        </div>
+                      )}
+                      {locationResults.length > 0 && !selectedLocation && (
+                        <div className="rounded-md border border-border bg-background p-1">
+                          {locationResults.map((result) => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                              onClick={() => {
+                                setSelectedLocation(result);
+                                setWeatherLocationQuery(result.displayName);
+                                setManualLatitude(String(result.latitude));
+                                setManualLongitude(String(result.longitude));
+                                setManualTimezone(result.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+                                setLocationResults([]);
+                                setLocationSearchCompleted(false);
+                              }}
+                            >{result.displayName}</button>
+                          ))}
+                        </div>
+                      )}
+                      {locationSearchCompleted && locationResults.length === 0 && !selectedLocation && (
+                        <p className="text-xs text-muted-foreground">No forecast area found.</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Weather uses the selected area’s coordinates.</p>
+                      <details className="rounded-md border border-border p-3 text-sm">
+                        <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
+                          <MapPinned className="size-4" />Use exact coordinates
+                        </summary>
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <label className="text-xs text-muted-foreground">
+                            Latitude
+                            <input
+                              type="number"
+                              min="-90"
+                              max="90"
+                              step="any"
+                              value={manualLatitude}
+                              onChange={(e) => setManualLatitude(e.target.value)}
+                              className={cn(inputClassName, "mt-1")}
+                            />
+                          </label>
+                          <label className="text-xs text-muted-foreground">
+                            Longitude
+                            <input
+                              type="number"
+                              min="-180"
+                              max="180"
+                              step="any"
+                              value={manualLongitude}
+                              onChange={(e) => setManualLongitude(e.target.value)}
+                              className={cn(inputClassName, "mt-1")}
+                            />
+                          </label>
+                          <label className="col-span-2 text-xs text-muted-foreground">
+                            Venue timezone
+                            <input
+                              value={manualTimezone}
+                              onChange={(e) => setManualTimezone(e.target.value)}
+                              placeholder="Africa/Johannesburg"
+                              className={cn(inputClassName, "mt-1")}
+                            />
+                          </label>
+                          <Button type="button" variant="outline" className="col-span-2" onClick={useExactCoordinates}>
+                            Use these coordinates
+                          </Button>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
               </div>
             </details>
           </Field>
@@ -923,6 +1304,67 @@ function Field({
         {label}
       </Label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Selected-Gaffer-opponent summary card. `status` is null for a fresh pick,
+ * or the live fixture status when the pick matches the event's existing
+ * link, so the coach sees whether the request is awaiting, declined, etc.
+ */
+function GafferOpponentCard({
+  name,
+  status,
+  onRemove,
+}: {
+  name: string;
+  status: FriendlyFixtureStatus | null;
+  onRemove: () => void;
+}) {
+  const heading =
+    status === "pending"
+      ? "Friendly fixture request sent"
+      : status === "declined"
+        ? "Friendly fixture declined"
+        : status === "cancelled"
+          ? "Friendly fixture cancelled"
+          : "Friendly fixture request will be sent";
+  const tone =
+    status === "declined"
+      ? "border-destructive/30 bg-destructive/5"
+      : status === "cancelled"
+        ? "border-border bg-muted/30"
+        : "border-emerald-500/30 bg-emerald-500/5";
+  const headingTone =
+    status === "declined"
+      ? "text-destructive"
+      : status === "cancelled"
+        ? "text-muted-foreground"
+        : "text-emerald-500";
+  const hint =
+    status === "pending"
+      ? "Waiting for them to accept — you can still change the date, venue, or opponent."
+      : status === "declined"
+        ? "They declined this fixture. Pick another Gaffer team or remove the opponent."
+        : status === "cancelled"
+          ? "This request was cancelled. Pick a team to send a new one."
+          : "They confirm the match before it appears on their calendar.";
+  return (
+    <div className={cn("rounded-md border p-2 text-xs text-foreground", tone)}>
+      <p className={cn("flex items-center gap-1 font-medium", headingTone)}>
+        <Check className="size-3" />
+        {heading}
+      </p>
+      <p className="mt-1">{name}</p>
+      <p className="mt-0.5 text-muted-foreground">{hint}</p>
+      <button
+        type="button"
+        className="mt-1 font-medium text-primary hover:underline"
+        onClick={onRemove}
+      >
+        Remove Gaffer opponent
+      </button>
     </div>
   );
 }

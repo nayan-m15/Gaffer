@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
+import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 
 interface FooterLink {
@@ -10,6 +11,7 @@ interface FooterLink {
 interface FooterProps {
   /** Which navigation set to render. Defaults to the coach link set. */
   variant?: "coach" | "player";
+  className?: string;
 }
 
 const COACH_FOOTER_LINKS: FooterLink[] = [
@@ -42,7 +44,7 @@ const LEGAL_FOOTER_LINKS: FooterLink[] = [
  * roster/events/live-logger/stats/team-tactics, player links point at the
  * read-only /player/* routes.
  */
-export function Footer({ variant = "coach" }: FooterProps) {
+export function Footer({ variant = "coach", className }: FooterProps) {
   const year = new Date().getFullYear();
   const returnTo = variant === "player" ? "/player/dashboard" : "/dashboard";
   const links = [
@@ -51,7 +53,7 @@ export function Footer({ variant = "coach" }: FooterProps) {
   ];
 
   return (
-    <footer className="mx-auto mt-8 w-full max-w-[1600px] border-t border-border/50 px-6 py-6 text-sm text-muted-foreground sm:px-10">
+    <footer className={cn("mx-auto mt-8 w-full max-w-[1600px] border-t border-border/50 px-6 py-6 text-sm text-muted-foreground sm:px-10", className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <SportLogo size={20} className="rounded" />

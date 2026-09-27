@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
   ChevronLeft,
+  Download,
   Loader2,
   Plus,
   Share2,
@@ -65,12 +66,15 @@ import {
   TeamComparisonChart,
 } from "@/features/matches/match-report-charts";
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
+import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
 import {
   LiveBenchRow,
   LivePitch,
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
 import {
+  friendlyLineupPlayers,
+  friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
@@ -196,6 +200,7 @@ export default function MatchReportPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
@@ -233,9 +238,23 @@ export default function MatchReportPage() {
     () => ownPitchState(squad, timeline),
     [squad, timeline],
   );
+  const opponentDisplaySquad = useMemo(
+    () =>
+      (match?.opponentSquad ?? []).length > 0
+        ? (match?.opponentSquad ?? [])
+        : friendlyLineupPlayers(match?.friendlyOpponentLineup),
+    [match?.friendlyOpponentLineup, match?.opponentSquad],
+  );
   const oppState = useMemo(
-    () => opponentPitchState(match?.opponentSquad ?? [], timeline),
-    [match?.opponentSquad, timeline],
+    () =>
+      opponentPitchState(
+        opponentDisplaySquad,
+        timeline,
+        (match?.opponentSquad ?? []).length > 0
+          ? undefined
+          : friendlyLineupStarterIds(match?.friendlyOpponentLineup),
+      ),
+    [match?.friendlyOpponentLineup, match?.opponentSquad, opponentDisplaySquad, timeline],
   );
   const ownPlaced = useMemo(
     () =>
@@ -335,6 +354,28 @@ export default function MatchReportPage() {
     } catch {
       setShareNote("Could not share");
       window.setTimeout(() => setShareNote(null), 2500);
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!match) return;
+    setExportingPdf(true);
+    setShareNote(null);
+    try {
+      await exportLiveMatchReportPdf({
+        match,
+        teamName: ownName,
+        squad,
+        events: timeline,
+        generatedAt: new Date(),
+      });
+      setShareNote("PDF report exported");
+    } catch (error) {
+      console.error("Match report PDF export failed", error);
+      setShareNote("Could not export PDF");
+    } finally {
+      setExportingPdf(false);
+      window.setTimeout(() => setShareNote(null), 3000);
     }
   };
 
@@ -459,14 +500,27 @@ export default function MatchReportPage() {
                 {metaLine}
               </p>
             </div>
-            <button
-              type="button"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#16d99a] text-[#06120e] transition-opacity hover:opacity-90"
-              onClick={() => void shareReport()}
-              aria-label="Share match report"
-            >
-              <Share2 className="size-4" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {team?.role === "coach" && (
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#00d99a]/50 px-3 font-oswald text-xs tracking-wider text-[#00d99a] transition-colors hover:bg-[#00d99a]/10 disabled:opacity-50"
+                  onClick={() => void exportPdf()}
+                  disabled={exportingPdf}
+                >
+                  <Download className="size-4" />
+                  <span className="hidden sm:inline">{exportingPdf ? "EXPORTING…" : "EXPORT PDF"}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
+                onClick={() => void shareReport()}
+                aria-label="Share match report"
+              >
+                <Share2 className="size-4" />
+              </button>
+            </div>
           </div>
           {shareNote ? (
             <p className="mt-2 text-right text-[11px] text-[#16d99a]">{shareNote}</p>

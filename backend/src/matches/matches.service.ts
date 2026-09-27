@@ -23,8 +23,13 @@ import {
   matchProjectionState,
   matches,
   opponentMatchPlayers,
+  seasons,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import {
+  FriendlyFixturesService,
+  unavailableFriendlyOpponentLineup,
+} from '../friendly-fixtures/friendly-fixtures.service';
 import {
   syncFixtureResult,
   validateFixtureResult,
@@ -46,6 +51,7 @@ export class MatchesService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly friendlyFixturesService: FriendlyFixturesService,
   ) {}
 
   async findOne(userId: string, matchId: string) {
@@ -53,17 +59,38 @@ export class MatchesService {
     const { match, event } = await this.requireMatch(team.id, matchId);
 
     let competitionName: string | null = null;
+    let competitionSeason: string | null = null;
     if (match.competitionId) {
       const [competition] = await this.databaseService.database
-        .select({ name: competitions.name })
+        .select({
+          name: competitions.name,
+          legacySeason: competitions.season,
+          seasonName: seasons.name,
+        })
         .from(competitions)
+        .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
         .where(eq(competitions.id, match.competitionId))
         .limit(1);
       competitionName = competition?.name ?? null;
+      competitionSeason =
+        competition?.seasonName ?? competition?.legacySeason ?? null;
     }
 
     const opponentSquad = await this.listOpponentPlayers(match.id);
     const projection = await this.refreshProjection(match.id);
+
+    // Accepted Gaffer friendlies only: surface the opposing team's actual
+    // confirmed lineup alongside the manually logged opponent squad. The
+    // expected opponent team is verified against the match row so a match
+    // can never resolve an unrelated team's lineup.
+    const friendlyOpponentLineup =
+      event.friendlyFixtureId && match.opponentTeamId
+        ? await this.friendlyFixturesService.resolveOpponentLineup(
+            event.friendlyFixtureId,
+            team.id,
+            match.opponentTeamId,
+          )
+        : unavailableFriendlyOpponentLineup();
 
     return {
       ...match,
@@ -74,8 +101,11 @@ export class MatchesService {
       eventStatus: event.status,
       eventScheduledAt: event.scheduledAt,
       eventLocation: event.location,
+      eventNotes: event.notes,
       competitionName,
+      competitionSeason,
       opponentSquad,
+      friendlyOpponentLineup,
     };
   }
 

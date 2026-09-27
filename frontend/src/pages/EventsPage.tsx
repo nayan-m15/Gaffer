@@ -9,6 +9,7 @@ import { CalendarToolbar } from "@/features/events/CalendarToolbar";
 import { DayEventsDialog } from "@/features/events/DayEventsDialog";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { EventFormDialog } from "@/features/events/EventFormDialog";
+import { FixtureRequestsBanner } from "@/features/events/FixtureRequestsBanner";
 import { MobileCalendarView } from "@/features/events/MobileCalendarView";
 import { MonthCalendar } from "@/features/events/MonthCalendar";
 import { WeekView } from "@/features/events/WeekView";
@@ -191,7 +192,6 @@ export default function EventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
-          onOpenEvent={handleOpenEvent}
         />
       )}
       {view === "week" && (
@@ -201,7 +201,6 @@ export default function EventsPage() {
           selectedDate={selectedDate}
           now={now}
           onCreateEvent={handleDayClick}
-          onOpenEvent={handleOpenEvent}
         />
       )}
       {view === "agenda" && (
@@ -225,7 +224,7 @@ export default function EventsPage() {
         className="shrink-0 pb-3 lg:pt-5 lg:pb-3"
       />
 
-      <div className="mx-auto flex w-full max-w-[1800px] min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 pb-3 sm:gap-4 sm:px-5 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1800px] min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 sm:gap-4 sm:px-5 lg:px-8">
         {/* Loading / error states */}
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
@@ -251,6 +250,9 @@ export default function EventsPage() {
             Couldn't refresh events — showing your last saved schedule.
           </p>
         )}
+
+        {/* Coach inbox: inbound friendly-fixture requests awaiting a response */}
+        {canManageEvents && <FixtureRequestsBanner />}
 
         {/* Mobile View: Samsung & Apple phone inspired calendar */}
         {events && (
