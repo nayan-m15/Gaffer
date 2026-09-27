@@ -69,8 +69,8 @@ function PickerRow({
       className={cn(
         "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors",
         selected
-          ? "border-[#00d99a]/70 bg-[#00d99a]/10"
-          : "border-[#1c2b36] bg-[#101920] hover:border-[#00d99a]/40",
+          ? "border-[#16d99a]/70 bg-[#16d99a]/10"
+          : "border-[#2a2e31] bg-[#111315] hover:border-[#16d99a]/40",
       )}
     >
       {children}
@@ -89,10 +89,10 @@ function EmptyRow({
 }) {
   return (
     <PickerRow selected={selected} onSelect={onSelect}>
-      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full border border-[#3d4f5c] bg-[#0c1218] text-[11px] font-bold text-[#8e9ba8]">
+      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full border border-[#3d4f5c] bg-[#0d0f10] text-[11px] font-bold text-[#9ca39f]">
         —
       </span>
-      <span className="text-sm font-semibold text-[#8e9ba8]">{label}</span>
+      <span className="text-sm font-semibold text-[#9ca39f]">{label}</span>
     </PickerRow>
   );
 }
@@ -156,7 +156,7 @@ export function AthletePicker({
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-semibold text-[#e8ecef]">
+                <span className="truncate text-sm font-semibold text-[#ecefed]">
                   {displayName(athlete)}
                 </span>
                 <span
@@ -240,7 +240,7 @@ export function OpponentPlayerPicker({
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-semibold text-[#e8ecef]">
+                <span className="truncate text-sm font-semibold text-[#ecefed]">
                   {opponentPlayerLabel(player, visibility)}
                 </span>
                 {positionLabel ? (

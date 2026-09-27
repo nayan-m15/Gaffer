@@ -121,26 +121,40 @@ export async function getPublicDashboardFilters() {
 export async function getPublicMatches(
   filters: PublicDashboardQuery & { status?: PublicMatchStatus },
 ) {
-  const response = await apiFetch<DataResponse<PublicMatch[]>>(
-    `${BASE}/matches${queryString(filters)}`,
-  );
-  return response.data;
+  return getAllPages<PublicMatch>("matches", filters, 100, 1);
 }
 
 export async function getPublicPlayers(filters: PublicDashboardQuery) {
-  const players: PublicPlayer[] = [];
-  const limit = 500;
-  let offset = 0;
+  return getAllPages<PublicPlayer>("players", filters, 500, 3);
+}
 
-  // Keep each backend request bounded while still fulfilling the page's
-  // all-players contract when the public dataset grows beyond one page.
-  while (true) {
-    const response = await apiFetch<DataResponse<PublicPlayer[]>>(
-      `${BASE}/players${queryString({ ...filters, limit, offset })}`,
+async function getAllPages<T>(
+  resource: "matches" | "players",
+  filters: PublicDashboardQuery & { status?: PublicMatchStatus },
+  limit: number,
+  concurrency: number,
+): Promise<T[]> {
+  const fetchPage = async (offset: number) => {
+    const response = await apiFetch<DataResponse<T[]>>(
+      `${BASE}/${resource}${queryString({ ...filters, limit, offset })}`,
     );
-    players.push(...response.data);
-    if (response.data.length < limit) return players;
-    offset += limit;
+    return response.data;
+  };
+
+  const first = await fetchPage(0);
+  const all = [...first];
+  if (first.length < limit) return all;
+
+  for (let offset = limit; ; offset += limit * concurrency) {
+    const pages = await Promise.all(
+      Array.from({ length: concurrency }, (_, index) =>
+        fetchPage(offset + index * limit),
+      ),
+    );
+    for (const page of pages) {
+      all.push(...page);
+      if (page.length < limit) return all;
+    }
   }
 }
 

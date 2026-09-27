@@ -7,12 +7,13 @@ import {
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
 import type {
+  FriendlyOpponentLineup,
   MatchLogEvent,
   MatchSquadAthlete,
   OpponentMatchPlayer,
 } from "./types";
 
-export const FALLBACK_OWN_COLOR = "#00D99A";
+export const FALLBACK_OWN_COLOR = "#16d99a";
 export const FALLBACK_OPP_COLOR = "#D4566A";
 
 export type PitchHalf = "left" | "right";
@@ -240,14 +241,60 @@ function hasRecordedPosition(player: OpponentMatchPlayer) {
   return Boolean(player.position?.trim());
 }
 
+/**
+ * Display-only view of the shared friendly-opponent lineup in the same shape
+ * the pitch and bench panels already render. Used only when the coach has not
+ * entered an opposition squad by hand — ids are the opponent's athlete ids,
+ * so nothing here is offered for event attribution. Athletes without a squad
+ * number cannot be placed as shirts, and duplicate shirt numbers collapse.
+ */
+export function friendlyLineupPlayers(
+  lineup: FriendlyOpponentLineup | null | undefined,
+): OpponentMatchPlayer[] {
+  if (!lineup?.available) {
+    return [];
+  }
+  const seenNumbers = new Set<number>();
+  const players: OpponentMatchPlayer[] = [];
+  for (const athlete of lineup.players) {
+    if (athlete.squadNumber == null || seenNumbers.has(athlete.squadNumber)) {
+      continue;
+    }
+    seenNumbers.add(athlete.squadNumber);
+    players.push({
+      id: athlete.id,
+      shirtNumber: athlete.squadNumber,
+      name: `${athlete.firstName} ${athlete.lastName}`.trim() || null,
+      position: null,
+    });
+  }
+  return players;
+}
+
+/** The opponent's actual confirmed starters, for pitch/bench selection. */
+export function friendlyLineupStarterIds(
+  lineup: FriendlyOpponentLineup | null | undefined,
+): ReadonlySet<string> {
+  if (!lineup?.available) {
+    return new Set<string>();
+  }
+  return new Set(
+    lineup.players
+      .filter((athlete) => athlete.started)
+      .map((athlete) => athlete.id),
+  );
+}
+
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
   timeline: MatchLogEvent[],
+  preferredStarterIds?: ReadonlySet<string>,
 ) {
   const unique = uniqueOpponents(players);
   const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
   const positioned = sorted.filter(hasRecordedPosition);
   const unpositioned = sorted.filter((player) => !hasRecordedPosition(player));
+  const preferred = new Set(preferredStarterIds ?? []);
   const starters: OpponentMatchPlayer[] = [];
   const seenNumbers = new Set<number>();
 
@@ -268,6 +315,14 @@ export function opponentPitchState(
       takeStarter(player);
     }
   } else {
+    // Shared friendly lineups know exactly who started, so honour that
+    // before guessing from shirt order. Manual squads pass no preferences
+    // and keep the lower-shirt-number behaviour unchanged.
+    for (const player of sorted) {
+      if (preferred.has(player.id)) {
+        takeStarter(player);
+      }
+    }
     for (const player of sorted) {
       takeStarter(player);
     }

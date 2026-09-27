@@ -342,6 +342,50 @@ export interface GamePlanSnapshot {
   cornerTakerId: string | null;
 }
 
+export const friendlyFixtureStatus = pgEnum('friendly_fixture_status', [
+  'pending',
+  'accepted',
+  'declined',
+  'cancelled',
+]);
+
+// A friendly fixture agreed between two Gaffer teams outside of a league/cup
+// competition. The requesting coach proposes the match (status 'pending'); the
+// opponent coach accepts or declines it. Once accepted, both teams get their
+// own events row linked back to this fixture so the two sides always describe
+// the same match instead of drifting into unrelated duplicates.
+// Null `friendly_fixture_id` on events keeps free-text (non-Gaffer) friendly
+// opponents working exactly as before.
+export const friendlyFixtures = pgTable(
+  'friendly_fixtures',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    requesterTeamId: uuid('requester_team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    opponentTeamId: uuid('opponent_team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    status: friendlyFixtureStatus('status').default('pending').notNull(),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    respondedByUserId: text('responded_by_user_id').references(() => user.id),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('friendly_fixtures_requester_team_id_index').on(
+      table.requesterTeamId,
+    ),
+    index('friendly_fixtures_opponent_team_id_index').on(table.opponentTeamId),
+    index('friendly_fixtures_opponent_status_index').on(
+      table.opponentTeamId,
+      table.status,
+    ),
+  ],
+);
+
 export const events = pgTable(
   'events',
   {
@@ -373,6 +417,14 @@ export const events = pgTable(
       (): AnyPgColumn => competitionFixtures.id,
       { onDelete: 'cascade' },
     ),
+    // Friendly fixtures live outside the generated competition fixture
+    // pipeline: both teams' events point at the same friendly_fixtures row.
+    // The per-team unique index below guarantees each team only ever has one
+    // event for a given friendly fixture (idempotent accept, no duplicates).
+    friendlyFixtureId: uuid('friendly_fixture_id').references(
+      (): AnyPgColumn => friendlyFixtures.id,
+      { onDelete: 'cascade' },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -384,6 +436,10 @@ export const events = pgTable(
       table.teamId,
       table.competitionFixtureId,
     ),
+    index('events_friendly_fixture_id_index').on(table.friendlyFixtureId),
+    uniqueIndex('events_team_friendly_fixture_unique')
+      .on(table.teamId, table.friendlyFixtureId)
+      .where(sql`${table.friendlyFixtureId} is not null`),
   ],
 );
 
@@ -419,6 +475,36 @@ export const eventRsvps = pgTable(
       table.athleteId,
     ),
   ],
+);
+
+// The coach's confirmed pre-match lineup for one event (one row per event).
+// Confirming a lineup is a separate step from starting the match: the XI is
+// stored here so an accepted Gaffer friendly opponent can see it before
+// kickoff. startMatch keeps its own athlete_match_stats squad and clears this
+// row once the match exists, so the live match squad stays the single source
+// for everything after kickoff.
+export const eventLineups = pgTable(
+  'event_lineups',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .unique()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    startingAthleteIds: jsonb('starting_athlete_ids')
+      .$type<string[]>()
+      .notNull(),
+    benchAthleteIds: jsonb('bench_athlete_ids').$type<string[]>().notNull(),
+    confirmedByUserId: text('confirmed_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [index('event_lineups_team_id_index').on(table.teamId)],
 );
 
 // A coach-defined date range that groups a team's matches for aggregate
@@ -664,6 +750,12 @@ export const matches = pgTable(
       () => competitionTeams.id,
       { onDelete: 'set null' },
     ),
+    // For friendly fixtures against another Gaffer team: links the match to
+    // that team so its squad/lineup can be retrieved later. Null for
+    // free-text friendlies and competition matches.
+    opponentTeamId: uuid('opponent_team_id').references(() => teams.id, {
+      onDelete: 'set null',
+    }),
     opponentName: text('opponent_name').notNull(),
     isHome: boolean('is_home').default(true).notNull(),
     teamScore: integer('team_score').default(0).notNull(),
@@ -692,6 +784,7 @@ export const matches = pgTable(
     index('matches_opponent_competition_team_id_index').on(
       table.opponentCompetitionTeamId,
     ),
+    index('matches_opponent_team_id_index').on(table.opponentTeamId),
     index('matches_game_plan_id_index').on(table.gamePlanId),
   ],
 );
@@ -1251,6 +1344,11 @@ export const matchEventReviews = pgTable(
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    observationIds: jsonb('observation_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    reviewVersion: integer('review_version').default(1).notNull(),
     reason: text('reason').notNull(),
     status: text('status').default('open').notNull(),
     resolution: text('resolution'),
@@ -1263,9 +1361,6 @@ export const matchEventReviews = pgTable(
       table.matchId,
       table.status,
     ),
-    uniqueIndex('match_event_reviews_open_canonical_unique')
-      .on(table.canonicalEventId)
-      .where(sql`${table.status} = 'open'`),
   ],
 );
 
@@ -1433,6 +1528,84 @@ export const matchProjectionState = pgTable('match_projection_state', {
   finalisedAt: timestamp('finalised_at', { withTimezone: true }),
   ...timestamps,
 });
+
+export const matchInsightStatus = pgEnum('match_insight_status', [
+  'pending',
+  'ready',
+  'failed',
+  'stale',
+]);
+
+/** Latest LLM-generated narrative summary for a finalised match. One mutable
+ * row per match (upserted on regeneration), mirroring matchProjectionState —
+ * a derived cache row, not part of the append-only event ledger. */
+export const matchInsights = pgTable('match_insights', {
+  matchId: uuid('match_id')
+    .primaryKey()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  status: matchInsightStatus('status').default('pending').notNull(),
+  narrativeText: text('narrative_text'),
+  // Structured highlights extracted alongside the prose (e.g. top performer,
+  // biggest trend) so the frontend can render a short list without
+  // re-parsing narrativeText.
+  highlights: jsonb('highlights').$type<Record<string, unknown>>(),
+  model: text('model'),
+  promptVersion: integer('prompt_version').default(1).notNull(),
+  // Hash of the stats payload sent to the model. Lets generation be skipped
+  // when nothing has changed since the last successful run.
+  inputDigest: text('input_digest'),
+  projectionRevision: integer('projection_revision'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
+  failureReason: text('failure_reason'),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  ...timestamps,
+});
+
+export const seasonInsightStatus = pgEnum('season_insight_status', [
+  'pending',
+  'ready',
+  'failed',
+]);
+
+/** Latest LLM-generated season-summary narrative for a team, manually
+ * triggered by a coach from the Statistics page (no automatic "season
+ * ended" event exists to hook this to). `seasonId` is null for the
+ * all-time/unfiltered overview, matching how `StatisticsService.getOverview`
+ * treats an absent `seasonId`. One row per (team, season) — or per team when
+ * `seasonId` is null — upserted on regeneration. */
+export const seasonInsights = pgTable(
+  'season_insights',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    seasonId: uuid('season_id').references(() => seasons.id, {
+      onDelete: 'cascade',
+    }),
+    status: seasonInsightStatus('status').default('pending').notNull(),
+    narrativeText: text('narrative_text'),
+    model: text('model'),
+    promptVersion: integer('prompt_version').default(1).notNull(),
+    inputDigest: text('input_digest'),
+    generatedAt: timestamp('generated_at', { withTimezone: true }),
+    failureReason: text('failure_reason'),
+    attemptCount: integer('attempt_count').default(0).notNull(),
+    generatedByUserId: text('generated_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    index('season_insights_team_id_index').on(table.teamId),
+    uniqueIndex('season_insights_team_season_unique')
+      .on(table.teamId, table.seasonId)
+      .where(sql`${table.seasonId} is not null`),
+    uniqueIndex('season_insights_team_all_time_unique')
+      .on(table.teamId)
+      .where(sql`${table.seasonId} is null`),
+  ],
+);
 
 /** Durable acknowledgement for each submitted observation or operation. */
 export const syncUploadReceipts = pgTable(

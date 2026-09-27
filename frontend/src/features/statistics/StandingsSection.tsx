@@ -13,7 +13,7 @@ export function StandingsSection({
   isLoading: boolean;
 }) {
   return (
-    <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
+    <section className="rounded-xl border border-border-subtle bg-surface-card p-4 shadow-[0_16px_40px_-32px_rgba(0,0,0,0.9)] md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Trophy className="size-4 text-muted-foreground" />
@@ -23,7 +23,7 @@ export function StandingsSection({
         </div>
         <Link
           to="/competitions"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+          className={cn("no-print", buttonVariants({ variant: "outline", size: "sm" }))}
         >
           Manage competitions
         </Link>
@@ -65,7 +65,7 @@ function CompetitionCard({
     competition.type.charAt(0).toUpperCase() + competition.type.slice(1);
 
   return (
-    <div className="rounded-xl border border-border bg-background">
+    <div className="rounded-xl border border-border-subtle bg-surface-nested">
       <div className="flex items-center justify-between gap-3 p-4">
         <button
           type="button"
@@ -97,7 +97,7 @@ function CompetitionCard({
         {competition.isAdmin && competition.type !== "friendly" && (
           <Link
             to={`/competitions/${competition.id}#results`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={cn("no-print", buttonVariants({ variant: "outline", size: "sm" }))}
           >
             Manage results
           </Link>
@@ -134,7 +134,7 @@ function StandingsTable({
     <div className="overflow-x-auto">
       <table className="w-full caption-bottom text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <tr className="border-b border-border-subtle bg-surface-elevated text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {columns.map((column) => (
               <th
                 key={column.key}
@@ -151,8 +151,8 @@ function StandingsTable({
             <tr
               key={standing.id}
               className={cn(
-                "border-b border-border last:border-b-0",
-                standing.isOwnTeam ? "bg-primary/10" : "hover:bg-muted/30",
+                "border-b border-border-subtle last:border-b-0",
+                standing.isOwnTeam ? "bg-surface-active shadow-[inset_2px_0_var(--primary)]" : "hover:bg-surface-hover",
               )}
             >
               <td className="px-3 py-2.5 text-center font-bold tabular-nums text-foreground">

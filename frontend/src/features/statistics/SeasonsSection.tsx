@@ -38,7 +38,7 @@ export function SeasonsSection({
             overlap.
           </p>
         </div>
-        <Button size="sm" onClick={onAdd}>
+        <Button className="no-print" size="sm" onClick={onAdd}>
           <Plus className="size-4" />
           Add Season
         </Button>
@@ -95,7 +95,7 @@ export function SeasonsSection({
                 </p>
               </button>
 
-              <div className="flex shrink-0 gap-1">
+              <div className="no-print flex shrink-0 gap-1">
                 <Button
                   variant="ghost"
                   size="icon-sm"

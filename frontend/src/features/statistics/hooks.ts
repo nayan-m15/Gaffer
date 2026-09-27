@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  askAssistant,
   compareAthletes,
   createCompetition,
   createStanding,
   deleteCompetition,
   deleteStanding,
+  generateSeasonInsight,
   getAthleteStatistics,
   getCompetitions,
+  getSeasonInsight,
   getStatistics,
   toUiAthleteComparison,
   toUiAthleteStatistics,
@@ -63,6 +66,9 @@ export const athleteStatisticsQueryKey = (athleteId: string) =>
 
 export const competitionsQueryKey = ["statistics", "competitions"] as const;
 
+export const seasonInsightQueryKey = (seasonId?: string) =>
+  ["statistics", "season-insight", seasonId ?? "all-seasons"] as const;
+
 /* ── Read hooks ──────────────────────────────────────────────────────────── */
 
 export function useStatistics(filters: StatisticsFilters = {}) {
@@ -101,6 +107,40 @@ export function useCompetitions(options?: { enabled?: boolean }) {
     queryKey: competitionsQueryKey,
     queryFn: () => getCompetitions().then(toUiCompetitions),
     enabled: options?.enabled ?? true,
+  });
+}
+
+export function useSeasonInsight(seasonId?: string) {
+  return useQuery({
+    queryKey: seasonInsightQueryKey(seasonId),
+    queryFn: () => getSeasonInsight(seasonId),
+  });
+}
+
+export function useGenerateSeasonInsight() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (seasonId: string | undefined) => generateSeasonInsight(seasonId),
+    onSuccess: (result, seasonId) => {
+      queryClient.setQueryData(seasonInsightQueryKey(seasonId), result);
+    },
+  });
+}
+
+/**
+ * Each call is independent — no conversation history is sent or stored.
+ * The panel keeps its own local list of exchanges for display only.
+ */
+export function useAskAssistant() {
+  return useMutation({
+    mutationFn: ({
+      question,
+      seasonId,
+    }: {
+      question: string;
+      seasonId?: string;
+    }) => askAssistant(question, seasonId),
   });
 }
 

@@ -260,6 +260,48 @@
       "when": 1790180000011,
       "tag": "0035_injuries_and_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790180000012,
+      "tag": "0036_friendly_fixtures",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790180000013,
+      "tag": "0037_event_lineups",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790280470187,
+      "tag": "0038_omniscient_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790285119767,
+      "tag": "0039_spicy_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790368520000,
+      "tag": "0036_concurrent_event_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790368525000,
+      "tag": "0037_concurrent_event_resolution",
+      "breakpoints": true
     }
   ]
 }

@@ -39,12 +39,12 @@ export function PlayerStatsTable({
     <div className="overflow-x-auto">
       <table className="w-full caption-bottom text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <tr className="border-b border-border-subtle bg-surface-nested text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {PLAYER_COLUMNS.map((col) => (
               <th
                 key={col.key}
                 scope="col"
-                className={cn("py-3 px-4", col.className)}
+                className={cn("py-3 px-4", col.className, col.key === "compare" && "no-print")}
               >
                 {col.label}
               </th>
@@ -60,14 +60,14 @@ export function PlayerStatsTable({
                 key={player.athleteId}
                 onClick={() => onSelect(player.athleteId)}
                 className={cn(
-                  "cursor-pointer border-b border-border transition-colors last:border-b-0",
+                  "cursor-pointer border-b border-border-subtle transition-colors last:border-b-0",
                   isSelected
-                    ? "border-primary bg-primary/10"
-                    : "hover:bg-muted/30",
+                    ? "bg-surface-active shadow-[inset_2px_0_var(--primary)]"
+                    : "hover:bg-surface-hover",
                 )}
               >
                 <td
-                  className="px-4 py-3 text-center"
+                  className="no-print px-4 py-3 text-center"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <input
@@ -110,10 +110,10 @@ export function PlayerStatsTable({
                 >
                   {player.assists}
                 </td>
-                <td className="px-4 py-3 text-center tabular-nums text-amber-400">
+                <td className="px-4 py-3 text-center tabular-nums text-warning">
                   {player.yellowCards}
                 </td>
-                <td className="px-4 py-3 text-center tabular-nums text-red-400">
+                <td className="px-4 py-3 text-center tabular-nums text-danger">
                   {player.redCards}
                 </td>
               </tr>

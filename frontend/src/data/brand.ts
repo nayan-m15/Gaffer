@@ -27,21 +27,21 @@ export const brand = {
 export const brandColors = {
   /* ── Primary accent — emerald / teal ─────────────────────────────────── */
   /** Primary emerald — CTA buttons, logo accent, active states. */
-  primary: "#00D99A",
+  primary: "#16d99a",
   /** Darker emerald — hover / pressed states. */
-  primaryDark: "#00CFA0",
+  primaryDark: "#10bf88",
   /** Lighter emerald — highlights and secondary emphasis. */
-  primaryLight: "#20E6A6",
+  primaryLight: "#48e3af",
 
   /* ── Dark-mode surfaces ──────────────────────────────────────────────── */
-  /** Near-black background with blue-gray undertone. */
-  darkBackground: "#0B1218",
-  /** Dark blue-gray surface for cards / panels. */
-  darkSurface: "#17212B",
+  /** Near-black page background. */
+  darkBackground: "#090A0B",
+  /** Neutral graphite surface for cards / panels. */
+  darkSurface: "#111315",
   /** Elevated dark surface for nested elements. */
-  darkSurfaceElevated: "#1A2530",
+  darkSurfaceElevated: "#1A1D1F",
   /** Subtle border colour in dark mode. */
-  darkBorder: "#233747",
+  darkBorder: "#2A2E31",
 
   /* ── Light-mode surfaces ─────────────────────────────────────────────── */
   /** Warm off-white used for light-mode backgrounds. */
@@ -55,13 +55,13 @@ export const brandColors = {
   /** Primary text colour in light mode. */
   darkText: "#171717",
   /** Primary text colour in dark mode. */
-  lightText: "#E8ECEF",
+  lightText: "#ecefed",
   /** Secondary / muted text. */
-  mutedText: "#8E9BA8",
+  mutedText: "#9ca39f",
 
   /* ── Semantic status colours ─────────────────────────────────────────── */
   /** Warning / draw / neutral — amber. */
-  warning: "#FFBE2E",
+  warning: "#d6a447",
   /** Danger / error / loss — red (reserved for negative states only). */
-  danger: "#FF5B5F",
+  danger: "#e36a6d",
 } as const;

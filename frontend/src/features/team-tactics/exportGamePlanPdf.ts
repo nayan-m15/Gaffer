@@ -32,7 +32,7 @@ export interface GamePlanExportData {
   /** Saved plan name, or a fallback when the board hasn't been saved yet. */
   planName: string;
   teamName: string | null;
-  /** Team brand color (hex, e.g. "#00D99A"); falls back to navy when unset. */
+  /** Team brand color (hex, e.g. "#16d99a"); falls back to navy when unset. */
   teamColor: string | null;
   formation: Formation;
   assignments: PitchAssignments;

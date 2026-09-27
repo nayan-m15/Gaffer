@@ -113,10 +113,10 @@ describe('Offline collaborative sync (e2e)', () => {
     ).toBe('accepted');
 
     const events = await agent.get(`/matches/${matchId}/events`).expect(200);
-    expect(events.body).toHaveLength(1);
+    expect(events.body).toHaveLength(2);
     const canonical = (
       events.body as Array<{ id: string; lifecycleStatus: string }>
-    )[0];
+    ).find((row) => row.id === [...ids].sort()[0])!;
     expect(canonical.lifecycleStatus).toBe('needs_review');
     const reviews = await agent
       .get(`/matches/${matchId}/event-reviews`)
@@ -192,6 +192,63 @@ describe('Offline collaborative sync (e2e)', () => {
       (retried.body as { receipts: Array<{ outcome: string }> }).receipts[0]
         .outcome,
     ).toBe('accepted');
+
+    const duplicateReview = (
+      reviews.body as Array<{
+        id: string;
+        status: string;
+        observations: unknown[];
+      }>
+    ).find(
+      (review) => review.status === 'open' && review.observations.length === 2,
+    );
+    expect(duplicateReview).toBeDefined();
+    await agent
+      .post(`/matches/${matchId}/event-reviews/${duplicateReview!.id}/resolve`)
+      .send({ resolution: 'same_event' })
+      .expect(201);
+    const merged = await agent.get(`/matches/${matchId}/events`).expect(200);
+    expect(merged.body).toHaveLength(0);
+
+    const closeGoals = [
+      item(randomUUID(), 900_000),
+      item(randomUUID(), 903_000),
+    ];
+    for (const goal of closeGoals) {
+      await agent
+        .post('/sync/upload')
+        .send({ items: [goal] })
+        .expect(201);
+    }
+    const beforeSplit = await agent
+      .get(`/matches/${matchId}/events`)
+      .expect(200);
+    expect(beforeSplit.body).toHaveLength(2);
+    const allReviews = await agent
+      .get(`/matches/${matchId}/event-reviews`)
+      .expect(200);
+    const closeReview = (
+      allReviews.body as Array<{
+        id: string;
+        status: string;
+        observations: Array<{ id: string }>;
+      }>
+    ).find(
+      (review) =>
+        review.status === 'open' &&
+        closeGoals.every((goal) =>
+          review.observations.some(
+            (observation) => observation.id === goal.payload.clientRequestId,
+          ),
+        ),
+    );
+    expect(closeReview).toBeDefined();
+    await agent
+      .post(`/matches/${matchId}/event-reviews/${closeReview!.id}/resolve`)
+      .send({ resolution: 'separate_events' })
+      .expect(201);
+    const separate = await agent.get(`/matches/${matchId}/events`).expect(200);
+    expect(separate.body).toHaveLength(2);
   }, 90_000);
 
   it('rolls back every reconciliation write when processing fails mid-transaction', async () => {

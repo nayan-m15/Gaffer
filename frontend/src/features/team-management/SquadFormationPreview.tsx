@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Compact formation pitch for Confirm Squad. Vertical (attack at the top),
  * own team only — not the live-match tactical view, which is landscape and
  * wired to events, opponent markers, and click-to-log.
@@ -27,7 +27,7 @@ const ROLE_MARKER: Record<
   { fill: string; glow: string }
 > = {
   GK: { fill: "#38bdf8", glow: "rgba(56, 189, 248, 0.55)" },
-  DEF: { fill: "#3b82f6", glow: "rgba(59, 130, 246, 0.55)" },
+  DEF: { fill: "#72a7d5", glow: "rgba(59, 130, 246, 0.55)" },
   MID: { fill: "#8b5cf6", glow: "rgba(139, 92, 246, 0.55)" },
   FWD: { fill: "#f97316", glow: "rgba(249, 115, 22, 0.55)" },
 };
