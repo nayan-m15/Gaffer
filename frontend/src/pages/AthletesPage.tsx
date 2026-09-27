@@ -350,14 +350,17 @@ export default function AthletesPage() {
   };
 
   return (
-    <>
-      <PageHeader
-        title="Roster Command"
-        subtitle="Manage active squad players, squad status, and athlete archives."
-        className="pb-4"
-      />
+    <div className="roster-page relative isolate min-h-full">
+      <div className="roster-page-backdrop" aria-hidden="true" />
 
-      <div className="roster-page mx-auto w-full min-w-0 max-w-[1600px] space-y-5 overflow-x-hidden px-3 pb-24 sm:px-8 sm:pb-8 lg:px-10">
+      <div className="relative z-10">
+        <PageHeader
+          title="Roster Command"
+          subtitle="Manage active squad players, squad status, and athlete archives."
+          className="pb-4"
+        />
+
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 overflow-x-hidden px-3 pb-24 sm:px-8 sm:pb-8 lg:px-10">
         <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-4">
           <SummaryCard
             value={activeCount}
@@ -655,6 +658,7 @@ export default function AthletesPage() {
             </div>
           </AppCard>
         )}
+        </div>
       </div>
 
       <Dialog
@@ -774,7 +778,7 @@ export default function AthletesPage() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 

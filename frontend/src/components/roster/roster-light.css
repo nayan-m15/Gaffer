@@ -66,3 +66,31 @@
   --sidebar-border: #D9D6D2;
   --sidebar-ring: #059669;
 }
+
+/* Theme-aware locker-room artwork behind the roster. Mobile is the default;
+ * tablets share the landscape desktop composition from 768px upward. */
+.roster-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: url("/rosterBgLightMobile.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.dark .roster-page-backdrop {
+  background-image: url("/rosterBgDarkMobile.png");
+}
+
+@media (min-width: 768px) {
+  .roster-page-backdrop {
+    background-image: url("/rosterBgLight.png");
+  }
+
+  .dark .roster-page-backdrop {
+    background-image: url("/rosterBgDark.png");
+  }
+}
