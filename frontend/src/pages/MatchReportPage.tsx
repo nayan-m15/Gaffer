@@ -1564,8 +1564,8 @@ function subjectLabel(eventType: MatchEventType) {
   if (eventType === "injury") {
     return "Injured player";
   }
-  if (eventType === "goalkeeper_save") {
-    return "Goalkeeper";
+  if (eventType === "penalty") {
+    return "Penalty taker";
   }
   return "Player";
 }
