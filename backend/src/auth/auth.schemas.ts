@@ -39,6 +39,7 @@ export const signInSchema = z.object({
     .string()
     .min(1, 'Password is required.')
     .max(128, 'Password must be 128 characters or fewer.'),
+     rememberMe: z.boolean().optional().default(false),
 });
 export type SignInDto = z.infer<typeof signInSchema>;
 

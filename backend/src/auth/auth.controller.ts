@@ -57,6 +57,41 @@ function forwardSetCookie(res: Response, headers: Headers): void {
   }
 }
 
+/**
+ * Expires Better Auth's `dont_remember` cookie.
+ *
+ * Better Auth only ever *writes* this flag when a sign-in declines persistence
+ * — a later "Remember me" sign-in does not clear the one an earlier
+ * unremembered session left behind. While a stale flag lingers (until the
+ * browser closes) it silently downgrades any session Better Auth creates
+ * without an explicit choice (the Google callback, the post-verification auto
+ * sign-in) to a browser-session cookie, and it disables rolling session
+ * refresh (`dontRememberMe` short-circuits the refresh branch of
+ * `getSession`). Expiring it during an explicitly-remembered sign-in makes the
+ * user's choice win unconditionally.
+ *
+ * Name and attributes mirror Better Auth's own `createCookieGetter`
+ * (`better-auth/dist/cookies`): the default `better-auth` cookie prefix, plus
+ * `__Secure-` when the auth baseURL is https.
+ */
+function expireDontRememberCookie(res: Response): void {
+  const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+  const secure = baseURL.startsWith('https://');
+  const name = `${secure ? '__Secure-' : ''}better-auth.dont_remember`;
+  const expired = `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${
+    secure ? '; Secure' : ''
+  }`;
+
+  const existing = res.getHeader('Set-Cookie');
+  const cookies =
+    existing === undefined
+      ? []
+      : Array.isArray(existing)
+        ? existing.map(String)
+        : [String(existing)];
+  res.setHeader('Set-Cookie', [...cookies, expired]);
+}
+
 const logger = new Logger('AuthController');
 
 /** Maps Better Auth and database errors to appropriate client-facing HTTP exceptions. */
@@ -187,10 +222,21 @@ export class AuthController {
 
     try {
       const { headers, response } = await auth.api.signInEmail({
-        body: { email: dto.email, password: dto.password },
+        body: {
+          email: dto.email,
+          password: dto.password,
+          rememberMe: dto.rememberMe,
+        },
         returnHeaders: true,
       });
       forwardSetCookie(res, headers);
+      if (dto.rememberMe) {
+        // A remembered sign-in must not leave a stale "don't remember" flag
+        // behind: it would block session refresh and downgrade the sessions
+        // of flows that create one without an explicit choice (Google
+        // callback, post-verification auto sign-in).
+        expireDontRememberCookie(res);
+      }
 
       return { user: response.user };
     } catch (error) {
