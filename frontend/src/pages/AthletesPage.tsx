@@ -9,7 +9,6 @@ import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
-import { RosterPlayerCard } from "@/components/roster/rosterPlayerCard";
 import { MobileRoster, MobileRosterSkeleton } from "@/components/roster/MobileRoster";
 import { MobilePlayerProfile } from "@/components/roster/MobilePlayerProfile";
 import { getPositionLabel } from "@/components/roster/position";
@@ -93,10 +92,6 @@ export default function AthletesPage() {
   const [isDesktopDetail, setIsDesktopDetail] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
   );
-  const [isMobileRoster, setIsMobileRoster] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
-  );
-
   const [editingBackendAthlete, setEditingBackendAthlete] = useState<BackendAthlete | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -174,14 +169,6 @@ export default function AthletesPage() {
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1280px)");
     const syncViewport = () => setIsDesktopDetail(mediaQuery.matches);
-    syncViewport();
-    mediaQuery.addEventListener("change", syncViewport);
-    return () => mediaQuery.removeEventListener("change", syncViewport);
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 767px)");
-    const syncViewport = () => setIsMobileRoster(mediaQuery.matches);
     syncViewport();
     mediaQuery.addEventListener("change", syncViewport);
     return () => mediaQuery.removeEventListener("change", syncViewport);
@@ -475,23 +462,7 @@ export default function AthletesPage() {
                 <>
                   <MobileRoster athletes={filteredAthletes} onSelect={handleSelect} />
 
-                  <div className="hidden min-w-0 grid-cols-1 gap-3 md:grid md:grid-cols-2 xl:hidden">
-                    {filteredAthletes.map((athlete) => (
-                      <RosterPlayerCard
-                        key={athlete.id}
-                        athlete={athlete}
-                        selected={athlete.id === selectedId}
-                        showArchived={showArchived}
-                        readOnly={!canManageRoster}
-                        onSelect={handleSelect}
-                        onEdit={openEditForm}
-                        onArchive={openArchiveDialog}
-                        onRestore={handleRestore}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="hidden min-w-0 xl:block">
+                  <div className="hidden min-w-0 md:block">
                     <RosterTable
                       athletes={filteredAthletes}
                       selectedId={selectedId}
@@ -718,7 +689,7 @@ export default function AthletesPage() {
                 <ArrowLeft className="size-4" />
               </Button>
               <DialogTitle className="truncate text-sm font-bold text-foreground">
-                {isMobileRoster ? "Player Profile" : "Player Details"}
+                Player Profile
               </DialogTitle>
             </div>
             <Button
@@ -731,20 +702,10 @@ export default function AthletesPage() {
               <X className="size-4" />
             </Button>
           </div>
-          <div className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden", isMobileRoster ? "p-0" : "p-3 sm:p-5")}>
-            {explicitlySelectedAthlete && isMobileRoster ? (
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+            {explicitlySelectedAthlete ? (
               <MobilePlayerProfile
                 key={explicitlySelectedAthlete.id}
-                athlete={explicitlySelectedAthlete}
-                onEdit={openEditForm}
-                onArchive={openArchiveDialog}
-                onRestore={handleRestore}
-                onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
-                showClaimStatus={canManageClaims}
-                readOnly={!canManageRoster}
-              />
-            ) : explicitlySelectedAthlete ? (
-              <AthleteDetailPanel
                 athlete={explicitlySelectedAthlete}
                 onEdit={openEditForm}
                 onArchive={openArchiveDialog}
