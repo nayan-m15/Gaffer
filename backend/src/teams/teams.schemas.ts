@@ -34,3 +34,13 @@ export const updateTeamSchema = z
     },
   );
 export type UpdateTeamDto = z.infer<typeof updateTeamSchema>;
+
+/** Search term for picking a friendly-fixture opponent on Gaffer. */
+export const teamSearchSchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .min(1, 'Enter a search term.')
+    .max(100, 'Search term must be 100 characters or fewer.'),
+});
+export type TeamSearchDto = z.infer<typeof teamSearchSchema>;

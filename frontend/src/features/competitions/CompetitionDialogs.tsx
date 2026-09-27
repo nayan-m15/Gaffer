@@ -82,13 +82,21 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
   const isLeaguePhase = format === "league" || format === "league_knockout";
   const validQualifierOptions = knockoutSizes.filter((size) => size <= configuredTeamCount);
   const effectiveQualifier = validQualifierOptions.includes(qualifierCount) ? qualifierCount : validQualifierOptions[0] ?? 4;
+  const nameError = !name.trim()
+    ? "Competition name is required."
+    : name.trim().length > 100
+      ? "Competition name must be 100 characters or fewer."
+      : null;
+  const seasonError = season.trim().length > 20
+    ? "Season must be 20 characters or fewer."
+    : null;
 
   const basicValid = useMemo(() => {
-    if (!name.trim() || !Number.isInteger(configuredTeamCount) || configuredTeamCount < 2 || configuredTeamCount > 128) return false;
+    if (nameError || seasonError || !Number.isInteger(configuredTeamCount) || configuredTeamCount < 2 || configuredTeamCount > 128) return false;
     if (format === "knockout" && !knockoutSizes.includes(configuredTeamCount as 4 | 8 | 16 | 32)) return false;
     if (format === "league_knockout" && (!validQualifierOptions.length || effectiveQualifier > configuredTeamCount)) return false;
     return true;
-  }, [configuredTeamCount, effectiveQualifier, format, name, validQualifierOptions.length]);
+  }, [configuredTeamCount, effectiveQualifier, format, nameError, seasonError, validQualifierOptions.length]);
 
   const rulesValid = useMemo(() => {
     const boundedInteger = (value: number, min: number) => Number.isInteger(value) && value >= min && value <= 99;
@@ -119,7 +127,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
   };
 
   const submit = () => {
-    if (competition && locked ? !name.trim() : !formValid) return;
+    if (competition && locked ? Boolean(nameError || seasonError) : !formValid) return;
     const fullInput: CompetitionInput = {
       name: name.trim(),
       type,
@@ -173,8 +181,10 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
 
         <fieldset disabled={save.isPending} className="space-y-4">
           {step === 1 && <>
-            <label className="grid gap-2 text-sm">Competition name<input className={fieldClass} autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></label>
-            <label className="grid gap-2 text-sm">Season (optional)<input className={fieldClass} maxLength={20} placeholder="e.g. 2026/27" value={season} onChange={(event) => setSeason(event.target.value)} /></label>
+            <label className="grid gap-2 text-sm">Competition name<input className={fieldClass} autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "competition-name-error" : undefined} /></label>
+            {nameError && <p id="competition-name-error" className="text-sm text-destructive">{nameError}</p>}
+            <label className="grid gap-2 text-sm">Season (optional)<input className={fieldClass} maxLength={20} placeholder="e.g. 2026/27" value={season} onChange={(event) => setSeason(event.target.value)} aria-invalid={Boolean(seasonError)} aria-describedby={seasonError ? "competition-season-error" : undefined} /></label>
+            {seasonError && <p id="competition-season-error" className="text-sm text-destructive">{seasonError}</p>}
 
             <div className="space-y-2"><p className="text-sm font-medium">Competition type</p><div className="grid gap-3 sm:grid-cols-2">
               {(["league", "cup"] as const).map((value) => <button key={value} type="button" disabled={locked} onClick={() => chooseType(value)} className={`rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${type === value ? "border-primary/50 bg-primary/10" : "border-border hover:bg-muted/40"}`}><span className="font-semibold">{value === "league" ? "League" : "Cup"}</span><span className="mt-1 block text-sm text-muted-foreground">{value === "league" ? "Round-robin standings competition." : "Knockout, or league phase followed by knockout."}</span></button>)}
@@ -224,7 +234,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
         <RequestError error={save.error} />
         <DialogFooter className="flex-row justify-between sm:justify-between">
           <div>{step > 1 && !locked && <Button type="button" variant="outline" disabled={save.isPending} onClick={() => setStep((step - 1) as Step)}><ChevronLeft className="size-4" />Back</Button>}</div>
-          <div className="flex gap-2"><Button type="button" variant="outline" disabled={save.isPending} onClick={onClose}>Cancel</Button>{step < 3 && !locked ? <Button type="button" disabled={!stepValid || save.isPending} onClick={() => setStep((step + 1) as Step)}>Next<ChevronRight className="size-4" /></Button> : <Button type="button" disabled={!stepValid || save.isPending} onClick={submit}>{save.isPending ? "Saving..." : competition ? "Save changes" : "Create competition"}</Button>}</div>
+          <div className="flex gap-2"><Button type="button" variant="outline" disabled={save.isPending} onClick={onClose}>Cancel</Button>{step < 3 && !locked ? <Button type="button" disabled={!stepValid || save.isPending} onClick={() => setStep((step + 1) as Step)}>Next<ChevronRight className="size-4" /></Button> : <Button type="button" disabled={(locked ? Boolean(nameError || seasonError) : !stepValid) || save.isPending} onClick={submit}>{save.isPending ? "Saving..." : competition ? "Save changes" : "Create competition"}</Button>}</div>
         </DialogFooter>
       </div>
     </Modal>

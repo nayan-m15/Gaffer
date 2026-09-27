@@ -9,6 +9,7 @@ import {
   competitionTeams,
   events,
   matchEvents,
+  matchProjectionState,
   matches,
   standings,
 } from '../database/schema';
@@ -258,8 +259,12 @@ async function ensureHybridKnockoutStage(
         ownCompetitionTeamId: competitionTeams.id,
         opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
         isHome: matches.isHome,
-        teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
-        opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+        teamScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
+          case when ${matches.isHome} then ${competitionFixtures.homeScore} else ${competitionFixtures.awayScore} end
+          else count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
+        opponentScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
+          case when ${matches.isHome} then ${competitionFixtures.awayScore} else ${competitionFixtures.homeScore} end
+          else count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
       })
       .from(matches)
       .innerJoin(events, eq(matches.eventId, events.id))
@@ -271,15 +276,33 @@ async function ensureHybridKnockoutStage(
         ),
       )
       .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
+      .leftJoin(
+        matchProjectionState,
+        eq(matchProjectionState.matchId, matches.id),
+      )
+      .leftJoin(
+        competitionFixtures,
+        eq(competitionFixtures.linkedMatchId, matches.id),
+      )
       .where(
         and(
           eq(matches.competitionId, competitionId),
           eq(events.status, 'completed'),
           gte(matches.createdAt, competition.resultTrackingStartedAt),
           sql`${matches.opponentCompetitionTeamId} is not null`,
+          sql`(${matchProjectionState.matchId} is null
+            or ${matchProjectionState.finalisationState} = 'finalised'
+            or ${competitionFixtures.status} = 'completed')`,
         ),
       )
-      .groupBy(matches.id, competitionTeams.id),
+      .groupBy(
+        matches.id,
+        competitionTeams.id,
+        matchProjectionState.finalisationState,
+        competitionFixtures.homeScore,
+        competitionFixtures.awayScore,
+        competitionFixtures.status,
+      ),
   ]);
 
   const liveResults = liveRows
