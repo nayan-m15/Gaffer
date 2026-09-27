@@ -22,10 +22,15 @@ import {
   matches,
   standings,
 } from '../database/schema';
+import { buildAssistantPrompt } from '../insights/assistant-prompt';
+import { InsightsService, type AssistantAnswer } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
+
+const RECENT_INSIGHTS_LIMIT = 1;
 import type {
+  AskAssistantDto,
   CompareAthletesDto,
   CreateCompetitionDto,
   CreateStandingDto,
@@ -155,6 +160,7 @@ export class StatisticsService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly seasonsService: SeasonsService,
+    private readonly insightsService: InsightsService,
   ) {}
 
   /* ── Read endpoints ─────────────────────────────────────────────────────── */
@@ -277,6 +283,11 @@ export class StatisticsService {
         a.name.localeCompare(b.name),
     );
 
+    const recentInsights = await this.insightsService.getRecentForTeam(
+      team.id,
+      RECENT_INSIGHTS_LIMIT,
+    );
+
     return {
       ...totals,
       trends,
@@ -286,7 +297,53 @@ export class StatisticsService {
       rollingWindow: trendAnalysis.rollingWindow,
       form: trendAnalysis.form,
       periods: trendAnalysis.periods,
+      recentInsights,
     };
+  }
+
+  /**
+   * Answers a free-text stats question via Gemini, scoped to the same
+   * season totals, trend deltas, player table, match list, and recent match
+   * reports `getOverview` already computes — no separate data path to keep
+   * in sync. Fully stateless: the question and answer are never persisted,
+   * only returned to the caller.
+   */
+  async askAssistant(
+    userId: string,
+    dto: AskAssistantDto,
+  ): Promise<AssistantAnswer> {
+    const team = await this.requireTeam(userId);
+    const overview = await this.getOverview(userId, { seasonId: dto.seasonId });
+
+    const prompt = buildAssistantPrompt({
+      teamName: team.name,
+      seasonLabel: overview.season?.name ?? 'all matches',
+      question: dto.question,
+      totals: {
+        matchesPlayed: overview.matchesPlayed,
+        wins: overview.wins,
+        draws: overview.draws,
+        losses: overview.losses,
+        goalsFor: overview.goalsFor,
+        goalsAgainst: overview.goalsAgainst,
+        points: overview.points,
+      },
+      deltas: overview.periods.deltas,
+      players: overview.players.map((player) => ({
+        name: player.name,
+        appearances: player.appearances,
+        goals: player.goals,
+        assists: player.assists,
+        yellowCards: player.yellowCards,
+        redCards: player.redCards,
+      })),
+      matches: overview.trends,
+      recentNarratives: overview.recentInsights
+        .map((insight) => insight.narrativeText)
+        .filter((text): text is string => Boolean(text)),
+    });
+
+    return this.insightsService.answerQuestion(prompt);
   }
 
   /**

@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { useAuth } from "@/hooks/useAuth";
+import { AssistantChatPanel } from "@/features/statistics/AssistantChatPanel";
 import { AthleteComparisonSection } from "@/features/statistics/AthleteComparisonSection";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { PlayerStatsTable } from "@/features/statistics/PlayerStatsTable";
 import { RecentFormSection } from "@/features/statistics/RecentFormSection";
+import { RecentInsightsSection } from "@/features/statistics/RecentInsightsSection";
 import { SeasonFormDialog } from "@/features/statistics/SeasonFormDialog";
+import { SeasonInsightSection } from "@/features/statistics/SeasonInsightSection";
 import { SeasonsSection } from "@/features/statistics/SeasonsSection";
 import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
 import { StandingsSection } from "@/features/statistics/StandingsSection";
@@ -93,6 +96,18 @@ export default function StatisticsPage() {
   const competitions = competitionsQuery.data ?? [];
   const seasons = seasonsQuery.data ?? [];
 
+  const playerSectionRef = useRef<HTMLDivElement>(null);
+  const comparisonSectionRef = useRef<HTMLDivElement>(null);
+
+  const handleViewPlayer = (id: string) => {
+    setAthleteId(id);
+    playerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleComparePlayers = () => {
+    comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Default to the current season once the list arrives. The server returns
   // all-time when unfiltered, so the default lives here rather than in the API
   // — and `replace` keeps it out of the back-button history.
@@ -121,6 +136,11 @@ export default function StatisticsPage() {
   const subtitle = overview
     ? `${scopeLabel} — ${overview.matchesPlayed} matches — ${overview.wins}W / ${overview.draws}D / ${overview.losses}L — ${overview.goalsFor} GF / ${overview.goalsAgainst} GA`
     : "Team performance, player statistics, and standings.";
+
+  const assistantSeasonLabel = activeSeason ? `${activeSeason.name} season` : "All time";
+  const assistantCompetitionLabel = competitionId
+    ? (competitions.find((c) => c.id === competitionId)?.name ?? "All Competitions")
+    : "All Competitions";
 
   const reportData = useMemo(
     () =>
@@ -293,8 +313,21 @@ export default function StatisticsPage() {
               rollingWindow={overview.rollingWindow}
             />
 
+            {/* AI-generated season-summary narrative */}
+            <SeasonInsightSection
+              seasonId={seasonId}
+              seasonLabel={overview.season?.name ?? "All Time"}
+              canGenerate={isCoach}
+            />
+
+            {/* AI-generated per-match narratives */}
+            <RecentInsightsSection insights={overview.recentInsights} />
+
             {/* Player stats + detail panel */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+            <div
+              ref={playerSectionRef}
+              className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6"
+            >
               <AppCard className="p-4 md:p-6 lg:col-span-2">
                 <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-foreground">
                   Player Statistics
@@ -322,11 +355,13 @@ export default function StatisticsPage() {
             </div>
 
             {/* Side-by-side player comparison */}
-            <AthleteComparisonSection
-              athleteIds={compareIds}
-              seasonId={seasonId}
-              onClear={clearCompare}
-            />
+            <div ref={comparisonSectionRef}>
+              <AthleteComparisonSection
+                athleteIds={compareIds}
+                seasonId={seasonId}
+                onClear={clearCompare}
+              />
+            </div>
           </>
         )}
 
@@ -350,6 +385,16 @@ export default function StatisticsPage() {
         />
         </div>
       </div>
+
+      {/* Floating AI stats assistant — fixed position, independent of overview load state */}
+      <AssistantChatPanel
+        seasonId={seasonId}
+        seasonLabel={assistantSeasonLabel}
+        competitionLabel={assistantCompetitionLabel}
+        players={overview?.players ?? []}
+        onViewPlayer={handleViewPlayer}
+        onComparePlayers={handleComparePlayers}
+      />
 
       {/* Dialogs */}
       <SeasonFormDialog

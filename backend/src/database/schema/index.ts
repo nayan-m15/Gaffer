@@ -1529,6 +1529,85 @@ export const matchProjectionState = pgTable('match_projection_state', {
   ...timestamps,
 });
 
+export const matchInsightStatus = pgEnum('match_insight_status', [
+  'pending',
+  'ready',
+  'failed',
+  'stale',
+]);
+
+/** Latest LLM-generated narrative summary for a finalised match. One mutable
+ * row per match (upserted on regeneration), mirroring matchProjectionState —
+ * a derived cache row, not part of the append-only event ledger. */
+export const matchInsights = pgTable('match_insights', {
+  matchId: uuid('match_id')
+    .primaryKey()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  status: matchInsightStatus('status').default('pending').notNull(),
+  narrativeText: text('narrative_text'),
+  // Structured highlights extracted alongside the prose (e.g. top performer,
+  // biggest trend) so the frontend can render a short list without
+  // re-parsing narrativeText.
+  highlights: jsonb('highlights').$type<Record<string, unknown>>(),
+  model: text('model'),
+  promptVersion: integer('prompt_version').default(1).notNull(),
+  // Hash of the stats payload sent to the model. Lets generation be skipped
+  // when nothing has changed since the last successful run.
+  inputDigest: text('input_digest'),
+  projectionRevision: integer('projection_revision'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
+  failureReason: text('failure_reason'),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  ...timestamps,
+});
+
+export const seasonInsightStatus = pgEnum('season_insight_status', [
+  'pending',
+  'ready',
+  'failed',
+]);
+
+/** Latest LLM-generated season-summary narrative for a team, manually
+ * triggered by a coach from the Statistics page (no automatic "season
+ * ended" event exists to hook this to). `seasonId` is null for the
+ * all-time/unfiltered overview, matching how `StatisticsService.getOverview`
+ * treats an absent `seasonId`. One row per (team, season) — or per team when
+ * `seasonId` is null — upserted on regeneration. */
+export const seasonInsights = pgTable(
+  'season_insights',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    seasonId: uuid('season_id').references(() => seasons.id, {
+      onDelete: 'cascade',
+    }),
+    status: seasonInsightStatus('status').default('pending').notNull(),
+    narrativeText: text('narrative_text'),
+    model: text('model'),
+    promptVersion: integer('prompt_version').default(1).notNull(),
+    inputDigest: text('input_digest'),
+    generatedAt: timestamp('generated_at', { withTimezone: true }),
+    failureReason: text('failure_reason'),
+    attemptCount: integer('attempt_count').default(0).notNull(),
+    generatedByUserId: text('generated_by_user_id').references(
+      () => user.id,
+      { onDelete: 'set null' },
+    ),
+    ...timestamps,
+  },
+  (table) => [
+    index('season_insights_team_id_index').on(table.teamId),
+    uniqueIndex('season_insights_team_season_unique')
+      .on(table.teamId, table.seasonId)
+      .where(sql`${table.seasonId} is not null`),
+    uniqueIndex('season_insights_team_all_time_unique')
+      .on(table.teamId)
+      .where(sql`${table.seasonId} is null`),
+  ],
+);
+
 /** Durable acknowledgement for each submitted observation or operation. */
 export const syncUploadReceipts = pgTable(
   'sync_upload_receipts',

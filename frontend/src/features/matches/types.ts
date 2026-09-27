@@ -21,6 +21,26 @@ export interface OpponentMatchPlayer {
   position?: string | null;
 }
 
+export type MatchInsightStatus =
+  | "ready"
+  | "failed"
+  | "stale"
+  | "pending"
+  | "unavailable";
+
+export interface MatchInsightHighlights {
+  playerOfTheMatch?: { athleteName: string; reason: string } | null;
+}
+
+/** LLM-generated narrative summary for a finalised match. See GET /matches/:matchId/insight. */
+export interface MatchInsight {
+  matchId: string;
+  status: MatchInsightStatus;
+  narrativeText: string | null;
+  highlights: MatchInsightHighlights | null;
+  generatedAt: string | null;
+}
+
 export interface MatchRecord {
   id: string;
   eventId: string;

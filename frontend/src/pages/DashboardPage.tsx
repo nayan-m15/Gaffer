@@ -87,6 +87,13 @@ interface MatchStat {
   value: number;
 }
 
+interface DashboardInsight {
+  matchId: string;
+  status: "ready" | "failed" | "stale" | "pending" | "unavailable";
+  narrativeText: string | null;
+  generatedAt: string | null;
+}
+
 interface DashboardData {
   /* Sprint 1 — served by GET /dashboard */
   activeAthletesCount: number;
@@ -97,6 +104,7 @@ interface DashboardData {
   seasonSummary?: SeasonSummaryData | null;
   recentForm?: RecentResult[];
   recentStats?: MatchStat[];
+  recentInsights?: DashboardInsight[];
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

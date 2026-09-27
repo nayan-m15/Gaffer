@@ -6,6 +6,7 @@ import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
 import { ClaimInviteDialog } from "@/components/roster/ClaimInviteDialog";
 import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog";
+import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
@@ -648,6 +649,15 @@ export default function AthletesPage() {
         }
         result={inviteResult}
       />
+
+      {canManageRoster && (
+        <GafferAiAssistant
+          context="roster"
+          onEntityCreated={() => {
+            void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
+          }}
+        />
+      )}
     </>
   );
 }
