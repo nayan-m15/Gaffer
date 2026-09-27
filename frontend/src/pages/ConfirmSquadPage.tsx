@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
-import { Loader2, LockKeyhole, Pencil, ShieldAlert, Users } from "lucide-react";
+import {
+  Loader2,
+  LockKeyhole,
+  Pencil,
+  Radio,
+  ShieldAlert,
+  Users,
+  Wand2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAthletes } from "@/features/team-management/api";
@@ -15,10 +23,18 @@ import {
   resolveFormation,
 } from "@/features/team-management/formations";
 import { SquadFormationPreview } from "@/features/team-management/SquadFormationPreview";
+import { suggestStartingXi } from "@/features/team-management/suggestions";
 import type { PositionRole } from "@/features/team-management/types";
 import { useGamePlan, useGamePlans } from "@/features/team-tactics/api";
-import { formatLocalDate } from "@/features/events/event-utils";
-import { useEvent, useStartMatch } from "@/features/events/hooks";
+import { formatEventDateTime, formatLocalDate } from "@/features/events/event-utils";
+import {
+  useConfirmEventLineup,
+  useEvent,
+  useEventLineup,
+  useEventRsvps,
+  useFriendlyOpponentLineup,
+  useStartMatch,
+} from "@/features/events/hooks";
 import type { OpponentSquadVisibility } from "@/features/events/types";
 import {
   contrastText,
@@ -28,6 +44,7 @@ import {
 } from "@/features/matches/live-match-model";
 import {
   assignmentsFromPlayers,
+  MAX_OPPONENT_PLAYERS,
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
@@ -406,10 +423,19 @@ export default function ConfirmSquadPage() {
   const opponentOutlet = useOutlet();
   const { team } = useAuth();
   const eventQuery = useEvent(eventId);
+  const lineupQuery = useEventLineup(eventId);
+  const friendlyLineupQuery = useFriendlyOpponentLineup(
+    eventId,
+    Boolean(eventQuery.data?.friendlyFixtureId),
+  );
   const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
+  const confirmLineup = useConfirmEventLineup(eventId ?? "");
+  // Assistants cannot read the coach-only RSVP endpoint; their suggestions
+  // simply run without the RSVP signal.
+  const rsvpQuery = useEventRsvps(eventId, team?.role === "coach");
   const [selectedGamePlanId, setSelectedGamePlanId] = useState<string | null>(
     null,
   );
@@ -431,9 +457,15 @@ export default function ConfirmSquadPage() {
   const [opponentSquadError, setOpponentSquadError] = useState<string | null>(
     null,
   );
+  // Set once the coach saves the setup page: manual entries always win over
+  // the shared friendly-opponent autofill.
+  const [opponentSquadTouched, setOpponentSquadTouched] = useState(false);
   const [teamColor, setTeamColor] = useState<string | null>(null);
   const [opponentColor, setOpponentColor] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [suggestionReasons, setSuggestionReasons] = useState<
+    Record<string, string> | null
+  >(null);
 
   const gamePlanQuery = useGamePlan(selectedGamePlanId ?? undefined);
   const appliedGamePlanIdRef = useRef<string | null>(null);
@@ -516,6 +548,12 @@ export default function ConfirmSquadPage() {
     );
   }, [selectedGamePlanId, gamePlanQuery.data, selectableRosterIds]);
 
+  // Suggestion chips only describe the suggestion they came from; switching
+  // the game plan replaces the XI, so the stale reasons are dropped too.
+  useEffect(() => {
+    setSuggestionReasons(null);
+  }, [selectedGamePlanId, gamePlanQuery.data?.id]);
+
   useEffect(() => {
     const currentFormation = FORMATIONS[opponentFormationId];
     if (currentFormation?.playerCount === startingTarget) {
@@ -534,6 +572,22 @@ export default function ConfirmSquadPage() {
       return next.size === current.size ? current : next;
     });
   }, [selectableRosterIds]);
+
+  // The confirmed pre-match lineup is the source of truth on load: prefill
+  // the XI once, as soon as both the lineup and the roster have arrived.
+  const appliedLineupRef = useRef<string | null>(null);
+  useEffect(() => {
+    const lineup = lineupQuery.data;
+    if (!lineup || !eventId || appliedLineupRef.current === eventId) {
+      return;
+    }
+    if (!athletesQuery.data) {
+      // Wait for the roster so the pruning effect above cannot clear the XI.
+      return;
+    }
+    appliedLineupRef.current = eventId;
+    setStartingIds(new Set(lineup.startingAthleteIds));
+  }, [athletesQuery.data, eventId, lineupQuery.data]);
 
   const competitionParticipants = useMemo(
     () =>
@@ -560,6 +614,13 @@ export default function ConfirmSquadPage() {
   );
 
   useEffect(() => {
+    if (eventQuery.data?.friendlyFixtureId) {
+      // The opponent is the linked Gaffer team — resolved server-side when
+      // the match is started, so it is read-only here.
+      setOpponentCompetitionTeamId(null);
+      setOpponentName(eventQuery.data.friendlyOpponentTeamName ?? "");
+      return;
+    }
     if (eventQuery.data?.competitionFixtureId) {
       setOpponentCompetitionTeamId(generatedFixtureOpponentId);
       setOpponentName(generatedFixtureOpponentName);
@@ -582,10 +643,44 @@ export default function ConfirmSquadPage() {
     competitionParticipants,
     eventQuery.data?.competitionFixtureId,
     eventQuery.data?.competitionId,
+    eventQuery.data?.friendlyFixtureId,
+    eventQuery.data?.friendlyOpponentTeamName,
     generatedFixtureOpponentId,
     generatedFixtureOpponentName,
     opponentCompetitionTeamId,
   ]);
+
+  // Auto-populate the opposition squad from the opponent's confirmed lineup
+  // once it exists, so a Gaffer friendly never needs manual re-entry of the
+  // other team. Manual edits via the setup page take precedence permanently.
+  useEffect(() => {
+    const lineup = friendlyLineupQuery.data;
+    if (!lineup?.available || opponentSquadTouched) {
+      return;
+    }
+    const seenNumbers = new Set<number>();
+    const players: DraftOpponentPlayer[] = [];
+    for (const athlete of lineup.players) {
+      if (athlete.squadNumber == null || seenNumbers.has(athlete.squadNumber)) {
+        continue;
+      }
+      seenNumbers.add(athlete.squadNumber);
+      players.push({
+        shirtNumber: athlete.squadNumber,
+        name: `${athlete.firstName} ${athlete.lastName}`.trim() || undefined,
+        position: athlete.position ?? undefined,
+      });
+      if (players.length >= MAX_OPPONENT_PLAYERS) {
+        break;
+      }
+    }
+    if (players.length === 0) {
+      return;
+    }
+    setOpponentPlayers(players);
+    setOpponentSquadVisibility("full");
+    setOpponentSquadError(null);
+  }, [friendlyLineupQuery.data, opponentSquadTouched]);
 
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
@@ -597,18 +692,70 @@ export default function ConfirmSquadPage() {
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
+  // Friendly fixtures are only confirmed once the Gaffer opponent accepted;
+  // generated competition fixtures keep their own schedule gate.
+  const friendlyFixtureLinked = Boolean(eventQuery.data?.friendlyFixtureStatus);
+  const friendlyFixtureAccepted =
+    !friendlyFixtureLinked ||
+    eventQuery.data?.friendlyFixtureStatus === "accepted";
   const fixtureDateConfirmed =
-    !eventQuery.data?.competitionFixtureId ||
-    Boolean(eventQuery.data.fixtureScheduleConfirmedAt);
-  const canSubmit =
+    (!eventQuery.data?.competitionFixtureId ||
+      Boolean(eventQuery.data.fixtureScheduleConfirmedAt)) &&
+    friendlyFixtureAccepted;
+  const confirmedLineup = lineupQuery.data ?? null;
+  const lineupReady = Boolean(confirmedLineup);
+  const lineupDirty = useMemo(() => {
+    if (!confirmedLineup) return false;
+    const confirmedIds = new Set(confirmedLineup.startingAthleteIds);
+    if (confirmedIds.size !== startingIds.size) return true;
+    for (const id of startingIds) {
+      if (!confirmedIds.has(id)) return true;
+    }
+    return false;
+  }, [confirmedLineup, startingIds]);
+  // Lineups can be confirmed before match day for advance sharing.
+  const canConfirmLineup =
     startingCount === startingTarget &&
     selectableAthletes.length >= startingTarget &&
-    opponentReady &&
     fixtureDateConfirmed &&
+    !confirmLineup.isPending;
+  const canSubmit =
+    canConfirmLineup &&
+    lineupReady &&
+    !lineupDirty &&
+    opponentReady &&
     !beforeMatchDay &&
     !startMatch.isPending &&
     (!eventQuery.data?.competitionId || competitionQuery.isSuccess) &&
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
+
+  const friendlyOpponentLabel =
+    eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent";
+  const sharingWithOpponent = friendlyFixtureLinked && friendlyFixtureAccepted;
+  const lineupStatusMessage = (() => {
+    if (!fixtureDateConfirmed) {
+      return "The fixture must be confirmed before the lineup can be saved.";
+    }
+    if (!lineupReady) {
+      return sharingWithOpponent
+        ? `Confirm your lineup to share it with ${friendlyOpponentLabel} — they will see it on their match setup page before kick-off.`
+        : "Confirm your lineup to lock in the starting XI before the match starts.";
+    }
+    if (lineupDirty) {
+      return sharingWithOpponent
+        ? `Your XI changed since it was shared — update the confirmed lineup so ${friendlyOpponentLabel} sees the latest squad.`
+        : "Your XI changed since it was confirmed — update the confirmed lineup to keep the saved squad accurate.";
+    }
+    const confirmedWhen = confirmedLineup
+      ? formatEventDateTime(confirmedLineup.confirmedAt)
+      : "";
+    if (sharingWithOpponent) {
+      return `Lineup confirmed ${confirmedWhen} — ${friendlyOpponentLabel} can see it on their match setup page.${
+        beforeMatchDay ? " Kick-off unlocks on match day." : ""
+      }`;
+    }
+    return `Lineup confirmed ${confirmedWhen}. You can start the match when ready.`;
+  })();
 
   const detailsComplete = opponentReady;
   const squadInfoComplete =
@@ -720,6 +867,45 @@ export default function ConfirmSquadPage() {
     });
   };
 
+  const handleConfirmLineup = async () => {
+    if (!eventId || !canConfirmLineup) {
+      return;
+    }
+    setSubmitError(null);
+    try {
+      await confirmLineup.mutateAsync({
+        startingAthleteIds: [...startingIds],
+        benchAthleteIds: benchIdsFromRoster(
+          athletes,
+          startingIds,
+          gamePlanQuery.data,
+        ),
+      });
+    } catch (err) {
+      setSubmitError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not confirm the lineup. Please try again.",
+      );
+    }
+  };
+
+  const handleSuggestXI = () => {
+    const suggestion = suggestStartingXi({
+      formationId: previewFormationId,
+      athletes,
+      rsvpByAthleteId: rsvpQuery.data
+        ? Object.fromEntries(
+            rsvpQuery.data.map((row) => [row.id, row.rsvpStatus]),
+          )
+        : undefined,
+      gamePlanAssignments: gamePlanQuery.data?.assignments,
+      gamePlanSubstituteIds: gamePlanQuery.data?.substituteIds,
+    });
+    setStartingIds(new Set(suggestion.startingIds));
+    setSuggestionReasons(suggestion.reasons);
+  };
+
   const handleSubmit = async () => {
     if (!eventId || !canSubmit) {
       return;
@@ -801,6 +987,7 @@ export default function ConfirmSquadPage() {
       playerCount: startingTarget,
       opponentColor: oppColor,
       onSave: (next) => {
+        setOpponentSquadTouched(true);
         setOpponentSquadVisibility(next.visibility);
         setOpponentPlayers(next.players);
         setOpponentFormationId(next.formationId);
@@ -870,6 +1057,26 @@ export default function ConfirmSquadPage() {
           </p>
           <Button variant="outline" size="sm" onClick={() => navigate("/events")}>
             Back to Events
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (event.matchId) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Radio className="size-8 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">
+            Match already started
+          </h2>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            The squad is managed live now — lineup changes and match events
+            happen in the Live Logger.
+          </p>
+          <Button onClick={() => navigate(`/matches/${event.matchId}/live`)}>
+            Open Live Logger
           </Button>
         </div>
       </div>
@@ -961,7 +1168,7 @@ export default function ConfirmSquadPage() {
               VS
             </p>
             <p className="mt-1 max-w-[10rem] truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-              {event.location}
+              {event.location || "Venue not set"}
             </p>
           </div>
           <HeroClub
@@ -1021,7 +1228,13 @@ export default function ConfirmSquadPage() {
           <h2 className={sectionLabelClassName}>Match details</h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor={event.competitionFixtureId ? undefined : "opponent-name"}>
+              <Label
+                htmlFor={
+                  event.competitionFixtureId || event.friendlyFixtureId
+                    ? undefined
+                    : "opponent-name"
+                }
+              >
                 Opponent
               </Label>
               {event.competitionFixtureId ? (
@@ -1043,6 +1256,34 @@ export default function ConfirmSquadPage() {
                     {generatedFixtureHasOpponent
                       ? "This opponent is fixed by the generated competition fixture."
                       : "The opponent will be filled automatically when the fixture pairing is known."}
+                  </p>
+                </>
+              ) : event.friendlyFixtureId ? (
+                <>
+                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-sm font-medium",
+                        !event.friendlyOpponentTeamName?.trim() &&
+                          "text-muted-foreground",
+                      )}
+                    >
+                      {event.friendlyOpponentTeamName?.trim() ||
+                        "Opponent pending"}
+                    </span>
+                    <LockKeyhole
+                      className="size-4 shrink-0 text-primary"
+                      aria-hidden
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {event.friendlyFixtureStatus === "accepted"
+                      ? "Friendly fixture confirmed — confirm your lineup to share it before kick-off."
+                      : event.friendlyFixtureStatus === "pending"
+                        ? "Waiting for this Gaffer opponent to accept the fixture request."
+                        : event.friendlyFixtureStatus === "declined"
+                          ? "The opponent declined this fixture. Update the event to pick another opponent."
+                          : "This friendly fixture is no longer active."}
                   </p>
                 </>
               ) : event.competitionId ? (
@@ -1175,6 +1416,21 @@ export default function ConfirmSquadPage() {
               Edit opponent squad
             </button>
           </div>
+          {eventQuery.data?.friendlyFixtureId && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {friendlyLineupQuery.data?.available
+                ? `Auto-filled from ${
+                    friendlyLineupQuery.data.teamName ?? "the opponent"
+                  }'s confirmed lineup — adjust it if needed.`
+                : eventQuery.data.friendlyFixtureStatus === "accepted"
+                  ? `Opponent lineup not available yet — ${
+                      eventQuery.data.friendlyOpponentTeamName ?? "the opponent"
+                    } has not confirmed their lineup. You can still enter it manually.`
+                  : eventQuery.data.friendlyFixtureStatus === "pending"
+                    ? "Their lineup is shared automatically once they accept the fixture and confirm it."
+                    : "The fixture request was not accepted, so no lineup can be shared."}
+            </p>
+          )}
           {opponentSquadVisibility === "none" ? (
             <div className="mt-4">
               <span
@@ -1382,22 +1638,37 @@ export default function ConfirmSquadPage() {
       <section className={cardClassName}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className={sectionLabelClassName}>Your squad</h2>
-          <p className="text-sm text-muted-foreground">
-            <span
-              className={cn(
-                lineupComplete ? "text-primary" : "text-muted-foreground",
-              )}
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              <span className={cn(lineupComplete ? "text-primary" : "text-muted-foreground")}>
+                Starting lineup: {startingCount} / {startingTarget}
+              </span>
+              <span className="mx-2 text-border">·</span>
+              Bench: {benchCount}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleSuggestXI}
+              disabled={selectableAthletes.length < startingTarget}
+              className="shrink-0 gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
             >
-              Starting lineup: {startingCount} / {startingTarget}
-            </span>
-            <span className="mx-2 text-border">·</span>
-            Bench: {benchCount}
-          </p>
+              <Wand2 className="size-3.5" aria-hidden />
+              Suggest lineup
+            </Button>
+          </div>
         </div>
 
         {competitionPlayerCount && (
           <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
             Competition format: <span className="font-semibold">{competitionPlayerCount}-a-side</span>. Exactly {competitionPlayerCount} available players must be selected as starters.
+          </p>
+        )}
+
+        {suggestionReasons && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Suggested lineup applied — tap any player to replace or remove them.
           </p>
         )}
 
@@ -1409,7 +1680,8 @@ export default function ConfirmSquadPage() {
 
         {beforeMatchDay && (
           <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            Matches cannot be started before match day.
+            Matches cannot be started before match day — you can still confirm
+            your lineup now so the opponent can prepare.
           </p>
         )}
 
@@ -1464,6 +1736,11 @@ export default function ConfirmSquadPage() {
                           {positionLabel}
                         </span>
                       </span>
+                      {selected && suggestionReasons?.[athlete.id] && (
+                        <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">
+                          {suggestionReasons[athlete.id]}
+                        </span>
+                      )}
                     </span>
                     <span
                       className={cn(
@@ -1514,19 +1791,74 @@ export default function ConfirmSquadPage() {
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!canSubmit}
-        onClick={() => void handleSubmit()}
-        className={cn(
-          "h-14 w-full rounded-xl bg-primary text-sm font-bold uppercase tracking-[0.18em] text-primary-foreground transition-opacity",
-          "shadow-[0_0_28px_color-mix(in_oklab,var(--primary)_45%,transparent)]",
-          "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-        )}
-      >
-        {startMatch.isPending ? "Saving…" : "Confirm starting lineup"}
-      </button>
+
+      <section className={cardClassName}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={sectionLabelClassName}>Lineup confirmation</h2>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]",
+              lineupReady && !lineupDirty
+                ? "bg-emerald-500/10 text-emerald-500"
+                : "bg-amber-500/10 text-amber-500",
+            )}
+          >
+            {lineupReady
+              ? lineupDirty
+                ? "Changes not shared"
+                : "Shared"
+              : "Not confirmed"}
+          </span>
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {lineupStatusMessage}
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={!canConfirmLineup || (lineupReady && !lineupDirty)}
+            onClick={() => void handleConfirmLineup()}
+            className={cn(
+              "h-14 w-full rounded-xl border text-xs font-bold uppercase tracking-[0.18em] transition-colors sm:text-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              lineupReady && !lineupDirty
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                : "border-primary/60 text-primary hover:bg-primary/10",
+            )}
+          >
+            {confirmLineup.isPending
+              ? "Saving lineup…"
+              : lineupReady
+                ? lineupDirty
+                  ? "Update confirmed lineup"
+                  : "Lineup confirmed"
+                : "Confirm lineup"}
+          </button>
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={() => void handleSubmit()}
+            className={cn(
+              "h-14 w-full rounded-xl bg-primary text-xs font-bold uppercase tracking-[0.18em] text-primary-foreground transition-opacity sm:text-sm",
+              "shadow-[0_0_28px_color-mix(in_oklab,var(--primary)_45%,transparent)]",
+              "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+            )}
+          >
+            {startMatch.isPending
+              ? "Starting…"
+              : beforeMatchDay
+                ? "Available on match day"
+                : !lineupReady
+                  ? "Confirm lineup first"
+                  : lineupDirty
+                    ? "Update lineup to start"
+                    : "Start match & open Live Logger"}
+          </button>
+        </div>
+      </section>
+
     </div>
   );
 }

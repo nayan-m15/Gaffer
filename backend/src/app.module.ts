@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { CompetitionsModule } from './competitions/competitions.module';
 import { CompetitionInvitesModule } from './competition-invites/competition-invites.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { EventsModule } from './events/events.module';
+import { FriendlyFixturesModule } from './friendly-fixtures/friendly-fixtures.module';
 import { GamePlansModule } from './game-plans/game-plans.module';
 import { InjuriesModule } from './injuries/injuries.module';
+import { InsightsModule } from './insights/insights.module';
 import { MatchesModule } from './matches/matches.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { StatisticsModule } from './statistics/statistics.module';
@@ -32,9 +35,11 @@ import { SyncModule } from './sync/sync.module';
     TeamInvitesModule,
     PlayerModule,
     EventsModule,
+    FriendlyFixturesModule,
     GamePlansModule,
     MatchesModule,
     InjuriesModule,
+    InsightsModule,
     DashboardModule,
     SeasonsModule,
     StatisticsModule,
@@ -44,6 +49,7 @@ import { SyncModule } from './sync/sync.module';
     WeatherModule,
     PublicApiModule,
     SyncModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

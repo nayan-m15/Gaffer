@@ -44,7 +44,7 @@ export function PlayerStatsTable({
               <th
                 key={col.key}
                 scope="col"
-                className={cn("py-3 px-4", col.className)}
+                className={cn("py-3 px-4", col.className, col.key === "compare" && "no-print")}
               >
                 {col.label}
               </th>
@@ -67,7 +67,7 @@ export function PlayerStatsTable({
                 )}
               >
                 <td
-                  className="px-4 py-3 text-center"
+                  className="no-print px-4 py-3 text-center"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <input

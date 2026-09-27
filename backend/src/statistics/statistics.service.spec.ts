@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { InsightsService } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
@@ -19,6 +20,11 @@ describe('StatisticsService', () => {
 
   const mockSeasonsService = {
     resolveSeasonWindow: jest.fn(),
+  };
+
+  const mockInsightsService = {
+    getRecentForTeam: jest.fn(),
+    answerQuestion: jest.fn(),
   };
 
   /**
@@ -86,12 +92,14 @@ describe('StatisticsService', () => {
         { provide: TeamsService, useValue: mockTeamsService },
         { provide: SeasonsService, useValue: mockSeasonsService },
         { provide: DatabaseService, useValue: mockDatabaseService },
+        { provide: InsightsService, useValue: mockInsightsService },
       ],
     }).compile();
 
     service = module.get<StatisticsService>(StatisticsService);
 
     jest.clearAllMocks();
+    mockInsightsService.getRecentForTeam.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -677,6 +685,64 @@ describe('StatisticsService', () => {
         service.updateStanding('user-1', 'standing-1', { won: 0 }),
       ).rejects.toThrow(BadRequestException);
       expect(mockDatabaseService.database.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('askAssistant', () => {
+    beforeEach(() => {
+      mockTeamsService.findTeamForUser.mockResolvedValue({
+        id: 'team-1',
+        name: 'Rovers',
+      });
+    });
+
+    it('builds a prompt from the overview and delegates to InsightsService', async () => {
+      mockInsightsService.answerQuestion.mockResolvedValue({
+        status: 'ready',
+        answer: 'Nobody has scored yet.',
+      });
+
+      const result = await service.askAssistant('user-1', {
+        question: 'Who scored the most goals?',
+      });
+
+      expect(result).toEqual({ status: 'ready', answer: 'Nobody has scored yet.' });
+      expect(mockInsightsService.answerQuestion).toHaveBeenCalledTimes(1);
+      const prompt = mockInsightsService.answerQuestion.mock.calls[0][0] as string;
+      expect(prompt).toContain("Rovers's record");
+      expect(prompt).toContain('Question: Who scored the most goals?');
+    });
+
+    it('scopes the prompt to the resolved season when seasonId is given', async () => {
+      mockSeasonsService.resolveSeasonWindow.mockResolvedValue({
+        season: { id: 'season-1', name: '2025/26', startDate: '2025-08-01', endDate: '2026-05-31', isCurrent: true },
+        window: { start: new Date('2025-08-01'), end: new Date('2026-05-31') },
+      });
+      mockInsightsService.answerQuestion.mockResolvedValue({
+        status: 'ready',
+        answer: 'Answer.',
+      });
+
+      await service.askAssistant('user-1', {
+        question: 'How are we doing?',
+        seasonId: 'season-1',
+      });
+
+      const prompt = mockInsightsService.answerQuestion.mock.calls[0][0] as string;
+      expect(prompt).toContain("record for 2025/26");
+    });
+
+    it('propagates a failed status without throwing', async () => {
+      mockInsightsService.answerQuestion.mockResolvedValue({
+        status: 'failed',
+        answer: null,
+      });
+
+      const result = await service.askAssistant('user-1', {
+        question: 'Who scored the most goals?',
+      });
+
+      expect(result).toEqual({ status: 'failed', answer: null });
     });
   });
 });

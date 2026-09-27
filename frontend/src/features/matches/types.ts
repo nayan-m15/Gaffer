@@ -12,17 +12,33 @@ export type MatchEventType =
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
 export type MatchClockPeriod =
-  | "not_started"
-  | "first_half"
-  | "half_time"
-  | "second_half"
-  | "full_time";
+  "not_started" | "first_half" | "half_time" | "second_half" | "full_time";
 
 export interface OpponentMatchPlayer {
   id: string;
   shirtNumber: number;
   name: string | null;
   position?: string | null;
+}
+
+export type MatchInsightStatus =
+  | "ready"
+  | "failed"
+  | "stale"
+  | "pending"
+  | "unavailable";
+
+export interface MatchInsightHighlights {
+  playerOfTheMatch?: { athleteName: string; reason: string } | null;
+}
+
+/** LLM-generated narrative summary for a finalised match. See GET /matches/:matchId/insight. */
+export interface MatchInsight {
+  matchId: string;
+  status: MatchInsightStatus;
+  narrativeText: string | null;
+  highlights: MatchInsightHighlights | null;
+  generatedAt: string | null;
 }
 
 export interface MatchRecord {
@@ -48,8 +64,12 @@ export interface MatchRecord {
   eventStatus: "scheduled" | "cancelled" | "completed";
   eventScheduledAt: string;
   eventLocation: string;
+  eventNotes?: string | null;
   competitionName: string | null;
+  competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
+  /** Present on GET /matches/:id for accepted Gaffer friendly fixtures. */
+  friendlyOpponentLineup?: FriendlyOpponentLineup;
   projection?: {
     revision: number;
     confirmedTeamScore: number;
@@ -75,6 +95,18 @@ export interface MatchSquadAthlete {
   started?: boolean;
 }
 
+/**
+ * The opposing Gaffer team's confirmed lineup, shared only for an accepted
+ * friendly fixture between two Gaffer teams. `available` stays false while
+ * the fixture is pending/declined or the opponent has not confirmed theirs.
+ */
+export interface FriendlyOpponentLineup {
+  available: boolean;
+  teamId: string | null;
+  teamName: string | null;
+  players: MatchSquadAthlete[];
+}
+
 export interface MatchLogEvent {
   id: string;
   matchId: string;
@@ -91,6 +123,7 @@ export interface MatchLogEvent {
   period?: MatchClockPeriod;
   matchElapsedMs?: number | null;
   lifecycleStatus?: "provisional" | "confirmed" | "needs_review" | "voided";
+  projectionRevision?: number;
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;

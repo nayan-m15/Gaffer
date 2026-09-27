@@ -2,12 +2,15 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { projectCanonicalEvents } from '@gaffer/match-domain';
+import { stableStringify } from '@gaffer/match-domain';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { InsightsService } from '../insights/insights.service';
 import {
   athleteMatchStats,
   athletes,
@@ -23,8 +26,13 @@ import {
   matchProjectionState,
   matches,
   opponentMatchPlayers,
+  seasons,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import {
+  FriendlyFixturesService,
+  unavailableFriendlyOpponentLineup,
+} from '../friendly-fixtures/friendly-fixtures.service';
 import {
   syncFixtureResult,
   validateFixtureResult,
@@ -43,9 +51,13 @@ import type {
  */
 @Injectable()
 export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
+    private readonly insightsService: InsightsService,
+    private readonly friendlyFixturesService: FriendlyFixturesService,
   ) {}
 
   async findOne(userId: string, matchId: string) {
@@ -53,17 +65,38 @@ export class MatchesService {
     const { match, event } = await this.requireMatch(team.id, matchId);
 
     let competitionName: string | null = null;
+    let competitionSeason: string | null = null;
     if (match.competitionId) {
       const [competition] = await this.databaseService.database
-        .select({ name: competitions.name })
+        .select({
+          name: competitions.name,
+          legacySeason: competitions.season,
+          seasonName: seasons.name,
+        })
         .from(competitions)
+        .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
         .where(eq(competitions.id, match.competitionId))
         .limit(1);
       competitionName = competition?.name ?? null;
+      competitionSeason =
+        competition?.seasonName ?? competition?.legacySeason ?? null;
     }
 
     const opponentSquad = await this.listOpponentPlayers(match.id);
     const projection = await this.refreshProjection(match.id);
+
+    // Accepted Gaffer friendlies only: surface the opposing team's actual
+    // confirmed lineup alongside the manually logged opponent squad. The
+    // expected opponent team is verified against the match row so a match
+    // can never resolve an unrelated team's lineup.
+    const friendlyOpponentLineup =
+      event.friendlyFixtureId && match.opponentTeamId
+        ? await this.friendlyFixturesService.resolveOpponentLineup(
+            event.friendlyFixtureId,
+            team.id,
+            match.opponentTeamId,
+          )
+        : unavailableFriendlyOpponentLineup();
 
     return {
       ...match,
@@ -74,8 +107,11 @@ export class MatchesService {
       eventStatus: event.status,
       eventScheduledAt: event.scheduledAt,
       eventLocation: event.location,
+      eventNotes: event.notes,
       competitionName,
+      competitionSeason,
       opponentSquad,
+      friendlyOpponentLineup,
     };
   }
 
@@ -104,6 +140,13 @@ export class MatchesService {
     return this.listOpponentPlayers(matchId);
   }
 
+  async getInsight(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    const insight = await this.insightsService.getForMatch(matchId);
+    return insight ?? { matchId, status: 'unavailable' as const };
+  }
+
   async listEvents(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     await this.requireMatch(team.id, matchId);
@@ -125,6 +168,7 @@ export class MatchesService {
         period: matchEvents.period,
         matchElapsedMs: matchEvents.matchElapsedMs,
         lifecycleStatus: matchEvents.lifecycleStatus,
+        projectionRevision: matchEvents.projectionRevision,
         createdAt: matchEvents.createdAt,
         updatedAt: matchEvents.updatedAt,
         athleteFirstName: athletes.firstName,
@@ -164,6 +208,7 @@ export class MatchesService {
       period: row.period,
       matchElapsedMs: row.matchElapsedMs,
       lifecycleStatus: row.lifecycleStatus,
+      projectionRevision: row.projectionRevision,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       athlete:
@@ -262,10 +307,9 @@ export class MatchesService {
       }
     }
 
-    if (process.env.OFFLINE_RECONCILIATION_FUNCTION !== 'disabled') {
-      const persistedResult = await this.databaseService.database.execute<{
-        canonical_event_id: string;
-      }>(sql`select ingest_match_event_observation(
+    const persistedResult = await this.databaseService.database.execute<{
+      canonical_event_id: string;
+    }>(sql`select ingest_match_event_observation(
           ${dto.clientRequestId}::uuid,
           ${match.id}::uuid,
           ${dto.deviceId ?? dto.clientRequestId}::uuid,
@@ -284,278 +328,22 @@ export class MatchesService {
           ${(dto.clientCreatedAt ? new Date(dto.clientCreatedAt) : new Date()).toISOString()}::timestamptz,
           ${event.status === 'completed'}::boolean
         ) as canonical_event_id`);
-      const persisted = persistedResult.rows[0];
-      if (!persisted?.canonical_event_id) {
-        throw new BadRequestException(
-          'Could not persist the match observation.',
-        );
-      }
-      const persistedEvent = await this.requireCanonicalEventForObservation(
-        match.id,
-        dto.clientRequestId,
-      );
-      await this.syncCompletedCompetitionFixture(
-        team.id,
-        match,
-        event.status,
-        dto.eventType === 'goal',
-      );
-      return persistedEvent;
+    const persisted = persistedResult.rows[0];
+    if (!persisted?.canonical_event_id) {
+      throw new BadRequestException('Could not persist the match observation.');
     }
-
-    const [insertedObservation] = await this.databaseService.database
-      .insert(matchEventObservations)
-      .values({
-        id: dto.clientRequestId,
-        matchId: match.id,
-        deviceId: dto.deviceId ?? dto.clientRequestId,
-        loggedByUserId: userId,
-        eventType: dto.eventType,
-        team: dto.team,
-        athleteId: dto.athleteId,
-        opponentLabel,
-        opponentPlayerId,
-        period,
-        matchElapsedMs,
-        payload,
-        payloadHash,
-        clientCreatedAt: dto.clientCreatedAt
-          ? new Date(dto.clientCreatedAt)
-          : new Date(),
-      })
-      .onConflictDoNothing({ target: matchEventObservations.id })
-      .returning();
-
-    if (!insertedObservation) {
-      const [existingObservation] = await this.databaseService.database
-        .select()
-        .from(matchEventObservations)
-        .where(eq(matchEventObservations.id, dto.clientRequestId))
-        .limit(1);
-      if (
-        !existingObservation ||
-        existingObservation.matchId !== match.id ||
-        existingObservation.payloadHash !== payloadHash
-      ) {
-        throw new BadRequestException(
-          'This offline operation ID was already used with different data.',
-        );
-      }
-      const [membership] = await this.databaseService.database
-        .select()
-        .from(matchEventMemberships)
-        .where(eq(matchEventMemberships.observationId, dto.clientRequestId))
-        .limit(1);
-      if (membership) {
-        const existingEvent = await this.requireMatchEvent(
-          match.id,
-          membership.canonicalEventId,
-        );
-        await this.syncCompletedCompetitionFixture(
-          team.id,
-          match,
-          event.status,
-          dto.eventType === 'goal',
-        );
-        return existingEvent;
-      }
-    }
-
-    // A semantic duplicate has a different operation ID, so ordinary database
-    // uniqueness cannot detect it. Attach close, equivalent observations to one
-    // canonical event and open an explicit coach review.
-    const [candidate] = await this.databaseService.database
-      .select({ canonicalEventId: matchEventMemberships.canonicalEventId })
-      .from(matchEventObservations)
-      .innerJoin(
-        matchEventMemberships,
-        eq(matchEventMemberships.observationId, matchEventObservations.id),
-      )
-      .where(
-        sql`
-        ${matchEventObservations.matchId} = ${match.id}
-        and ${matchEventObservations.id} <> ${dto.clientRequestId}
-        and ${matchEventObservations.period} = ${period}
-        and ${matchEventObservations.eventType} = ${dto.eventType}
-        and ${matchEventObservations.team} = ${dto.team}
-        and ${matchEventObservations.athleteId} is not distinct from ${dto.athleteId ?? null}
-        and ${matchEventObservations.opponentPlayerId} is not distinct from ${opponentPlayerId}
-        and ${matchEventObservations.opponentLabel} is not distinct from ${opponentLabel}
-        and abs(${matchEventObservations.matchElapsedMs} - ${matchElapsedMs}) <= 5000
-      `,
-      )
-      .orderBy(asc(matchEventMemberships.canonicalEventId))
-      .limit(1);
-
-    if (candidate) {
-      const currentBecomesAnchor =
-        dto.clientRequestId.localeCompare(candidate.canonicalEventId) < 0;
-      if (currentBecomesAnchor) {
-        await this.databaseService.database.insert(matchEvents).values({
-          id: dto.clientRequestId,
-          matchId: match.id,
-          athleteId: dto.athleteId,
-          team: dto.team,
-          opponentLabel,
-          opponentPlayerId,
-          eventType: dto.eventType,
-          minute: dto.minute,
-          detail: dto.detail,
-          loggedByUserId: userId,
-          clientRequestId: dto.clientRequestId,
-          manuallyAdjusted: event.status === 'completed',
-          period,
-          matchElapsedMs,
-          structuredPayload: payload,
-          lifecycleStatus: 'needs_review',
-        });
-      }
-      const canonicalEventId = currentBecomesAnchor
-        ? dto.clientRequestId
-        : candidate.canonicalEventId;
-      await this.databaseService.database
-        .insert(matchEventMemberships)
-        .values({
-          observationId: dto.clientRequestId,
-          canonicalEventId,
-        })
-        .onConflictDoNothing({ target: matchEventMemberships.observationId });
-      if (currentBecomesAnchor) {
-        await this.databaseService.database
-          .update(matchEventMemberships)
-          .set({ canonicalEventId })
-          .where(
-            eq(
-              matchEventMemberships.canonicalEventId,
-              candidate.canonicalEventId,
-            ),
-          );
-        await this.databaseService.database
-          .delete(matchEvents)
-          .where(eq(matchEvents.id, candidate.canonicalEventId));
-      }
-      await this.databaseService.database
-        .update(matchEvents)
-        .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
-        .where(eq(matchEvents.id, canonicalEventId));
-      await this.databaseService.database
-        .insert(matchEventReviews)
-        .values({
-          matchId: match.id,
-          canonicalEventId,
-          reason: 'possible_duplicate',
-        })
-        .onConflictDoNothing();
-      const canonicalEvent = await this.requireMatchEvent(
-        match.id,
-        canonicalEventId,
-      );
-      await this.syncCompletedCompetitionFixture(
-        team.id,
-        match,
-        event.status,
-        dto.eventType === 'goal',
-      );
-      return canonicalEvent;
-    }
-
-    const [created] = await this.databaseService.database
-      .insert(matchEvents)
-      .values({
-        id: dto.clientRequestId,
-        matchId: match.id,
-        athleteId: dto.athleteId,
-        team: dto.team,
-        opponentLabel,
-        opponentPlayerId,
-        eventType: dto.eventType,
-        minute: dto.minute,
-        detail: dto.detail,
-        loggedByUserId: userId,
-        clientRequestId: dto.clientRequestId,
-        manuallyAdjusted: event.status === 'completed',
-        period,
-        matchElapsedMs,
-        structuredPayload: payload,
-      })
-      .onConflictDoNothing({ target: matchEvents.id })
-      .returning();
-    const canonical =
-      created ?? (await this.requireMatchEvent(match.id, dto.clientRequestId));
-    await this.databaseService.database
-      .insert(matchEventMemberships)
-      .values({
-        observationId: dto.clientRequestId,
-        canonicalEventId: canonical.id,
-      })
-      .onConflictDoNothing({ target: matchEventMemberships.observationId });
-
-    // Close the race where two devices inserted their memberships between the
-    // first candidate lookup and this insert. The lexicographically smallest
-    // client UUID is the stable anchor, independent of reconnect order.
-    const [lateCandidate] = await this.databaseService.database
-      .select({ canonicalEventId: matchEventMemberships.canonicalEventId })
-      .from(matchEventObservations)
-      .innerJoin(
-        matchEventMemberships,
-        eq(matchEventMemberships.observationId, matchEventObservations.id),
-      )
-      .where(
-        sql`
-        ${matchEventObservations.matchId} = ${match.id}
-        and ${matchEventObservations.id} <> ${dto.clientRequestId}
-        and ${matchEventObservations.period} = ${period}
-        and ${matchEventObservations.eventType} = ${dto.eventType}
-        and ${matchEventObservations.team} = ${dto.team}
-        and ${matchEventObservations.athleteId} is not distinct from ${dto.athleteId ?? null}
-        and ${matchEventObservations.opponentPlayerId} is not distinct from ${opponentPlayerId}
-        and ${matchEventObservations.opponentLabel} is not distinct from ${opponentLabel}
-        and abs(${matchEventObservations.matchElapsedMs} - ${matchElapsedMs}) <= 5000
-      `,
-      )
-      .orderBy(asc(matchEventMemberships.canonicalEventId))
-      .limit(1);
-    if (!lateCandidate || lateCandidate.canonicalEventId === canonical.id) {
-      await this.syncCompletedCompetitionFixture(
-        team.id,
-        match,
-        event.status,
-        dto.eventType === 'goal',
-      );
-      return canonical;
-    }
-    const winningId = [canonical.id, lateCandidate.canonicalEventId].sort()[0];
-    const losingId =
-      winningId === canonical.id
-        ? lateCandidate.canonicalEventId
-        : canonical.id;
-    await this.databaseService.database
-      .update(matchEventMemberships)
-      .set({ canonicalEventId: winningId })
-      .where(eq(matchEventMemberships.canonicalEventId, losingId));
-    await this.databaseService.database
-      .delete(matchEvents)
-      .where(eq(matchEvents.id, losingId));
-    await this.databaseService.database
-      .update(matchEvents)
-      .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
-      .where(eq(matchEvents.id, winningId));
-    await this.databaseService.database
-      .insert(matchEventReviews)
-      .values({
-        matchId: match.id,
-        canonicalEventId: winningId,
-        reason: 'possible_duplicate',
-      })
-      .onConflictDoNothing();
-    const winningEvent = await this.requireMatchEvent(match.id, winningId);
+    const persistedEvent = await this.requireCanonicalEventForObservation(
+      match.id,
+      dto.clientRequestId,
+    );
+    await this.refreshProjection(match.id);
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
       event.status,
       dto.eventType === 'goal',
     );
-    return winningEvent;
+    return persistedEvent;
   }
 
   async listEventReviews(userId: string, matchId: string) {
@@ -568,19 +356,38 @@ export class MatchesService {
       .orderBy(desc(matchEventReviews.createdAt));
     return Promise.all(
       rows.map(async (review) => {
-        const observations = await this.databaseService.database
-          .select()
-          .from(matchEventObservations)
-          .innerJoin(
-            matchEventMemberships,
-            eq(matchEventMemberships.observationId, matchEventObservations.id),
-          )
-          .where(
-            eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
-          );
+        const observations =
+          review.observationIds.length > 0
+            ? await this.databaseService.database
+                .select()
+                .from(matchEventObservations)
+                .where(
+                  sql`${matchEventObservations.id} in (${sql.join(
+                    review.observationIds.map((id) => sql`${id}::uuid`),
+                    sql`, `,
+                  )})`,
+                )
+            : (
+                await this.databaseService.database
+                  .select({ observation: matchEventObservations })
+                  .from(matchEventObservations)
+                  .innerJoin(
+                    matchEventMemberships,
+                    eq(
+                      matchEventMemberships.observationId,
+                      matchEventObservations.id,
+                    ),
+                  )
+                  .where(
+                    eq(
+                      matchEventMemberships.canonicalEventId,
+                      review.canonicalEventId,
+                    ),
+                  )
+              ).map((row) => row.observation);
         return {
           ...review,
-          observations: observations.map((row) => row.match_event_observations),
+          observations,
         };
       }),
     );
@@ -596,6 +403,30 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    const [previousDecision] = await this.databaseService.database
+      .select()
+      .from(matchEventOperations)
+      .where(eq(matchEventOperations.id, operationId))
+      .limit(1);
+    if (previousDecision) {
+      if (
+        previousDecision.matchId !== matchId ||
+        previousDecision.actorUserId !== userId ||
+        previousDecision.decision.reviewId !== reviewId ||
+        previousDecision.decision.resolution !== dto.resolution
+      ) {
+        throw new BadRequestException('This offline operation ID was reused.');
+      }
+      const [resolvedReview] = await this.databaseService.database
+        .select()
+        .from(matchEventReviews)
+        .where(eq(matchEventReviews.id, reviewId))
+        .limit(1);
+      if (resolvedReview) {
+        await this.refreshProjection(matchId);
+        return resolvedReview;
+      }
+    }
     const [review] = await this.databaseService.database
       .select()
       .from(matchEventReviews)
@@ -603,11 +434,38 @@ export class MatchesService {
         and(
           eq(matchEventReviews.id, reviewId),
           eq(matchEventReviews.matchId, matchId),
-          eq(matchEventReviews.status, 'open'),
         ),
       )
       .limit(1);
-    if (!review) throw new NotFoundException('Open event review not found.');
+    if (!review) throw new NotFoundException('Event review not found.');
+    if (review.reviewVersion === 2 && review.observationIds.length === 2) {
+      const result = await this.databaseService.database.execute<{
+        canonical_event_id: string;
+      }>(sql`select resolve_match_event_candidate(
+        ${reviewId}::uuid, ${matchId}::uuid, ${userId}::text,
+        ${operationId}::uuid, ${dto.resolution}::text,
+        ${JSON.stringify(causalParentIds)}::jsonb
+      ) as canonical_event_id`);
+      await this.refreshProjection(matchId);
+      await this.syncCompletedCompetitionFixture(
+        team.id,
+        match,
+        event.status,
+        true,
+      );
+      const [updatedReview] = await this.databaseService.database
+        .select()
+        .from(matchEventReviews)
+        .where(eq(matchEventReviews.id, reviewId))
+        .limit(1);
+      return {
+        ...updatedReview,
+        canonicalEventId: result.rows[0].canonical_event_id,
+      };
+    }
+    if (review.status !== 'open') {
+      throw new NotFoundException('Open event review not found.');
+    }
     const targetObservationIds = await this.observationIdsForCanonical(
       review.canonicalEventId,
     );
@@ -730,6 +588,14 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    const previous = await this.findOperation(operationId);
+    if (previous) {
+      this.assertSameOperation(previous, userId, matchId, eventId, 'correct', {
+        replacement: dto,
+      });
+      await this.refreshProjection(matchId);
+      return this.requireMatchEvent(matchId, eventId);
+    }
     this.assertEditable(event.status);
     const logged = await this.requireMatchEvent(matchId, eventId);
 
@@ -787,42 +653,25 @@ export class MatchesService {
       }
     }
 
-    const [updated] = await this.databaseService.database
-      .update(matchEvents)
-      .set({
-        ...(dto.athleteId !== undefined ? { athleteId: dto.athleteId } : {}),
-        ...(attribution.opponentLabel !== undefined
-          ? { opponentLabel: attribution.opponentLabel }
-          : dto.opponentLabel !== undefined
-            ? { opponentLabel: dto.opponentLabel }
-            : {}),
-        ...(attribution.opponentPlayerId !== undefined
-          ? { opponentPlayerId: attribution.opponentPlayerId }
-          : {}),
-        ...(dto.minute !== undefined ? { minute: dto.minute } : {}),
-        ...(dto.eventType !== undefined ? { eventType: dto.eventType } : {}),
-        ...(dto.detail !== undefined ? { detail: dto.detail } : {}),
-        manuallyAdjusted: event.status === 'completed' ? true : true,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
-      .returning();
-
-    if (!updated) {
-      throw new NotFoundException('Match event not found.');
-    }
-
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'correct',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { replacement: dto },
+      effective: {
+        ...dto,
+        ...(attribution.opponentLabel !== undefined
+          ? { opponentLabel: attribution.opponentLabel }
+          : {}),
+        ...(attribution.opponentPlayerId !== undefined
+          ? { opponentPlayerId: attribution.opponentPlayerId }
+          : {}),
+      },
       causalParentIds,
     });
-    await this.refreshProjection(matchId);
+    const updated = await this.requireMatchEvent(matchId, eventId);
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
@@ -841,6 +690,19 @@ export class MatchesService {
     causalParentIds: string[] = [],
   ) {
     const team = await this.requireTeam(userId);
+    const previous = await this.findOperation(operationId);
+    if (previous) {
+      this.assertSameOperation(
+        previous,
+        userId,
+        matchId,
+        eventId,
+        team.role === 'coach' ? 'correct' : 'propose_correction',
+        { replacement: dto },
+      );
+      await this.refreshProjection(matchId);
+      return this.requireMatchEvent(matchId, eventId);
+    }
     if (team.role === 'coach') {
       return this.updateEvent(
         userId,
@@ -854,31 +716,15 @@ export class MatchesService {
     const { event } = await this.requireMatch(team.id, matchId);
     this.assertEditable(event.status);
     const canonical = await this.requireMatchEvent(matchId, eventId);
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'propose_correction',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { replacement: dto },
       causalParentIds,
     });
-    await this.databaseService.database
-      .insert(matchEventReviews)
-      .values({
-        matchId,
-        canonicalEventId: eventId,
-        reason: 'assistant_proposed_correction',
-      })
-      .onConflictDoNothing();
-    await this.databaseService.database
-      .update(matchEvents)
-      .set({ lifecycleStatus: 'needs_review', updatedAt: new Date() })
-      .where(
-        and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)),
-      );
-    await this.refreshProjection(matchId);
     return canonical;
   }
 
@@ -892,6 +738,14 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    const previous = await this.findOperation(operationId);
+    if (previous) {
+      this.assertSameOperation(previous, userId, matchId, eventId, 'void', {
+        lifecycleStatus: 'voided',
+      });
+      await this.refreshProjection(matchId);
+      return this.requireMatchEvent(matchId, eventId);
+    }
     this.assertEditable(event.status);
     const logged = await this.requireMatchEvent(matchId, eventId);
 
@@ -917,28 +771,17 @@ export class MatchesService {
       }
     }
 
-    const [deleted] = await this.databaseService.database
-      .update(matchEvents)
-      .set({ lifecycleStatus: 'voided', updatedAt: new Date() })
-      .where(and(eq(matchEvents.id, eventId), eq(matchEvents.matchId, matchId)))
-      .returning();
-
-    if (!deleted) {
-      throw new NotFoundException('Match event not found.');
-    }
-
-    await this.recordOperation({
+    await this.applyEventMutation({
       id: operationId,
       matchId,
       actorUserId: userId,
       operationType: 'void',
       canonicalEventId: eventId,
-      targetObservationIds: await this.observationIdsForCanonical(eventId),
       decision: { lifecycleStatus: 'voided' },
       causalParentIds,
       reason,
     });
-    await this.refreshProjection(matchId);
+    const deleted = await this.requireMatchEvent(matchId, eventId);
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
@@ -952,20 +795,6 @@ export class MatchesService {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
     this.assertLive(event.status);
-
-    const fixtureContext = await this.buildCompetitionFixtureResult(
-      team.id,
-      match,
-    );
-    const competitionFixtureResult = fixtureContext?.result ?? null;
-    if (fixtureContext) {
-      await validateFixtureResult(
-        this.databaseService,
-        fixtureContext.competitionId,
-        { kind: 'live', id: match.id },
-        fixtureContext.result,
-      );
-    }
 
     const [finishedMatch] = await this.databaseService.database
       .update(matches)
@@ -997,14 +826,7 @@ export class MatchesService {
     if (!finishedMatch) {
       throw new NotFoundException('Match not found.');
     }
-    if (match.competitionId && competitionFixtureResult) {
-      await syncFixtureResult(
-        this.databaseService,
-        match.competitionId,
-        { kind: 'live', id: match.id },
-        competitionFixtureResult,
-      );
-    }
+    await this.refreshProjection(matchId);
     return this.findOne(userId, matchId);
   }
 
@@ -1060,7 +882,12 @@ export class MatchesService {
     expectedRevision: number,
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    const { event } = await this.requireMatch(team.id, matchId);
+    if (event.status !== 'completed') {
+      throw new BadRequestException(
+        'Finish the match before finalising the result.',
+      );
+    }
     const projection = await this.refreshProjection(matchId);
     if (projection.revision !== expectedRevision) {
       throw new BadRequestException(
@@ -1072,16 +899,37 @@ export class MatchesService {
         'Resolve all event reviews before finalising the result.',
       );
     }
-    const [finalised] = await this.databaseService.database
-      .update(matchProjectionState)
-      .set({
-        finalisationState: 'finalised',
-        finalisedByUserId: userId,
-        finalisedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(matchProjectionState.matchId, matchId))
-      .returning();
+    const { match } = await this.requireMatch(team.id, matchId);
+    const fixtureContext = await this.buildCompetitionFixtureResult(
+      team.id,
+      match,
+    );
+    if (fixtureContext) {
+      await validateFixtureResult(
+        this.databaseService,
+        fixtureContext.competitionId,
+        { kind: 'live', id: match.id },
+        fixtureContext.result,
+      );
+    }
+    const result = await this.databaseService.database.execute<{
+      finalised: boolean;
+    }>(sql`select finalise_match_projection(
+      ${matchId}::uuid, ${expectedRevision}::integer, ${userId}::text
+    ) as finalised`);
+    if (!result.rows[0]?.finalised) {
+      throw new BadRequestException(
+        'Projection changed; refresh before finalising.',
+      );
+    }
+    if (fixtureContext) {
+      await syncFixtureResult(
+        this.databaseService,
+        fixtureContext.competitionId,
+        { kind: 'live', id: match.id },
+        fixtureContext.result,
+      );
+    }
     await this.recordOperation({
       id: randomUUID(),
       matchId,
@@ -1090,6 +938,22 @@ export class MatchesService {
       targetObservationIds: [],
       decision: { projectionRevision: expectedRevision },
     });
+    const [finalised] = await this.databaseService.database
+      .select()
+      .from(matchProjectionState)
+      .where(eq(matchProjectionState.matchId, matchId))
+      .limit(1);
+    // Fire-and-forget: insight generation must never delay or fail
+    // finalisation. InsightsService.generateForMatch always resolves (never
+    // rejects) by writing a failed row internally, so this catch is a
+    // last-resort log, not the primary error handling.
+    void this.insightsService
+      .generateForMatch(matchId, { projectionRevision: finalised.revision })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Insight generation failed for match ${matchId}: ${String(error)}`,
+        ),
+      );
     return finalised;
   }
 
@@ -1116,6 +980,8 @@ export class MatchesService {
       decision: { reason },
       reason,
     });
+    // Cheap flag update, no LLM call — the next finalise regenerates.
+    await this.insightsService.markStale(matchId);
     return reopened;
   }
 
@@ -1126,6 +992,45 @@ export class MatchesService {
       .where(eq(matchEventMemberships.canonicalEventId, canonicalEventId))
       .orderBy(asc(matchEventMemberships.observationId));
     return rows.map((row) => row.id);
+  }
+
+  async listEventOperations(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    await this.requireMatch(team.id, matchId);
+    return this.databaseService.database
+      .select()
+      .from(matchEventOperations)
+      .where(eq(matchEventOperations.matchId, matchId))
+      .orderBy(asc(matchEventOperations.id))
+      .limit(500);
+  }
+
+  private async findOperation(operationId: string) {
+    const [operation] = await this.databaseService.database
+      .select()
+      .from(matchEventOperations)
+      .where(eq(matchEventOperations.id, operationId))
+      .limit(1);
+    return operation;
+  }
+
+  private assertSameOperation(
+    previous: typeof matchEventOperations.$inferSelect,
+    userId: string,
+    matchId: string,
+    eventId: string,
+    operationType: string,
+    decision: Record<string, unknown>,
+  ) {
+    if (
+      previous.actorUserId !== userId ||
+      previous.matchId !== matchId ||
+      previous.canonicalEventId !== eventId ||
+      previous.operationType !== operationType ||
+      stableStringify(previous.decision) !== stableStringify(decision)
+    ) {
+      throw new BadRequestException('This offline operation ID was reused.');
+    }
   }
 
   async canonicalEventIdForObservation(matchId: string, observationId: string) {
@@ -1195,85 +1100,43 @@ export class MatchesService {
       .onConflictDoNothing({ target: matchEventOperations.id });
   }
 
-  private async refreshProjection(matchId: string) {
-    const eventRows = await this.databaseService.database
-      .select({
-        id: matchEvents.id,
-        team: matchEvents.team,
-        eventType: matchEvents.eventType,
-        athleteId: matchEvents.athleteId,
-        lifecycleStatus: matchEvents.lifecycleStatus,
-        updatedAt: matchEvents.updatedAt,
-      })
-      .from(matchEvents)
-      .where(eq(matchEvents.matchId, matchId))
-      .orderBy(asc(matchEvents.id));
-    const openReviews = await this.databaseService.database
-      .select({ id: matchEventReviews.id })
-      .from(matchEventReviews)
-      .where(
-        and(
-          eq(matchEventReviews.matchId, matchId),
-          eq(matchEventReviews.status, 'open'),
-        ),
+  private async applyEventMutation(input: {
+    id: string;
+    matchId: string;
+    actorUserId: string;
+    canonicalEventId: string;
+    operationType: 'correct' | 'propose_correction' | 'void';
+    decision: Record<string, unknown>;
+    effective?: Record<string, unknown>;
+    causalParentIds: string[];
+    reason?: string;
+  }) {
+    await this.databaseService.database.execute(sql`
+      select apply_match_event_mutation(
+        ${input.id}::uuid, ${input.matchId}::uuid,
+        ${input.actorUserId}::text, ${input.canonicalEventId}::uuid,
+        ${input.operationType}::text, ${JSON.stringify(input.decision)}::jsonb,
+        ${JSON.stringify(input.effective ?? {})}::jsonb,
+        ${JSON.stringify(input.causalParentIds)}::jsonb,
+        ${input.reason ?? null}::text
       )
-      .orderBy(asc(matchEventReviews.id));
-    const domainProjection = projectCanonicalEvents(eventRows);
-    const digestInput = {
-      events: eventRows.map((event) => ({
-        id: event.id,
-        team: event.team,
-        type: event.eventType,
-        athleteId: event.athleteId,
-        status: event.lifecycleStatus,
-        updatedAt: event.updatedAt.toISOString(),
-      })),
-      openReviewIds: openReviews.map((review) => review.id),
-      rulesVersion: 1,
-    };
-    const inputDigest = createHash('sha256')
-      .update(JSON.stringify(digestInput))
-      .digest('hex');
-    const [existing] = await this.databaseService.database
+    `);
+  }
+
+  private async refreshProjection(matchId: string) {
+    await this.databaseService.database.execute(
+      sql`select refresh_match_projection(${matchId}::uuid)`,
+    );
+    const [projection] = await this.databaseService.database
       .select()
       .from(matchProjectionState)
       .where(eq(matchProjectionState.matchId, matchId))
       .limit(1);
-    if (existing?.inputDigest === inputDigest) return existing;
-    const revision = (existing?.revision ?? 0) + 1;
-    const values = {
-      matchId,
-      revision,
-      inputDigest,
-      rulesVersion: 1,
-      ...domainProjection,
-      unresolvedReviewCount: openReviews.length,
-      finalisationState:
-        existing?.finalisationState === 'finalised'
-          ? 'amendment_required'
-          : (existing?.finalisationState ?? 'open'),
-      updatedAt: new Date(),
-    };
-    const [projection] = await this.databaseService.database
-      .insert(matchProjectionState)
-      .values(values)
-      .onConflictDoUpdate({
-        target: matchProjectionState.matchId,
-        set: values,
-      })
-      .returning();
-    await this.databaseService.database
-      .update(matchEvents)
-      .set({ projectionRevision: revision })
-      .where(eq(matchEvents.matchId, matchId));
-    await this.databaseService.database
-      .update(matchEventMemberships)
-      .set({ projectionRevision: revision })
-      .where(
-        sql`${matchEventMemberships.canonicalEventId} in (
-          select id from match_events where match_id = ${matchId}
-        )`,
+    if (!projection) {
+      throw new ServiceUnavailableException(
+        'Could not refresh the match result.',
       );
+    }
     return projection;
   }
 
@@ -1355,6 +1218,12 @@ export class MatchesService {
     scoreMayHaveChanged: boolean,
   ) {
     if (eventStatus !== 'completed' || !scoreMayHaveChanged) return;
+    const projection = await this.refreshProjection(match.id);
+    if (
+      projection.finalisationState !== 'finalised' ||
+      projection.unresolvedReviewCount > 0
+    )
+      return;
     const fixtureContext = await this.buildCompetitionFixtureResult(
       teamId,
       match,
