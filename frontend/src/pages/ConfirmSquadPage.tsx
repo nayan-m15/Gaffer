@@ -125,6 +125,21 @@ function opponentNamePlaceholder(eventTitle: string) {
   return `e.g. ${title}`;
 }
 
+function getOpponentSquadError(
+  visibility: OpponentSquadVisibility,
+  players: DraftOpponentPlayer[],
+) {
+  if (visibility !== "none" && players.length === 0) {
+    return visibility === "full"
+      ? "Add at least one opponent player with a shirt number and name."
+      : "Add at least one opponent shirt number.";
+  }
+  if (visibility === "full" && players.some((player) => !player.name?.trim())) {
+    return "Enter a name for every opponent player.";
+  }
+  return null;
+}
+
 function isBeforeMatchDay(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
   if (Number.isNaN(scheduled.getTime())) {
@@ -851,24 +866,9 @@ export default function ConfirmSquadPage() {
     if (!eventId || !canSubmit) {
       return;
     }
-    if (
-      opponentSquadVisibility !== "none" &&
-      opponentPlayers.length === 0
-    ) {
-      setOpponentSquadError(
-        opponentSquadVisibility === "full"
-          ? "Add at least one opponent player with a shirt number and name."
-          : "Add at least one opponent shirt number.",
-      );
-      return;
-    }
-    if (
-      opponentSquadVisibility === "full" &&
-      opponentPlayers.some((player) => !player.name?.trim())
-    ) {
-      setOpponentSquadError(
-        "Enter a name for every opponent player.",
-      );
+    const squadError = getOpponentSquadError(opponentSquadVisibility, opponentPlayers);
+    if (squadError) {
+      setOpponentSquadError(squadError);
       return;
     }
     setSubmitError(null);

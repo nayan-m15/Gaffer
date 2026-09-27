@@ -5,6 +5,7 @@ import {
   previewAssignmentsForStarters,
 } from "@/features/team-management/formations";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
+import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
 import type {
   FriendlyOpponentLineup,

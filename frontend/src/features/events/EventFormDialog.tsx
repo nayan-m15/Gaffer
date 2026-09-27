@@ -168,6 +168,25 @@ function eventScheduleError(
   return undefined;
 }
 
+function parseExactWeatherCoordinates(latitudeText: string, longitudeText: string, timezoneText: string) {
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  const timezone = timezoneText.trim();
+  const coordinatesValid =
+    latitudeText.trim() !== "" && longitudeText.trim() !== "" &&
+    Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
+    Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+  if (!coordinatesValid) {
+    return { error: "Enter valid latitude (-90 to 90) and longitude (-180 to 180)." } as const;
+  }
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone }).format();
+  } catch {
+    return { error: "Enter a valid IANA timezone, such as Africa/Johannesburg." } as const;
+  }
+  return { latitude, longitude, timezone } as const;
+}
+
 interface EventFormDialogProps {
   open: boolean;
   event?: TeamEvent;
@@ -396,28 +415,12 @@ export function EventFormDialog({
   );
 
   const useExactCoordinates = () => {
-    const latitude = Number(manualLatitude);
-    const longitude = Number(manualLongitude);
-    const timezone = manualTimezone.trim();
-    if (
-      manualLatitude.trim() === "" ||
-      manualLongitude.trim() === "" ||
-      !Number.isFinite(latitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      !Number.isFinite(longitude) ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      setError("Enter valid latitude (-90 to 90) and longitude (-180 to 180).");
+    const coordinates = parseExactWeatherCoordinates(manualLatitude, manualLongitude, manualTimezone);
+    if (coordinates.error) {
+      setError(coordinates.error);
       return;
     }
-    try {
-      new Intl.DateTimeFormat(undefined, { timeZone: timezone }).format();
-    } catch {
-      setError("Enter a valid IANA timezone, such as Africa/Johannesburg.");
-      return;
-    }
+    const { latitude, longitude, timezone } = coordinates;
     const displayName = weatherLocationQuery.trim() || `${latitude}, ${longitude}`;
     setSelectedLocation({
       id: `coordinates:${latitude}:${longitude}`,

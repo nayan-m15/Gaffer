@@ -98,7 +98,7 @@ function fixtureStatus(
 }
 
 function fixtureResponseForViewer(
-  participant: Participant | undefined,
+  participant: Participant | null | undefined,
   fixture: CompetitionFixture,
 ) {
   if (participant?.id === fixture.homeCompetitionTeamId) return fixture.homeScheduleResponse;

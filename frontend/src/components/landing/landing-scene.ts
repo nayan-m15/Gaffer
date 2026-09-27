@@ -240,55 +240,149 @@ function createEquipmentArea(lowPower: boolean, ballMaterial: THREE.Material, ki
 
 interface StandKit { structure: THREE.Material; concrete: THREE.Material; seat: THREE.Material; crowd: THREE.Material; metal: THREE.Material; light: THREE.Material }
 
-function stadiumStand(side: "east" | "west" | "north" | "south", lowPower: boolean, kit: StandKit) {
-  const group = new THREE.Group(), alongZ = side === "east" || side === "west";
-  const sign = side === "west" || side === "north" ? -1 : 1;
-  const near = alongZ ? 38 : 56.5, length = alongZ ? 112 : 76, rows = lowPower ? 6 : 9, depth = 1.45;
+interface StandLayout {
+  group: THREE.Group;
+  side: "east" | "west" | "north" | "south";
+  alongZ: boolean;
+  sign: number;
+  near: number;
+  length: number;
+  rows: number;
+  depth: number;
+  back: number;
+  upper: number;
+  lowPower: boolean;
+  kit: StandKit;
+}
+
+function addStandSteps(layout: StandLayout) {
+  const { group, side, alongZ, sign, near, length, rows, depth, kit } = layout;
   for (let row = 0; row < rows; row += 1) {
-    const out = near + row * depth, y = .65 + row * 1.08, material = row % 3 === 1 ? kit.seat : kit.structure;
-    if (alongZ && side === "west") group.add(box([3.1, .92, 48], [sign * out, y, -32], material), box([3.1, .92, 34], [sign * out, y, 39], material));
-    else if (alongZ) group.add(box([3.1, .92, length], [sign * out, y, 0], material));
-    else group.add(box([length + row * 2.4, .92, 3.1], [0, y, sign * out], material));
+    const out = near + row * depth;
+    const y = .65 + row * 1.08;
+    const material = row % 3 === 1 ? kit.seat : kit.structure;
+    if (alongZ && side === "west") {
+      group.add(box([3.1, .92, 48], [sign * out, y, -32], material), box([3.1, .92, 34], [sign * out, y, 39], material));
+    } else if (alongZ) {
+      group.add(box([3.1, .92, length], [sign * out, y, 0], material));
+    } else {
+      group.add(box([length + row * 2.4, .92, 3.1], [0, y, sign * out], material));
+    }
   }
-  // A seat is two very low-poly pieces, instanced across the most visible rows.
-  const seatRows = lowPower ? 3 : 6, seatsPerRow = Math.floor(length / (lowPower ? 2.1 : 1.35));
+}
+
+function addStandSeats(layout: StandLayout) {
+  const { group, side, alongZ, sign, near, length, depth, lowPower, kit } = layout;
+  const seatRows = lowPower ? 3 : 6;
+  const seatsPerRow = Math.floor(length / (lowPower ? 2.1 : 1.35));
   const seatBases = new THREE.InstancedMesh(new THREE.BoxGeometry(.64, .13, .54), kit.seat, seatRows * seatsPerRow);
   const seatBacks = new THREE.InstancedMesh(new THREE.BoxGeometry(.64, .62, .11), kit.seat, seatRows * seatsPerRow);
   const seatPart = new THREE.Object3D();
   let seatIndex = 0;
-  for (let row = 0; row < seatRows; row += 1) for (let column = 0; column < seatsPerRow; column += 1) {
-    const along = -length / 2 + (column + .5) * length / seatsPerRow, out = near + .62 + row * depth;
-    const hiddenByWestAccess = side === "west" && along > -8 && along < 22;
-    const scale = hiddenByWestAccess ? 0 : 1;
-    seatPart.position.set(alongZ ? sign * out : along, 1.16 + row * 1.08, alongZ ? along : sign * out);
-    seatPart.scale.setScalar(scale); seatPart.updateMatrix(); seatBases.setMatrixAt(seatIndex, seatPart.matrix);
-    seatPart.position.set(alongZ ? sign * (out + .27) : along, 1.48 + row * 1.08, alongZ ? along : sign * (out + .27));
-    seatPart.updateMatrix(); seatBacks.setMatrixAt(seatIndex, seatPart.matrix); seatIndex += 1;
+  for (let row = 0; row < seatRows; row += 1) {
+    for (let column = 0; column < seatsPerRow; column += 1) {
+      const along = -length / 2 + (column + .5) * length / seatsPerRow;
+      const out = near + .62 + row * depth;
+      seatPart.position.set(alongZ ? sign * out : along, 1.16 + row * 1.08, alongZ ? along : sign * out);
+      seatPart.scale.setScalar(side === "west" && along > -8 && along < 22 ? 0 : 1);
+      seatPart.updateMatrix();
+      seatBases.setMatrixAt(seatIndex, seatPart.matrix);
+      seatPart.position.set(alongZ ? sign * (out + .27) : along, 1.48 + row * 1.08, alongZ ? along : sign * (out + .27));
+      seatPart.updateMatrix();
+      seatBacks.setMatrixAt(seatIndex, seatPart.matrix);
+      seatIndex += 1;
+    }
   }
   group.add(seatBases, seatBacks);
-  const back = near + rows * depth + 2.2, upper = rows * 1.08 + 5.4;
-  if (alongZ) group.add(box([6.4, 1.05, length + 2], [sign * back, upper, 0], kit.concrete), box([1.4, 7.2, length + 4], [sign * (back + 3.4), upper + 3.1, 0], kit.structure), box([15, .65, length + 8], [sign * (back - 1.2), upper + 9.7, 0], kit.metal, !lowPower));
-  else group.add(box([length + 8, 1.05, 6.4], [0, upper, sign * back], kit.concrete), box([length + 10, 7.2, 1.4], [0, upper + 3.1, sign * (back + 3.4)], kit.structure), box([length + 16, .65, 15], [0, upper + 9.7, sign * (back - 1.2)], kit.metal, !lowPower));
-  const supports = lowPower ? 5 : 8;
-  for (let i = 0; i < supports; i += 1) {
-    const at = -length / 2 + 6 + i * (length - 12) / Math.max(supports - 1, 1);
-    if (alongZ) group.add(box([.32, upper + 9.4, .32], [sign * (back + 2.7), (upper + 9.4) / 2, at], kit.metal), box([9.5, .22, .26], [sign * (back - 1.1), upper + 9.25, at], kit.metal));
-    else group.add(box([.32, upper + 9.4, .32], [at, (upper + 9.4) / 2, sign * (back + 2.7)], kit.metal), box([.26, .22, 9.5], [at, upper + 9.25, sign * (back - 1.1)], kit.metal));
+}
+
+function addStandRoof(layout: StandLayout) {
+  const { group, alongZ, sign, back, upper, length, lowPower, kit } = layout;
+  const beam = !lowPower;
+  if (alongZ) {
+    group.add(box([6.4, 1.05, length + 2], [sign * back, upper, 0], kit.concrete), box([1.4, 7.2, length + 4], [sign * (back + 3.4), upper + 3.1, 0], kit.structure), box([15, .65, length + 8], [sign * (back - 1.2), upper + 9.7, 0], kit.metal, beam));
+    return;
   }
-  const crowdRows = lowPower ? 4 : 7, perRow = Math.floor(length / (lowPower ? 2.4 : 1.55));
-  const crowd = new THREE.InstancedMesh(new THREE.BoxGeometry(.34, .72, .28), kit.crowd, crowdRows * perRow), person = new THREE.Object3D();
+  group.add(box([length + 8, 1.05, 6.4], [0, upper, sign * back], kit.concrete), box([length + 10, 7.2, 1.4], [0, upper + 3.1, sign * (back + 3.4)], kit.structure), box([length + 16, .65, 15], [0, upper + 9.7, sign * (back - 1.2)], kit.metal, beam));
+}
+
+function addStandSupports(layout: StandLayout) {
+  const { group, alongZ, sign, length, back, upper, lowPower, kit } = layout;
+  const supports = lowPower ? 5 : 8;
+  for (let index = 0; index < supports; index += 1) {
+    const at = -length / 2 + 6 + index * (length - 12) / Math.max(supports - 1, 1);
+    if (alongZ) {
+      group.add(box([.32, upper + 9.4, .32], [sign * (back + 2.7), (upper + 9.4) / 2, at], kit.metal), box([9.5, .22, .26], [sign * (back - 1.1), upper + 9.25, at], kit.metal));
+    } else {
+      group.add(box([.32, upper + 9.4, .32], [at, (upper + 9.4) / 2, sign * (back + 2.7)], kit.metal), box([.26, .22, 9.5], [at, upper + 9.25, sign * (back - 1.1)], kit.metal));
+    }
+  }
+}
+
+function addStandCrowd(layout: StandLayout) {
+  const { group, side, alongZ, sign, near, length, depth, lowPower, kit } = layout;
+  const crowdRows = lowPower ? 4 : 7;
+  const perRow = Math.floor(length / (lowPower ? 2.4 : 1.55));
+  const crowd = new THREE.InstancedMesh(new THREE.BoxGeometry(.34, .72, .28), kit.crowd, crowdRows * perRow);
+  const person = new THREE.Object3D();
+  const colors = [0x16744f, 0xd8dedb, 0x24312e, 0x0d5139];
   let index = 0;
-  for (let row = 0; row < crowdRows; row += 1) for (let col = 0; col < perRow; col += 1) {
-    const along = -length / 2 + (col + .5) * length / perRow, out = near + .7 + row * depth;
-    person.position.set(alongZ ? sign * out : along, 1.45 + row * 1.08, alongZ ? along : sign * out);
-    const hiddenByWestAccess = side === "west" && along > -8 && along < 22;
-    person.scale.setScalar(hiddenByWestAccess ? 0 : .82 + ((row * 17 + col * 7) % 5) * .045); person.updateMatrix();
-    crowd.setMatrixAt(index, person.matrix); crowd.setColorAt(index, new THREE.Color([0x16744f, 0xd8dedb, 0x24312e, 0x0d5139][(row + col) % 4])); index += 1;
+  for (let row = 0; row < crowdRows; row += 1) {
+    for (let column = 0; column < perRow; column += 1) {
+      const along = -length / 2 + (column + .5) * length / perRow;
+      const out = near + .7 + row * depth;
+      person.position.set(alongZ ? sign * out : along, 1.45 + row * 1.08, alongZ ? along : sign * out);
+      const hidden = side === "west" && along > -8 && along < 22;
+      person.scale.setScalar(hidden ? 0 : .82 + ((row * 17 + column * 7) % 5) * .045);
+      person.updateMatrix();
+      crowd.setMatrixAt(index, person.matrix);
+      crowd.setColorAt(index, new THREE.Color(colors[(row + column) % colors.length]));
+      index += 1;
+    }
   }
   group.add(crowd);
+}
+
+function addStandLights(layout: StandLayout) {
+  const { group, alongZ, sign, length, back, upper, lowPower, kit } = layout;
   const rigs = lowPower ? 4 : 7;
-  for (let i = 0; i < rigs; i += 1) { const at = -length / 2 + 8 + i * (length - 16) / Math.max(rigs - 1, 1); group.add(alongZ ? box([.22, .16, 3.2], [sign * (back - 7.5), upper + 9.25, at], kit.light) : box([3.2, .16, .22], [at, upper + 9.25, sign * (back - 7.5)], kit.light)); }
-  return group;
+  for (let index = 0; index < rigs; index += 1) {
+    const at = -length / 2 + 8 + index * (length - 16) / Math.max(rigs - 1, 1);
+    const light = alongZ
+      ? box([.22, .16, 3.2], [sign * (back - 7.5), upper + 9.25, at], kit.light)
+      : box([3.2, .16, .22], [at, upper + 9.25, sign * (back - 7.5)], kit.light);
+    group.add(light);
+  }
+}
+
+function stadiumStand(side: "east" | "west" | "north" | "south", lowPower: boolean, kit: StandKit) {
+  const alongZ = side === "east" || side === "west";
+  const rows = lowPower ? 6 : 9;
+  const depth = 1.45;
+  const near = alongZ ? 38 : 56.5;
+  const length = alongZ ? 112 : 76;
+  const back = near + rows * depth + 2.2;
+  const layout: StandLayout = {
+    group: new THREE.Group(),
+    side,
+    alongZ,
+    sign: side === "west" || side === "north" ? -1 : 1,
+    near,
+    length,
+    rows,
+    depth,
+    back,
+    upper: rows * 1.08 + 5.4,
+    lowPower,
+    kit,
+  };
+  addStandSteps(layout);
+  addStandSeats(layout);
+  addStandRoof(layout);
+  addStandSupports(layout);
+  addStandCrowd(layout);
+  addStandLights(layout);
+  return layout.group;
 }
 
 function smooth(edge0: number, edge1: number, value: number) { const t = THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1); return t * t * (3 - 2 * t); }
@@ -320,34 +414,7 @@ function footballGoal(end: number, frame: THREE.Material, net: THREE.Material) {
   return group;
 }
 
-export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
-  const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-  const constrainedDevice =
-    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4) ||
-    (deviceMemory !== undefined && deviceMemory <= 4);
-  let lowPower = initialWidth < 768 || constrainedDevice;
-  const renderer = new THREE.WebGLRenderer({
-    alpha: false,
-    antialias: !lowPower,
-    powerPreference: lowPower ? "low-power" : "high-performance",
-  });
-  const gl = renderer.getContext();
-  const rendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
-  const rendererName = String(
-    gl.getParameter(
-      rendererInfo?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER,
-    ),
-  );
-  const softwareRenderer = /swiftshader|llvmpipe|software/i.test(rendererName);
-  lowPower ||= softwareRenderer;
-  renderer.outputEncoding = THREE.sRGBEncoding; renderer.setClearColor(0x07100d); renderer.shadowMap.enabled = !lowPower; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.02; renderer.domElement.className = "landing-scene__canvas"; renderer.domElement.setAttribute("aria-hidden", "true"); renderer.domElement.tabIndex = -1; container.appendChild(renderer.domElement);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x07100d); scene.fog = new THREE.Fog(0x0b1512, 24, lowPower ? 145 : 190);
-  const camera = new THREE.PerspectiveCamera(lowPower ? 67 : 58, initialWidth / initialHeight, .08, 240);
-  const cameraPath = new THREE.CatmullRomCurve3([-73, -67, -61, -55.5, -50, TUNNEL_EXIT, -38, -29, -15, 0].map(x => new THREE.Vector3(x, 1.72, 0)), false, "centripetal");
-
+function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   const concrete = new THREE.MeshStandardMaterial({ color: 0x4b504e, roughness: .94 }), dark = new THREE.MeshStandardMaterial({ color: 0x181e1c, roughness: .92 });
   const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x818582, map: floorTexture, roughness: .69, metalness: .04, clearcoat: .08, clearcoatRoughness: .82 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x202725, roughness: .62, metalness: .34 });
@@ -408,6 +475,16 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   for(const side of [-1,1]) for(const x of [-57.5,-51.2,-46.2]){const banner=box([4.5,1.15,.1],[x,2.05,side*3.055],bannerMat);if(side>0)banner.rotation.y=Math.PI;scene.add(banner);}
   scene.add(box([.5,4.55,.55],[TUNNEL_EXIT,2.15,-3.3],metal),box([.5,4.55,.55],[TUNNEL_EXIT,2.15,3.3],metal),box([.5,.55,7.15],[TUNNEL_EXIT,4.25,0],metal),box([10.5,.18,6.4],[-39.25,-.04,0],dark));
 
+  return { floorTexture, crestMap, tacticsMap, numberMaps, bannerTexture, scoreTexture, ballTexture, bannerMat, footballMat, metal, green, dark, dummy, light };
+}
+
+function buildPitchAndStadium(
+  scene: THREE.Scene,
+  renderer: THREE.WebGLRenderer,
+  lowPower: boolean,
+  roomAssets: ReturnType<typeof buildDressingRoomAndTunnel>,
+) {
+  const { dummy, green, metal, dark, bannerMat, footballMat, light } = roomAssets;
   const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassMat=new THREE.MeshStandardMaterial({map:grassTexture,roughness:.96});const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
   const ball=new THREE.Mesh(new THREE.SphereGeometry(.22,lowPower?12:18,lowPower?8:12),footballMat);ball.position.set(0,.225,0);ball.rotation.set(.16,-.5,.08);ball.castShadow=!lowPower;scene.add(ball);
   const glass=new THREE.MeshPhysicalMaterial({color:0xb9d8d0,roughness:.24,transparent:true,opacity:.25,side:THREE.DoubleSide}),dugout=new THREE.Group();dugout.position.set(-39.2,0,13.5);dugout.add(box([2.8,.3,13],[0,.15,0],dark),box([.3,3.2,13],[-1.25,1.75,0],glass),box([2.8,.32,13],[0,3.25,0],metal));scene.add(dugout);
@@ -426,6 +503,39 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const portalLight=new THREE.PointLight(0x38bb82,.32,9,2);portalLight.position.set(ROOM_EXIT-.65,2.35,0);
   const exitLight=new THREE.PointLight(0xcaf2df,.78,22,2);exitLight.position.set(TUNNEL_EXIT+1.5,3.6,0);scene.add(roomLight,lockerLightLeft,lockerLightRight,portalLight,exitLight);
 
+  return grassTexture;
+}
+export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
+  const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const constrainedDevice =
+    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4) ||
+    (deviceMemory !== undefined && deviceMemory <= 4);
+  let lowPower = initialWidth < 768 || constrainedDevice;
+  const renderer = new THREE.WebGLRenderer({
+    alpha: false,
+    antialias: !lowPower,
+    powerPreference: lowPower ? "low-power" : "high-performance",
+  });
+  const gl = renderer.getContext();
+  const rendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
+  const rendererName = String(
+    gl.getParameter(
+      rendererInfo?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER,
+    ),
+  );
+  const softwareRenderer = /swiftshader|llvmpipe|software/i.test(rendererName);
+  lowPower ||= softwareRenderer;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.setClearColor(0x07100d); renderer.shadowMap.enabled = !lowPower; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.02; renderer.domElement.className = "landing-scene__canvas"; renderer.domElement.setAttribute("aria-hidden", "true"); renderer.domElement.tabIndex = -1; container.appendChild(renderer.domElement);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x07100d); scene.fog = new THREE.Fog(0x0b1512, 24, lowPower ? 145 : 190);
+  const camera = new THREE.PerspectiveCamera(lowPower ? 67 : 58, initialWidth / initialHeight, .08, 240);
+  const cameraPath = new THREE.CatmullRomCurve3([-73, -67, -61, -55.5, -50, TUNNEL_EXIT, -38, -29, -15, 0].map(x => new THREE.Vector3(x, 1.72, 0)), false, "centripetal");
+
+  const roomAssets = buildDressingRoomAndTunnel(scene, lowPower);
+  const { floorTexture, crestMap, tacticsMap, numberMaps, bannerTexture, scoreTexture, ballTexture } = roomAssets;
+  const grassTexture = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
   const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
   const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);

@@ -240,11 +240,11 @@ function resolveInjuryPlayer(
 function getMissingInjuryReply(
   state: AssistantConversationState,
 ): AssistantTurnResult | undefined {
-  const missing = HARD_REQUIRED.filter(
+  const missing: string[] = HARD_REQUIRED.filter(
     (key) => state.collectedFields[key] === undefined,
   );
   if (missing.length === 0) return undefined;
-  const needsInjuryDetails = ['bodyRegion', 'injuryType', 'severity'].some(
+  const needsInjuryDetails = (['bodyRegion', 'injuryType', 'severity'] as string[]).some(
     (key) => missing.includes(key),
   );
   return {

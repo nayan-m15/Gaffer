@@ -23,11 +23,17 @@ type ViewMode = "sign-up" | "sign-in";
 const INVALID_LINK_MESSAGE =
   "This invite link is no longer valid — ask the competition admin to send a new one.";
 
-async function resolveCompetitionInviteFailure(token: string, error: unknown) {
+async function resolveCompetitionInviteFailure(
+  token: string,
+  error: unknown,
+): Promise<{
+  message: string;
+  kind: ReturnType<typeof classifyCompetitionInviteAcceptError>;
+}> {
   const message = error instanceof ApiError
     ? error.message
     : "Something went wrong accepting the invite. Please try again.";
-  let kind = classifyCompetitionInviteAcceptError(error);
+  let kind: ReturnType<typeof classifyCompetitionInviteAcceptError> = classifyCompetitionInviteAcceptError(error);
   if (error instanceof ApiError && error.status === 409) {
     try {
       const current = await previewCompetitionInvite(token);

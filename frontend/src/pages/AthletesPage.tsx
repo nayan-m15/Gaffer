@@ -39,6 +39,8 @@ import {
   getTeamAssistants,
   getTeamInvites,
   revokeTeamInvite,
+  type TeamAssistantSummary,
+  type TeamInviteSummary,
   type TeamInviteResult,
 } from "@/services/team-invites";
 
@@ -314,282 +316,39 @@ export default function AthletesPage() {
       />
 
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        <BentoGrid className="max-w-none grid-cols-1 gap-4 md:auto-rows-auto md:grid-cols-3">
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{activeCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active athletes</p></div>
-            <Users className="size-6 text-primary" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{unavailableCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unavailable</p></div>
-            <AlertCircle className="size-6 text-amber-500" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{archivedCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Archived</p></div>
-            <Archive className="size-6 text-muted-foreground" aria-hidden="true" />
-          </AppCard>
-        </BentoGrid>
-        {/* Main layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
-            {/* Squad management card */}
-            <AppCard className="p-4 md:p-6 lg:col-span-2">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
-                    {showArchived ? "Archived Athletes" : "Squad Management"}
-                  </h2>
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand">
-                  {showArchived
-                    ? `${archivedCount} ARCHIVED`
-                    : `${activeCount} PLAYERS REGULARLY ACTIVE`}
-                </p>
-              </div>
-
-              {/* Toolbar: tabs + search + add athlete */}
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
-                  <TabButton
-                    active={!showArchived}
-                    onClick={() => switchTab(false)}
-                    icon={<Users className="size-3.5" />}
-                    label="Active"
-                  />
-                  <TabButton
-                    active={showArchived}
-                    onClick={() => switchTab(true)}
-                    icon={<Archive className="size-3.5" />}
-                    label="Archived"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="relative w-full sm:max-w-xs">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search athletes..."
-                      className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
-                    />
-                  </div>
-
-                  {!showArchived && canManageRoster && (
-                    <Button
-                      type="button"
-                      onClick={openAddForm}
-                      className="w-full gap-1.5 sm:w-auto"
-                    >
-                      <Plus className="size-4" />
-                      Add Athlete
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {isPending || isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading roster…
-                </div>
-              ) : error ? (
-                <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                  <div>
-                    <p className="font-semibold">Failed to load athletes</p>
-                    <p>{error instanceof ApiError ? error.message : "Please try again later."}</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <RosterTable
-                    athletes={filteredAthletes}
-                    selectedId={selectedId}
-                    showArchived={showArchived}
-                    readOnly={!canManageRoster}
-                    showClaimStatus={canManageClaims}
-                    onSelect={handleSelect}
-                    onEdit={openEditForm}
-                    onArchive={openArchiveDialog}
-                    onRestore={handleRestore}
-                  />
-
-                  {filteredAthletes.length === 0 && (
-                    <div className="py-12 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {searchQuery
-                          ? "No athletes match your search."
-                          : showArchived
-                            ? "No archived athletes."
-                            : "No active athletes."}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </AppCard>
-
-            {/* Selected athlete details */}
-            <section
-              className={cn(
-                "min-h-[560px] lg:col-span-1",
-                !selectedAthlete && "hidden lg:flex",
-              )}
-            >
-              {selectedAthlete ? (
-                <AthleteDetailPanel
-                  athlete={selectedAthlete}
-                  onEdit={openEditForm}
-                  onArchive={openArchiveDialog}
-                  onRestore={handleRestore}
-                  onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
-                  readOnly={!canManageRoster}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
-                  Select an athlete to view details.
-                </div>
-              )}
-            </section>
-          </div>
-
-        {/* ── Assistants management card (coach-only) ────────────────── */}
-        {canManageRoster && (
-          <AppCard className="p-4 md:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
-                  Assistants
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Invite assistants to help manage your squad. They can view
-                  the roster, events and statistics but cannot make changes.
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  setInviteResult(null);
-                  setIsInviteDialogOpen(true);
-                }}
-                className="gap-1.5"
-              >
-                <UserPlus className="size-4" />
-                Invite Assistant
-              </Button>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">
-                  Accepted Assistants
-                </h3>
-
-                {assistantsQuery.isLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading assistants…
-                  </div>
-                ) : assistantsQuery.error ? (
-                  <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                    <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      {assistantsQuery.error instanceof ApiError
-                        ? assistantsQuery.error.message
-                        : "Failed to load assistants."}
-                    </span>
-                  </div>
-                ) : (assistantsQuery.data ?? []).length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                    No assistants have joined the team yet.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {assistantsQuery.data!.map((assistant) => (
-                      <li
-                        key={assistant.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {assistant.name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {assistant.email}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                          Active
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div>
-                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">
-                  Pending Invitations
-                </h3>
-
-                {invitesQuery.isLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading invites…
-                  </div>
-                ) : invitesQuery.error ? (
-                  <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                    <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      {invitesQuery.error instanceof ApiError
-                        ? invitesQuery.error.message
-                        : "Failed to load pending invites."}
-                    </span>
-                  </div>
-                ) : (invitesQuery.data ?? []).length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                    No pending assistant invites.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {invitesQuery.data!.map((inv) => (
-                      <li
-                        key={inv.id}
-                        className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {inv.email}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Expires{" "}
-                            {new Date(inv.expiresAt).toLocaleDateString(undefined, {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => revokeTeamInviteMutation.mutate(inv.id)}
-                          disabled={revokeTeamInviteMutation.isPending}
-                          className="gap-1 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="size-3.5" />
-                          Revoke
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </AppCard>
-        )}
+        <AthleteRosterWorkspace
+          activeCount={activeCount}
+          unavailableCount={unavailableCount}
+          archivedCount={archivedCount}
+          showArchived={showArchived}
+          onSwitchTab={switchTab}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          canManageRoster={canManageRoster}
+          onAddAthlete={openAddForm}
+          isPending={isPending}
+          isLoading={isLoading}
+          error={error}
+          filteredAthletes={filteredAthletes}
+          selectedId={selectedId}
+          canManageClaims={canManageClaims}
+          selectedAthlete={selectedAthlete}
+          onSelect={handleSelect}
+          onEdit={openEditForm}
+          onArchive={openArchiveDialog}
+          onRestore={handleRestore}
+          onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+        />
+        {canManageRoster && <AssistantManagementCard
+          assistants={{ items: assistantsQuery.data ?? [], isLoading: assistantsQuery.isLoading, error: assistantsQuery.error }}
+          invites={{ items: invitesQuery.data ?? [], isLoading: invitesQuery.isLoading, error: invitesQuery.error }}
+          onInvite={() => {
+            setInviteResult(null);
+            setIsInviteDialogOpen(true);
+          }}
+          onRevoke={(inviteId) => revokeTeamInviteMutation.mutate(inviteId)}
+          isRevoking={revokeTeamInviteMutation.isPending}
+        />}
       </div>
 
       <AthleteFormDialog
@@ -687,4 +446,280 @@ function TabButton({ active, onClick, icon, label }: TabButtonProps) {
       {label}
     </button>
   );
+}
+
+function AthleteRosterWorkspace({
+  activeCount,
+  unavailableCount,
+  archivedCount,
+  showArchived,
+  onSwitchTab,
+  searchQuery,
+  onSearchChange,
+  canManageRoster,
+  onAddAthlete,
+  isPending,
+  isLoading,
+  error,
+  filteredAthletes,
+  selectedId,
+  canManageClaims,
+  selectedAthlete,
+  onSelect,
+  onEdit,
+  onArchive,
+  onRestore,
+  onInviteClaim,
+}: {
+  activeCount: number;
+  unavailableCount: number;
+  archivedCount: number;
+  showArchived: boolean;
+  onSwitchTab: (archived: boolean) => void;
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+  canManageRoster: boolean;
+  onAddAthlete: () => void;
+  isPending: boolean;
+  isLoading: boolean;
+  error: Error | null;
+  filteredAthletes: Athlete[];
+  selectedId: string | null;
+  canManageClaims: boolean;
+  selectedAthlete: Athlete | null;
+  onSelect: (athlete: Athlete) => void;
+  onEdit: (athlete: Athlete) => void;
+  onArchive: (athlete: Athlete) => void;
+  onRestore: (athlete: Athlete) => void;
+  onInviteClaim?: (athlete: Athlete) => void;
+}) {
+  return <>
+    <BentoGrid className="max-w-none grid-cols-1 gap-4 md:auto-rows-auto md:grid-cols-3">
+      <AppCard className="flex items-center justify-between py-4">
+        <div><p className="text-2xl font-bold tabular-nums">{activeCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active athletes</p></div>
+        <Users className="size-6 text-primary" aria-hidden="true" />
+      </AppCard>
+      <AppCard className="flex items-center justify-between py-4">
+        <div><p className="text-2xl font-bold tabular-nums">{unavailableCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unavailable</p></div>
+        <AlertCircle className="size-6 text-amber-500" aria-hidden="true" />
+      </AppCard>
+      <AppCard className="flex items-center justify-between py-4">
+        <div><p className="text-2xl font-bold tabular-nums">{archivedCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Archived</p></div>
+        <Archive className="size-6 text-muted-foreground" aria-hidden="true" />
+      </AppCard>
+    </BentoGrid>
+
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+      <AppCard className="p-4 md:p-6 lg:col-span-2">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
+            {showArchived ? "Archived Athletes" : "Squad Management"}
+          </h2>
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand">
+            {showArchived ? `${archivedCount} ARCHIVED` : `${activeCount} PLAYERS REGULARLY ACTIVE`}
+          </p>
+        </div>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+            <TabButton active={!showArchived} onClick={() => onSwitchTab(false)} icon={<Users className="size-3.5" />} label="Active" />
+            <TabButton active={showArchived} onClick={() => onSwitchTab(true)} icon={<Archive className="size-3.5" />} label="Archived" />
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Search athletes..."
+                className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
+              />
+            </div>
+            {!showArchived && canManageRoster && <Button type="button" onClick={onAddAthlete} className="w-full gap-1.5 sm:w-auto">
+              <Plus className="size-4" />Add Athlete
+            </Button>}
+          </div>
+        </div>
+        <RosterContentState
+          isPending={isPending}
+          isLoading={isLoading}
+          error={error}
+          athletes={filteredAthletes}
+          selectedId={selectedId}
+          showArchived={showArchived}
+          readOnly={!canManageRoster}
+          showClaimStatus={canManageClaims}
+          searchQuery={searchQuery}
+          onSelect={onSelect}
+          onEdit={onEdit}
+          onArchive={onArchive}
+          onRestore={onRestore}
+        />
+      </AppCard>
+      <section className={cn("min-h-[560px] lg:col-span-1", !selectedAthlete && "hidden lg:flex")}>
+        {selectedAthlete ? <AthleteDetailPanel
+          athlete={selectedAthlete}
+          onEdit={onEdit}
+          onArchive={onArchive}
+          onRestore={onRestore}
+          onInviteClaim={onInviteClaim}
+          readOnly={!canManageRoster}
+        /> : <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
+          Select an athlete to view details.
+        </div>}
+      </section>
+    </div>
+  </>;
+}
+
+function RosterContentState({
+  isPending,
+  isLoading,
+  error,
+  athletes,
+  selectedId,
+  showArchived,
+  readOnly,
+  showClaimStatus,
+  searchQuery,
+  onSelect,
+  onEdit,
+  onArchive,
+  onRestore,
+}: {
+  isPending: boolean;
+  isLoading: boolean;
+  error: Error | null;
+  athletes: Athlete[];
+  selectedId: string | null;
+  showArchived: boolean;
+  readOnly: boolean;
+  showClaimStatus: boolean;
+  searchQuery: string;
+  onSelect: (athlete: Athlete) => void;
+  onEdit: (athlete: Athlete) => void;
+  onArchive: (athlete: Athlete) => void;
+  onRestore: (athlete: Athlete) => void;
+}) {
+  if (isPending || isLoading) return <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+    <Loader2 className="size-4 animate-spin" />Loading roster…
+  </div>;
+  if (error) return <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+    <div><p className="font-semibold">Failed to load athletes</p><p>{error instanceof ApiError ? error.message : "Please try again later."}</p></div>
+  </div>;
+  return <>
+    <RosterTable athletes={athletes} selectedId={selectedId} showArchived={showArchived} readOnly={readOnly} showClaimStatus={showClaimStatus} onSelect={onSelect} onEdit={onEdit} onArchive={onArchive} onRestore={onRestore} />
+    {athletes.length === 0 && <div className="py-12 text-center"><p className="text-sm text-muted-foreground">
+      {searchQuery ? "No athletes match your search." : showArchived ? "No archived athletes." : "No active athletes."}
+    </p></div>}
+  </>;
+}
+
+function AssistantQueryList<T extends { id: string }>({
+  items,
+  isLoading,
+  error,
+  loadingMessage,
+  failureMessage,
+  emptyMessage,
+  children,
+}: {
+  items: T[];
+  isLoading: boolean;
+  error: unknown;
+  loadingMessage: string;
+  failureMessage: string;
+  emptyMessage: string;
+  children: (item: T) => React.ReactNode;
+}) {
+  if (isLoading) {
+    return <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" />{loadingMessage}
+    </div>;
+  }
+  if (error) {
+    return <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+      <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+      <span>{error instanceof ApiError ? error.message : failureMessage}</span>
+    </div>;
+  }
+  if (items.length === 0) {
+    return <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+      {emptyMessage}
+    </p>;
+  }
+  return <ul className="flex flex-col gap-2">{items.map((item) => <li key={item.id}>{children(item)}</li>)}</ul>;
+}
+
+function AssistantManagementCard({
+  assistants,
+  invites,
+  onInvite,
+  onRevoke,
+  isRevoking,
+}: {
+  assistants: { items: TeamAssistantSummary[]; isLoading: boolean; error: unknown };
+  invites: { items: TeamInviteSummary[]; isLoading: boolean; error: unknown };
+  onInvite: () => void;
+  onRevoke: (inviteId: string) => void;
+  isRevoking: boolean;
+}) {
+  return <AppCard className="p-4 md:p-6">
+    <div className="mb-4 flex items-center justify-between">
+      <div>
+        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Assistants</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Invite assistants to help manage your squad. They can view the roster, events and statistics but cannot make changes.
+        </p>
+      </div>
+      <Button type="button" size="sm" onClick={onInvite} className="gap-1.5">
+        <UserPlus className="size-4" />Invite Assistant
+      </Button>
+    </div>
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">Accepted Assistants</h3>
+        <AssistantQueryList
+          items={assistants.items}
+          isLoading={assistants.isLoading}
+          error={assistants.error}
+          loadingMessage="Loading assistants…"
+          failureMessage="Failed to load assistants."
+          emptyMessage="No assistants have joined the team yet."
+        >
+          {(assistant) => <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">{assistant.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{assistant.email}</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Active</span>
+          </div>}
+        </AssistantQueryList>
+      </div>
+      <div>
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">Pending Invitations</h3>
+        <AssistantQueryList
+          items={invites.items}
+          isLoading={invites.isLoading}
+          error={invites.error}
+          loadingMessage="Loading invites…"
+          failureMessage="Failed to load pending invites."
+          emptyMessage="No pending assistant invites."
+        >
+          {(invite) => <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">{invite.email}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Expires {new Date(invite.expiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => onRevoke(invite.id)} disabled={isRevoking} className="gap-1 text-muted-foreground hover:text-destructive">
+              <Trash2 className="size-3.5" />Revoke
+            </Button>
+          </div>}
+        </AssistantQueryList>
+      </div>
+    </div>
+  </AppCard>;
 }
