@@ -266,7 +266,7 @@ interface ProfileBodyProps {
   onEditDateOfBirthChange: (value: string) => void;
   onEdit: () => void;
   onCancel: () => void;
-  onSave: () => void;
+  onSave: () => Promise<void>;
 }
 
 function ProfileBody({
@@ -445,7 +445,7 @@ interface EditFormProps {
   validationError: string | null;
   mutationError: Error | null;
   isSaving: boolean;
-  onSave: () => void;
+  onSave: () => Promise<void>;
   onCancel: () => void;
   onNameChange: (value: string) => void;
   onPhoneNumberChange: (value: string) => void;
@@ -471,9 +471,9 @@ function EditForm({
   const errorMessage = validationError ?? getMutationMessage(mutationError);
   const today = new Date().toISOString().slice(0, 10);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    void onSave();
+    await onSave();
   };
 
   const inputClass = cn(
