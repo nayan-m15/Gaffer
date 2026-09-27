@@ -60,6 +60,36 @@ describe('SyncController', () => {
     expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });
 
+  it('leaves an upload retriable when the database fails after ingestion', async () => {
+    const timeout = new Error('database connection timed out');
+    const query = {
+      select: jest.fn(),
+      insert: jest.fn(),
+    };
+    query.select.mockReturnValue({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+    });
+    const controller = new SyncController(
+      {} as never,
+      { logEvent: jest.fn().mockRejectedValue(timeout) } as never,
+      { database: query } as never,
+    );
+    const item = {
+      kind: 'observation',
+      matchId: '11111111-1111-4111-8111-111111111111',
+      payload: {
+        clientRequestId: '22222222-2222-4222-8222-222222222222',
+        team: 'opponent',
+        eventType: 'goal',
+        minute: 12,
+      },
+    };
+    await expect(
+      controller.upload({ id: 'user-1' } as never, { items: [item] }),
+    ).rejects.toBe(timeout);
+    expect(query.insert).not.toHaveBeenCalled();
+  });
+
   it('runs different matches concurrently while preserving same-match order and receipt order', async () => {
     const controller = new SyncController(
       {} as never,
