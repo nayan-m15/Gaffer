@@ -12,6 +12,8 @@ export interface PageHeaderProps {
   children?: ReactNode;
   /** Additional custom class names for the header container */
   className?: string;
+  /** Align the title and actions on one row on mobile. */
+  mobileInline?: boolean;
 }
 
 /**
@@ -26,23 +28,23 @@ export function PageHeader({
   actions,
   children,
   className,
+  mobileInline = false,
 }: PageHeaderProps) {
   return (
     <header
       className={cn(
         // Mobile: clear fixed sidebar toggle (left-4 top-4) horizontally and vertically
-        "mx-auto w-full max-w-[1600px] pt-16 pb-7 pl-16 pr-6 sm:pr-8 lg:px-10 lg:pb-6 lg:pt-9",
+        "mx-auto w-full max-w-[1600px] pt-8 pb-5 pl-16 pr-6 sm:pr-8 lg:px-10 lg:pb-6 lg:pt-9",
         className,
       )}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-3 flex items-center gap-2" aria-hidden="true">
-            <span className="h-px w-7 bg-primary" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
-              Gaffer workspace
-            </span>
-          </div>
+      <div
+        className={cn(
+          "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
+          mobileInline && "flex-row items-center justify-between gap-2",
+        )}
+      >
+        <div className={mobileInline ? "min-w-0" : undefined}>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl">
             {title}
           </h1>
@@ -52,7 +54,7 @@ export function PageHeader({
         </div>
 
         {actions && (
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className={cn("flex flex-wrap items-center gap-3 sm:gap-4", mobileInline && "shrink-0")}>
             {actions}
           </div>
         )}

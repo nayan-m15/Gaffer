@@ -62,15 +62,15 @@ export function EventPill({ event, now, onSelect }: EventPillProps) {
         }}
         aria-label={pillAriaLabel(timeLabel, event.type, event.title)}
         className={cn(
-          "group flex w-full items-start rounded-md px-2 py-1 text-left cursor-pointer",
-          "text-xs font-semibold leading-snug transition-all duration-150 shadow-2xs",
-          "hover:scale-[1.01] hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "group flex w-full min-w-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-left cursor-pointer",
+          "text-xs font-medium leading-tight transition-colors duration-150",
+          "hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           style.pill,
           cancelled && "line-through opacity-60",
           !cancelled && completed && "opacity-75",
         )}
       >
-        <span className="min-w-0 flex-1 break-words whitespace-normal font-semibold line-clamp-2">
+        <span className="min-w-0 flex-1 truncate font-semibold">
           {event.title}
         </span>
       </PopoverTrigger>

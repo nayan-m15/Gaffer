@@ -44,7 +44,7 @@ export function MonthCalendar({
   const grid = useMemo(() => getMonthGrid(month), [month]);
   const weeks = useMemo(
     () =>
-      Array.from({ length: 6 }, (_, weekIndex) =>
+      Array.from({ length: grid.length / 7 }, (_, weekIndex) =>
         grid.slice(weekIndex * 7, weekIndex * 7 + 7),
       ),
     [grid],
@@ -71,7 +71,7 @@ export function MonthCalendar({
           <div
             key={label}
             role="columnheader"
-            className="px-1 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+            className="px-1 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground"
           >
             <span className="hidden sm:inline">{label}</span>
             <span className="sm:hidden">{label.slice(0, 1)}</span>
@@ -145,14 +145,29 @@ function DayCell({
       aria-label={`${dayLabel}${events.length > 0 ? `, ${events.length} event${events.length === 1 ? "" : "s"}` : ""}`}
       onClick={() => onCreateEvent(day)}
       className={cn(
-        "flex min-h-0 min-w-0 cursor-pointer flex-col gap-1 overflow-hidden border-r border-border p-1 sm:p-1.5 transition-colors last:border-r-0",
+        "flex min-h-0 min-w-0 cursor-pointer flex-col gap-0.5 overflow-hidden border-r border-border p-1 transition-colors last:border-r-0",
         "hover:bg-muted/30 focus-within:bg-muted/20",
         outside && "bg-muted/25",
         isSelected && !outside && "bg-accent/40",
       )}
     >
       {/* Day number — top-right, selects the date */}
-      <div className="flex justify-end">
+      <div className="flex min-h-5 items-center justify-between">
+        {hiddenCount > 0 ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectDate(day);
+            }}
+            className="rounded px-1 text-left text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-label={`${hiddenCount} more event${hiddenCount === 1 ? "" : "s"} on ${dayLabel}`}
+          >
+            +{hiddenCount}
+          </button>
+        ) : (
+          <span aria-hidden="true" />
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -162,7 +177,7 @@ function DayCell({
           aria-label={`Select ${dayLabel}`}
           aria-current={isToday ? "date" : undefined}
           className={cn(
-            "flex size-6 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
+            "flex size-5 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
             "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
             isToday
               ? "bg-primary text-primary-foreground"
@@ -181,19 +196,6 @@ function DayCell({
         <EventPill key={event.id} event={event} now={now} onSelect={() => onSelectDate(day)} />
       ))}
 
-      {/* Overflow */}
-      {hiddenCount > 0 && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelectDate(day);
-          }}
-          className="w-fit rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        >
-          +{hiddenCount} more
-        </button>
-      )}
     </div>
   );
 }
