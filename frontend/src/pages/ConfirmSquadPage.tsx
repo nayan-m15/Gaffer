@@ -20,7 +20,7 @@ import {
 } from "@/features/team-management/formations";
 import { SquadFormationPreview } from "@/features/team-management/SquadFormationPreview";
 import { suggestStartingXi } from "@/features/team-management/suggestions";
-import type { PositionRole } from "@/features/team-management/types";
+import type { PitchAssignments, PositionRole } from "@/features/team-management/types";
 import { useGamePlan, useGamePlans } from "@/features/team-tactics/api";
 import { formatEventDateTime, formatLocalDate } from "@/features/events/event-utils";
 import {
@@ -423,6 +423,801 @@ function ColorSwatch({
   );
 }
 
+type OpponentFieldEvent = {
+  competitionFixtureId?: string | null;
+  friendlyFixtureId?: string | null;
+  friendlyOpponentTeamName?: string | null;
+  friendlyFixtureStatus?: string | null;
+  competitionId?: string | null;
+  title: string;
+};
+
+function OpponentField({
+  event,
+  fixtureHasOpponent,
+  fixtureOpponentName,
+  participants,
+  competitionLoading,
+  competitionError,
+  competitionName,
+  selectedParticipantId,
+  onSelectParticipant,
+  opponentName,
+  onOpponentNameChange,
+}: {
+  event: OpponentFieldEvent;
+  fixtureHasOpponent: boolean;
+  fixtureOpponentName: string;
+  participants: { id: string; displayName: string }[];
+  competitionLoading: boolean;
+  competitionError: boolean;
+  competitionName?: string;
+  selectedParticipantId: string | null;
+  onSelectParticipant: (id: string) => void;
+  opponentName: string;
+  onOpponentNameChange: (name: string) => void;
+}) {
+  const locked = Boolean(event.competitionFixtureId || event.friendlyFixtureId);
+  const fixtureMessage = fixtureHasOpponent
+    ? "This opponent is fixed by the generated competition fixture."
+    : "The opponent will be filled automatically when the fixture pairing is known.";
+  const friendlyMessage = {
+    accepted: "Friendly fixture confirmed — confirm your lineup to share it before kick-off.",
+    pending: "Waiting for this Gaffer opponent to accept the fixture request.",
+    declined: "The opponent declined this fixture. Update the event to pick another opponent.",
+  }[event.friendlyFixtureStatus ?? ""] ?? "This friendly fixture is no longer active.";
+  const placeholder = competitionLoading
+    ? "Loading participating teams…"
+    : "Choose an opponent";
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={locked ? undefined : "opponent-name"}>Opponent</Label>
+      {event.competitionFixtureId ? (
+        <>
+          <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+            <span className={cn("min-w-0 truncate text-sm font-medium", !fixtureHasOpponent && "text-muted-foreground")}>
+              {fixtureHasOpponent ? fixtureOpponentName : "Opponent not determined yet"}
+            </span>
+            <LockKeyhole className="size-4 shrink-0 text-primary" aria-hidden />
+          </div>
+          <p className="text-xs text-muted-foreground">{fixtureMessage}</p>
+        </>
+      ) : event.friendlyFixtureId ? (
+        <>
+          <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
+            <span className={cn("min-w-0 truncate text-sm font-medium", !event.friendlyOpponentTeamName?.trim() && "text-muted-foreground")}>
+              {event.friendlyOpponentTeamName?.trim() || "Opponent pending"}
+            </span>
+            <LockKeyhole className="size-4 shrink-0 text-primary" aria-hidden />
+          </div>
+          <p className="text-xs text-muted-foreground">{friendlyMessage}</p>
+        </>
+      ) : event.competitionId ? (
+        <>
+          <select
+            id="opponent-name"
+            className={inputClassName}
+            value={selectedParticipantId ?? ""}
+            disabled={competitionLoading || competitionError}
+            onChange={(changeEvent) => onSelectParticipant(changeEvent.target.value)}
+          >
+            <option value="" disabled>{placeholder}</option>
+            {participants.map((participant) => (
+              <option key={participant.id} value={participant.id}>{participant.displayName}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Opponents are limited to teams participating in {competitionName ?? "this competition"}.
+          </p>
+          {competitionError && <p className="text-xs text-destructive">Could not load the competition teams. Please retry.</p>}
+        </>
+      ) : (
+        <input
+          id="opponent-name"
+          className={inputClassName}
+          value={opponentName}
+          onChange={(changeEvent) => onOpponentNameChange(changeEvent.target.value)}
+          placeholder={opponentNamePlaceholder(event.title)}
+          autoComplete="off"
+          maxLength={100}
+        />
+      )}
+    </div>
+  );
+}
+
+function MatchDetailsSection({
+  event,
+  fixtureHasOpponent,
+  fixtureOpponentName,
+  participants,
+  competitionLoading,
+  competitionError,
+  competitionName,
+  selectedParticipantId,
+  onSelectParticipant,
+  opponentName,
+  onOpponentNameChange,
+  isHome,
+  venuePulse,
+  ownColor,
+  opponentColor,
+  onVenueChange,
+}: {
+  event: OpponentFieldEvent;
+  fixtureHasOpponent: boolean;
+  fixtureOpponentName: string;
+  participants: { id: string; displayName: string }[];
+  competitionLoading: boolean;
+  competitionError: boolean;
+  competitionName?: string;
+  selectedParticipantId: string | null;
+  onSelectParticipant: (id: string) => void;
+  opponentName: string;
+  onOpponentNameChange: (name: string) => void;
+  isHome: boolean;
+  venuePulse: number;
+  ownColor: string;
+  opponentColor: string;
+  onVenueChange: (home: boolean) => void;
+}) {
+  return (
+    <section className={cardClassName}>
+      <h2 className={sectionLabelClassName}>Match details</h2>
+      <div className="mt-4 space-y-4">
+        <OpponentField
+          event={event}
+          fixtureHasOpponent={fixtureHasOpponent}
+          fixtureOpponentName={fixtureOpponentName}
+          participants={participants}
+          competitionLoading={competitionLoading}
+          competitionError={competitionError}
+          competitionName={competitionName}
+          selectedParticipantId={selectedParticipantId}
+          onSelectParticipant={onSelectParticipant}
+          opponentName={opponentName}
+          onOpponentNameChange={onOpponentNameChange}
+        />
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Venue</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              key={isHome ? `home-${venuePulse}` : "home"}
+              onClick={() => onVenueChange(true)}
+              className={cn(
+                "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
+                "transition-all duration-200 ease-out",
+                isHome ? "scale-105" : "scale-100 border hover:opacity-90",
+                isHome && venuePulse > 0 && "animate-venue-pop",
+              )}
+              style={
+                isHome
+                  ? {
+                      backgroundColor: ownColor,
+                      color: contrastText(ownColor),
+                      boxShadow: `0 0 18px ${ownColor}8c`,
+                    }
+                  : { borderColor: `${ownColor}66`, color: ownColor }
+              }
+            >
+              Home
+            </button>
+            <button
+              type="button"
+              key={!isHome ? `away-${venuePulse}` : "away"}
+              onClick={() => onVenueChange(false)}
+              className={cn(
+                "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
+                "transition-all duration-200 ease-out",
+                !isHome ? "scale-105" : "scale-100 border hover:opacity-90",
+                !isHome && venuePulse > 0 && "animate-venue-pop",
+              )}
+              style={
+                !isHome
+                  ? {
+                      backgroundColor: opponentColor,
+                      color: contrastText(opponentColor),
+                      boxShadow: `0 0 18px ${opponentColor}8c`,
+                    }
+                  : { borderColor: `${opponentColor}66`, color: opponentColor }
+              }
+            >
+              Away
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function friendlyOpponentLineupMessage(
+  event: OpponentFieldEvent,
+  lineup: { available: boolean; teamName?: string | null } | undefined,
+) {
+  if (lineup?.available) {
+    return `Auto-filled from ${lineup.teamName ?? "the opponent"}'s confirmed lineup — adjust it if needed.`;
+  }
+  if (event.friendlyFixtureStatus === "accepted") {
+    return `Opponent lineup not available yet — ${event.friendlyOpponentTeamName ?? "the opponent"} has not confirmed their lineup. You can still enter it manually.`;
+  }
+  if (event.friendlyFixtureStatus === "pending") {
+    return "Their lineup is shared automatically once they accept the fixture and confirm it.";
+  }
+  return "The fixture request was not accepted, so no lineup can be shared.";
+}
+
+function OpponentSquadSummary({
+  event,
+  lineup,
+  visibility,
+  formationId,
+  summary,
+  opponentColor,
+  error,
+  onEdit,
+}: {
+  event: OpponentFieldEvent;
+  lineup: { available: boolean; teamName?: string | null } | undefined;
+  visibility: OpponentSquadVisibility;
+  formationId: string;
+  summary: {
+    modeLabel: string;
+    playerCount: number;
+    placedCount: number;
+    assignedSlotIds: Set<string>;
+    formationCaption: string;
+  };
+  opponentColor: string;
+  error: string | null;
+  onEdit: () => void;
+}) {
+  return (
+    <section className={cardClassName}>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className={sectionLabelClassName}>Opponent squad</h2>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]"
+          style={{ borderColor: opponentColor, color: opponentColor }}
+        >
+          <Pencil className="size-3" />
+          Edit opponent squad
+        </button>
+      </div>
+      {event.friendlyFixtureId && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {friendlyOpponentLineupMessage(event, lineup)}
+        </p>
+      )}
+      {visibility === "none" ? (
+        <div className="mt-4">
+          <span
+            className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
+            style={{ color: opponentColor, backgroundColor: `${opponentColor}22` }}
+          >
+            {summary.modeLabel}
+          </span>
+          <p className="mt-2 text-sm text-muted-foreground">No opponent info will be logged</p>
+        </div>
+      ) : (
+        <div className="mt-4 flex items-center gap-4">
+          <OpponentSquadPitchThumb
+            formationId={formationId}
+            assignedSlotIds={summary.assignedSlotIds}
+            color={opponentColor}
+          />
+          <div className="min-w-0">
+            <span
+              className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
+              style={{ color: opponentColor, backgroundColor: `${opponentColor}22` }}
+            >
+              {summary.modeLabel}
+            </span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-sm font-bold text-foreground">
+                {summary.playerCount} player{summary.playerCount === 1 ? "" : "s"}
+              </p>
+              <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
+                <PlacedProgressRing
+                  value={summary.placedCount}
+                  max={summary.playerCount > 0 ? summary.playerCount : 1}
+                  color={opponentColor}
+                />
+                {summary.placedCount} placed
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">{summary.formationCaption}</p>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+function SavedGamePlanSection({
+  gamePlans,
+  selectedGamePlanId,
+  loading,
+  error,
+  onSelect,
+}: {
+  gamePlans: BackendGamePlan[];
+  selectedGamePlanId: string | null;
+  loading: boolean;
+  error?: string;
+  onSelect: (planId: string | null) => void;
+}) {
+  return (
+    <section className={cardClassName}>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className={sectionLabelClassName}>Saved game plan</h2>
+        <p className="text-sm text-muted-foreground">Pick a plan to pre-fill your XI, then adjust below</p>
+      </div>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <li>
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className={cn(
+              "flex h-full w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors",
+              "hover:border-primary/40 hover:bg-card/80",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              selectedGamePlanId === null ? "border-primary bg-primary/5" : "border-border",
+            )}
+          >
+            <div className="flex h-[72px] w-[52px] shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">—</div>
+            <span className="min-w-0">
+              <span className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">Pick from roster</span>
+                {selectedGamePlanId === null && <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">Selected</span>}
+              </span>
+              <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">No plan</span>
+              <span className="mt-1 block text-xs text-muted-foreground">Start fresh</span>
+            </span>
+          </button>
+        </li>
+        {gamePlans.map((plan) => {
+          const selected = selectedGamePlanId === plan.id;
+          const counts = planCounts(plan);
+          return (
+            <li key={plan.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(plan.id)}
+                className={cn(
+                  "flex h-full w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors",
+                  "hover:border-primary/40 hover:bg-card/80",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  selected ? "border-primary bg-primary/5" : "border-border",
+                )}
+              >
+                <MiniPitch formationId={plan.formationId} />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground">{plan.name}</span>
+                    {selected && <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">Selected</span>}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{plan.formationId}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{counts.starters} starters · {counts.subs} subs</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {selectedGamePlanId && loading && (
+        <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading game plan…
+        </p>
+      )}
+      {selectedGamePlanId && error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+type HeroClubInfo = {
+  name: string;
+  abbrev: string;
+  color: string;
+  empty: boolean;
+};
+
+function MatchSetupHero({
+  scheduledAt,
+  location,
+  isHome,
+  homeClub,
+  awayClub,
+}: {
+  scheduledAt: string;
+  location: string | null;
+  isHome: boolean;
+  homeClub: HeroClubInfo;
+  awayClub: HeroClubInfo;
+}) {
+  return (
+    <section className={cardClassName}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Match setup</p>
+        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {formatHeroWhen(scheduledAt)}
+        </p>
+      </div>
+      <div
+        key={isHome ? "home" : "away"}
+        className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 animate-fade-in [animation-duration:280ms]"
+      >
+        <HeroClub {...homeClub} venue="Home" align="left" />
+        <div className="text-center">
+          <p className="font-display text-2xl font-bold text-muted-foreground">VS</p>
+          <p className="mt-1 max-w-[10rem] truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {location || "Venue not set"}
+          </p>
+        </div>
+        <HeroClub {...awayClub} venue="Away" align="right" />
+      </div>
+    </section>
+  );
+}
+
+function MatchSetupProgress({ states }: { states: readonly [string, string, string] }) {
+  return (
+    <ol className="flex items-center gap-2 sm:gap-3">
+      {SETUP_STEPS.map((step, index) => {
+        const state = states[index];
+        return (
+          <li key={step.n} className="flex min-w-0 flex-1 items-center gap-2">
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold",
+                state === "todo" && "border-border text-muted-foreground",
+                state === "current" && "border-primary text-primary",
+                state === "done" && "border-primary bg-primary text-primary-foreground",
+              )}
+            >
+              {step.n}
+            </span>
+            <span
+              className={cn(
+                "hidden truncate text-[10px] font-semibold uppercase tracking-[0.16em] sm:inline",
+                state === "todo" ? "text-muted-foreground" : "text-primary",
+              )}
+            >
+              {step.label}
+            </span>
+            {index < SETUP_STEPS.length - 1 && (
+              <span className={cn("h-px min-w-4 flex-1", state === "done" ? "bg-primary/70" : "bg-border")} />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function StartingSquadSection({
+  startingCount,
+  benchCount,
+  xiComplete,
+  selectableCount,
+  suggestionReasons,
+  fixtureDateConfirmed,
+  beforeMatchDay,
+  sortedAthletes,
+  startingIds,
+  onSuggest,
+  onToggle,
+  formationId,
+  assignments,
+  athletes,
+}: {
+  startingCount: number;
+  benchCount: number;
+  xiComplete: boolean;
+  selectableCount: number;
+  suggestionReasons: Record<string, string> | null;
+  fixtureDateConfirmed: boolean;
+  beforeMatchDay: boolean;
+  sortedAthletes: BackendAthlete[];
+  startingIds: Set<string>;
+  onSuggest: () => void;
+  onToggle: (athleteId: string) => void;
+  formationId: string;
+  assignments: PitchAssignments;
+  athletes: BackendAthlete[];
+}) {
+  return (
+    <section className={cardClassName}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className={sectionLabelClassName}>Your squad</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            <span className={cn(xiComplete ? "text-primary" : "text-muted-foreground")}>
+              Starting XI: {startingCount} / {STARTING_XI_SIZE}
+            </span>
+            <span className="mx-2 text-border">·</span>
+            Bench: {benchCount}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onSuggest}
+            disabled={selectableCount === 0}
+            className="shrink-0 gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
+          >
+            <Wand2 className="size-3.5" aria-hidden /> Suggest XI
+          </Button>
+        </div>
+      </div>
+      {suggestionReasons && <p className="mt-3 text-xs text-muted-foreground">Suggested XI applied — tap any player to replace or remove them.</p>}
+      {!fixtureDateConfirmed && (
+        <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+          This generated fixture is still provisional. Both teams must agree the date in Leagues &amp; Competitions before the match can start.
+        </p>
+      )}
+      {beforeMatchDay && (
+        <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+          Matches cannot be started before match day — you can still confirm your lineup now so the opponent can prepare.
+        </p>
+      )}
+      {selectableCount < STARTING_XI_SIZE && <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">Need at least 11 players for a full XI.</p>}
+      <div className="mt-4 grid items-start gap-5 lg:grid-cols-2">
+        <ul className="flex flex-col gap-2">
+          {sortedAthletes.map((athlete) => {
+            const selected = startingIds.has(athlete.id);
+            const injured = athlete.status === "injured";
+            const style = roleStyle(athlete.position);
+            const positionLabel = (athlete.position ?? "—").toUpperCase();
+            return (
+              <li key={athlete.id}>
+                <button
+                  type="button"
+                  onClick={() => onToggle(athlete.id)}
+                  disabled={injured}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    injured ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70" : selected ? "border-primary/70 bg-primary/5" : "border-border bg-card hover:border-primary/40",
+                  )}
+                >
+                  <span className={cn("flex h-10 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold", style.avatar)}>
+                    {athlete.squadNumber ?? "—"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">{athleteDisplayName(athlete)}</span>
+                      <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", style.badge)}>{positionLabel}</span>
+                    </span>
+                    {selected && suggestionReasons?.[athlete.id] && <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">{suggestionReasons[athlete.id]}</span>}
+                  </span>
+                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", injured ? "bg-red-500/10 text-red-600 dark:text-red-400" : selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                    {injured ? "Injured" : selected ? "Starting" : "Bench"}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <SquadFormationPreview
+          className="lg:sticky lg:top-4"
+          formationId={formationId}
+          assignments={assignments}
+          athletes={athletes}
+        />
+      </div>
+    </section>
+  );
+}
+
+function LineupConfirmationSection({
+  lineupReady,
+  lineupDirty,
+  canConfirmLineup,
+  canSubmit,
+  confirming,
+  starting,
+  beforeMatchDay,
+  message,
+  onConfirm,
+  onStart,
+}: {
+  lineupReady: boolean;
+  lineupDirty: boolean;
+  canConfirmLineup: boolean;
+  canSubmit: boolean;
+  confirming: boolean;
+  starting: boolean;
+  beforeMatchDay: boolean;
+  message: string;
+  onConfirm: () => void;
+  onStart: () => void;
+}) {
+  return (
+    <section className={cardClassName}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className={sectionLabelClassName}>Lineup confirmation</h2>
+        <span className={cn(
+          "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]",
+          lineupReady && !lineupDirty ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500",
+        )}>
+          {lineupStatusLabel(lineupReady, lineupDirty)}
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-muted-foreground">{message}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          disabled={!canConfirmLineup || (lineupReady && !lineupDirty)}
+          onClick={onConfirm}
+          className={cn(
+            "h-14 w-full rounded-xl border text-xs font-bold uppercase tracking-[0.18em] transition-colors sm:text-sm",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            lineupReady && !lineupDirty ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500" : "border-primary/60 text-primary hover:bg-primary/10",
+          )}
+        >
+          {lineupConfirmLabel(confirming, lineupReady, lineupDirty)}
+        </button>
+        <button
+          type="button"
+          disabled={!canSubmit}
+          onClick={onStart}
+          className={cn(
+            "h-14 w-full rounded-xl bg-primary text-xs font-bold uppercase tracking-[0.18em] text-primary-foreground transition-opacity sm:text-sm",
+            "shadow-[0_0_28px_color-mix(in_oklab,var(--primary)_45%,transparent)]",
+            "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+          )}
+        >
+          {matchStartLabel(starting, beforeMatchDay, lineupReady, lineupDirty)}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function lineupStatusLabel(lineupReady: boolean, lineupDirty: boolean) {
+  if (!lineupReady) return "Not confirmed";
+  return lineupDirty ? "Changes not shared" : "Shared";
+}
+
+function lineupConfirmLabel(
+  confirming: boolean,
+  lineupReady: boolean,
+  lineupDirty: boolean,
+) {
+  if (confirming) return "Saving lineup…";
+  if (!lineupReady) return "Confirm lineup";
+  return lineupDirty ? "Update confirmed lineup" : "Lineup confirmed";
+}
+
+function matchStartLabel(
+  starting: boolean,
+  beforeMatchDay: boolean,
+  lineupReady: boolean,
+  lineupDirty: boolean,
+) {
+  if (starting) return "Starting…";
+  if (beforeMatchDay) return "Available on match day";
+  if (!lineupReady) return "Confirm lineup first";
+  return lineupDirty ? "Update lineup to start" : "Start match & open Live Logger";
+}
+
+function getLineupStatusMessage({
+  fixtureDateConfirmed,
+  lineupReady,
+  lineupDirty,
+  sharingWithOpponent,
+  friendlyOpponentLabel,
+  confirmedAt,
+  beforeMatchDay,
+}: {
+  fixtureDateConfirmed: boolean;
+  lineupReady: boolean;
+  lineupDirty: boolean;
+  sharingWithOpponent: boolean;
+  friendlyOpponentLabel: string;
+  confirmedAt?: string;
+  beforeMatchDay: boolean;
+}) {
+  if (!fixtureDateConfirmed) {
+    return "The fixture must be confirmed before the lineup can be saved.";
+  }
+  if (!lineupReady) {
+    return sharingWithOpponent
+      ? `Confirm your lineup to share it with ${friendlyOpponentLabel} — they will see it on their match setup page before kick-off.`
+      : "Confirm your lineup to lock in the starting XI before the match starts.";
+  }
+  if (lineupDirty) {
+    return sharingWithOpponent
+      ? `Your XI changed since it was shared — update the confirmed lineup so ${friendlyOpponentLabel} sees the latest squad.`
+      : "Your XI changed since it was confirmed — update the confirmed lineup to keep the saved squad accurate.";
+  }
+  const confirmedWhen = confirmedAt ? formatEventDateTime(confirmedAt) : "";
+  if (!sharingWithOpponent) {
+    return `Lineup confirmed ${confirmedWhen}. You can start the match when ready.`;
+  }
+  const matchDayNote = beforeMatchDay ? " Kick-off unlocks on match day." : "";
+  return `Lineup confirmed ${confirmedWhen} — ${friendlyOpponentLabel} can see it on their match setup page.${matchDayNote}`;
+}
+
+function isOpponentReadyForSetup({
+  hasGeneratedFixture,
+  generatedOpponentReady,
+  hasCompetition,
+  selectedCompetitionOpponent,
+  opponentName,
+}: {
+  hasGeneratedFixture: boolean;
+  generatedOpponentReady: boolean;
+  hasCompetition: boolean;
+  selectedCompetitionOpponent: boolean;
+  opponentName: string;
+}) {
+  if (hasGeneratedFixture) return generatedOpponentReady;
+  if (hasCompetition) return selectedCompetitionOpponent;
+  return opponentName.trim().length > 0;
+}
+
+function canStartMatch({
+  canConfirmLineup,
+  lineupReady,
+  lineupDirty,
+  opponentReady,
+  beforeMatchDay,
+  startPending,
+  hasCompetition,
+  hasGeneratedFixture,
+  competitionLoading,
+  competitionError,
+  selectedGamePlan,
+  gamePlanLoading,
+  gamePlanError,
+}: {
+  canConfirmLineup: boolean;
+  lineupReady: boolean;
+  lineupDirty: boolean;
+  opponentReady: boolean;
+  beforeMatchDay: boolean;
+  startPending: boolean;
+  hasCompetition: boolean;
+  hasGeneratedFixture: boolean;
+  competitionLoading: boolean;
+  competitionError: boolean;
+  selectedGamePlan: boolean;
+  gamePlanLoading: boolean;
+  gamePlanError: boolean;
+}) {
+  return (
+    canConfirmLineup &&
+    lineupReady &&
+    !lineupDirty &&
+    opponentReady &&
+    !beforeMatchDay &&
+    !startPending &&
+    !(hasCompetition && !hasGeneratedFixture && (competitionLoading || competitionError)) &&
+    !(selectedGamePlan && (gamePlanLoading || gamePlanError))
+  );
+}
+
+function setupStepStates(
+  detailsComplete: boolean,
+  squadInfoComplete: boolean,
+  xiComplete: boolean,
+) {
+  return [
+    detailsComplete ? "done" : "current",
+    detailsComplete ? (squadInfoComplete ? "done" : "current") : "todo",
+    xiComplete ? "done" : detailsComplete && squadInfoComplete ? "current" : "todo",
+  ] as const;
+}
+
 export default function ConfirmSquadPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
@@ -639,11 +1434,13 @@ export default function ConfirmSquadPage() {
 
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
-  const opponentReady = eventQuery.data?.competitionFixtureId
-    ? generatedFixtureHasOpponent
-    : eventQuery.data?.competitionId
-      ? selectedCompetitionOpponent !== null
-      : opponentName.trim().length > 0;
+  const opponentReady = isOpponentReadyForSetup({
+    hasGeneratedFixture: Boolean(eventQuery.data?.competitionFixtureId),
+    generatedOpponentReady: generatedFixtureHasOpponent,
+    hasCompetition: Boolean(eventQuery.data?.competitionId),
+    selectedCompetitionOpponent: selectedCompetitionOpponent !== null,
+    opponentName,
+  });
   const beforeMatchDay = eventQuery.data
     ? isBeforeMatchDay(eventQuery.data.scheduledAt)
     : false;
@@ -681,59 +1478,44 @@ export default function ConfirmSquadPage() {
     startingCount === STARTING_XI_SIZE &&
     fixtureDateConfirmed &&
     !confirmLineup.isPending;
-  const canSubmit =
-    canConfirmLineup &&
-    lineupReady &&
-    !lineupDirty &&
-    opponentReady &&
-    !beforeMatchDay &&
-    !startMatch.isPending &&
-    !(eventQuery.data?.competitionId &&
-      !eventQuery.data?.competitionFixtureId &&
-      (competitionQuery.isFetching || competitionQuery.isError)) &&
-    !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
+  const canSubmit = canStartMatch({
+    canConfirmLineup,
+    lineupReady,
+    lineupDirty,
+    opponentReady,
+    beforeMatchDay,
+    startPending: startMatch.isPending,
+    hasCompetition: Boolean(eventQuery.data?.competitionId),
+    hasGeneratedFixture: Boolean(eventQuery.data?.competitionFixtureId),
+    competitionLoading: competitionQuery.isFetching,
+    competitionError: competitionQuery.isError,
+    selectedGamePlan: Boolean(selectedGamePlanId),
+    gamePlanLoading: gamePlanQuery.isFetching,
+    gamePlanError: gamePlanQuery.isError,
+  });
 
   const friendlyOpponentLabel =
     eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent";
   const sharingWithOpponent = friendlyFixtureLinked && friendlyFixtureAccepted;
-  const lineupStatusMessage = (() => {
-    if (!fixtureDateConfirmed) {
-      return "The fixture must be confirmed before the lineup can be saved.";
-    }
-    if (!lineupReady) {
-      return sharingWithOpponent
-        ? `Confirm your lineup to share it with ${friendlyOpponentLabel} — they will see it on their match setup page before kick-off.`
-        : "Confirm your lineup to lock in the starting XI before the match starts.";
-    }
-    if (lineupDirty) {
-      return sharingWithOpponent
-        ? `Your XI changed since it was shared — update the confirmed lineup so ${friendlyOpponentLabel} sees the latest squad.`
-        : "Your XI changed since it was confirmed — update the confirmed lineup to keep the saved squad accurate.";
-    }
-    const confirmedWhen = confirmedLineup
-      ? formatEventDateTime(confirmedLineup.confirmedAt)
-      : "";
-    if (sharingWithOpponent) {
-      return `Lineup confirmed ${confirmedWhen} — ${friendlyOpponentLabel} can see it on their match setup page.${
-        beforeMatchDay ? " Kick-off unlocks on match day." : ""
-      }`;
-    }
-    return `Lineup confirmed ${confirmedWhen}. You can start the match when ready.`;
-  })();
+  const lineupStatusMessage = getLineupStatusMessage({
+    fixtureDateConfirmed,
+    lineupReady,
+    lineupDirty,
+    sharingWithOpponent,
+    friendlyOpponentLabel,
+    confirmedAt: confirmedLineup?.confirmedAt,
+    beforeMatchDay,
+  });
 
   const detailsComplete = opponentReady;
   const squadInfoComplete =
     opponentSquadVisibility === "none" || opponentPlayers.length > 0;
   const xiComplete = startingCount === STARTING_XI_SIZE;
-  const stepState = [
-    detailsComplete ? "done" : "current",
-    detailsComplete
-      ? squadInfoComplete
-        ? "done"
-        : "current"
-      : "todo",
-    xiComplete ? "done" : detailsComplete && squadInfoComplete ? "current" : "todo",
-  ] as const;
+  const stepState = setupStepStates(
+    detailsComplete,
+    squadInfoComplete,
+    xiComplete,
+  );
 
   const sortedAthletes = useMemo(() => {
     return [...athletes].sort((a, b) => {
@@ -920,6 +1702,19 @@ export default function ConfirmSquadPage() {
     }
   };
 
+  const handlePlanSelection = (planId: string | null) => {
+    if (planId === null) {
+      setSelectedGamePlanId(null);
+      return;
+    }
+    const reselectingPlan = selectedGamePlanId === planId;
+    if (reselectingPlan) appliedGamePlanIdRef.current = null;
+    setSelectedGamePlanId(planId);
+    if (reselectingPlan && gamePlanQuery.data?.id === planId) {
+      setStartingIds(startingIdsFromGamePlan(gamePlanQuery.data, selectableRosterIds));
+      appliedGamePlanIdRef.current = planId;
+    }
+  };
   if (opponentOutlet) {
     const setupContext: OpponentSquadSetupContext = {
       visibility: opponentSquadVisibility,
@@ -1082,606 +1877,78 @@ export default function ConfirmSquadPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
-      <section className={cardClassName}>
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-            Match setup
-          </p>
-          <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {formatHeroWhen(event.scheduledAt)}
-          </p>
-        </div>
-        <div
-          key={isHome ? "home" : "away"}
-          className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 animate-fade-in [animation-duration:280ms]"
-        >
-          <HeroClub
-            name={homeClub.name}
-            abbrev={homeClub.abbrev}
-            color={homeClub.color}
-            venue="Home"
-            align="left"
-            empty={homeClub.empty}
-          />
-          <div className="text-center">
-            <p className="font-display text-2xl font-bold text-muted-foreground">
-              VS
-            </p>
-            <p className="mt-1 max-w-[10rem] truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-              {event.location || "Venue not set"}
-            </p>
-          </div>
-          <HeroClub
-            name={awayClub.name}
-            abbrev={awayClub.abbrev}
-            color={awayClub.color}
-            venue="Away"
-            align="right"
-            empty={awayClub.empty}
-          />
-        </div>
-      </section>
-
-      <ol className="flex items-center gap-2 sm:gap-3">
-        {SETUP_STEPS.map((step, index) => {
-          const state = stepState[index];
-          return (
-            <li key={step.n} className="flex min-w-0 flex-1 items-center gap-2">
-              <span
-                className={cn(
-                  "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold",
-                  state === "todo" &&
-                    "border-border text-muted-foreground",
-                  state === "current" &&
-                    "border-primary text-primary",
-                  state === "done" &&
-                    "border-primary bg-primary text-primary-foreground",
-                )}
-              >
-                {step.n}
-              </span>
-              <span
-                className={cn(
-                  "hidden truncate text-[10px] font-semibold uppercase tracking-[0.16em] sm:inline",
-                  state === "todo"
-                    ? "text-muted-foreground"
-                    : "text-primary",
-                )}
-              >
-                {step.label}
-              </span>
-              {index < SETUP_STEPS.length - 1 && (
-                <span
-                  className={cn(
-                    "h-px min-w-4 flex-1",
-                    state === "done" ? "bg-primary/70" : "bg-border",
-                  )}
-                />
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      <MatchSetupHero
+        scheduledAt={event.scheduledAt}
+        location={event.location}
+        isHome={isHome}
+        homeClub={homeClub}
+        awayClub={awayClub}
+      />      <MatchSetupProgress states={stepState} />
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className={cardClassName}>
-          <h2 className={sectionLabelClassName}>Match details</h2>
-          <div className="mt-4 space-y-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor={
-                  event.competitionFixtureId || event.friendlyFixtureId
-                    ? undefined
-                    : "opponent-name"
-                }
-              >
-                Opponent
-              </Label>
-              {event.competitionFixtureId ? (
-                <>
-                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
-                    <span
-                      className={cn(
-                        "min-w-0 truncate text-sm font-medium",
-                        !generatedFixtureHasOpponent && "text-muted-foreground",
-                      )}
-                    >
-                      {generatedFixtureHasOpponent
-                        ? generatedFixtureOpponentName
-                        : "Opponent not determined yet"}
-                    </span>
-                    <LockKeyhole className="size-4 shrink-0 text-primary" aria-hidden />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {generatedFixtureHasOpponent
-                      ? "This opponent is fixed by the generated competition fixture."
-                      : "The opponent will be filled automatically when the fixture pairing is known."}
-                  </p>
-                </>
-              ) : event.friendlyFixtureId ? (
-                <>
-                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted/25 px-3 py-2.5">
-                    <span
-                      className={cn(
-                        "min-w-0 truncate text-sm font-medium",
-                        !event.friendlyOpponentTeamName?.trim() &&
-                          "text-muted-foreground",
-                      )}
-                    >
-                      {event.friendlyOpponentTeamName?.trim() ||
-                        "Opponent pending"}
-                    </span>
-                    <LockKeyhole
-                      className="size-4 shrink-0 text-primary"
-                      aria-hidden
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {event.friendlyFixtureStatus === "accepted"
-                      ? "Friendly fixture confirmed — confirm your lineup to share it before kick-off."
-                      : event.friendlyFixtureStatus === "pending"
-                        ? "Waiting for this Gaffer opponent to accept the fixture request."
-                        : event.friendlyFixtureStatus === "declined"
-                          ? "The opponent declined this fixture. Update the event to pick another opponent."
-                          : "This friendly fixture is no longer active."}
-                  </p>
-                </>
-              ) : event.competitionId ? (
-                <>
-                  <select
-                    id="opponent-name"
-                    className={inputClassName}
-                    value={opponentCompetitionTeamId ?? ""}
-                    disabled={competitionQuery.isFetching || competitionQuery.isError}
-                    onChange={(changeEvent) => {
-                      const participant = competitionParticipants.find(
-                        (item) => item.id === changeEvent.target.value,
-                      );
-                      setOpponentCompetitionTeamId(participant?.id ?? null);
-                      setOpponentName(participant?.displayName ?? "");
-                    }}
-                  >
-                    <option value="" disabled>
-                      {competitionQuery.isFetching
-                        ? "Loading participating teams…"
-                        : "Choose an opponent"}
-                    </option>
-                    {competitionParticipants.map((participant) => (
-                      <option key={participant.id} value={participant.id}>
-                        {participant.displayName}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground">
-                    Opponents are limited to teams participating in{" "}
-                    {competitionQuery.data?.name ?? "this competition"}.
-                  </p>
-                  {competitionQuery.isError && (
-                    <p className="text-xs text-destructive">
-                      Could not load the competition teams. Please retry.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <input
-                  id="opponent-name"
-                  className={inputClassName}
-                  value={opponentName}
-                  onChange={(changeEvent) =>
-                    setOpponentName(changeEvent.target.value)
-                  }
-                  placeholder={opponentNamePlaceholder(event.title)}
-                  autoComplete="off"
-                  maxLength={100}
-                />
-              )}
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Venue</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  key={isHome ? `home-${venuePulse}` : "home"}
-                  onClick={() => setVenue(true)}
-                  className={cn(
-                    "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
-                    "transition-all duration-200 ease-out",
-                    isHome
-                      ? "scale-105"
-                      : "scale-100 border hover:opacity-90",
-                    isHome && venuePulse > 0 && "animate-venue-pop",
-                  )}
-                  style={
-                    isHome
-                      ? {
-                          backgroundColor: ownColor,
-                          color: contrastText(ownColor),
-                          boxShadow: `0 0 18px ${ownColor}8c`,
-                        }
-                      : {
-                          borderColor: `${ownColor}66`,
-                          color: ownColor,
-                        }
-                  }
-                >
-                  Home
-                </button>
-                <button
-                  type="button"
-                  key={!isHome ? `away-${venuePulse}` : "away"}
-                  onClick={() => setVenue(false)}
-                  className={cn(
-                    "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
-                    "transition-all duration-200 ease-out",
-                    !isHome
-                      ? "scale-105"
-                      : "scale-100 border hover:opacity-90",
-                    !isHome && venuePulse > 0 && "animate-venue-pop",
-                  )}
-                  style={
-                    !isHome
-                      ? {
-                          backgroundColor: oppColor,
-                          color: contrastText(oppColor),
-                          boxShadow: `0 0 18px ${oppColor}8c`,
-                        }
-                      : {
-                          borderColor: `${oppColor}66`,
-                          color: oppColor,
-                        }
-                  }
-                >
-                  Away
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <MatchDetailsSection
+          event={event}
+          fixtureHasOpponent={generatedFixtureHasOpponent}
+          fixtureOpponentName={generatedFixtureOpponentName}
+          participants={competitionParticipants}
+          competitionLoading={competitionQuery.isFetching}
+          competitionError={competitionQuery.isError}
+          competitionName={competitionQuery.data?.name}
+          selectedParticipantId={opponentCompetitionTeamId}
+          onSelectParticipant={(id) => {
+            const participant = competitionParticipants.find((item) => item.id === id);
+            setOpponentCompetitionTeamId(participant?.id ?? null);
+            setOpponentName(participant?.displayName ?? "");
+          }}
+          opponentName={opponentName}
+          onOpponentNameChange={setOpponentName}
+          isHome={isHome}
+          venuePulse={venuePulse}
+          ownColor={ownColor}
+          opponentColor={oppColor}
+          onVenueChange={setVenue}
+        />
 
-        <section className={cardClassName}>
-          <div className="flex items-start justify-between gap-3">
-            <h2 className={sectionLabelClassName}>Opponent squad</h2>
-            <button
-              type="button"
-              onClick={() =>
-                navigate(`/events/${eventId}/confirm-squad/opponent`)
-              }
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]"
-              style={{
-                borderColor: oppColor,
-                color: oppColor,
-              }}
-            >
-              <Pencil className="size-3" />
-              Edit opponent squad
-            </button>
-          </div>
-          {eventQuery.data?.friendlyFixtureId && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {friendlyLineupQuery.data?.available
-                ? `Auto-filled from ${
-                    friendlyLineupQuery.data.teamName ?? "the opponent"
-                  }'s confirmed lineup — adjust it if needed.`
-                : eventQuery.data.friendlyFixtureStatus === "accepted"
-                  ? `Opponent lineup not available yet — ${
-                      eventQuery.data.friendlyOpponentTeamName ?? "the opponent"
-                    } has not confirmed their lineup. You can still enter it manually.`
-                  : eventQuery.data.friendlyFixtureStatus === "pending"
-                    ? "Their lineup is shared automatically once they accept the fixture and confirm it."
-                    : "The fixture request was not accepted, so no lineup can be shared."}
-            </p>
-          )}
-          {opponentSquadVisibility === "none" ? (
-            <div className="mt-4">
-              <span
-                className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
-                style={{
-                  color: oppColor,
-                  backgroundColor: `${oppColor}22`,
-                }}
-              >
-                {opponentSummary.modeLabel}
-              </span>
-              <p className="mt-2 text-sm text-muted-foreground">
-                No opponent info will be logged
-              </p>
-            </div>
-          ) : (
-            <div className="mt-4 flex items-center gap-4">
-              <OpponentSquadPitchThumb
-                formationId={opponentFormationId}
-                assignedSlotIds={opponentSummary.assignedSlotIds}
-                color={oppColor}
-              />
-              <div className="min-w-0">
-                <span
-                  className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
-                  style={{
-                    color: oppColor,
-                    backgroundColor: `${oppColor}22`,
-                  }}
-                >
-                  {opponentSummary.modeLabel}
-                </span>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <p className="text-sm font-bold text-foreground">
-                    {opponentSummary.playerCount} player
-                    {opponentSummary.playerCount === 1 ? "" : "s"}
-                  </p>
-                  <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
-                    <PlacedProgressRing
-                      value={opponentSummary.placedCount}
-                      max={
-                        opponentSummary.playerCount > 0
-                          ? opponentSummary.playerCount
-                          : 1
-                      }
-                      color={oppColor}
-                    />
-                    {opponentSummary.placedCount} placed
-                  </span>
-                </div>
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  {opponentSummary.formationCaption}
-                </p>
-              </div>
-            </div>
-          )}
-          {opponentSquadError && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {opponentSquadError}
-            </p>
-          )}
-        </section>
+        <OpponentSquadSummary
+          event={event}
+          lineup={friendlyLineupQuery.data}
+          visibility={opponentSquadVisibility}
+          formationId={opponentFormationId}
+          summary={opponentSummary}
+          opponentColor={oppColor}
+          error={opponentSquadError}
+          onEdit={() => navigate(`/events/${eventId}/confirm-squad/opponent`)}
+        />
       </div>
 
-      <section className={cardClassName}>
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className={sectionLabelClassName}>Saved game plan</h2>
-          <p className="text-sm text-muted-foreground">
-            Pick a plan to pre-fill your XI, then adjust below
-          </p>
-        </div>
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <li>
-            <button
-              type="button"
-              onClick={() => setSelectedGamePlanId(null)}
-              className={cn(
-                "flex h-full w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors",
-                "hover:border-primary/40 hover:bg-card/80",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                selectedGamePlanId === null
-                  ? "border-primary bg-primary/5"
-                  : "border-border",
-              )}
-            >
-              <div className="flex h-[72px] w-[52px] shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                —
-              </div>
-              <span className="min-w-0">
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    Pick from roster
-                  </span>
-                  {selectedGamePlanId === null && (
-                    <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
-                      Selected
-                    </span>
-                  )}
-                </span>
-                <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  No plan
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Start fresh
-                </span>
-              </span>
-            </button>
-          </li>
-          {gamePlans.map((plan) => {
-            const selected = selectedGamePlanId === plan.id;
-            const counts = planCounts(plan);
-            return (
-              <li key={plan.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedGamePlanId === plan.id) {
-                      appliedGamePlanIdRef.current = null;
-                    }
-                    setSelectedGamePlanId(plan.id);
-                    if (
-                      selectedGamePlanId === plan.id &&
-                      gamePlanQuery.data?.id === plan.id
-                    ) {
-                      setStartingIds(
-                        startingIdsFromGamePlan(
-                          gamePlanQuery.data,
-                          selectableRosterIds,
-                        ),
-                      );
-                      appliedGamePlanIdRef.current = plan.id;
-                    }
-                  }}
-                  className={cn(
-                    "flex h-full w-full items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors",
-                    "hover:border-primary/40 hover:bg-card/80",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                    selected
-                      ? "border-primary bg-primary/5"
-                      : "border-border",
-                  )}
-                >
-                  <MiniPitch formationId={plan.formationId} />
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-foreground">
-                        {plan.name}
-                      </span>
-                      {selected && (
-                        <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
-                          Selected
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      {plan.formationId}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {counts.starters} starters · {counts.subs} subs
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        {selectedGamePlanId && gamePlanQuery.isFetching && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading game plan…
-          </p>
-        )}
-        {selectedGamePlanId && gamePlanQuery.isError && (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {gamePlanQuery.error instanceof Error
-              ? gamePlanQuery.error.message
-              : "Could not load this game plan."}
-          </p>
-        )}
-      </section>
+      <SavedGamePlanSection
+        gamePlans={gamePlans}
+        selectedGamePlanId={selectedGamePlanId}
+        loading={gamePlanQuery.isFetching}
+        error={gamePlanQuery.isError
+          ? gamePlanQuery.error instanceof Error
+            ? gamePlanQuery.error.message
+            : "Could not load this game plan."
+          : undefined}
+        onSelect={handlePlanSelection}
+      />
 
-      <section className={cardClassName}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className={sectionLabelClassName}>Your squad</h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-muted-foreground">
-              <span
-                className={cn(
-                  xiComplete ? "text-primary" : "text-muted-foreground",
-                )}
-              >
-                Starting XI: {startingCount} / {STARTING_XI_SIZE}
-              </span>
-              <span className="mx-2 text-border">·</span>
-              Bench: {benchCount}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleSuggestXI}
-              disabled={selectableAthletes.length === 0}
-              className="shrink-0 gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
-            >
-              <Wand2 className="size-3.5" aria-hidden />
-              Suggest XI
-            </Button>
-          </div>
-        </div>
-
-        {suggestionReasons && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Suggested XI applied — tap any player to replace or remove them.
-          </p>
-        )}
-
-        {!fixtureDateConfirmed && (
-          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            This generated fixture is still provisional. Both teams must agree the date in Leagues & Competitions before the match can start.
-          </p>
-        )}
-
-        {beforeMatchDay && (
-          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            Matches cannot be started before match day — you can still confirm
-            your lineup now so the opponent can prepare.
-          </p>
-        )}
-
-        {selectableAthletes.length < STARTING_XI_SIZE && (
-          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
-            Need at least 11 players for a full XI.
-          </p>
-        )}
-
-        <div className="mt-4 grid items-start gap-5 lg:grid-cols-2">
-          <ul className="flex flex-col gap-2">
-            {sortedAthletes.map((athlete) => {
-              const selected = startingIds.has(athlete.id);
-              const injured = athlete.status === "injured";
-              const style = roleStyle(athlete.position);
-              const positionLabel = (athlete.position ?? "—").toUpperCase();
-              return (
-                <li key={athlete.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleStarter(athlete.id)}
-                    disabled={injured}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                      injured
-                        ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70"
-                        : selected
-                          ? "border-primary/70 bg-primary/5"
-                          : "border-border bg-card hover:border-primary/40",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-10 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold",
-                        style.avatar,
-                      )}
-                    >
-                      {athlete.squadNumber ?? "—"}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-foreground">
-                          {athleteDisplayName(athlete)}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                            style.badge,
-                          )}
-                        >
-                          {positionLabel}
-                        </span>
-                      </span>
-                      {selected && suggestionReasons?.[athlete.id] && (
-                        <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">
-                          {suggestionReasons[athlete.id]}
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
-                        injured
-                          ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                          : selected
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {injured ? "Injured" : selected ? "Starting" : "Bench"}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <SquadFormationPreview
-            className="lg:sticky lg:top-4"
-            formationId={previewFormationId}
-            assignments={previewAssignments}
-            athletes={athletes}
-          />
-        </div>
-      </section>
+      <StartingSquadSection
+        startingCount={startingCount}
+        benchCount={benchCount}
+        xiComplete={xiComplete}
+        selectableCount={selectableAthletes.length}
+        suggestionReasons={suggestionReasons}
+        fixtureDateConfirmed={fixtureDateConfirmed}
+        beforeMatchDay={beforeMatchDay}
+        sortedAthletes={sortedAthletes}
+        startingIds={startingIds}
+        onSuggest={handleSuggestXI}
+        onToggle={toggleStarter}
+        formationId={previewFormationId}
+        assignments={previewAssignments}
+        athletes={athletes}
+      />
 
       <section className={cardClassName}>
         <h2 className={sectionLabelClassName}>Team colours</h2>
@@ -1705,72 +1972,18 @@ export default function ConfirmSquadPage() {
         </p>
       )}
 
-      <section className={cardClassName}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className={sectionLabelClassName}>Lineup confirmation</h2>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]",
-              lineupReady && !lineupDirty
-                ? "bg-emerald-500/10 text-emerald-500"
-                : "bg-amber-500/10 text-amber-500",
-            )}
-          >
-            {lineupReady
-              ? lineupDirty
-                ? "Changes not shared"
-                : "Shared"
-              : "Not confirmed"}
-          </span>
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          {lineupStatusMessage}
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            disabled={!canConfirmLineup || (lineupReady && !lineupDirty)}
-            onClick={() => void handleConfirmLineup()}
-            className={cn(
-              "h-14 w-full rounded-xl border text-xs font-bold uppercase tracking-[0.18em] transition-colors sm:text-sm",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              lineupReady && !lineupDirty
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
-                : "border-primary/60 text-primary hover:bg-primary/10",
-            )}
-          >
-            {confirmLineup.isPending
-              ? "Saving lineup…"
-              : lineupReady
-                ? lineupDirty
-                  ? "Update confirmed lineup"
-                  : "Lineup confirmed"
-                : "Confirm lineup"}
-          </button>
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={() => void handleSubmit()}
-            className={cn(
-              "h-14 w-full rounded-xl bg-primary text-xs font-bold uppercase tracking-[0.18em] text-primary-foreground transition-opacity sm:text-sm",
-              "shadow-[0_0_28px_color-mix(in_oklab,var(--primary)_45%,transparent)]",
-              "hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-            )}
-          >
-            {startMatch.isPending
-              ? "Starting…"
-              : beforeMatchDay
-                ? "Available on match day"
-                : !lineupReady
-                  ? "Confirm lineup first"
-                  : lineupDirty
-                    ? "Update lineup to start"
-                    : "Start match & open Live Logger"}
-          </button>
-        </div>
-      </section>
+      <LineupConfirmationSection
+        lineupReady={lineupReady}
+        lineupDirty={lineupDirty}
+        canConfirmLineup={canConfirmLineup}
+        canSubmit={canSubmit}
+        confirming={confirmLineup.isPending}
+        starting={startMatch.isPending}
+        beforeMatchDay={beforeMatchDay}
+        message={lineupStatusMessage}
+        onConfirm={() => void handleConfirmLineup()}
+        onStart={() => void handleSubmit()}
+      />
     </div>
   );
 }
