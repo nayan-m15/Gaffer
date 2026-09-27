@@ -48,6 +48,29 @@ const QUERY_KEY_ARCHIVED = ["athletes", "archived"] as const;
 const QUERY_KEY_TEAM_INVITES = ["team-invites"] as const;
 const QUERY_KEY_TEAM_ASSISTANTS = ["team-assistants"] as const;
 
+const POSITION_GROUPS = [
+  new Set(["GK"]),
+  new Set(["CB", "LB", "RB", "LWB", "RWB", "SW", "DEF", "DF"]),
+  new Set(["DM", "CM", "AM", "LM", "RM", "MID", "MF"]),
+  new Set(["LW", "RW", "ST", "CF", "SS", "FWD", "FW"]),
+] as const;
+
+function positionGroup(position: string): number {
+  const normalizedPosition = position.trim().toUpperCase();
+  const groupIndex = POSITION_GROUPS.findIndex((group) => group.has(normalizedPosition));
+  return groupIndex === -1 ? POSITION_GROUPS.length : groupIndex;
+}
+
+function compareAthletesByPositionAndNumber(left: Athlete, right: Athlete): number {
+  const groupDifference = positionGroup(left.position) - positionGroup(right.position);
+  if (groupDifference !== 0) return groupDifference;
+
+  const numberDifference = left.jerseyNumber - right.jerseyNumber;
+  if (numberDifference !== 0) return numberDifference;
+
+  return left.name.localeCompare(right.name);
+}
+
 /**
  * AthletesPage — Squad roster command centre (S1-03).
  *
@@ -110,21 +133,24 @@ export default function AthletesPage() {
   const error = showArchived ? archivedQuery.error : activeQuery.error;
 
   /**
-   * Filter the roster by the search query.
-   * Search matches name, position, status or jersey number.
+   * Filter the roster by the search query, then keep it in football order:
+   * goalkeeper, defenders, midfielders and forwards. Players within each
+   * positional group are ordered by squad number.
    */
   const filteredAthletes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) return currentAthletes;
+    const matchingAthletes = query
+      ? currentAthletes.filter(
+          (athlete) =>
+            athlete.name.toLowerCase().includes(query) ||
+            athlete.position.toLowerCase().includes(query) ||
+            athlete.status.toLowerCase().includes(query) ||
+            athlete.jerseyNumber.toString().includes(query),
+        )
+      : currentAthletes;
 
-    return currentAthletes.filter(
-      (athlete) =>
-        athlete.name.toLowerCase().includes(query) ||
-        athlete.position.toLowerCase().includes(query) ||
-        athlete.status.toLowerCase().includes(query) ||
-        athlete.jerseyNumber.toString().includes(query),
-    );
+    return [...matchingAthletes].sort(compareAthletesByPositionAndNumber);
   }, [currentAthletes, searchQuery]);
 
   /** Selected athlete must belong to the current filtered view. */
