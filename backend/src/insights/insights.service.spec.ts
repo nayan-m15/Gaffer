@@ -24,6 +24,10 @@ function thenable(result: unknown) {
   return obj;
 }
 
+function firstCallArgument<T>(mock: { mock: { calls: unknown[][] } }): T {
+  return mock.mock.calls[0]?.[0] as T;
+}
+
 describe('InsightsService', () => {
   let service: InsightsService;
 
@@ -122,6 +126,8 @@ describe('InsightsService', () => {
       );
       expect(onConflictDoUpdateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          // Jest's nested objectContaining matcher is typed as `any` by @types/jest.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           set: expect.objectContaining({ status: 'ready' }),
         }),
       );
@@ -160,6 +166,8 @@ describe('InsightsService', () => {
       );
       // A failed attempt never overwrites narrativeText via this write path.
       expect(insertValuesSpy).not.toHaveBeenCalledWith(
+        // Jest's objectContaining matcher is typed as `any` by @types/jest.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         expect.objectContaining({ narrativeText: expect.anything() }),
       );
     });
@@ -248,10 +256,8 @@ describe('InsightsService', () => {
         model: 'gemini-3.6-flash',
       });
       await service.generateForMatch('match-1', { projectionRevision: 1 });
-      const firstDigest = (
-        insertValuesSpy.mock.calls[0][0] as {
-          inputDigest: string;
-        }
+      const firstDigest = firstCallArgument<{ inputDigest: string }>(
+        insertValuesSpy,
       ).inputDigest;
 
       jest.clearAllMocks();
@@ -461,8 +467,8 @@ describe('InsightsService — season insights', () => {
       model: 'gemini-3.6-flash',
     });
     const first = await service.generateSeasonInsight('team-1', null, 'user-1');
-    const firstDigest = (
-      insertValuesSpy.mock.calls[0][0] as { inputDigest: string }
+    const firstDigest = firstCallArgument<{ inputDigest: string }>(
+      insertValuesSpy,
     ).inputDigest;
 
     jest.clearAllMocks();

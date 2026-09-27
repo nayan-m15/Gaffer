@@ -46,6 +46,10 @@ describe('StatisticsService', () => {
     return obj;
   }
 
+  function firstCallArgument<T>(mock: { mock: { calls: unknown[][] } }): T {
+    return mock.mock.calls[0]?.[0] as T;
+  }
+
   /**
    * Recursively collects bound parameter values from a drizzle SQL AST —
    * `and`/`eq` conditions carry their literal values inside `Param` chunks,
@@ -711,8 +715,9 @@ describe('StatisticsService', () => {
         answer: 'Nobody has scored yet.',
       });
       expect(mockInsightsService.answerQuestion).toHaveBeenCalledTimes(1);
-      const prompt = mockInsightsService.answerQuestion.mock
-        .calls[0][0] as string;
+      const prompt = firstCallArgument<string>(
+        mockInsightsService.answerQuestion,
+      );
       expect(prompt).toContain("Rovers's record");
       expect(prompt).toContain('Question: Who scored the most goals?');
     });
@@ -738,8 +743,9 @@ describe('StatisticsService', () => {
         seasonId: 'season-1',
       });
 
-      const prompt = mockInsightsService.answerQuestion.mock
-        .calls[0][0] as string;
+      const prompt = firstCallArgument<string>(
+        mockInsightsService.answerQuestion,
+      );
       expect(prompt).toContain('record for 2025/26');
     });
 

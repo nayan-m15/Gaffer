@@ -48,6 +48,10 @@ async function waitForInsightStatus(
   throw new Error(`Insight for ${matchId} never reached status "${status}".`);
 }
 
+function firstCallArgument<T>(mock: { mock: { calls: unknown[][] } }): T {
+  return mock.mock.calls[0]?.[0] as T;
+}
+
 describe('Match insights (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
@@ -377,8 +381,9 @@ describe('Stats assistant (e2e)', () => {
       answer: 'No matches have been played yet.',
     });
     expect(mockGeminiClient.generateNarrative).toHaveBeenCalledTimes(1);
-    const prompt = mockGeminiClient.generateNarrative.mock
-      .calls[0][0] as string;
+    const prompt = firstCallArgument<string>(
+      mockGeminiClient.generateNarrative,
+    );
     expect(prompt).toContain('Who has scored the most goals?');
   });
 
