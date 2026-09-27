@@ -463,11 +463,7 @@ export class EventsService {
   async update(userId: string, eventId: string, dto: UpdateEventDto) {
     const team = await this.requireTeam(userId);
     const existingEvent = await this.requireEvent(team.id, eventId);
-    if (existingEvent.competitionFixtureId) {
-      throw new BadRequestException(
-        'Generated competition fixtures are managed from Leagues & Competitions.',
-      );
-    }
+    this.ensureEventCanBeUpdated(existingEvent);
     const fixture = existingEvent.friendlyFixtureId
       ? await this.requireFriendlyFixture(existingEvent.friendlyFixtureId)
       : null;
@@ -480,20 +476,7 @@ export class EventsService {
           : existingEvent.competitionId
         : null;
     const competitionChanged = competitionId !== existingEvent.competitionId;
-    if (fixture && competitionChanged && competitionId) {
-      throw new BadRequestException(
-        'Remove the Gaffer opponent before adding this match to a competition.',
-      );
-    }
-    if (
-      fixture &&
-      fixture.status === 'accepted' &&
-      (type !== 'match' || competitionChanged)
-    ) {
-      throw new BadRequestException(
-        'This friendly fixture has been accepted and cannot be moved to another competition.',
-      );
-    }
+    this.ensureCompetitionUpdateAllowed(fixture, type, competitionChanged, competitionId);
     if (competitionChanged) {
       const [startedMatch] = await this.databaseService.database
         .select({ id: matches.id })
@@ -516,120 +499,26 @@ export class EventsService {
     const currentFriendlyTeamId = fixture
       ? this.friendlyOpponentTeamIdFor(fixture, team.id)
       : null;
-    const requestedFriendlyTeamId =
-      dto.friendlyOpponentTeamId === undefined
-        ? currentFriendlyTeamId
-        : type === 'match' && competitionId === null
-          ? dto.friendlyOpponentTeamId
-          : null;
-
-    if (
-      fixture &&
-      fixture.status === 'accepted' &&
-      requestedFriendlyTeamId !== currentFriendlyTeamId
-    ) {
-      throw new BadRequestException(
-        'The opponent is fixed while this friendly fixture is accepted.',
-      );
-    }
-
-    let friendlyFixtureId = existingEvent.friendlyFixtureId;
-    let createdFixtureId: string | null = null;
-    if (requestedFriendlyTeamId !== currentFriendlyTeamId) {
-      if (requestedFriendlyTeamId) {
-        await this.requireFriendlyOpponentTeam(
-          team.id,
-          requestedFriendlyTeamId,
-        );
-        const [created] = await this.databaseService.database
-          .insert(friendlyFixtures)
-          .values({
-            requesterTeamId: team.id,
-            opponentTeamId: requestedFriendlyTeamId,
-            createdByUserId: userId,
-          })
-          .returning({ id: friendlyFixtures.id });
-        createdFixtureId = created.id;
-        friendlyFixtureId = created.id;
-      } else {
-        friendlyFixtureId = null;
-      }
-    }
+    const requestedFriendlyTeamId = this.getRequestedFriendlyTeamId(
+      dto, type, competitionId, currentFriendlyTeamId,
+    );
+    this.ensureAcceptedFriendlyOpponentUnchanged(
+      fixture, requestedFriendlyTeamId, currentFriendlyTeamId,
+    );
+    const { friendlyFixtureId, createdFixtureId } = await this.prepareFriendlyFixtureUpdate(
+      userId, team.id, existingEvent.friendlyFixtureId, requestedFriendlyTeamId, currentFriendlyTeamId,
+    );
 
     try {
       const [event] = await this.databaseService.database
         .update(events)
-        .set({
-          ...(dto.title !== undefined ? { title: dto.title } : {}),
-          ...(dto.type !== undefined ? { type: dto.type } : {}),
-          ...(dto.status !== undefined ? { status: dto.status } : {}),
-          ...(dto.scheduledAt !== undefined
-            ? { scheduledAt: new Date(dto.scheduledAt) }
-            : {}),
-          ...(dto.location !== undefined ? { location: dto.location } : {}),
-          ...(dto.venueAddress !== undefined
-            ? { venueAddress: dto.venueAddress }
-            : {}),
-          ...(dto.weatherLocation !== undefined
-            ? { weatherLocation: dto.weatherLocation }
-            : {}),
-          ...(dto.weatherLatitude !== undefined
-            ? { weatherLatitude: dto.weatherLatitude }
-            : {}),
-          ...(dto.weatherLongitude !== undefined
-            ? { weatherLongitude: dto.weatherLongitude }
-            : {}),
-          ...(dto.weatherTimezone !== undefined
-            ? { weatherTimezone: dto.weatherTimezone }
-            : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-          ...(dto.competitionId !== undefined || type !== 'match'
-            ? { competitionId }
-            : {}),
-          ...(friendlyFixtureId !== existingEvent.friendlyFixtureId
-            ? { friendlyFixtureId }
-            : {}),
-          updatedAt: new Date(),
-        })
+        .set(this.buildEventUpdateValues(dto, type, competitionId, friendlyFixtureId, existingEvent.friendlyFixtureId))
         .where(and(eq(events.id, eventId), eq(events.teamId, team.id)))
         .returning();
 
-      // Retire a replaced/removed pending request, and keep an accepted
-      // opponent's calendar entry in step when this side reschedules.
-      if (fixture && fixture.id !== friendlyFixtureId) {
-        await this.databaseService.database
-          .update(friendlyFixtures)
-          .set({ status: 'cancelled', updatedAt: new Date() })
-          .where(
-            and(
-              eq(friendlyFixtures.id, fixture.id),
-              eq(friendlyFixtures.status, 'pending'),
-            ),
-          );
-      }
-      if (
-        fixture &&
-        fixture.id === friendlyFixtureId &&
-        fixture.status === 'accepted' &&
-        currentFriendlyTeamId &&
-        (dto.scheduledAt !== undefined || dto.location !== undefined)
-      ) {
-        await this.databaseService.database
-          .update(events)
-          .set({
-            ...(dto.scheduledAt !== undefined
-              ? { scheduledAt: new Date(dto.scheduledAt) }
-              : {}),
-            ...(dto.location !== undefined ? { location: dto.location } : {}),
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(events.friendlyFixtureId, fixture.id),
-              eq(events.teamId, currentFriendlyTeamId),
-            ),
-          );
-      }
+      await this.syncFriendlyFixtureUpdate(
+        fixture, friendlyFixtureId, currentFriendlyTeamId, dto,
+      );
 
       await this.databaseService.database
         .update(matches)
@@ -647,6 +536,137 @@ export class EventsService {
       }
       throw error;
     }
+  }
+
+  private ensureEventCanBeUpdated(event: typeof events.$inferSelect) {
+    if (event.competitionFixtureId) {
+      throw new BadRequestException(
+        'Generated competition fixtures are managed from Leagues & Competitions.',
+      );
+    }
+  }
+
+  private buildEventUpdateValues(
+    dto: UpdateEventDto,
+    type: string,
+    competitionId: string | null,
+    friendlyFixtureId: string | null,
+    existingFriendlyFixtureId: string | null,
+  ): Partial<typeof events.$inferInsert> {
+    return {
+      ...(dto.title !== undefined ? { title: dto.title } : {}),
+      ...(dto.type !== undefined ? { type: dto.type } : {}),
+      ...(dto.status !== undefined ? { status: dto.status } : {}),
+      ...(dto.scheduledAt !== undefined ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
+      ...(dto.location !== undefined ? { location: dto.location } : {}),
+      ...(dto.venueAddress !== undefined ? { venueAddress: dto.venueAddress } : {}),
+      ...(dto.weatherLocation !== undefined ? { weatherLocation: dto.weatherLocation } : {}),
+      ...(dto.weatherLatitude !== undefined ? { weatherLatitude: dto.weatherLatitude } : {}),
+      ...(dto.weatherLongitude !== undefined ? { weatherLongitude: dto.weatherLongitude } : {}),
+      ...(dto.weatherTimezone !== undefined ? { weatherTimezone: dto.weatherTimezone } : {}),
+      ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      ...(dto.competitionId !== undefined || type !== 'match' ? { competitionId } : {}),
+      ...(friendlyFixtureId !== existingFriendlyFixtureId ? { friendlyFixtureId } : {}),
+      updatedAt: new Date(),
+    };
+  }
+
+  private ensureCompetitionUpdateAllowed(
+    fixture: typeof friendlyFixtures.$inferSelect | null,
+    type: string,
+    competitionChanged: boolean,
+    competitionId: string | null,
+  ) {
+    if (fixture && competitionChanged && competitionId) {
+      throw new BadRequestException(
+        'Remove the Gaffer opponent before adding this match to a competition.',
+      );
+    }
+    if (fixture?.status === 'accepted' && (type !== 'match' || competitionChanged)) {
+      throw new BadRequestException(
+        'This friendly fixture has been accepted and cannot be moved to another competition.',
+      );
+    }
+  }
+
+  private getRequestedFriendlyTeamId(
+    dto: UpdateEventDto,
+    type: string,
+    competitionId: string | null,
+    currentTeamId: string | null,
+  ) {
+    if (dto.friendlyOpponentTeamId === undefined) return currentTeamId;
+    return type === 'match' && competitionId === null
+      ? dto.friendlyOpponentTeamId
+      : null;
+  }
+
+  private ensureAcceptedFriendlyOpponentUnchanged(
+    fixture: typeof friendlyFixtures.$inferSelect | null,
+    requestedTeamId: string | null,
+    currentTeamId: string | null,
+  ) {
+    if (fixture?.status === 'accepted' && requestedTeamId !== currentTeamId) {
+      throw new BadRequestException(
+        'The opponent is fixed while this friendly fixture is accepted.',
+      );
+    }
+  }
+
+  private async prepareFriendlyFixtureUpdate(
+    userId: string,
+    teamId: string,
+    existingFixtureId: string | null,
+    requestedTeamId: string | null,
+    currentTeamId: string | null,
+  ): Promise<{ friendlyFixtureId: string | null; createdFixtureId: string | null }> {
+    if (requestedTeamId === currentTeamId) {
+      return { friendlyFixtureId: existingFixtureId, createdFixtureId: null };
+    }
+    if (!requestedTeamId) {
+      return { friendlyFixtureId: null, createdFixtureId: null };
+    }
+    await this.requireFriendlyOpponentTeam(teamId, requestedTeamId);
+    const [created] = await this.databaseService.database
+      .insert(friendlyFixtures)
+      .values({ requesterTeamId: teamId, opponentTeamId: requestedTeamId, createdByUserId: userId })
+      .returning({ id: friendlyFixtures.id });
+    return { friendlyFixtureId: created.id, createdFixtureId: created.id };
+  }
+
+  private async syncFriendlyFixtureUpdate(
+    fixture: typeof friendlyFixtures.$inferSelect | null,
+    friendlyFixtureId: string | null,
+    currentFriendlyTeamId: string | null,
+    dto: UpdateEventDto,
+  ) {
+    if (fixture && fixture.id !== friendlyFixtureId) {
+      await this.databaseService.database
+        .update(friendlyFixtures)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(and(eq(friendlyFixtures.id, fixture.id), eq(friendlyFixtures.status, 'pending')));
+    }
+    if (!this.shouldSyncAcceptedFriendlyEvent(fixture, friendlyFixtureId, currentFriendlyTeamId, dto)) return;
+    await this.databaseService.database
+      .update(events)
+      .set({
+        ...(dto.scheduledAt !== undefined ? { scheduledAt: new Date(dto.scheduledAt) } : {}),
+        ...(dto.location !== undefined ? { location: dto.location } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(events.friendlyFixtureId, fixture!.id), eq(events.teamId, currentFriendlyTeamId!)));
+  }
+
+  private shouldSyncAcceptedFriendlyEvent(
+    fixture: typeof friendlyFixtures.$inferSelect | null,
+    friendlyFixtureId: string | null,
+    currentTeamId: string | null,
+    dto: UpdateEventDto,
+  ) {
+    return Boolean(
+      fixture?.status === 'accepted' && fixture.id === friendlyFixtureId && currentTeamId &&
+      (dto.scheduledAt !== undefined || dto.location !== undefined),
+    );
   }
 
   async cancel(userId: string, eventId: string) {

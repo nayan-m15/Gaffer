@@ -23,6 +23,44 @@ type ViewMode = "sign-up" | "sign-in";
 const INVALID_LINK_MESSAGE =
   "This invite link is no longer valid — ask the competition admin to send a new one.";
 
+async function resolveCompetitionInviteFailure(token: string, error: unknown) {
+  const message = error instanceof ApiError
+    ? error.message
+    : "Something went wrong accepting the invite. Please try again.";
+  let kind = classifyCompetitionInviteAcceptError(error);
+  if (error instanceof ApiError && error.status === 409) {
+    try {
+      const current = await previewCompetitionInvite(token);
+      if (!current.valid) kind = "definitive";
+    } catch {
+      // Keep the invitation on a failed recheck.
+    }
+  }
+  return { message, kind };
+}
+
+function persistCompetitionInviteFailure(
+  token: string,
+  kind: ReturnType<typeof classifyCompetitionInviteAcceptError>,
+  handlers: {
+    setEmailMismatch: (value: boolean) => void;
+    setPreviewError: (value: boolean) => void;
+  },
+) {
+  if (kind === "email-mismatch") {
+    storePendingCompetitionInviteToken(token);
+    handlers.setEmailMismatch(true);
+    return;
+  }
+  handlers.setEmailMismatch(false);
+  if (kind === "definitive") {
+    clearPendingCompetitionInviteToken(token);
+    handlers.setPreviewError(true);
+    return;
+  }
+  storePendingCompetitionInviteToken(token);
+}
+
 /**
  * JoinCompetitionPage — public route at /join-competition/:token.
  *
@@ -161,39 +199,12 @@ export default function JoinCompetitionPage() {
       await queryClient.invalidateQueries({ queryKey: ["shared-competitions", user.id] });
       navigate("/competitions", { replace: true });
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong accepting the invite. Please try again.";
-      let kind = classifyCompetitionInviteAcceptError(err);
-      // Conflicts can mean either a consumed slot or an ineligible account.
-      // Only a fresh public preview can confirm the invitation is unusable.
-      if (err instanceof ApiError && err.status === 409) {
-        try {
-          const current = await previewCompetitionInvite(token);
-          if (!current.valid) kind = "definitive";
-        } catch { /* Keep the invitation on a failed recheck. */ }
-      }
-
-      if (kind === "email-mismatch") {
-        // Signed in as a different account than the invited email. Keep the
-        // invitation fully recoverable — persist the token and guide the
-        // user to sign out and sign in with the invited email. The invite
-        // URL itself also stays right here in the address bar.
-        storePendingCompetitionInviteToken(token);
-        setEmailMismatch(true);
-      } else {
-        setEmailMismatch(false);
-        if (kind === "definitive") {
-          clearPendingCompetitionInviteToken(token);
-          setPreviewError(true);
-        } else {
-          // Transient failure: keep the invitation context so the user (or
-          // the resumer, on a later sign-in) can retry without losing it.
-          storePendingCompetitionInviteToken(token);
-        }
-      }
-      setFormError(message);
+      const failure = await resolveCompetitionInviteFailure(token, err);
+      persistCompetitionInviteFailure(token, failure.kind, {
+        setEmailMismatch,
+        setPreviewError,
+      });
+      setFormError(failure.message);
     }
   };
 
