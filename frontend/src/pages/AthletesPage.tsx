@@ -394,10 +394,16 @@ export default function AthletesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface-card px-3 py-2.5 text-xs sm:hidden">
-          <span className="font-bold tabular-nums text-foreground">{activeCount} players</span>
-          <span className="h-3 w-px bg-border-default" aria-hidden="true" />
-          <span className={cn("font-semibold tabular-nums", unavailableCount > 0 ? "text-warning" : "text-muted-foreground")}>
+        <div className="flex items-center justify-between gap-3 text-xs sm:hidden">
+          <span className="rounded-full border border-border-subtle bg-surface-card px-3 py-2 font-bold tabular-nums text-foreground shadow-sm">
+            {activeCount} players
+          </span>
+          <span
+            className={cn(
+              "rounded-full border border-border-subtle bg-surface-card px-3 py-2 font-semibold tabular-nums shadow-sm",
+              unavailableCount > 0 ? "text-warning" : "text-muted-foreground",
+            )}
+          >
             {unavailableCount} unavailable
           </span>
         </div>
