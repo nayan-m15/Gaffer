@@ -19,7 +19,7 @@ const PASSWORD = 'password123';
  * hosted database, and a too-short wait fails on latency, not on behaviour.
  */
 const NETWORK = { timeout: process.env.CI ? 90_000 : 30_000 };
-const INJURY_TEST_TIMEOUT = process.env.CI ? 480_000 : 180_000;
+const INJURY_TEST_TIMEOUT = process.env.CI ? 240_000 : 180_000;
 
 /**
  * Injury & Recovery through the real UI.
@@ -135,8 +135,14 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
       // is how the same listbox is driven by real keyboard/AT users, so it's
       // both more reliable here and a closer match to actual usage.
       await dialog.getByLabel('Player').click();
+      await expect(
+        page.getByRole('option', { name: '#7 Rosa Hamstring', exact: true }),
+      ).toBeVisible(NETWORK);
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('Enter');
+      await expect(dialog.getByLabel('Player')).toContainText(
+        'Rosa Hamstring',
+      );
       await dialog
         .getByRole('button', { name: 'Right hamstring', exact: true })
         .click();
@@ -156,7 +162,9 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
     await test.step('saving creates the record and focuses it', async () => {
       const dialog = page.getByRole('dialog', { name: 'Log an injury' });
       await dialog.getByLabel('Diagnosed by (optional)').fill('Club Physio');
-      await dialog.getByRole('button', { name: 'Log injury' }).click();
+      const submit = dialog.getByRole('button', { name: 'Log injury' });
+      await expect(submit).toBeEnabled();
+      await submit.click();
       await expect(dialog).toBeHidden(NETWORK);
 
       // The page deep-links to the new record.

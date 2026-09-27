@@ -26,8 +26,15 @@ export function LoadingScreen({ appReady, onDone }: LoadingScreenProps) {
   const [startFade, setStartFade] = useState(false);
 
   useEffect(() => {
-    if (appReady) setStartFade(true);
-  }, [appReady]);
+    if (!appReady) return;
+    setStartFade(true);
+
+    // Reduced-motion styles can shorten the CSS transition enough that some
+    // browsers omit its transitionend event. Keep the loader from lingering
+    // if that happens; normal transitions still finish through the handler.
+    const fallback = window.setTimeout(onDone, 600);
+    return () => window.clearTimeout(fallback);
+  }, [appReady, onDone]);
 
   /** Lock body scroll while the overlay is visible. */
   useEffect(() => {
