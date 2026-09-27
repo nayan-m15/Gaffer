@@ -120,7 +120,7 @@ describe('EventsController', () => {
       expect(mockEventsService.update).toHaveBeenCalledWith(
         'user-id',
         'event-id',
-        body,
+        { ...body, location: '' },
       );
     });
 

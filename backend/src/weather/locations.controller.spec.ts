@@ -1,4 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
+
+jest.mock('../auth/auth.guard', () => ({
+  AuthGuard: class MockAuthGuard {},
+}));
+
 import { LocationsController } from './locations.controller';
 
 describe('LocationsController', () => {

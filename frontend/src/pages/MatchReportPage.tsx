@@ -262,12 +262,12 @@ export default function MatchReportPage() {
           event.lifecycleStatus !== "voided",
       ).length
     : (match?.opponentScore ?? 0);
-  const projection = match?.projection;
+  const currentProjection = match?.projection;
   const projectionConsistent =
-    !projection ||
+    !currentProjection ||
     timeline
       .filter((event) => event.syncStatus === "reconciled")
-      .every((event) => event.projectionRevision === projection.revision);
+      .every((event) => event.projectionRevision === currentProjection.revision);
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
