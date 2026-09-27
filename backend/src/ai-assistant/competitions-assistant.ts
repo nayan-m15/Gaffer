@@ -110,6 +110,89 @@ function buildSummary(
   return summary;
 }
 
+function inferCompetitionType(
+  state: AssistantConversationState,
+  message: string,
+  typeAlreadyKnown: boolean,
+): void {
+  if (typeAlreadyKnown) return;
+  const mentionsCup = /\b(cup|tournament|knockout)\b/i.test(message);
+  const mentionsLeague = /\bleague\b/i.test(message);
+  if (mentionsCup !== mentionsLeague) {
+    state.collectedFields.type = mentionsCup ? 'cup' : 'league';
+  }
+}
+
+function getMissingCompetitionReply(
+  collected: Record<string, unknown>,
+): AssistantTurnResult | undefined {
+  const missing = missingHardRequired(collected);
+  if (missing.length === 0) return undefined;
+  if (missing.includes('name') && missing.includes('type')) {
+    return {
+      reply:
+        'What would you like to call this league or competition, and is it a league or a cup?',
+      requiresConfirmation: false,
+    };
+  }
+  if (missing.includes('name')) {
+    const kind = collected.type === 'cup' ? 'competition' : 'league';
+    return {
+      reply: `What would you like to call this ${kind}?`,
+      requiresConfirmation: false,
+    };
+  }
+  return {
+    reply: 'Is this a league or a cup?',
+    requiresConfirmation: false,
+  };
+}
+
+function askOptionalCompetitionFields(
+  state: AssistantConversationState,
+): AssistantTurnResult | undefined {
+  if (state.askedOptionalGroup) return undefined;
+  const hasOptional =
+    state.collectedFields.season !== undefined ||
+    state.collectedFields.startDate !== undefined;
+  state.askedOptionalGroup = true;
+  if (hasOptional) return undefined;
+  return {
+    reply:
+      'Which season is this for, and what start date should it begin? Both are optional — say "skip" if you\'re not sure yet.',
+    requiresConfirmation: false,
+  };
+}
+
+function buildCompetitionConfirmation(
+  state: AssistantConversationState,
+): AssistantTurnResult {
+  const parsed = createCompetitionSchema.safeParse(state.collectedFields);
+  if (!parsed.success) {
+    const [issue] = parsed.error.issues;
+    const badKey = issue?.path[0];
+    if (typeof badKey === 'string') delete state.collectedFields[badKey];
+    return {
+      reply: `${issue?.message ?? 'Something about those details is invalid.'} Could you clarify?`,
+      requiresConfirmation: false,
+    };
+  }
+  const summary = buildSummary(parsed.data);
+  const isCup = parsed.data.type === 'cup';
+  return {
+    reply:
+      'Please confirm:\n' +
+      summary.map((row) => `${row.label}: ${row.value}`).join('\n') +
+      `\n\nCreate this ${isCup ? 'competition' : 'league'}?`,
+    requiresConfirmation: true,
+    proposedAction: {
+      type: isCup ? 'CREATE_COMPETITION' : 'CREATE_LEAGUE',
+      payload: parsed.data,
+      displaySummary: summary,
+    },
+  };
+}
+
 @Injectable()
 export class CompetitionsAssistant {
   constructor(
@@ -143,30 +226,17 @@ export class CompetitionsAssistant {
       ? COMPETITION_FIELDS.filter((field) => field.key !== 'type')
       : COMPETITION_FIELDS;
 
-    let extracted: Record<string, unknown> = {};
-    try {
-      const prompt = buildExtractionPrompt({
-        purpose: 'creating a new league or competition for a football team',
-        fields: fieldsToExtract,
-        collected: state.collectedFields,
-        message,
-      });
-      const { text } = await this.geminiClient.generateNarrative(prompt);
-      extracted = parseExtractionResponse(text);
-    } catch (error) {
-      if (error instanceof GeminiNotConfiguredError) {
-        return {
-          reply:
-            "The AI assistant isn't configured yet on this server (missing GEMINI_API_KEY). Please use the standard create-competition form for now.",
-          requiresConfirmation: false,
-        };
-      }
-    }
+    const extraction = await this.extractCompetitionFields(
+      fieldsToExtract,
+      state,
+      message,
+    );
+    if ('errorReply' in extraction) return extraction.errorReply;
 
     state.collectedFields = mergeExtractedFields(
       fieldsToExtract,
       state.collectedFields,
-      extracted,
+      extraction.extracted,
     );
 
     // An explicit "cup"/"tournament"/"knockout" or "league" in the message
@@ -174,83 +244,48 @@ export class CompetitionsAssistant {
     // ("Create a league" / "Create a competition / tournament") set the
     // type immediately instead of re-asking what the coach just specified
     // by clicking the button. Only fires while the type is still unknown.
-    if (!typeAlreadyKnown) {
-      const mentionsCup = /\b(cup|tournament|knockout)\b/i.test(message);
-      const mentionsLeague = /\bleague\b/i.test(message);
-      if (mentionsCup && !mentionsLeague) {
-        state.collectedFields.type = 'cup';
-      } else if (mentionsLeague && !mentionsCup) {
-        state.collectedFields.type = 'league';
-      }
-    }
-
+    inferCompetitionType(state, message, typeAlreadyKnown);
     state.intent =
       state.collectedFields.type === 'cup'
         ? 'CREATE_COMPETITION'
         : 'CREATE_LEAGUE';
 
-    const missing = missingHardRequired(state.collectedFields);
-    if (missing.length > 0) {
-      if (missing.includes('name') && missing.includes('type')) {
+    const missingReply = getMissingCompetitionReply(state.collectedFields);
+    if (missingReply) return missingReply;
+    const optionalReply = askOptionalCompetitionFields(state);
+    if (optionalReply) return optionalReply;
+    return buildCompetitionConfirmation(state);
+  }
+
+  private async extractCompetitionFields(
+    fields: AssistantFieldSpec[],
+    state: AssistantConversationState,
+    message: string,
+  ): Promise<
+    | { extracted: Record<string, unknown> }
+    | { errorReply: AssistantTurnResult }
+  > {
+    try {
+      const prompt = buildExtractionPrompt({
+        purpose: 'creating a new league or competition for a football team',
+        fields,
+        collected: state.collectedFields,
+        message,
+      });
+      const { text } = await this.geminiClient.generateNarrative(prompt);
+      return { extracted: parseExtractionResponse(text) };
+    } catch (error) {
+      if (error instanceof GeminiNotConfiguredError) {
         return {
-          reply:
-            'What would you like to call this league or competition, and is it a league or a cup?',
-          requiresConfirmation: false,
+          errorReply: {
+            reply:
+              "The AI assistant isn't configured yet on this server (missing GEMINI_API_KEY). Please use the standard create-competition form for now.",
+            requiresConfirmation: false,
+          },
         };
       }
-      if (missing.includes('name')) {
-        const kind =
-          state.collectedFields.type === 'cup' ? 'competition' : 'league';
-        return {
-          reply: `What would you like to call this ${kind}?`,
-          requiresConfirmation: false,
-        };
-      }
-      return {
-        reply: 'Is this a league or a cup?',
-        requiresConfirmation: false,
-      };
+      return { extracted: {} };
     }
-
-    if (!state.askedOptionalGroup) {
-      const hasOptional =
-        state.collectedFields.season !== undefined ||
-        state.collectedFields.startDate !== undefined;
-      state.askedOptionalGroup = true;
-      if (!hasOptional) {
-        return {
-          reply:
-            'Which season is this for, and what start date should it begin? Both are optional — say "skip" if you\'re not sure yet.',
-          requiresConfirmation: false,
-        };
-      }
-    }
-
-    const parsed = createCompetitionSchema.safeParse(state.collectedFields);
-    if (!parsed.success) {
-      const [issue] = parsed.error.issues;
-      const badKey = issue?.path[0];
-      if (typeof badKey === 'string') delete state.collectedFields[badKey];
-      return {
-        reply: `${issue?.message ?? 'Something about those details is invalid.'} Could you clarify?`,
-        requiresConfirmation: false,
-      };
-    }
-
-    const summary = buildSummary(parsed.data);
-    return {
-      reply:
-        'Please confirm:\n' +
-        summary.map((row) => `${row.label}: ${row.value}`).join('\n') +
-        `\n\nCreate this ${parsed.data.type === 'cup' ? 'competition' : 'league'}?`,
-      requiresConfirmation: true,
-      proposedAction: {
-        type:
-          parsed.data.type === 'cup' ? 'CREATE_COMPETITION' : 'CREATE_LEAGUE',
-        payload: parsed.data,
-        displaySummary: summary,
-      },
-    };
   }
 
   async execute(
