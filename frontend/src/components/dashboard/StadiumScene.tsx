@@ -308,7 +308,7 @@ export function StadiumScene() {
       // distracting new colour pattern whenever the dashboard is revisited.
       let randomState = 0x5f3759df;
       const random = () => {
-        randomState = (randomState + 0x6d2b79f5) | 0;
+        randomState = Math.trunc(randomState + 0x6d2b79f5);
         let value = Math.imul(randomState ^ (randomState >>> 15), 1 | randomState);
         value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
         return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
