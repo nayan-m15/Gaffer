@@ -150,9 +150,7 @@ Only name a player who appears in the notable individual performances list above
 
 /** Deterministic hash of a digest payload, used as `matchInsights.inputDigest`. */
 export function computeInputDigest(payload: Record<string, unknown>): string {
-  return createHash('sha256')
-    .update(JSON.stringify(payload))
-    .digest('hex');
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 export interface ParsedInsightResponse {

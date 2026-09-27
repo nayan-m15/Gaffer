@@ -307,13 +307,20 @@
       "idx": 42,
       "version": "7",
       "when": 1790368530000,
-      "tag": "0036_competition_players_per_side",
+      "tag": "0040_goalkeeper_save",
       "breakpoints": true
     },
     {
       "idx": 43,
       "version": "7",
       "when": 1790368535000,
+      "tag": "0036_competition_players_per_side",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790368540000,
       "tag": "0037_game_plan_custom_formations",
       "breakpoints": true
     }

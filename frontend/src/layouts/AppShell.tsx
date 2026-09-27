@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
@@ -20,18 +20,6 @@ const StadiumScene = lazy(() =>
  * present after sign-in.
  */
 export function AppShell() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains("dark");
-    root.classList.add("dark");
-
-    return () => {
-      if (!wasDark) {
-        root.classList.remove("dark");
-      }
-    };
-  }, []);
-
   return (
     <SidebarProvider>
       <AppShellContent />

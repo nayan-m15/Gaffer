@@ -115,7 +115,7 @@ export function FeaturesSection() {
     <section
       ref={sectionRef}
       id="features"
-      className="scroll-mt-16 relative bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground"
+      className="scroll-mt-16 relative bg-[#090A0B] text-white selection:bg-brand selection:text-brand-foreground"
     >
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
         <img
@@ -149,7 +149,7 @@ export default function FeaturesPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#0B1218] text-white selection:bg-brand selection:text-brand-foreground">
+    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#090A0B] text-white selection:bg-brand selection:text-brand-foreground">
       {/* ── Fixed stadium background ──────────────────────────────────────
        * The image and its overlays are anchored to the viewport with
        * `position: fixed`. Every section scrolls *over* this single layer,
@@ -275,7 +275,7 @@ function HeroSection() {
 
 function JumpBarSection() {
   return (
-    <div id="features-content" className="sticky top-16 z-40 border-y border-white/10 bg-[#0B1218]/90 backdrop-blur-md py-3 shadow-md">
+    <div id="features-content" className="sticky top-16 z-40 border-y border-white/10 bg-[#090A0B]/90 backdrop-blur-md py-3 shadow-md">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-start gap-2 overflow-x-auto no-scrollbar sm:justify-center">
           {FEATURE_NAV_ITEMS.map((item) => {
@@ -866,8 +866,8 @@ function LineupTacticalMockup() {
                 cx={p.x}
                 cy={p.y}
                 r="3.2"
-                fill="#00D99A"
-                stroke="#07110F"
+                fill="#16d99a"
+                stroke="#06120e"
                 strokeWidth="0.5"
               />
               <text
@@ -875,7 +875,7 @@ function LineupTacticalMockup() {
                 y={p.y + 0.4}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill="#07110F"
+                fill="#06120e"
                 fontSize="2.4"
                 fontWeight="bold"
               >

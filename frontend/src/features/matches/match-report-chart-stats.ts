@@ -1,8 +1,9 @@
+import { EVENT_COLOR } from "./event-visuals";
 import type { MatchLogEvent } from "./types";
 
 const BREAKDOWN_COLORS = {
-  goals: "#00d99a",
-  cards: "#f5c518",
+  goals: "#16d99a",
+  cards: "#d7ba55",
   subs: "#c084fc",
   assists: "#5b9fff",
 } as const;
@@ -54,6 +55,11 @@ export function teamComparisonRows(events: MatchLogEvent[]) {
       own: countBy(events, "own", ["substitution"]),
       opp: countBy(events, "opponent", ["substitution"]),
     },
+    {
+      category: "SAVES",
+      own: countBy(events, "own", ["goalkeeper_save"]),
+      opp: countBy(events, "opponent", ["goalkeeper_save"]),
+    },
   ];
 }
 
@@ -100,7 +106,7 @@ export function cardProgressionMarks(events: MatchLogEvent[]) {
       minute: event.minute,
       lane: -0.35,
       kind: event.eventType === "red_card" ? "red" : "yellow",
-      color: event.eventType === "red_card" ? "#ff5b5f" : "#f5c518",
+      color: event.eventType === "red_card" ? "#e36a6d" : "#d7ba55",
     }));
 }
 
@@ -154,6 +160,12 @@ export function eventBreakdownSlices(events: MatchLogEvent[]) {
       name: "Assists",
       value: events.filter((event) => event.eventType === "assist").length,
       color: BREAKDOWN_COLORS.assists,
+    },
+    {
+      name: "Saves",
+      value: events.filter((event) => event.eventType === "goalkeeper_save")
+        .length,
+      color: EVENT_COLOR.goalkeeper_save,
     },
   ];
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);

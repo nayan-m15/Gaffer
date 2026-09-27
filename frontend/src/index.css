@@ -44,6 +44,24 @@ body {
   --color-brand-light:      var(--brand-light);
   --color-brand-foreground: var(--brand-foreground);
   --color-border-strong: var(--border-strong);
+  --color-surface-page: var(--surface-page);
+  --color-surface-sidebar: var(--surface-sidebar);
+  --color-surface-header: var(--surface-header);
+  --color-surface-card: var(--surface-card);
+  --color-surface-nested: var(--surface-nested);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
 
   /* Event-type accent tokens — calendar pills and swatches */
   --color-event-training: var(--event-training);
@@ -109,6 +127,26 @@ body {
   --pitch-grass-light: #4f9b3a;
   --pitch-grass-dark:  #3c7c2b;
 
+  /* Semantic aliases preserve the existing light theme. */
+  --surface-page: #F5F3F0;
+  --surface-sidebar: #FAFAF9;
+  --surface-header: #F5F3F0;
+  --surface-card: #FFFFFF;
+  --surface-nested: #F0EEEB;
+  --surface-elevated: #FFFFFF;
+  --surface-hover: #E8E5E1;
+  --surface-active: #DDDAD6;
+  --text-primary: #171717;
+  --text-secondary: #3F423F;
+  --text-muted: #5F625F;
+  --text-disabled: #858985;
+  --border-subtle: #E4E1DD;
+  --border-default: #D9D6D2;
+  --success: #047857;
+  --warning: #B45309;
+  --danger: #C24145;
+  --info: #1D4ED8;
+
   /* Surfaces */
   --background: #F5F3F0;
   --foreground: #171717;
@@ -129,7 +167,7 @@ body {
   --accent:              #E8E5E1;
   --accent-foreground:   #171717;
 
-  --destructive: #FF5B5F;
+  --destructive: var(--danger);
 
   --border: #D9D6D2;
   --border-strong: #8E8A84;
@@ -162,46 +200,65 @@ body {
 }
 
 /* ─── Dark-mode palette ─────────────────────────────────────────────────── *
- * Near-black background (#0B1218) with dark blue-gray surfaces (#17212B).
- * Emerald accent (#00D99A) for primary interactions and positive states.     */
+ * Near-black and neutral graphite surfaces create hierarchy without a blue cast.
+ * Emerald is reserved for primary interactions and positive states.          */
 .dark {
-  --brand:            #00D99A;
-  --brand-dark:       #00CFA0;
-  --brand-light:      #20E6A6;
-  --brand-foreground: #07110F;
+  --brand:            #16D99A;
+  --brand-dark:       #10BF88;
+  --brand-light:      #48E3AF;
+  --brand-foreground: #06120E;
 
   /* Event-type accents (calendar pills, swatches, badges) */
-  --event-training: #00D99A;
-  --event-match:    #FFBE2E;
-  --event-meeting:  #7CB3F5;
+  --event-training: #32C997;
+  --event-match:    #D6A447;
+  --event-meeting:  #72A7D5;
 
   /* Football pitch grass (mowing stripes) */
-  --pitch-grass-light: #2f7a2c;
-  --pitch-grass-dark:  #246022;
+  --pitch-grass-light: #2B6E35;
+  --pitch-grass-dark:  #22592D;
 
-  --background: #0B1218;
-  --foreground: #E8ECEF;
-  --card:       #17212B;
-  --card-foreground: #E8ECEF;
-  --popover:    #17212B;
-  --popover-foreground: #E8ECEF;
+  --surface-page: #090A0B;
+  --surface-sidebar: #0C0E0F;
+  --surface-header: #0D0F10;
+  --surface-card: #111315;
+  --surface-nested: #151719;
+  --surface-elevated: #1A1D1F;
+  --surface-hover: #202326;
+  --surface-active: #25292C;
+  --text-primary: #ECEFED;
+  --text-secondary: #C7CCC9;
+  --text-muted: #9CA39F;
+  --text-disabled: #707773;
+  --border-subtle: #202326;
+  --border-default: #2A2E31;
+  --border-strong: #62696D;
+  --success: #3BCB8D;
+  --warning: #D6A447;
+  --danger: #E36A6D;
+  --info: #72A7D5;
 
-  --primary:            #00D99A;
-  --primary-foreground: #07110F;
+  --background: var(--surface-page);
+  --foreground: var(--text-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text-primary);
 
-  --secondary:           #1A2530;
-  --secondary-foreground: #E8ECEF;
-  --muted:               #1A2530;
-  --muted-foreground:    #AAB6C1;
-  --accent:              rgba(0, 217, 154, 0.10);
-  --accent-foreground:   #20E6A6;
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
 
-  --destructive: #FF5B5F;
+  --secondary: var(--surface-nested);
+  --secondary-foreground: var(--text-secondary);
+  --muted: var(--surface-elevated);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text-primary);
 
-  --border: #233747;
-  --border-strong: #567185;
-  --input:  #567185;
-  --ring:   #00D99A;
+  --destructive: var(--danger);
+
+  --border: var(--border-default);
+  --input: #62696D;
+  --ring: var(--brand);
 
   --landing-scene-foreground: #F7FAF8;
   --landing-scene-secondary: #D5DFDA;
@@ -209,20 +266,20 @@ body {
   --landing-scene-accent: #62E6B2;
   --landing-scene-border: rgba(226, 239, 233, 0.34);
 
-  --chart-1: #00D99A;
-  --chart-2: #00AFA0;
-  --chart-3: #1A2530;
-  --chart-4: #8E9BA8;
-  --chart-5: #FFBE2E;
+  --chart-1: #25CE91;
+  --chart-2: #48B8AE;
+  --chart-3: #719FD2;
+  --chart-4: #9B86C5;
+  --chart-5: #D6A447;
 
-  --sidebar: #111A22;
-  --sidebar-foreground: #E8ECEF;
-  --sidebar-primary: #00D99A;
-  --sidebar-primary-foreground: #07110F;
-  --sidebar-accent: #1A2530;
-  --sidebar-accent-foreground: #E8ECEF;
-  --sidebar-border: #233747;
-  --sidebar-ring: #00D99A;
+  --sidebar: var(--surface-sidebar);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-foreground);
+  --sidebar-accent: var(--surface-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--brand);
 }
 
 /* ─── Base-layer resets ─────────────────────────────────────────────────── */
@@ -235,7 +292,41 @@ body {
   }
   html {
     @apply font-sans scroll-smooth;
+    color-scheme: light;
   }
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+* {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent)
+    var(--surface-page);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--surface-page);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid var(--surface-page);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-secondary) 72%, transparent);
+}
+
+::selection {
+  color: var(--primary-foreground);
+  background: color-mix(in srgb, var(--primary) 72%, transparent);
 }
 
 /* ─── Reduced-motion preference ─────────────────────────────────────────── *
@@ -447,9 +538,9 @@ body {
 }
 
 .dark .dashboard-glass-card {
-  background: rgba(14, 20, 17, 0.24);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--surface-card) 78%, transparent);
+  border-color: var(--border-subtle);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
 }
 
 /* ─── Scroll indicator bounce ───────────────────────────────────────────── *
@@ -641,7 +732,7 @@ body {
 }
 
 .public-dashboard-match-list {
-  scrollbar-color: color-mix(in srgb, var(--brand) 42%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
   scrollbar-width: thin;
 }
 
@@ -655,7 +746,7 @@ body {
 
 .public-dashboard-match-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in srgb, var(--brand) 42%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
 }
 
 .public-dashboard-page :where(a, button, input, select, [tabindex]):focus {

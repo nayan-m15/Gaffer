@@ -25,6 +25,7 @@ import {
   type MarkerStats,
   type PitchHalf,
 } from "./live-match-model";
+import { Hand } from "lucide-react";
 import { BootIcon, SoccerBallIcon } from "./match-icons";
 
 const TOKEN_FACE =
@@ -102,8 +103,8 @@ function CardGlyph({
   if (stacked) {
     return (
       <span className="relative inline-block h-3.5 w-3">
-        <span className="absolute left-0 top-0 h-3 w-[7px] rounded-[1px] bg-[#f5c518] shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
-        <span className="absolute bottom-0 right-0 h-3 w-[7px] rounded-[1px] bg-[#ff5b5f] shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
+        <span className="absolute left-0 top-0 h-3 w-[7px] rounded-[1px] bg-[#d7ba55] shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
+        <span className="absolute bottom-0 right-0 h-3 w-[7px] rounded-[1px] bg-[#e36a6d] shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
       </span>
     );
   }
@@ -111,7 +112,7 @@ function CardGlyph({
     <span
       className={cn(
         "inline-block h-3.5 w-2.5 rounded-[1px] shadow-[0_0_0_1px_rgba(0,0,0,0.35)]",
-        red ? "bg-[#ff5b5f]" : yellow ? "bg-[#f5c518]" : "bg-[#f5c518]",
+        red ? "bg-[#e36a6d]" : yellow ? "bg-[#d7ba55]" : "bg-[#d7ba55]",
       )}
     />
   );
@@ -122,7 +123,7 @@ function BadgeCount({ value }: { value: number }) {
     return null;
   }
   return (
-    <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-[#0c1218] text-[7px] font-bold leading-none text-white">
+    <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-[#0d0f10] text-[7px] font-bold leading-none text-white">
       {value}
     </span>
   );
@@ -137,6 +138,9 @@ function badgeAnchorStyle(kind: MarkerBadgeKind): CSSProperties {
   }
   if (kind === "assist") {
     return { bottom: "-6px", left: "-6px" };
+  }
+  if (kind === "save") {
+    return { top: "-6px", right: "-6px" };
   }
   return { bottom: "-6px", right: "-6px" };
 }
@@ -156,12 +160,14 @@ function MarkerOverlays({ stats }: { stats: MarkerStats }) {
             ? `goal-${stats.goals}`
             : badge.kind === "assist"
               ? `assist-${stats.assists}`
-              : badge.kind === "card"
-                ? `card-${stats.secondYellow ? "2y" : stats.red ? "r" : "y"}`
-                : isSubIn
-                  ? `sub-in-${stats.subMinute ?? ""}`
-                  : `sub-out-${stats.subMinute ?? ""}`;
-        const subColor = isSubIn ? "text-[#00d99a]" : "text-[#ff5b5f]";
+              : badge.kind === "save"
+                ? `save-${stats.saves}`
+                : badge.kind === "card"
+                  ? `card-${stats.secondYellow ? "2y" : stats.red ? "r" : "y"}`
+                  : isSubIn
+                    ? `sub-in-${stats.subMinute ?? ""}`
+                    : `sub-out-${stats.subMinute ?? ""}`;
+        const subColor = isSubIn ? "text-[#16d99a]" : "text-[#e36a6d]";
         return (
           <span
             key={badgeKey}
@@ -176,7 +182,7 @@ function MarkerOverlays({ stats }: { stats: MarkerStats }) {
                   className={cn(
                     "relative flex size-4 items-center justify-center rounded-full bg-[#141414] shadow-[0_1px_2px_rgba(0,0,0,0.55)] ring-1",
                     subColor,
-                    isSubIn ? "ring-[#00d99a]/70" : "ring-[#ff5b5f]/70",
+                    isSubIn ? "ring-[#16d99a]/70" : "ring-[#e36a6d]/70",
                   )}
                 >
                   {stats.subMinute != null ? (
@@ -199,9 +205,15 @@ function MarkerOverlays({ stats }: { stats: MarkerStats }) {
                 </span>
               ) : null}
               {badge.kind === "assist" ? (
-                <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#e8ecef] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+                <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#ecefed] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
                   <BootIcon className="size-5" />
                   <BadgeCount value={stats.assists} />
+                </span>
+              ) : null}
+              {badge.kind === "save" ? (
+                <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#67e8f9] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+                  <Hand className="size-3.5" strokeWidth={2.25} />
+                  <BadgeCount value={stats.saves} />
                 </span>
               ) : null}
               {badge.kind === "card" ? (
@@ -652,7 +664,7 @@ function BenchPlayer({
         />
       </span>
       {name ? (
-        <span className="live-bench-name mt-1 max-w-[4.5rem] truncate text-[8px] font-semibold uppercase tracking-wide text-[#c5ced6]">
+        <span className="live-bench-name mt-1 max-w-[4.5rem] truncate text-[8px] font-semibold uppercase tracking-wide text-[#c7ccc9]">
           {name}
         </span>
       ) : null}
@@ -699,9 +711,9 @@ export function LiveBenchRow({
     >
       <p
         className={cn(
-          "live-bench-label shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8e9ba8]",
+          "live-bench-label shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9ca39f]",
           orientation === "vertical" ? "w-full text-center" : "w-24",
-          callToAction && "text-[#ffbe2e]",
+          callToAction && "text-[#d6a447]",
         )}
       >
         {label}
@@ -742,7 +754,7 @@ export function LiveBenchRow({
             ))
           : null}
         {empty && (
-          <span className="text-[11px] text-[#5d6b76]">No substitutes</span>
+          <span className="text-[11px] text-[#707773]">No substitutes</span>
         )}
       </div>
     </div>

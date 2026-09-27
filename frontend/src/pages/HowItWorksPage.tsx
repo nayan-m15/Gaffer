@@ -131,7 +131,7 @@ export function HowItWorksSection() {
     <section
       ref={sectionRef}
       id="how-it-works"
-      className="scroll-mt-16 relative bg-[#0B1218] text-white"
+      className="scroll-mt-16 relative bg-[#090A0B] text-white"
     >
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
         <img
@@ -162,7 +162,7 @@ export default function HowItWorksPage() {
   const pageRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#0B1218] text-white">
+    <div ref={pageRef} className="relative flex min-h-screen flex-col bg-[#090A0B] text-white">
       {/* ── Fixed stadium background ──────────────────────────────────────
        * The image and its overlays are anchored to the viewport with
        * `position: fixed`.  Every section scrolls *over* this single layer,
@@ -837,12 +837,12 @@ function FormationMockup() {
             <g key={p.label}>
               <circle
                 cx={p.x} cy={p.y} r="3.5"
-                fill="#00D99A" stroke="#07110F" strokeWidth="0.5"
+                fill="#16d99a" stroke="#06120e" strokeWidth="0.5"
               />
               <text
                 x={p.x} y={p.y + 0.5}
                 textAnchor="middle" dominantBaseline="central"
-                fill="#07110F" fontSize="2.8" fontWeight="bold"
+                fill="#06120e" fontSize="2.8" fontWeight="bold"
               >
                 {p.label}
               </text>

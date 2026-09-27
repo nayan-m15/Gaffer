@@ -88,21 +88,21 @@ export function LiveInjurySheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="live-injury-title"
-        className="relative z-10 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#1c2b36] bg-[#070d12] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className="relative z-10 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#2a2e31] bg-[#090a0b] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       >
         <p
           id="live-injury-title"
-          className="font-oswald text-2xl tracking-widest text-[#ff5f56]"
+          className="font-oswald text-2xl tracking-widest text-[#e36a6d]"
         >
           INJURY
         </p>
-        <p className="mt-1 text-sm text-[#8e9ba8]">
+        <p className="mt-1 text-sm text-[#9ca39f]">
           {squadLabel}
           {lastName(athlete).toUpperCase()} &middot; {minute}&apos;
         </p>
 
         {/* 1. Region */}
-        <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#8e9ba8]">
+        <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#9ca39f]">
           WHERE?
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -121,8 +121,8 @@ export function LiveInjurySheet({
               className={cn(
                 "rounded-xl border-2 py-3 text-sm font-semibold tracking-wide transition-colors",
                 bodyRegion === region
-                  ? "border-[#ff5f56] bg-[#ff5f56]/15 text-white"
-                  : "border-[#233747] bg-[#101920] text-[#c7d0dc]",
+                  ? "border-[#e36a6d] bg-[#e36a6d]/15 text-white"
+                  : "border-[#3e4448] bg-[#111315] text-[#c7ccc9]",
               )}
             >
               {bodyRegionLabel(region)}
@@ -142,7 +142,7 @@ export function LiveInjurySheet({
               setInjuryType(null);
               setSeverity(null);
             }}
-            className="h-11 w-full rounded-xl border-2 border-[#233747] bg-[#101920] px-3 text-sm text-[#c7d0dc]"
+            className="h-11 w-full rounded-xl border-2 border-[#3e4448] bg-[#111315] px-3 text-sm text-[#c7ccc9]"
           >
             <option value="" disabled>
               Somewhere else&hellip;
@@ -160,7 +160,7 @@ export function LiveInjurySheet({
         {/* 2. Kind */}
         {bodyRegion && (
           <>
-            <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#8e9ba8]">
+            <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#9ca39f]">
               WHAT KIND?
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -173,8 +173,8 @@ export function LiveInjurySheet({
                   className={cn(
                     "rounded-xl border-2 py-3 text-sm font-semibold tracking-wide transition-colors",
                     injuryType === type
-                      ? "border-[#ff5f56] bg-[#ff5f56]/15 text-white"
-                      : "border-[#233747] bg-[#101920] text-[#c7d0dc]",
+                      ? "border-[#e36a6d] bg-[#e36a6d]/15 text-white"
+                      : "border-[#3e4448] bg-[#111315] text-[#c7ccc9]",
                   )}
                 >
                   {INJURY_TYPE_LABELS[type]}
@@ -187,7 +187,7 @@ export function LiveInjurySheet({
         {/* 3. Severity */}
         {injuryType && (
           <>
-            <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#8e9ba8]">
+            <p className="mt-5 font-oswald text-xs tracking-[0.2em] text-[#9ca39f]">
               HOW BAD?
             </p>
             <div className="mt-2 grid grid-cols-3 gap-2">
@@ -200,14 +200,14 @@ export function LiveInjurySheet({
                   className={cn(
                     "rounded-xl border-2 py-3 transition-colors",
                     severity === option
-                      ? "border-[#ff5f56] bg-[#ff5f56]/15 text-white"
-                      : "border-[#233747] bg-[#101920] text-[#c7d0dc]",
+                      ? "border-[#e36a6d] bg-[#e36a6d]/15 text-white"
+                      : "border-[#3e4448] bg-[#111315] text-[#c7ccc9]",
                   )}
                 >
                   <span className="block text-sm font-semibold">
                     {SEVERITY_LABELS[option]}
                   </span>
-                  <span className="mt-0.5 block text-[10px] text-[#8e9ba8]">
+                  <span className="mt-0.5 block text-[10px] text-[#9ca39f]">
                     {SEVERITY_GRADES[option]}
                   </span>
                 </button>
@@ -220,10 +220,10 @@ export function LiveInjurySheet({
             that gets persisted on the record. */}
         {complete && (
           <div
-            className="mt-5 rounded-xl border border-[#233747] bg-[#101920] px-4 py-3"
+            className="mt-5 rounded-xl border border-[#3e4448] bg-[#111315] px-4 py-3"
             aria-live="polite"
           >
-            <p className="font-oswald text-xs tracking-[0.2em] text-[#8e9ba8]">
+            <p className="font-oswald text-xs tracking-[0.2em] text-[#9ca39f]">
               ESTIMATED RETURN
             </p>
             <p className="mt-0.5 font-oswald text-xl tracking-widest text-white">
@@ -234,7 +234,7 @@ export function LiveInjurySheet({
                   ).toUpperCase()
                 : "…"}
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#8e9ba8]">
+            <p className="mt-1 text-[11px] leading-relaxed text-[#9ca39f]">
               A planning range, not medical advice. Adjustable on the record.
             </p>
           </div>
@@ -252,18 +252,18 @@ export function LiveInjurySheet({
                 severity: severity!,
               })
             }
-            className="rounded-2xl border-2 border-[#00d99a] bg-[#00d99a]/10 py-5 font-oswald text-lg tracking-widest text-[#00d99a] disabled:border-[#233747] disabled:bg-[#101920] disabled:text-[#54606d]"
+            className="rounded-2xl border-2 border-[#16d99a] bg-[#16d99a]/10 py-5 font-oswald text-lg tracking-widest text-[#16d99a] disabled:border-[#3e4448] disabled:bg-[#111315] disabled:text-[#54606d]"
           >
             LOG &amp; SUBSTITUTE
           </button>
           <button
             type="button"
             onClick={onSkip}
-            className="rounded-2xl border border-[#233747] bg-[#101920] py-4 font-oswald tracking-widest text-[#c7d0dc]"
+            className="rounded-2xl border border-[#3e4448] bg-[#111315] py-4 font-oswald tracking-widest text-[#c7ccc9]"
           >
             SKIP DETAILS
           </button>
-          <p className="text-center text-[11px] text-[#8e9ba8]">
+          <p className="text-center text-[11px] text-[#9ca39f]">
             Skipping still logs the injury and the substitution. Add the
             details later on the Injury &amp; Recovery page.
           </p>

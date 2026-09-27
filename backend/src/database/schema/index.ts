@@ -966,6 +966,7 @@ export const matchEventType = pgEnum('match_event_type', [
   'substitution',
   'penalty',
   'injury',
+  'goalkeeper_save',
 ]);
 
 export const matchEvents = pgTable(
@@ -1607,10 +1608,9 @@ export const seasonInsights = pgTable(
     generatedAt: timestamp('generated_at', { withTimezone: true }),
     failureReason: text('failure_reason'),
     attemptCount: integer('attempt_count').default(0).notNull(),
-    generatedByUserId: text('generated_by_user_id').references(
-      () => user.id,
-      { onDelete: 'set null' },
-    ),
+    generatedByUserId: text('generated_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [

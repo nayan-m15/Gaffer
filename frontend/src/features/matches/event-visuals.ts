@@ -1,19 +1,21 @@
 import type { MatchEventType, MatchLogEvent } from "./types";
 
 export const EVENT_COLOR: Record<MatchEventType, string> = {
-  goal: "#00d99a",
-  assist: "#00d99a",
+  goal: "#16d99a",
+  assist: "#16d99a",
   key_pass: "#5b9fff",
-  yellow_card: "#f5c518",
-  red_card: "#ff5b5f",
+  yellow_card: "#d7ba55",
+  red_card: "#e36a6d",
   substitution: "#c084fc",
-  penalty: "#20e6a6",
+  penalty: "#48e3af",
   injury: "#fb923c",
+  goalkeeper_save: "#67e8f9",
 };
 
 export const SECOND_YELLOW_DETAIL = "Second yellow card";
 export const PENALTY_SCORED_DETAIL = "Penalty";
 export const PENALTY_MISSED_DETAIL = "Penalty missed";
+export const PENALTY_SAVED_BY_GOALKEEPER_DETAIL = "Penalty saved by goalkeeper";
 
 export const EVENT_LABEL: Record<MatchEventType, string> = {
   goal: "Goal",
@@ -24,6 +26,7 @@ export const EVENT_LABEL: Record<MatchEventType, string> = {
   substitution: "Substitution",
   penalty: "Penalty",
   injury: "Injury",
+  goalkeeper_save: "Save",
 };
 
 /**
@@ -67,6 +70,16 @@ export function isMissedPenalty(event: {
   );
 }
 
+export function isPenaltySavedByGoalkeeper(event: {
+  eventType: MatchEventType;
+  detail: string | null;
+}) {
+  return (
+    event.eventType === "penalty" &&
+    event.detail === PENALTY_SAVED_BY_GOALKEEPER_DETAIL
+  );
+}
+
 /** Stored as `penalty`, or as a goal whose detail marks a scored penalty. */
 export function isPenaltyLike(event: {
   eventType: MatchEventType;
@@ -84,6 +97,12 @@ export function eventDisplayLabel(event: {
   }
   if (isMissedPenalty(event) || event.detail === PENALTY_MISSED_DETAIL) {
     return "Penalty missed";
+  }
+  if (
+    isPenaltySavedByGoalkeeper(event) ||
+    event.detail === PENALTY_SAVED_BY_GOALKEEPER_DETAIL
+  ) {
+    return "Penalty saved by goalkeeper";
   }
   if (isSecondYellow(event)) {
     return "Second yellow";
@@ -103,6 +122,22 @@ export function linkedAssistsForGoal(
     (event) =>
       event.eventType === "assist" &&
       event.detail === goal.id &&
+      !event.pending,
+  );
+}
+
+/** Saves persisted with `detail` set to the penalty's id. */
+export function linkedGoalkeeperSavesForPenalty(
+  timeline: MatchLogEvent[],
+  penalty: MatchLogEvent | undefined,
+) {
+  if (!penalty) {
+    return [];
+  }
+  return timeline.filter(
+    (event) =>
+      event.eventType === "goalkeeper_save" &&
+      event.detail === penalty.id &&
       !event.pending,
   );
 }

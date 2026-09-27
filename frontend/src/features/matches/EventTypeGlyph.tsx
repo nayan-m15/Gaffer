@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   ChevronsRight,
+  Hand,
   HeartPulse,
   Target,
 } from "lucide-react";
@@ -35,17 +36,17 @@ export function EventTypeGlyph({
         className="relative inline-block size-5 shrink-0"
         aria-label="Second yellow card"
       >
-        <span className="absolute left-0 top-0 h-3.5 w-2.5 rounded-[2px] bg-[#f5c518]" />
-        <span className="absolute bottom-0 right-0 h-3.5 w-2.5 rounded-[2px] bg-[#ff5b5f]" />
+        <span className="absolute left-0 top-0 h-3.5 w-2.5 rounded-[2px] bg-[#d7ba55]" />
+        <span className="absolute bottom-0 right-0 h-3.5 w-2.5 rounded-[2px] bg-[#e36a6d]" />
       </span>
     );
   }
 
   if (eventType === "yellow_card") {
-    return <CardGlyph color="#f5c518" />;
+    return <CardGlyph color="#d7ba55" />;
   }
   if (eventType === "red_card") {
-    return <CardGlyph color="#ff5b5f" />;
+    return <CardGlyph color="#e36a6d" />;
   }
 
   const color = EVENT_COLOR[eventType];
@@ -62,6 +63,8 @@ export function EventTypeGlyph({
       <Target className="size-3.5" />
     ) : eventType === "injury" ? (
       <HeartPulse className="size-3.5" />
+    ) : eventType === "goalkeeper_save" ? (
+      <Hand className="size-3.5" />
     ) : null;
 
   return (

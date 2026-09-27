@@ -20,9 +20,9 @@ export function AppCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border border-border/70 bg-card/80 p-5 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl",
+        "overflow-hidden rounded-xl border border-border-subtle bg-surface-card p-5 shadow-[0_16px_40px_-32px_rgba(0,0,0,0.9)]",
         interactive &&
-          "transition-[border-color,box-shadow,transform] duration-300 motion-reduce:transition-none hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_24px_70px_-42px_rgba(16,185,129,0.45)] motion-reduce:hover:translate-y-0",
+          "transition-[border-color,background-color,box-shadow,transform] duration-200 motion-reduce:transition-none hover:-translate-y-px hover:border-border-strong hover:bg-surface-nested hover:shadow-[0_18px_46px_-34px_rgba(0,0,0,0.95)] motion-reduce:hover:translate-y-0",
         className,
       )}
       {...props}

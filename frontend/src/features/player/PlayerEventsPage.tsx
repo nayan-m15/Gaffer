@@ -243,7 +243,6 @@ export default function PlayerEventsPage() {
             hiddenTypes={hiddenTypes}
             readOnly
             onToggleType={handleToggleType}
-            onViewChange={setView}
             onSelectDate={handleDayClick}
             onNavigate={navigate}
             onToday={goToToday}
