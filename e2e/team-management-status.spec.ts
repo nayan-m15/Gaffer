@@ -63,6 +63,16 @@ test('team management reflects athlete status badges and roster edits', async ({
         'team creation',
       );
 
+      // The dashboard already fetched "no team yet" on first load, and
+      // creating the team via the API (instead of through the UI's own
+      // create-team dialog) doesn't invalidate that cache. Reload so the
+      // sidebar picks up the new team instead of staying on its
+      // "Add a team first" placeholders.
+      await page.reload();
+      await expect(
+        page.getByLabel('Main navigation').getByRole('link', { name: 'Team' }),
+      ).toBeVisible(NETWORK);
+
       const athletes = [
         { firstName: 'Domi', lastName: 'Available', status: 'available' },
         { firstName: 'Ines', lastName: 'Injured', status: 'injured' },
@@ -143,12 +153,18 @@ test('team management reflects athlete status badges and roster edits', async ({
       await expect(dialog).toBeHidden();
 
       // Navigate to Team Management — the same shared athletes cache was
-      // invalidated, so the bench badge updates without a hard reload.
+      // invalidated, so the bench badge updates without a hard reload. That
+      // update rides on a background refetch against the real database
+      // though, so it needs the same network-round-trip allowance as the
+      // rest of this spec's data-dependent assertions, not the default
+      // expect timeout.
       await sidebarLink('Team').click();
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
-      await expect(inesCard).toBeVisible();
-      await expect(inesCard.getByText('Available', { exact: true })).toBeVisible();
+      await expect(inesCard).toBeVisible(NETWORK);
+      await expect(
+        inesCard.getByText('Available', { exact: true }),
+      ).toBeVisible(NETWORK);
       await expect(inesCard.getByText('Injured', { exact: true })).toHaveCount(0);
       await expect(page.getByText('Injured: 1')).toHaveCount(0);
     });
@@ -160,12 +176,14 @@ test('team management reflects athlete status badges and roster edits', async ({
       ).toBeVisible(NETWORK);
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
-      await expect(inesCard).toBeVisible();
-      await expect(inesCard.getByText('Available', { exact: true })).toBeVisible();
+      await expect(inesCard).toBeVisible(NETWORK);
+      await expect(
+        inesCard.getByText('Available', { exact: true }),
+      ).toBeVisible(NETWORK);
       await expect(
         bench.getByRole('button', { name: /Suri Suspended —/ }),
-      ).toBeVisible();
-      await expect(page.getByText('Suspended: 1')).toBeVisible();
+      ).toBeVisible(NETWORK);
+      await expect(page.getByText('Suspended: 1')).toBeVisible(NETWORK);
     });
   } finally {
     await cleanupUser({ email, teamName });

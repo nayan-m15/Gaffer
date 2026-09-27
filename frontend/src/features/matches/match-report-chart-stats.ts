@@ -1,4 +1,4 @@
-import { EVENT_COLOR } from "./event-visuals";
+import { EVENT_COLOR } from "./event-visuals.ts";
 import type { MatchLogEvent } from "./types";
 
 const BREAKDOWN_COLORS = {

@@ -283,6 +283,16 @@ export default function AthletesPage() {
     setIsFormOpen(true);
   };
 
+  // Computed once per edit session rather than inline in the JSX below: a
+  // fresh object on every render would look like a changed prop to the
+  // dialog's initial-values effect, resetting the user's in-progress edit
+  // back to the original values on the next unrelated re-render (e.g. a
+  // background query settling elsewhere on the page).
+  const editFormValues = useMemo(
+    () => (editingBackendAthlete ? toFormValues(editingBackendAthlete) : null),
+    [editingBackendAthlete],
+  );
+
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingBackendAthlete(null);
@@ -722,7 +732,7 @@ export default function AthletesPage() {
       <AthleteFormDialog
         isOpen={isFormOpen}
         onClose={closeForm}
-        initialValues={editingBackendAthlete ? toFormValues(editingBackendAthlete) : null}
+        initialValues={editFormValues}
         onSubmit={handleFormSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
       />
