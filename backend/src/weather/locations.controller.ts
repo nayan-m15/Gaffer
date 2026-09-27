@@ -24,8 +24,8 @@ interface GeocodingResponse {
 @UseGuards(AuthGuard)
 export class LocationsController {
   @Get('search')
-  async search(@Query('q') query: unknown) {
-    const term = typeof query === 'string' ? query.trim() : '';
+  async search(@Query('q') query?: string) {
+    const term = query?.trim();
     if (!term || term.length < 3 || term.length > 200) {
       throw new BadRequestException(
         'Enter at least 3 characters to search for a location.',

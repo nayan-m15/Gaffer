@@ -80,46 +80,44 @@ describe('PublicDashboardService', () => {
   });
 
   it('aggregates completed-match player statistics and keeps safe fields only', async () => {
-    select
-      .mockReturnValueOnce(queryResult([{ id: 'athlete-1' }]))
-      .mockReturnValueOnce(
-        queryResult([
-          {
-            id: 'athlete-1',
-            firstName: 'Ari',
-            lastName: 'Nkosi',
-            position: 'CM',
-            squadNumber: 8,
-            teamId: 'team-1',
-            teamName: 'Gaffer FC',
-            matchId: 'match-1',
-            eventStatus: 'completed',
-            minutesPlayed: 90,
-            appeared: true,
-            goals: 1,
-            assists: 2,
-            yellowCards: 0,
-            redCards: 0,
-          },
-          {
-            id: 'athlete-1',
-            firstName: 'Ari',
-            lastName: 'Nkosi',
-            position: 'CM',
-            squadNumber: 8,
-            teamId: 'team-1',
-            teamName: 'Gaffer FC',
-            matchId: 'match-2',
-            eventStatus: 'scheduled',
-            minutesPlayed: null,
-            appeared: false,
-            goals: 0,
-            assists: 0,
-            yellowCards: 0,
-            redCards: 0,
-          },
-        ]),
-      );
+    select.mockReturnValue(
+      queryResult([
+        {
+          id: 'athlete-1',
+          firstName: 'Ari',
+          lastName: 'Nkosi',
+          position: 'CM',
+          squadNumber: 8,
+          teamId: 'team-1',
+          teamName: 'Gaffer FC',
+          matchId: 'match-1',
+          eventStatus: 'completed',
+          minutesPlayed: 90,
+          appeared: true,
+          goals: 1,
+          assists: 2,
+          yellowCards: 0,
+          redCards: 0,
+        },
+        {
+          id: 'athlete-1',
+          firstName: 'Ari',
+          lastName: 'Nkosi',
+          position: 'CM',
+          squadNumber: 8,
+          teamId: 'team-1',
+          teamName: 'Gaffer FC',
+          matchId: 'match-2',
+          eventStatus: 'scheduled',
+          minutesPlayed: null,
+          appeared: false,
+          goals: 0,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0,
+        },
+      ]),
+    );
 
     const result = await service.getPlayers({ limit: 200, offset: 0 });
 

@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pencil, Plus, Search, Settings2, Trash2, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
-import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import { StandingsDisplay } from "@/components/standings/StandingsDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,7 +50,6 @@ function CompetitionList({ rows, empty, basePath }: { rows: CompetitionSummary[]
 
 function CompetitionWorkspace() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { team, accountKind } = useAuth();
   const basePath = competitionBasePath(accountKind);
   const canCreate = team?.role === "coach";
@@ -93,14 +90,6 @@ function CompetitionWorkspace() {
       </AppCard>
     </div>
     {creating && canCreate && <CompetitionFormDialog onClose={() => setCreating(false)} onSaved={(competitionId) => navigate(`${basePath}/${competitionId}`)} />}
-    {canCreate && (
-      <GafferAiAssistant
-        context="competitions"
-        onEntityCreated={() => {
-          void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
-        }}
-      />
-    )}
   </>;
 }
 
@@ -134,7 +123,6 @@ function SettingsSummary({ competition, onEdit, locked, editDisabled = false }: 
 
 function CompetitionDetails({ id }: { id: string }) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { team, accountKind } = useAuth();
   const basePath = competitionBasePath(accountKind);
   const detail = useCompetition(id);
@@ -223,15 +211,6 @@ function CompetitionDetails({ id }: { id: string }) {
         {editing && competition.isAdmin && <CompetitionFormDialog competition={competition} locked={settingsLocked} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />}
         {editingResult && competition.isAdmin && <CompetitionResultDialog competitionId={competition.id} participants={competition.participants} result={editingResult === "new" ? undefined : editingResult} fixture={resultFixture ?? undefined} onClose={() => { setEditingResult(null); setResultFixture(null); }} />}
         {action && competition.isAdmin && <CompetitionActionDialog config={action} onClose={() => setAction(null)} />}
-        {competition.isAdmin && !participantAddDisabled && (
-          <GafferAiAssistant
-            context="competitions"
-            competitionId={id}
-            onEntityCreated={() => {
-              void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
-            }}
-          />
-        )}
       </>}
     </div>
   </>;

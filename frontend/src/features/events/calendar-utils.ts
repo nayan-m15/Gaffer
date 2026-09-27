@@ -2,8 +2,6 @@ import {
   addDays,
   addMonths,
   addWeeks,
-  endOfMonth,
-  endOfWeek,
   format,
   isSameDay,
   isSameMonth,
@@ -26,9 +24,7 @@ export type CalendarView = "month" | "week" | "agenda";
  */
 export function getMonthGrid(anchor: Date): Date[] {
   const first = startOfWeek(startOfMonth(anchor), { weekStartsOn: WEEK_STARTS_ON });
-  const last = endOfWeek(endOfMonth(anchor), { weekStartsOn: WEEK_STARTS_ON });
-  const dayCount = Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1;
-  return Array.from({ length: dayCount }, (_, index) => addDays(first, index));
+  return Array.from({ length: 42 }, (_, index) => addDays(first, index));
 }
 
 /** The seven dates (Monday–Sunday) of the week containing `anchor`. */

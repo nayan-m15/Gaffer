@@ -45,7 +45,7 @@ function StatCard({
   variant?: "positive" | "negative" | "neutral";
 }) {
   return (
-    <AppCard className="stats-print-keep rounded-xl p-4 text-center" interactive>
+    <AppCard className="rounded-xl p-4 text-center" interactive>
       <p
         className={cn(
           "text-2xl font-bold tabular-nums",

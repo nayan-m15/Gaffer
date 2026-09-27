@@ -35,7 +35,6 @@ import { FormationSelector } from "./FormationSelector";
 import { SubstitutesArea } from "./SubstitutesArea";
 import type { BackendAthlete } from "@/services/athletes";
 import { useAuth } from "@/hooks/useAuth";
-import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
 import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDialog";
 import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
@@ -401,13 +400,6 @@ export default function TeamManagementPage() {
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}
       />
-
-      {canManageTeam && (
-        <GafferAiAssistant
-          context="lineup"
-          onLineupApplied={(suggested) => lineup.loadLineup(suggested)}
-        />
-      )}
           </>
         )}
       </div>

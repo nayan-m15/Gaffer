@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   Download,
@@ -9,7 +9,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AppCard } from "@/components/app/AppCard";
-import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { AnimatedTabs } from "@/components/ui/tabs";
@@ -115,7 +114,6 @@ export default function InjuryRecoveryPage() {
   const [reportError, setReportError] = useState<string | undefined>();
 
   const { team } = useAuth();
-  const queryClient = useQueryClient();
   const today = todayIso();
   const injuriesQuery = useInjuries();
   const createInjury = useCreateInjury();
@@ -618,19 +616,6 @@ export default function InjuryRecoveryPage() {
           errorMessage={closeError}
         />
       )}
-
-      <GafferAiAssistant
-        context="injuries"
-        // No `selectedPlayerId`: the assistant always resolves the player
-        // from the conversation itself (by name, or by asking). `focused`
-        // here is just a display default (the most-urgent existing injury,
-        // or whatever `?injury=` last pointed at) — not a deliberate choice
-        // by the coach for whatever they're about to ask or record next.
-        onEntityCreated={() => {
-          void queryClient.invalidateQueries({ queryKey: ["injuries"] });
-          void queryClient.invalidateQueries({ queryKey: ["athletes"] });
-        }}
-      />
     </>
   );
 }

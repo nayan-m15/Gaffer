@@ -25,30 +25,6 @@ export interface PlayerStatLine {
   redCards: number;
 }
 
-/** One AI-generated match narrative, as surfaced on the statistics/dashboard pages. */
-export interface MatchInsightSummary {
-  matchId: string;
-  status: "ready" | "failed" | "stale" | "pending" | "unavailable";
-  narrativeText: string | null;
-  generatedAt: string | null;
-}
-
-/** AI-generated season-summary narrative. Coach-triggered via GET/POST /statistics/season-insight. */
-export interface SeasonInsight {
-  teamId: string;
-  seasonId: string | null;
-  status: "ready" | "failed" | "pending" | "unavailable";
-  narrativeText: string | null;
-  generatedAt: string | null;
-  failureReason: string | null;
-}
-
-/** Response from POST /statistics/assistant. Stateless — never persisted. */
-export interface AssistantAnswer {
-  status: "ready" | "failed";
-  answer: string | null;
-}
-
 /** Team-wide season overview returned by GET /statistics. */
 export interface TeamOverview {
   matchesPlayed: number;
@@ -71,7 +47,6 @@ export interface TeamOverview {
   rollingWindow: number;
   form: SeasonForm;
   periods: SeasonPeriods;
-  recentInsights: MatchInsightSummary[];
 }
 
 /** A single match's stats for the athlete detail view. */

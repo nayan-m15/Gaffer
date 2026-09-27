@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
-import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 
 interface FooterLink {
@@ -11,7 +10,6 @@ interface FooterLink {
 interface FooterProps {
   /** Which navigation set to render. Defaults to the coach link set. */
   variant?: "coach" | "player";
-  className?: string;
 }
 
 const COACH_FOOTER_LINKS: FooterLink[] = [
@@ -44,7 +42,7 @@ const LEGAL_FOOTER_LINKS: FooterLink[] = [
  * roster/events/live-logger/stats/team-tactics, player links point at the
  * read-only /player/* routes.
  */
-export function Footer({ variant = "coach", className }: FooterProps) {
+export function Footer({ variant = "coach" }: FooterProps) {
   const year = new Date().getFullYear();
   const returnTo = variant === "player" ? "/player/dashboard" : "/dashboard";
   const links = [
@@ -53,36 +51,12 @@ export function Footer({ variant = "coach", className }: FooterProps) {
   ];
 
   return (
-    <footer className={cn("mx-auto mt-3 w-full max-w-[1600px] border-t border-border/50 px-3 py-2 text-[10px] text-muted-foreground sm:mt-8 sm:px-10 sm:py-6 sm:text-sm", className)}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex items-center justify-between gap-2 sm:hidden">
-          <div className="flex items-center gap-1.5">
-            <SportLogo size={16} className="rounded" />
-            <span className="font-display text-[10px] font-bold tracking-wide text-foreground">
-              Gaffer
-            </span>
-          </div>
-          <nav aria-label="Legal links" className="flex items-center gap-3">
-            <a
-              href={`/terms-of-service.html?returnTo=${encodeURIComponent(returnTo)}`}
-              className="transition-colors hover:text-foreground"
-            >
-              T&apos;s&amp;C&apos;s
-            </a>
-            <a
-              href={`/privacy-policy.html?returnTo=${encodeURIComponent(returnTo)}`}
-              className="transition-colors hover:text-foreground"
-            >
-              Privacy policy
-            </a>
-          </nav>
-        </div>
-        <p className="sm:hidden">@Gaffer {year} all rights reserved.</p>
-
-        <div className="hidden items-center gap-2 sm:flex">
+    <footer className="mx-auto mt-8 w-full max-w-[1600px] border-t border-border/50 px-6 py-6 text-sm text-muted-foreground sm:px-10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
           <SportLogo size={20} className="rounded" />
           <span className="font-display text-xs font-bold tracking-wide text-foreground">
-            Gaffer
+            GAFFER
           </span>
           <span aria-hidden="true">·</span>
           <span>
@@ -90,7 +64,7 @@ export function Footer({ variant = "coach", className }: FooterProps) {
           </span>
         </div>
 
-        <nav aria-label="Footer navigation" className="hidden sm:block">
+        <nav aria-label="Footer navigation">
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {links.map((link) => (
               <li key={link.path}>
@@ -114,7 +88,7 @@ export function Footer({ variant = "coach", className }: FooterProps) {
           </ul>
         </nav>
 
-        <span className="hidden text-xs sm:inline">v{APP_VERSION}</span>
+        <span className="text-xs">v{APP_VERSION}</span>
       </div>
     </footer>
   );

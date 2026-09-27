@@ -4,9 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, ilike, ne, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
-import { teamMembers, teams, user } from '../database/schema';
+import { teamMembers, teams } from '../database/schema';
 import type { UpdateTeamDto } from './teams.schemas';
 
 export interface TeamSummary {
@@ -52,45 +52,6 @@ export class TeamsService {
       .limit(1);
 
     return row ?? null;
-  }
-
-  /**
-   * Case-insensitive team search used when picking a friendly-fixture
-   * opponent. Matches either the team's registered name or the name of the
-   * account that coaches it, because a coach often only knows the person
-   * ("the team of ...") rather than the exact team name entered at
-   * sign-up. The caller's own team is always excluded, so a coach can never
-   * schedule against themselves; a user without a team simply sees every
-   * match. Mirrors the competition search limits (25 rows, name order).
-   */
-  async searchTeams(
-    userId: string,
-    term: string,
-  ): Promise<{ id: string; name: string; primaryColor: string | null }[]> {
-    const ownTeam = await this.findTeamForUser(userId);
-    const pattern = `%${term}%`;
-    const nameFilter = or(
-      ilike(teams.name, pattern),
-      ilike(user.name, pattern),
-    );
-
-    // The joins only feed the coach-name half of the filter; selectDistinct
-    // keeps one row per team even if several memberships ever match.
-    return this.databaseService.database
-      .selectDistinct({
-        id: teams.id,
-        name: teams.name,
-        primaryColor: teams.primaryColor,
-      })
-      .from(teams)
-      .leftJoin(
-        teamMembers,
-        and(eq(teamMembers.teamId, teams.id), eq(teamMembers.role, 'coach')),
-      )
-      .leftJoin(user, eq(teamMembers.userId, user.id))
-      .where(ownTeam ? and(ne(teams.id, ownTeam.id), nameFilter) : nameFilter)
-      .orderBy(asc(teams.name))
-      .limit(25);
   }
 
   /**

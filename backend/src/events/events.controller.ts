@@ -7,7 +7,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBody } from '@nestjs/swagger';
@@ -18,7 +17,6 @@ import { requireCoachTeamId } from '../common/team-access';
 import { TeamsService } from '../teams/teams.service';
 import { WeatherService } from '../weather/weather.service';
 import {
-  confirmLineupSchema,
   createEventSchema,
   StartMatchBodyDto,
   createRsvpSchema,
@@ -91,46 +89,6 @@ export class EventsController {
     @Param('eventId', ParseUUIDPipe) eventId: string,
   ) {
     return this.eventsService.listRsvps(user.id, eventId);
-  }
-
-  /**
-   * For an accepted friendly fixture between two Gaffer teams: the opposing
-   * team's confirmed lineup once it exists, otherwise a neutral
-   * "not available" shape. Non-Gaffer events return the neutral shape.
-   */
-  @Get(':eventId/friendly-opponent-lineup')
-  async friendlyOpponentLineup(
-    @CurrentUser() user: AuthenticatedRequest['user'],
-    @Param('eventId', ParseUUIDPipe) eventId: string,
-  ) {
-    return this.eventsService.getFriendlyOpponentLineup(user.id, eventId);
-  }
-
-  /**
-   * Confirms (saves or replaces) the pre-match lineup for a scheduled
-   * match. Like starting a match, every team member can call this — the
-   * lineup is only shared with an accepted Gaffer friendly opponent.
-   */
-  @Put(':eventId/lineup')
-  async confirmLineup(
-    @CurrentUser() user: AuthenticatedRequest['user'],
-    @Param('eventId', ParseUUIDPipe) eventId: string,
-    @Body() body: unknown,
-  ) {
-    const dto = zodValidate(confirmLineupSchema, body);
-    return this.eventsService.confirmLineup(user.id, eventId, dto);
-  }
-
-  /**
-   * The team's currently confirmed pre-match lineup for one of its events,
-   * or null when none has been confirmed.
-   */
-  @Get(':eventId/lineup')
-  async lineup(
-    @CurrentUser() user: AuthenticatedRequest['user'],
-    @Param('eventId', ParseUUIDPipe) eventId: string,
-  ) {
-    return this.eventsService.getLineup(user.id, eventId);
   }
 
   @Get(':id')

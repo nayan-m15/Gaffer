@@ -165,12 +165,10 @@ function MatchRow({
           <CalendarDays className="size-3.5 shrink-0" />
           {formatEventDateTime(event.scheduledAt)}
         </span>
-        {event.location && (
-          <span className="inline-flex items-center gap-1.5">
-            <MapPin className="size-3.5 shrink-0" />
-            {event.location}
-          </span>
-        )}
+        <span className="inline-flex items-center gap-1.5">
+          <MapPin className="size-3.5 shrink-0" />
+          {event.location}
+        </span>
       </div>
     </>
   );

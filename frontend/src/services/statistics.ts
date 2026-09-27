@@ -1,13 +1,11 @@
 import { apiFetch } from "@/lib/api";
 import type {
-  AssistantAnswer,
   AthleteComparison,
   AthleteStatistics,
   CompetitionFormValues,
   CompetitionWithStandings,
   CreateCompetitionInput,
   CreateStandingInput,
-  SeasonInsight,
   StandingFormValues,
   TeamOverview,
   UpdateCompetitionInput,
@@ -79,30 +77,6 @@ export async function getCompetitions(): Promise<
   return apiFetch<BackendCompetitionWithStandings[]>(
     `${STATISTICS_PATH}/competitions`,
   );
-}
-
-export async function getSeasonInsight(seasonId?: string): Promise<SeasonInsight> {
-  const query = seasonId ? `?seasonId=${seasonId}` : "";
-  return apiFetch<SeasonInsight>(`${STATISTICS_PATH}/season-insight${query}`);
-}
-
-export async function generateSeasonInsight(
-  seasonId?: string,
-): Promise<SeasonInsight> {
-  return apiFetch<SeasonInsight>(`${STATISTICS_PATH}/season-insight`, {
-    method: "POST",
-    body: JSON.stringify(seasonId ? { seasonId } : {}),
-  });
-}
-
-export async function askAssistant(
-  question: string,
-  seasonId?: string,
-): Promise<AssistantAnswer> {
-  return apiFetch<AssistantAnswer>(`${STATISTICS_PATH}/assistant`, {
-    method: "POST",
-    body: JSON.stringify(seasonId ? { question, seasonId } : { question }),
-  });
 }
 
 /* ── Competition CRUD ─────────────────────────────────────────────────────── */

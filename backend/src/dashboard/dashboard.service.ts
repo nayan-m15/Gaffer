@@ -8,12 +8,9 @@ import {
   matches,
   seasons,
 } from '../database/schema';
-import { InsightsService } from '../insights/insights.service';
 import { StatisticsService } from '../statistics/statistics.service';
 import { matchResult } from '../statistics/statistics.trends';
 import { TeamsService } from '../teams/teams.service';
-
-const RECENT_INSIGHTS_LIMIT = 3;
 
 /**
  * Aggregates dashboard summary data for a coach's team.
@@ -31,7 +28,6 @@ export class DashboardService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly statisticsService: StatisticsService,
-    private readonly insightsService: InsightsService,
   ) {}
 
   async getSummary(userId: string) {
@@ -46,7 +42,6 @@ export class DashboardService {
         recentForm: [],
         seasonSummary: null,
         recentStats: [],
-        recentInsights: [],
       };
     }
 
@@ -93,8 +88,8 @@ export class DashboardService {
           eventTitle: events.title,
           opponent: matches.opponentName,
           isHome: matches.isHome,
-          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided'), 0)`,
-          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided'), 0)`,
+          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal'), 0)`,
+          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal'), 0)`,
           clockElapsedMs: matches.clockElapsedMs,
           clockStartedAt: matches.clockStartedAt,
         })
@@ -118,8 +113,8 @@ export class DashboardService {
           id: matches.id,
           opponent: matches.opponentName,
           isHome: matches.isHome,
-          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided'), 0)`,
-          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided'), 0)`,
+          teamScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal'), 0)`,
+          opponentScore: sql<number>`coalesce((select count(*)::int from ${matchEvents} where ${matchEvents.matchId} = ${matches.id} and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal'), 0)`,
           date: events.scheduledAt,
         })
         .from(matches)
@@ -231,11 +226,6 @@ export class DashboardService {
           ]
         : [];
 
-    const recentInsights = await this.insightsService.getRecentForTeam(
-      team.id,
-      RECENT_INSIGHTS_LIMIT,
-    );
-
     return {
       activeAthletesCount,
       totalEventsCount,
@@ -244,7 +234,6 @@ export class DashboardService {
       recentForm,
       seasonSummary,
       recentStats,
-      recentInsights,
     };
   }
 }

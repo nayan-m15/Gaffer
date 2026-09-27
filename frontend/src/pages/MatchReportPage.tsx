@@ -3,17 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
   ChevronLeft,
-  Download,
   Loader2,
-  Lock,
   Plus,
   Share2,
   ShieldAlert,
-  Sparkles,
   Square,
   Timer,
   Trash2,
-  Unlock,
   X,
   Zap,
 } from "lucide-react";
@@ -28,13 +24,10 @@ import type { FormationPlayerCount } from "@/features/team-management/types";
 import { AthletePicker, OpponentPlayerPicker } from "@/features/matches/AthletePicker";
 import {
   useDeleteMatchEvent,
-  useFinaliseMatchProjection,
   useLogMatchEvent,
   useMatch,
   useMatchEvents,
-  useMatchInsight,
   useMatchSquad,
-  useReopenMatchProjection,
   useUpdateMatchEvent,
 } from "@/features/matches/hooks";
 import {
@@ -52,7 +45,6 @@ import {
 import type {
   MatchEventTeam,
   MatchEventType,
-  MatchInsight,
   MatchLogEvent,
   MatchSquadAthlete,
   OpponentMatchPlayer,
@@ -75,15 +67,12 @@ import {
   TeamComparisonChart,
 } from "@/features/matches/match-report-charts";
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
-import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
 import {
   LiveBenchRow,
   LivePitch,
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
 import {
-  friendlyLineupPlayers,
-  friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
@@ -192,11 +181,6 @@ export default function MatchReportPage() {
   const matchQuery = useMatch(matchId);
   const squadQuery = useMatchSquad(matchId);
   const eventsQuery = useMatchEvents(matchId);
-  const insightQuery = useMatchInsight(
-    matchId,
-    matchQuery.data?.projection?.finalisationState !== undefined &&
-      matchQuery.data.projection.finalisationState !== "open",
-  );
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
   const gamePlanQuery = useGamePlan(
     gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
@@ -205,8 +189,6 @@ export default function MatchReportPage() {
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const logEvent = useLogMatchEvent(matchId ?? "");
-  const finaliseProjection = useFinaliseMatchProjection(matchId ?? "");
-  const reopenProjection = useReopenMatchProjection(matchId ?? "");
 
   const [tab, setTab] = useState<Tab>("match");
   const [editing, setEditing] = useState<MatchLogEvent | null>(null);
@@ -214,15 +196,8 @@ export default function MatchReportPage() {
   const [adding, setAdding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
-  const [resultActionError, setResultActionError] = useState<string | null>(
-    null,
-  );
-  const [resultActionNote, setResultActionNote] = useState<string | null>(
-    null,
-  );
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
@@ -245,28 +220,8 @@ export default function MatchReportPage() {
   const oppColor = resolveOppColor(match?.opponentColor);
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = eventsQuery.isSuccess
-    ? timeline.filter(
-        (event) =>
-          event.team === "own" &&
-          event.eventType === "goal" &&
-          event.lifecycleStatus !== "voided",
-      ).length
-    : (match?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
-    ? timeline.filter(
-        (event) =>
-          event.team === "opponent" &&
-          event.eventType === "goal" &&
-          event.lifecycleStatus !== "voided",
-      ).length
-    : (match?.opponentScore ?? 0);
-  const currentProjection = match?.projection;
-  const projectionConsistent =
-    !currentProjection ||
-    timeline
-      .filter((event) => event.syncStatus === "reconciled")
-      .every((event) => event.projectionRevision === currentProjection.revision);
+  const teamScore = match?.teamScore ?? 0;
+  const oppScore = match?.opponentScore ?? 0;
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
@@ -285,24 +240,9 @@ export default function MatchReportPage() {
     : ownState.onPitch.length === 5 || ownState.onPitch.length === 7
       ? ownState.onPitch.length
       : 11;
-  const opponentDisplaySquad = useMemo(
-    () =>
-      (match?.opponentSquad ?? []).length > 0
-        ? (match?.opponentSquad ?? [])
-        : friendlyLineupPlayers(match?.friendlyOpponentLineup),
-    [match?.friendlyOpponentLineup, match?.opponentSquad],
-  );
   const oppState = useMemo(
-    () =>
-      opponentPitchState(
-        opponentDisplaySquad,
-        timeline,
-        matchPlayerCount,
-        (match?.opponentSquad ?? []).length > 0
-          ? undefined
-          : friendlyLineupStarterIds(match?.friendlyOpponentLineup),
-      ),
-    [match?.opponentSquad, match?.friendlyOpponentLineup, opponentDisplaySquad, timeline, matchPlayerCount],
+    () => opponentPitchState(match?.opponentSquad ?? [], timeline, matchPlayerCount),
+    [match?.opponentSquad, matchPlayerCount, timeline],
   );
   const ownPlaced = useMemo(
     () =>
@@ -363,7 +303,8 @@ export default function MatchReportPage() {
           .length,
         yellow: ownEvents.filter((event) => event.eventType === "yellow_card")
           .length,
-        red: ownEvents.filter((event) => event.eventType === "red_card").length,
+        red: ownEvents.filter((event) => event.eventType === "red_card")
+          .length,
       };
     });
   }, [squad, timeline]);
@@ -392,32 +333,6 @@ export default function MatchReportPage() {
     squad,
   });
 
-  const finaliseResult = () => {
-    if (!match?.projection) return;
-    setResultActionError(null);
-    finaliseProjection.mutate(match.projection.revision, {
-      onSuccess: () => setResultActionNote("Result finalised"),
-      onError: (err) =>
-        setResultActionError(
-          err instanceof Error ? err.message : "Could not finalise the result.",
-        ),
-    });
-  };
-
-  const reopenResult = () => {
-    setResultActionError(null);
-    reopenProjection.mutate(
-      "Coach reopened the published result for amendment.",
-      {
-        onSuccess: () => setResultActionNote("Result reopened"),
-        onError: (err) =>
-          setResultActionError(
-            err instanceof Error ? err.message : "Could not reopen the result.",
-          ),
-      },
-    );
-  };
-
   const shareReport = async () => {
     const url = window.location.href;
     const title = `${ownName} ${teamScore}-${oppScore} ${oppName}`;
@@ -435,28 +350,6 @@ export default function MatchReportPage() {
     }
   };
 
-  const exportPdf = async () => {
-    if (!match) return;
-    setExportingPdf(true);
-    setShareNote(null);
-    try {
-      await exportLiveMatchReportPdf({
-        match,
-        teamName: ownName,
-        squad,
-        events: timeline,
-        generatedAt: new Date(),
-      });
-      setShareNote("PDF report exported");
-    } catch (error) {
-      console.error("Match report PDF export failed", error);
-      setShareNote("Could not export PDF");
-    } finally {
-      setExportingPdf(false);
-      window.setTimeout(() => setShareNote(null), 3000);
-    }
-  };
-
   const confirmDeleteEvent = async () => {
     if (!deleting || deleting.pending) {
       return;
@@ -471,7 +364,9 @@ export default function MatchReportPage() {
       setDeleting(null);
     } catch (err) {
       setDeleteError(
-        err instanceof ApiError ? err.message : "Could not delete this event.",
+        err instanceof ApiError
+          ? err.message
+          : "Could not delete this event.",
       );
     }
   };
@@ -518,9 +413,7 @@ export default function MatchReportPage() {
       <div className="match-report flex min-h-[70dvh] items-center justify-center px-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <ShieldAlert className="size-8 text-[#ff5b5f]" />
-          <p className="font-oswald text-xl tracking-wide">
-            FAILED TO LOAD REPORT
-          </p>
+          <p className="font-oswald text-xl tracking-wide">FAILED TO LOAD REPORT</p>
           <p className="text-sm text-[#8e9ba8]">
             {error instanceof Error ? error.message : "Something went wrong."}
           </p>
@@ -557,13 +450,6 @@ export default function MatchReportPage() {
     .join(" · ")
     .toUpperCase();
 
-  const projection = match.projection;
-  const canManageResult =
-    team?.role === "coach" &&
-    match.eventStatus === "completed" &&
-    Boolean(projection);
-  const isFinalised = projection?.finalisationState !== "open";
-
   return (
     <div className="match-report min-h-full overflow-x-hidden">
       <header className="border-b border-[#1c2b36]">
@@ -585,57 +471,17 @@ export default function MatchReportPage() {
                 {metaLine}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {team?.role === "coach" && (
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#00d99a]/50 px-3 font-oswald text-xs tracking-wider text-[#00d99a] transition-colors hover:bg-[#00d99a]/10 disabled:opacity-50"
-                  onClick={() => void exportPdf()}
-                  disabled={exportingPdf}
-                >
-                  <Download className="size-4" />
-                  <span className="hidden sm:inline">{exportingPdf ? "EXPORTING…" : "EXPORT PDF"}</span>
-                </button>
-              )}
-              {canManageResult && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#233747] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#c5ced6] transition-colors hover:text-white disabled:opacity-60"
-                  onClick={isFinalised ? reopenResult : finaliseResult}
-                  disabled={finaliseProjection.isPending || reopenProjection.isPending}
-                >
-                  {isFinalised ? (
-                    <Unlock className="size-3.5" />
-                  ) : (
-                    <Lock className="size-3.5" />
-                  )}
-                  {isFinalised ? "Reopen Result" : "Finalise Result"}
-                </button>
-              )}
-              <button
-                type="button"
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
-                onClick={() => void shareReport()}
-                aria-label="Share match report"
-              >
-                <Share2 className="size-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#00d99a] text-[#07110f] transition-opacity hover:opacity-90"
+              onClick={() => void shareReport()}
+              aria-label="Share match report"
+            >
+              <Share2 className="size-4" />
+            </button>
           </div>
           {shareNote ? (
-            <p className="mt-2 text-right text-[11px] text-[#00d99a]">
-              {shareNote}
-            </p>
-          ) : null}
-          {resultActionNote ? (
-            <p className="mt-2 text-right text-[11px] text-[#00d99a]">
-              {resultActionNote}
-            </p>
-          ) : null}
-          {resultActionError ? (
-            <p className="mt-2 text-right text-[11px] text-[#ff5b5f]">
-              {resultActionError}
-            </p>
+            <p className="mt-2 text-right text-[11px] text-[#00d99a]">{shareNote}</p>
           ) : null}
         </div>
       </header>
@@ -661,7 +507,9 @@ export default function MatchReportPage() {
         </div>
 
         {(tab === "match" || tab === "events") && (
-          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-12">
+          <div
+            className="grid grid-cols-1 items-start gap-5 xl:grid-cols-12"
+          >
             {/* Left Column: Score, Facts, Analytical Charts */}
             <div
               className={cn(
@@ -697,23 +545,10 @@ export default function MatchReportPage() {
                     />
                   </div>
                 </div>
-                {projection ? (
-                  <p className="mt-3 text-center text-xs text-[#c5ced6]">
-                    {!projectionConsistent
-                      ? "Syncing result and event log"
-                      : projection.finalisationState === "finalised"
-                        ? `Final result · revision ${projection.revision}`
-                        : projection.unresolvedReviewCount > 0
-                          ? `Provisional result · ${projection.unresolvedReviewCount} event review${projection.unresolvedReviewCount === 1 ? "" : "s"} open`
-                          : `Provisional result · revision ${projection.revision}`}
-                  </p>
-                ) : null}
                 <p className="mt-5 border-l-2 border-[#00d99a] pl-3 text-sm leading-relaxed text-[#c5ced6]">
                   {story}
                 </p>
               </section>
-
-              <MatchInsightSection insight={insightQuery.data} />
 
               <section>
                 <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
@@ -793,8 +628,7 @@ export default function MatchReportPage() {
                       Match Events
                     </h2>
                     <p className="text-[11px] text-[#8e9ba8]">
-                      {timeline.length}{" "}
-                      {timeline.length === 1 ? "event" : "events"} logged
+                      {timeline.length} {timeline.length === 1 ? "event" : "events"} logged
                     </p>
                   </div>
                   <button
@@ -813,17 +647,13 @@ export default function MatchReportPage() {
                 {timeline.length === 0 ? (
                   <div className="py-8 text-center">
                     <Timer className="mx-auto mb-2 size-8 text-[#8e9ba8]/40" />
-                    <p className="text-sm text-[#8e9ba8]">
-                      No events logged yet.
-                    </p>
+                    <p className="text-sm text-[#8e9ba8]">No events logged yet.</p>
                   </div>
                 ) : (
                   <div className="max-h-[32rem] overflow-y-auto pr-1 xl:max-h-[38rem]">
                     <Timeline
                       data={timeline
-                        .filter(
-                          (event) => !isPairedAssistEvent(event, assistsByGoal),
-                        )
+                        .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
                         .map((event) => ({
                           id: event.optimisticKey ?? event.id,
                           markerColor: EVENT_COLOR[event.eventType],
@@ -849,21 +679,18 @@ export default function MatchReportPage() {
                                     />
                                     <div className="min-w-0">
                                       <p className="font-oswald text-xs tracking-wide text-white sm:text-sm">
-                                        {event.minute}&apos;{" "}
-                                        {eventDisplayLabel(event)}
+                                        {event.minute}&apos; {eventDisplayLabel(event)}
                                       </p>
                                       <p className="truncate text-[11px] text-[#8e9ba8]">
-                                        {event.team === "own"
-                                          ? ownName
-                                          : oppName}{" "}
-                                        · {whoLabel(event, squad)}
+                                        {event.team === "own" ? ownName : oppName} ·{" "}
+                                        {whoLabel(event, squad)}
                                         {event.eventType === "goal" &&
                                         assistsByGoal.get(event.id)
                                           ? `, Assist: ${whoLabel(assistsByGoal.get(event.id)!, squad)}`
                                           : ""}
                                         {substitutionIncoming(event, squad)}
                                       </p>
-                                      {event.detail &&
+                                        {event.detail &&
                                         event.eventType !== "substitution" &&
                                         event.eventType !== "assist" &&
                                         event.eventType !== "goal" &&
@@ -882,9 +709,7 @@ export default function MatchReportPage() {
                                 type="button"
                                 aria-label="Delete event"
                                 className="shrink-0 self-center rounded-md p-1.5 text-[#8e9ba8] hover:bg-white/5 hover:text-[#ff5b5f] disabled:opacity-40"
-                                disabled={
-                                  event.pending || deleteEvent.isPending
-                                }
+                                disabled={event.pending || deleteEvent.isPending}
                                 onClick={() => {
                                   if (event.pending) {
                                     return;
@@ -995,14 +820,8 @@ export default function MatchReportPage() {
                             {shirtLabel(row.athlete)}
                           </p>
                           <p className="text-xs text-[#8e9ba8]">
-                            <span className="font-oswald text-[#00d99a]">
-                              {row.goals}
-                            </span>{" "}
-                            G ·{" "}
-                            <span className="font-oswald text-[#c084fc]">
-                              {row.assists}
-                            </span>{" "}
-                            A
+                            <span className="font-oswald text-[#00d99a]">{row.goals}</span> G ·{" "}
+                            <span className="font-oswald text-[#c084fc]">{row.assists}</span> A
                           </p>
                         </li>
                       ))}
@@ -1072,16 +891,9 @@ export default function MatchReportPage() {
                             ["Y", row.yellow, "text-[#ffbe2e]"],
                             ["R", row.red, "text-[#ff5b5f]"],
                           ].map(([label, value, color]) => (
-                            <div
-                              key={String(label)}
-                              className="rounded-lg bg-[#0c1218] px-2 py-1.5"
-                            >
-                              <p className={cn("font-oswald text-base", color)}>
-                                {value}
-                              </p>
-                              <p className="text-[8px] font-bold uppercase text-[#8e9ba8]">
-                                {label}
-                              </p>
+                            <div key={String(label)} className="rounded-lg bg-[#0c1218] px-2 py-1.5">
+                              <p className={cn("font-oswald text-base", color)}>{value}</p>
+                              <p className="text-[8px] font-bold uppercase text-[#8e9ba8]">{label}</p>
                             </div>
                           ))}
                         </div>
@@ -1131,7 +943,7 @@ export default function MatchReportPage() {
                       </tr>
                     ))}
                   </tbody>
-                    </table>
+                  </table>
                   </div>
                 </>
               )}
@@ -1228,49 +1040,6 @@ export default function MatchReportPage() {
   );
 }
 
-/**
- * AI-generated narrative summary for a finalised match. Renders nothing
- * while unavailable/pending/failed so the page never shows a broken or
- * empty-looking card — a Gemini failure just means this section is absent.
- */
-function MatchInsightSection({ insight }: { insight: MatchInsight | undefined }) {
-  if (!insight || insight.status === "unavailable" || insight.status === "pending") {
-    return null;
-  }
-  if (insight.status === "failed" || !insight.narrativeText) {
-    return null;
-  }
-
-  return (
-    <section className="rounded-2xl border border-[#1c2b36] bg-[#101920] p-4 sm:p-5">
-      <h2 className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8e9ba8]">
-        <Sparkles className="size-3.5 text-[#00d99a]" aria-hidden="true" />
-        AI Match Insight
-        {insight.status === "stale" && (
-          <span className="ml-auto rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#ffbe2e] bg-[#ffbe2e]/15">
-            May be outdated
-          </span>
-        )}
-      </h2>
-      <p className="text-sm leading-relaxed text-[#c5ced6]">
-        {insight.narrativeText}
-      </p>
-      {insight.highlights?.playerOfTheMatch && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#1c2b36]/60 bg-[#0c1218] px-3 py-2">
-          <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#f5c518]" aria-hidden="true" />
-          <p className="text-xs text-[#c5ced6]">
-            <span className="font-semibold text-white">Player of the Match: </span>
-            {insight.highlights.playerOfTheMatch.athleteName}
-            {insight.highlights.playerOfTheMatch.reason && (
-              <span> — {insight.highlights.playerOfTheMatch.reason}</span>
-            )}
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function FactCard({
   label,
   value,
@@ -1287,10 +1056,7 @@ function FactCard({
       className="rounded-xl bg-[#101920] px-3 py-3"
       style={{ boxShadow: `inset 0 0 0 1px ${color}55` }}
     >
-      <span
-        className="inline-flex text-[color:var(--fact-color)]"
-        style={{ ["--fact-color" as string]: color }}
-      >
+      <span className="inline-flex text-[color:var(--fact-color)]" style={{ ["--fact-color" as string]: color }}>
         {icon}
       </span>
       <p className="mt-2 font-oswald text-2xl leading-none tabular-nums text-white">
@@ -1324,7 +1090,9 @@ function DeleteEventOverlay({
       <p className="mt-2 text-sm text-[#8e9ba8]">
         {event.minute}&apos; {eventDisplayLabel(event)} will be removed from
         this match.
-        {linkedAssistCount > 0 ? " The linked assist will be removed too." : ""}
+        {linkedAssistCount > 0
+          ? " The linked assist will be removed too."
+          : ""}
       </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
@@ -1596,8 +1364,8 @@ function EventComposerOverlay({
           : Boolean(draft.opponentPlayerId || draft.opponentLabel.trim());
       const onOk = Boolean(
         draft.incomingAthleteId ||
-        draft.incomingOpponentPlayerId ||
-        draft.incomingOpponentLabel.trim(),
+          draft.incomingOpponentPlayerId ||
+          draft.incomingOpponentLabel.trim(),
       );
       if (!offOk || !onOk) {
         setFormError("Pick the player coming off and the player coming on.");
@@ -1619,9 +1387,7 @@ function EventComposerOverlay({
             down over the first field. */}
         <div className="sticky top-0 z-10 -mx-5 flex items-start justify-between gap-4 border-b border-[#1c2b36] bg-[#070d12] px-5 pb-4 pt-5 sm:-mx-6 sm:px-6 sm:pb-5 sm:pt-6">
           <div>
-            <p className="font-oswald text-xl tracking-widest sm:text-2xl">
-              {title}
-            </p>
+            <p className="font-oswald text-xl tracking-widest sm:text-2xl">{title}</p>
             <p className="mt-1 text-xs text-[#8e9ba8] sm:text-sm">{subtitle}</p>
           </div>
           <button
@@ -1636,9 +1402,7 @@ function EventComposerOverlay({
 
         {!teamLocked && (
           <fieldset className="pt-1">
-            <legend
-              className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}
-            >
+            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
               Team
             </legend>
             <div className="grid grid-cols-2 gap-2">
@@ -1735,9 +1499,7 @@ function EventComposerOverlay({
 
         {isPenalty ? (
           <fieldset>
-            <legend
-              className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}
-            >
+            <legend className={`${fieldLabelClassName} mb-2.5 px-0 py-0 leading-5`}>
               Outcome
             </legend>
             <div className="grid grid-cols-2 gap-2">
@@ -1770,9 +1532,7 @@ function EventComposerOverlay({
 
         {team === "own" ? (
           <div>
-            <p className={`${fieldLabelClassName} mb-2`}>
-              {subjectLabel(eventType)}
-            </p>
+            <p className={`${fieldLabelClassName} mb-2`}>{subjectLabel(eventType)}</p>
             <AthletePicker
               squad={squad}
               value={athleteId}
@@ -1797,9 +1557,7 @@ function EventComposerOverlay({
           </div>
         ) : (
           <label className="block">
-            <span className={fieldLabelClassName}>
-              {subjectLabel(eventType)}
-            </span>
+            <span className={fieldLabelClassName}>{subjectLabel(eventType)}</span>
             <input
               type="text"
               value={opponentLabel}
@@ -1839,9 +1597,7 @@ function EventComposerOverlay({
               <input
                 type="text"
                 value={assistOpponentLabel}
-                onChange={(change) =>
-                  setAssistOpponentLabel(change.target.value)
-                }
+                onChange={(change) => setAssistOpponentLabel(change.target.value)}
                 placeholder="Leave blank for no assist"
                 maxLength={50}
                 className={fieldClassName}

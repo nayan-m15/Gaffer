@@ -112,8 +112,6 @@ async function database() {
         match_event_reviews: new Table({
           match_id: column.text,
           canonical_event_id: column.text,
-          observation_ids: column.text,
-          review_version: column.integer,
           reason: column.text,
           status: column.text,
           resolution: column.text,
@@ -121,40 +119,6 @@ async function database() {
           resolved_at: column.text,
           created_at: column.text,
           updated_at: column.text,
-        }),
-        match_event_observations: new Table({
-          match_id: column.text,
-          device_id: column.text,
-          logged_by_user_id: column.text,
-          schema_version: column.integer,
-          event_type: column.text,
-          team: column.text,
-          athlete_id: column.text,
-          opponent_label: column.text,
-          opponent_player_id: column.text,
-          period: column.text,
-          match_elapsed_ms: column.integer,
-          payload: column.text,
-          payload_hash: column.text,
-          client_created_at: column.text,
-          server_received_at: column.text,
-        }),
-        match_event_operations: new Table({
-          match_id: column.text,
-          actor_user_id: column.text,
-          operation_type: column.text,
-          target_observation_ids: column.text,
-          canonical_event_id: column.text,
-          causal_parent_ids: column.text,
-          decision: column.text,
-          reason: column.text,
-          schema_version: column.integer,
-          created_at: column.text,
-        }),
-        match_event_memberships: new Table({
-          canonical_event_id: column.text,
-          projection_revision: column.integer,
-          created_at: column.text,
         }),
         match_projection_state: new Table({
           revision: column.integer,
@@ -795,7 +759,6 @@ interface SyncedEventRow {
   period: MatchLogEvent["period"];
   match_elapsed_ms: number | null;
   lifecycle_status: MatchLogEvent["lifecycleStatus"];
-  projection_revision: number;
   created_at: string;
   updated_at: string;
 }
@@ -805,7 +768,7 @@ export async function readSyncedMatchEvents(
 ): Promise<MatchLogEvent[]> {
   const db = await database();
   const rows = await db.getAll<SyncedEventRow>(
-    "SELECT * FROM match_events WHERE match_id = ? AND lifecycle_status <> 'voided' ORDER BY minute DESC, created_at DESC",
+    "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute DESC, created_at DESC",
     [matchId],
   );
   return rows.map((row) => ({
@@ -824,140 +787,12 @@ export async function readSyncedMatchEvents(
     period: row.period,
     matchElapsedMs: row.match_elapsed_ms,
     lifecycleStatus: row.lifecycle_status,
-    projectionRevision: row.projection_revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     athlete: null,
     opponentPlayer: null,
     syncStatus: "reconciled",
   }));
-}
-
-export async function readSyncedObservationMemberships(matchId: string) {
-  const db = await database();
-  const rows = await db.getAll<{ id: string; canonical_event_id: string }>(
-    `SELECT membership.id, membership.canonical_event_id
-       FROM match_event_memberships membership
-       JOIN match_event_observations observation ON observation.id = membership.id
-      WHERE observation.match_id = ?`,
-    [matchId],
-  );
-  return new Map(rows.map((row) => [row.id, row.canonical_event_id]));
-}
-
-export interface SyncedMatchReview {
-  id: string;
-  reviewVersion: number;
-  reason: string;
-  status: string;
-  resolution: string | null;
-  resolvedByUserId: string | null;
-  observations: Array<{
-    id: string;
-    eventType: string;
-    team: string;
-    matchElapsedMs: number;
-    loggedByUserId: string;
-    athleteId: string | null;
-    opponentLabel: string | null;
-  }>;
-}
-
-export async function readSyncedMatchReviews(
-  matchId: string,
-): Promise<SyncedMatchReview[]> {
-  const db = await database();
-  const reviews = await db.getAll<{
-    id: string;
-    review_version: number;
-    reason: string;
-    status: string;
-    resolution: string | null;
-    resolved_by_user_id: string | null;
-    observation_ids: string | string[];
-  }>(
-    "SELECT * FROM match_event_reviews WHERE match_id = ? ORDER BY created_at DESC",
-    [matchId],
-  );
-  const observations = await db.getAll<{
-    id: string;
-    event_type: string;
-    team: string;
-    match_elapsed_ms: number;
-    logged_by_user_id: string;
-    athlete_id: string | null;
-    opponent_label: string | null;
-  }>("SELECT * FROM match_event_observations WHERE match_id = ?", [matchId]);
-  const byId = new Map(observations.map((row) => [row.id, row]));
-  return reviews.map((review) => {
-    const ids =
-      typeof review.observation_ids === "string"
-        ? (JSON.parse(review.observation_ids) as string[])
-        : review.observation_ids;
-    return {
-      id: review.id,
-      reviewVersion: review.review_version,
-      reason: review.reason,
-      status: review.status,
-      resolution: review.resolution,
-      resolvedByUserId: review.resolved_by_user_id,
-      observations: ids.flatMap((id) => {
-        const row = byId.get(id);
-        return row
-          ? [
-              {
-                id: row.id,
-                eventType: row.event_type,
-                team: row.team,
-                matchElapsedMs: row.match_elapsed_ms,
-                loggedByUserId: row.logged_by_user_id,
-                athleteId: row.athlete_id,
-                opponentLabel: row.opponent_label,
-              },
-            ]
-          : [];
-      }),
-    };
-  });
-}
-
-export async function subscribeToSyncedMatchReviewChanges(
-  onChange: () => void,
-) {
-  const db = await database();
-  return db.onChange(
-    { onChange },
-    {
-      tables: [
-        "match_event_reviews",
-        "match_event_observations",
-        "match_event_operations",
-      ],
-    },
-  );
-}
-
-export async function readSyncedReviewDecisionIds(
-  matchId: string,
-  reviewId: string,
-) {
-  const db = await database();
-  const rows = await db.getAll<{
-    id: string;
-    decision: string | { reviewId?: string };
-  }>("SELECT id, decision FROM match_event_operations WHERE match_id = ?", [
-    matchId,
-  ]);
-  return rows
-    .filter((row) => {
-      const decision =
-        typeof row.decision === "string"
-          ? (JSON.parse(row.decision) as { reviewId?: string })
-          : row.decision;
-      return decision.reviewId === reviewId;
-    })
-    .map((row) => row.id)
-    .sort();
 }
 
 export interface OfflineReadiness {
@@ -1117,13 +952,7 @@ export async function subscribeToSyncedMatchEventChanges(
   const db = await database();
   return db.onChange(
     { onChange },
-    {
-      tables: [
-        "match_events",
-        "match_event_memberships",
-        "match_projection_state",
-      ],
-    },
+    { tables: ["match_events", "match_projection_state"] },
   );
 }
 

@@ -6,7 +6,6 @@ import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
 import { ClaimInviteDialog } from "@/components/roster/ClaimInviteDialog";
 import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog";
-import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterTable } from "@/components/roster/RosterTable";
@@ -311,6 +310,15 @@ export default function AthletesPage() {
       <PageHeader
         title="Roster Command"
         subtitle="Manage active squad players, squad status, and athlete archives."
+        actions={
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="relative flex size-2.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
+            </span>
+            Sideline Active Mode
+          </div>
+        }
       />
 
       <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
@@ -649,15 +657,6 @@ export default function AthletesPage() {
         }
         result={inviteResult}
       />
-
-      {canManageRoster && (
-        <GafferAiAssistant
-          context="roster"
-          onEntityCreated={() => {
-            void queryClient.invalidateQueries({ queryKey: QUERY_KEY_ACTIVE });
-          }}
-        />
-      )}
     </>
   );
 }

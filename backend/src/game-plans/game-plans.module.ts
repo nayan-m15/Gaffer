@@ -7,6 +7,5 @@ import { GamePlansService } from './game-plans.service';
   imports: [TeamsModule],
   controllers: [GamePlansController],
   providers: [GamePlansService],
-  exports: [GamePlansService],
 })
 export class GamePlansModule {}

@@ -5,17 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNull,
-  ne,
-  notInArray,
-  sql,
-} from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { and, asc, eq, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -24,26 +14,18 @@ import {
   competitions,
   competitionFixtures,
   competitionTeams,
-  eventLineups,
   eventRsvps,
   events,
-  friendlyFixtures,
   gamePlans,
   matches,
   opponentMatchPlayers,
-  teams,
 } from '../database/schema';
-import {
-  FriendlyFixturesService,
-  unavailableFriendlyOpponentLineup,
-} from '../friendly-fixtures/friendly-fixtures.service';
 import { TeamsService } from '../teams/teams.service';
 import {
   DEFAULT_FORMATION_ID,
   getFormationPlayerCount,
 } from '../common/formations';
 import type {
-  ConfirmLineupDto,
   CreateEventDto,
   CreateRsvpDto,
   StartMatchDto,
@@ -61,7 +43,6 @@ export class EventsService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly athletesService: AthletesService,
-    private readonly friendlyFixturesService: FriendlyFixturesService,
   ) {}
 
   async create(userId: string, dto: CreateEventDto) {
@@ -71,58 +52,25 @@ export class EventsService {
       await this.requireTeamCompetition(team.id, competitionId);
     }
 
-    const friendlyOpponent =
-      dto.type === 'match' && !competitionId && dto.friendlyOpponentTeamId
-        ? await this.requireFriendlyOpponentTeam(
-            team.id,
-            dto.friendlyOpponentTeamId,
-          )
-        : null;
+    const [event] = await this.databaseService.database
+      .insert(events)
+      .values({
+        teamId: team.id,
+        title: dto.title,
+        type: dto.type,
+        scheduledAt: new Date(dto.scheduledAt),
+        location: dto.location,
+        venueAddress: dto.venueAddress,
+        weatherLocation: dto.weatherLocation,
+        weatherLatitude: dto.weatherLatitude,
+        weatherLongitude: dto.weatherLongitude,
+        weatherTimezone: dto.weatherTimezone,
+        notes: dto.notes,
+        competitionId,
+      })
+      .returning();
 
-    // The fixture request is written first so the event carries the link from
-    // the start; a failed event insert removes the request again.
-    let fixtureId: string | null = null;
-    if (friendlyOpponent) {
-      const [fixture] = await this.databaseService.database
-        .insert(friendlyFixtures)
-        .values({
-          requesterTeamId: team.id,
-          opponentTeamId: friendlyOpponent.id,
-          createdByUserId: userId,
-        })
-        .returning({ id: friendlyFixtures.id });
-      fixtureId = fixture.id;
-    }
-
-    try {
-      const [event] = await this.databaseService.database
-        .insert(events)
-        .values({
-          teamId: team.id,
-          title: dto.title,
-          type: dto.type,
-          scheduledAt: new Date(dto.scheduledAt),
-          location: dto.location,
-          venueAddress: dto.venueAddress,
-          weatherLocation: dto.weatherLocation,
-          weatherLatitude: dto.weatherLatitude,
-          weatherLongitude: dto.weatherLongitude,
-          weatherTimezone: dto.weatherTimezone,
-          notes: dto.notes,
-          competitionId,
-          friendlyFixtureId: fixtureId,
-        })
-        .returning();
-
-      return event;
-    } catch (error) {
-      if (fixtureId) {
-        await this.databaseService.database
-          .delete(friendlyFixtures)
-          .where(eq(friendlyFixtures.id, fixtureId));
-      }
-      throw error;
-    }
+    return event;
   }
 
   async list(userId: string) {
@@ -136,71 +84,26 @@ export class EventsService {
    * instead of a coach's owned team.
    */
   async listForTeam(teamId: string) {
-    const requesterTeams = alias(teams, 'friendly_requester_team');
-    const opponentTeams = alias(teams, 'friendly_opponent_team');
-
     const rows = await this.databaseService.database
       .select({
         event: events,
         matchId: matches.id,
         fixtureScheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
-        lineupConfirmedAt: eventLineups.confirmedAt,
-        friendlyFixtureStatus: friendlyFixtures.status,
-        friendlyRequesterTeamId: friendlyFixtures.requesterTeamId,
-        friendlyRequesterTeamName: requesterTeams.name,
-        friendlyOpponentTeamId: friendlyFixtures.opponentTeamId,
-        friendlyOpponentTeamName: opponentTeams.name,
       })
       .from(events)
       .leftJoin(matches, eq(matches.eventId, events.id))
-      .leftJoin(eventLineups, eq(eventLineups.eventId, events.id))
       .leftJoin(
         competitionFixtures,
         eq(competitionFixtures.id, events.competitionFixtureId),
       )
-      .leftJoin(
-        friendlyFixtures,
-        eq(friendlyFixtures.id, events.friendlyFixtureId),
-      )
-      .leftJoin(
-        requesterTeams,
-        eq(requesterTeams.id, friendlyFixtures.requesterTeamId),
-      )
-      .leftJoin(
-        opponentTeams,
-        eq(opponentTeams.id, friendlyFixtures.opponentTeamId),
-      )
       .where(eq(events.teamId, teamId))
       .orderBy(asc(events.scheduledAt));
 
-    return rows.map((row) => {
-      // Each side's calendar shows the *other* team as the opponent. The
-      // link itself is what keeps the two sides on the same friendly fixture.
-      const isRequester = row.friendlyRequesterTeamId === row.event.teamId;
-      const friendlyOpponentTeam = row.event.friendlyFixtureId
-        ? isRequester
-          ? {
-              id: row.friendlyOpponentTeamId,
-              name: row.friendlyOpponentTeamName,
-            }
-          : {
-              id: row.friendlyRequesterTeamId,
-              name: row.friendlyRequesterTeamName,
-            }
-        : { id: null, name: null };
-
-      return {
-        ...row.event,
-        matchId: row.matchId,
-        fixtureScheduleConfirmedAt: row.fixtureScheduleConfirmedAt,
-        lineupConfirmedAt: row.lineupConfirmedAt,
-        friendlyFixtureStatus: row.friendlyFixtureStatus,
-        friendlyRequesterTeamId: row.friendlyRequesterTeamId,
-        friendlyRequesterTeamName: row.friendlyRequesterTeamName,
-        friendlyOpponentTeamId: friendlyOpponentTeam.id,
-        friendlyOpponentTeamName: friendlyOpponentTeam.name,
-      };
-    });
+    return rows.map((row) => ({
+      ...row.event,
+      matchId: row.matchId,
+      fixtureScheduleConfirmedAt: row.fixtureScheduleConfirmedAt,
+    }));
   }
 
   /**
@@ -297,44 +200,12 @@ export class EventsService {
   async findOne(userId: string, eventId: string) {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
-
-    const [friendlyContext, matchRows, lineupRows] = await Promise.all([
-      event.friendlyFixtureId
-        ? this.resolveFriendlyFixtureContext(team.id, event.friendlyFixtureId)
-        : Promise.resolve(null),
-      this.databaseService.database
-        .select({ id: matches.id })
-        .from(matches)
-        .where(eq(matches.eventId, event.id))
-        .limit(1),
-      this.databaseService.database
-        .select({ confirmedAt: eventLineups.confirmedAt })
-        .from(eventLineups)
-        .where(eq(eventLineups.eventId, event.id))
-        .limit(1),
-    ]);
-    // Side-aware friendly fields: the opponent is always the *other* team,
-    // and the requester identity lets the UI tell which side is viewing.
-    const friendlyFields = {
-      friendlyFixtureStatus: friendlyContext?.status ?? null,
-      friendlyRequesterTeamId: friendlyContext?.requester?.id ?? null,
-      friendlyRequesterTeamName: friendlyContext?.requester?.name ?? null,
-      friendlyOpponentTeamId: friendlyContext?.opponent?.id ?? null,
-      friendlyOpponentTeamName: friendlyContext?.opponent?.name ?? null,
-    };
-    const lineupFields = {
-      matchId: matchRows[0]?.id ?? null,
-      lineupConfirmedAt: lineupRows[0]?.confirmedAt ?? null,
-    };
-
     if (!event.competitionFixtureId) {
       return {
         ...event,
         fixtureScheduleConfirmedAt: null,
         fixtureOpponentCompetitionTeamId: null,
         fixtureOpponentName: null,
-        ...friendlyFields,
-        ...lineupFields,
       };
     }
 
@@ -349,118 +220,6 @@ export class EventsService {
       fixtureScheduleConfirmedAt: fixtureContext.scheduleConfirmedAt,
       fixtureOpponentCompetitionTeamId: fixtureContext.opponent?.id ?? null,
       fixtureOpponentName: fixtureContext.opponent?.displayName ?? null,
-      ...friendlyFields,
-      ...lineupFields,
-    };
-  }
-
-  /**
-   * The opposing Gaffer team's confirmed match lineup for an accepted
-   * friendly fixture on this event, so coaches never have to re-enter the
-   * opposition by hand. Only the event's own team is ever resolved as the
-   * other side of the shared fixture; every other case returns the neutral
-   * "not available" shape.
-   */
-  async getFriendlyOpponentLineup(userId: string, eventId: string) {
-    const team = await this.requireTeam(userId);
-    const event = await this.requireEvent(team.id, eventId);
-    if (!event.friendlyFixtureId) {
-      return unavailableFriendlyOpponentLineup();
-    }
-    return this.friendlyFixturesService.resolveOpponentLineup(
-      event.friendlyFixtureId,
-      team.id,
-    );
-  }
-
-  /**
-   * Saves (or replaces) the pre-match lineup for a scheduled match so the
-   * squad is on record before kickoff — in particular for accepted friendly
-   * fixtures, where the opponent sees it through the friendly-opponent
-   * lookup. Open to every team member, mirroring the start-match access
-   * model; once the match starts, its own squad supersedes this record.
-   */
-  async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
-    const team = await this.requireTeam(userId);
-    const event = await this.requireEvent(team.id, eventId);
-
-    if (event.type !== 'match') {
-      throw new NotFoundException('Event not found.');
-    }
-
-    if (event.status !== 'scheduled') {
-      throw new BadRequestException(
-        'Only scheduled matches can have a confirmed lineup.',
-      );
-    }
-
-    const [existingMatch] = await this.databaseService.database
-      .select({ id: matches.id })
-      .from(matches)
-      .where(eq(matches.eventId, event.id))
-      .limit(1);
-
-    if (existingMatch) {
-      throw new ConflictException(
-        'This match has already started — the squad is managed from the Live Logger.',
-      );
-    }
-
-    await this.loadSelectableTeamAthletes(
-      team.id,
-      dto.startingAthleteIds,
-      dto.benchAthleteIds,
-    );
-
-    const confirmedAt = new Date();
-    const [lineup] = await this.databaseService.database
-      .insert(eventLineups)
-      .values({
-        eventId: event.id,
-        teamId: team.id,
-        startingAthleteIds: dto.startingAthleteIds,
-        benchAthleteIds: dto.benchAthleteIds ?? [],
-        confirmedByUserId: userId,
-        confirmedAt,
-      })
-      .onConflictDoUpdate({
-        target: eventLineups.eventId,
-        set: {
-          startingAthleteIds: dto.startingAthleteIds,
-          benchAthleteIds: dto.benchAthleteIds ?? [],
-          confirmedByUserId: userId,
-          confirmedAt,
-          updatedAt: confirmedAt,
-        },
-      })
-      .returning();
-
-    return this.toLineupResponse(lineup);
-  }
-
-  /**
-   * The team's currently confirmed pre-match lineup for this event, or null
-   * when nothing has been confirmed (or the match has started and its live
-   * squad superseded the pre-match record).
-   */
-  async getLineup(userId: string, eventId: string) {
-    const team = await this.requireTeam(userId);
-    const event = await this.requireEvent(team.id, eventId);
-
-    const [lineup] = await this.databaseService.database
-      .select()
-      .from(eventLineups)
-      .where(eq(eventLineups.eventId, event.id))
-      .limit(1);
-
-    return lineup ? this.toLineupResponse(lineup) : null;
-  }
-
-  private toLineupResponse(lineup: typeof eventLineups.$inferSelect) {
-    return {
-      startingAthleteIds: lineup.startingAthleteIds,
-      benchAthleteIds: lineup.benchAthleteIds,
-      confirmedAt: lineup.confirmedAt,
     };
   }
 
@@ -472,10 +231,6 @@ export class EventsService {
         'Generated competition fixtures are managed from Leagues & Competitions.',
       );
     }
-    const fixture = existingEvent.friendlyFixtureId
-      ? await this.requireFriendlyFixture(existingEvent.friendlyFixtureId)
-      : null;
-
     const type = dto.type ?? existingEvent.type;
     const competitionId =
       type === 'match'
@@ -484,20 +239,6 @@ export class EventsService {
           : existingEvent.competitionId
         : null;
     const competitionChanged = competitionId !== existingEvent.competitionId;
-    if (fixture && competitionChanged && competitionId) {
-      throw new BadRequestException(
-        'Remove the Gaffer opponent before adding this match to a competition.',
-      );
-    }
-    if (
-      fixture &&
-      fixture.status === 'accepted' &&
-      (type !== 'match' || competitionChanged)
-    ) {
-      throw new BadRequestException(
-        'This friendly fixture has been accepted and cannot be moved to another competition.',
-      );
-    }
     if (competitionChanged) {
       const [startedMatch] = await this.databaseService.database
         .select({ id: matches.id })
@@ -514,143 +255,46 @@ export class EventsService {
       await this.requireTeamCompetition(team.id, competitionId);
     }
 
-    // Resolve the friendly-opponent link after this update. A pending request
-    // can still be swapped or removed; an accepted fixture is fixed because
-    // the opponent's calendar mirrors it.
-    const currentFriendlyTeamId = fixture
-      ? this.friendlyOpponentTeamIdFor(fixture, team.id)
-      : null;
-    const requestedFriendlyTeamId =
-      dto.friendlyOpponentTeamId === undefined
-        ? currentFriendlyTeamId
-        : type === 'match' && competitionId === null
-          ? dto.friendlyOpponentTeamId
-          : null;
+    const [event] = await this.databaseService.database
+      .update(events)
+      .set({
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.scheduledAt !== undefined
+          ? { scheduledAt: new Date(dto.scheduledAt) }
+          : {}),
+        ...(dto.location !== undefined ? { location: dto.location } : {}),
+        ...(dto.venueAddress !== undefined
+          ? { venueAddress: dto.venueAddress }
+          : {}),
+        ...(dto.weatherLocation !== undefined
+          ? { weatherLocation: dto.weatherLocation }
+          : {}),
+        ...(dto.weatherLatitude !== undefined
+          ? { weatherLatitude: dto.weatherLatitude }
+          : {}),
+        ...(dto.weatherLongitude !== undefined
+          ? { weatherLongitude: dto.weatherLongitude }
+          : {}),
+        ...(dto.weatherTimezone !== undefined
+          ? { weatherTimezone: dto.weatherTimezone }
+          : {}),
+        ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        ...(dto.competitionId !== undefined || type !== 'match'
+          ? { competitionId }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(events.id, eventId), eq(events.teamId, team.id)))
+      .returning();
 
-    if (
-      fixture &&
-      fixture.status === 'accepted' &&
-      requestedFriendlyTeamId !== currentFriendlyTeamId
-    ) {
-      throw new BadRequestException(
-        'The opponent is fixed while this friendly fixture is accepted.',
-      );
-    }
+    await this.databaseService.database
+      .update(matches)
+      .set({ competitionId, updatedAt: new Date() })
+      .where(eq(matches.eventId, eventId));
 
-    let friendlyFixtureId = existingEvent.friendlyFixtureId;
-    let createdFixtureId: string | null = null;
-    if (requestedFriendlyTeamId !== currentFriendlyTeamId) {
-      if (requestedFriendlyTeamId) {
-        await this.requireFriendlyOpponentTeam(
-          team.id,
-          requestedFriendlyTeamId,
-        );
-        const [created] = await this.databaseService.database
-          .insert(friendlyFixtures)
-          .values({
-            requesterTeamId: team.id,
-            opponentTeamId: requestedFriendlyTeamId,
-            createdByUserId: userId,
-          })
-          .returning({ id: friendlyFixtures.id });
-        createdFixtureId = created.id;
-        friendlyFixtureId = created.id;
-      } else {
-        friendlyFixtureId = null;
-      }
-    }
-
-    try {
-      const [event] = await this.databaseService.database
-        .update(events)
-        .set({
-          ...(dto.title !== undefined ? { title: dto.title } : {}),
-          ...(dto.type !== undefined ? { type: dto.type } : {}),
-          ...(dto.status !== undefined ? { status: dto.status } : {}),
-          ...(dto.scheduledAt !== undefined
-            ? { scheduledAt: new Date(dto.scheduledAt) }
-            : {}),
-          ...(dto.location !== undefined ? { location: dto.location } : {}),
-          ...(dto.venueAddress !== undefined
-            ? { venueAddress: dto.venueAddress }
-            : {}),
-          ...(dto.weatherLocation !== undefined
-            ? { weatherLocation: dto.weatherLocation }
-            : {}),
-          ...(dto.weatherLatitude !== undefined
-            ? { weatherLatitude: dto.weatherLatitude }
-            : {}),
-          ...(dto.weatherLongitude !== undefined
-            ? { weatherLongitude: dto.weatherLongitude }
-            : {}),
-          ...(dto.weatherTimezone !== undefined
-            ? { weatherTimezone: dto.weatherTimezone }
-            : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-          ...(dto.competitionId !== undefined || type !== 'match'
-            ? { competitionId }
-            : {}),
-          ...(friendlyFixtureId !== existingEvent.friendlyFixtureId
-            ? { friendlyFixtureId }
-            : {}),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(events.id, eventId), eq(events.teamId, team.id)))
-        .returning();
-
-      // Retire a replaced/removed pending request, and keep an accepted
-      // opponent's calendar entry in step when this side reschedules.
-      if (fixture && fixture.id !== friendlyFixtureId) {
-        await this.databaseService.database
-          .update(friendlyFixtures)
-          .set({ status: 'cancelled', updatedAt: new Date() })
-          .where(
-            and(
-              eq(friendlyFixtures.id, fixture.id),
-              eq(friendlyFixtures.status, 'pending'),
-            ),
-          );
-      }
-      if (
-        fixture &&
-        fixture.id === friendlyFixtureId &&
-        fixture.status === 'accepted' &&
-        currentFriendlyTeamId &&
-        (dto.scheduledAt !== undefined || dto.location !== undefined)
-      ) {
-        await this.databaseService.database
-          .update(events)
-          .set({
-            ...(dto.scheduledAt !== undefined
-              ? { scheduledAt: new Date(dto.scheduledAt) }
-              : {}),
-            ...(dto.location !== undefined ? { location: dto.location } : {}),
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(events.friendlyFixtureId, fixture.id),
-              eq(events.teamId, currentFriendlyTeamId),
-            ),
-          );
-      }
-
-      await this.databaseService.database
-        .update(matches)
-        .set({ competitionId, updatedAt: new Date() })
-        .where(eq(matches.eventId, eventId));
-
-      return event;
-    } catch (error) {
-      // Do not leave a freshly created request behind when the event update
-      // fails — it would surface as an orphaned inbound ask for the opponent.
-      if (createdFixtureId) {
-        await this.databaseService.database
-          .delete(friendlyFixtures)
-          .where(eq(friendlyFixtures.id, createdFixtureId));
-      }
-      throw error;
-    }
+    return event;
   }
 
   async cancel(userId: string, eventId: string) {
@@ -660,10 +304,6 @@ export class EventsService {
       throw new BadRequestException(
         'Generated competition fixtures are managed from Leagues & Competitions.',
       );
-    }
-
-    if (existingEvent.friendlyFixtureId) {
-      await this.cancelFriendlyFixture(existingEvent.friendlyFixtureId);
     }
 
     const [event] = await this.databaseService.database
@@ -676,33 +316,6 @@ export class EventsService {
       .returning();
 
     return event;
-  }
-
-  /**
-   * A friendly fixture is one shared agreement: cancelling either side
-   * retires the fixture and cancels the linked events on both calendars.
-   * Already declined/cancelled fixtures keep their terminal status.
-   */
-  private async cancelFriendlyFixture(fixtureId: string) {
-    await this.databaseService.database
-      .update(events)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(
-        and(
-          eq(events.friendlyFixtureId, fixtureId),
-          ne(events.status, 'cancelled'),
-        ),
-      );
-
-    await this.databaseService.database
-      .update(friendlyFixtures)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(
-        and(
-          eq(friendlyFixtures.id, fixtureId),
-          inArray(friendlyFixtures.status, ['pending', 'accepted']),
-        ),
-      );
   }
 
   async startMatch(userId: string, eventId: string, dto: StartMatchDto) {
@@ -746,43 +359,6 @@ export class EventsService {
       generatedFixtureOpponent = fixtureContext.opponent;
     }
 
-    let friendlyFixtureOpponent: { id: string; name: string } | null = null;
-    if (event.friendlyFixtureId) {
-      const fixture = await this.requireFriendlyFixture(
-        event.friendlyFixtureId,
-      );
-      if (fixture.status === 'pending') {
-        throw new ForbiddenException(
-          'Waiting for the opponent to accept this friendly fixture.',
-        );
-      }
-      if (fixture.status === 'declined') {
-        throw new ForbiddenException(
-          'The opponent declined this friendly fixture.',
-        );
-      }
-      if (fixture.status === 'cancelled') {
-        throw new ForbiddenException(
-          'This friendly fixture has been cancelled.',
-        );
-      }
-      const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, team.id);
-      if (!opponentTeamId) {
-        throw new BadRequestException(
-          'This event is not linked to the friendly fixture.',
-        );
-      }
-      const [opponentTeam] = await this.databaseService.database
-        .select({ id: teams.id, name: teams.name })
-        .from(teams)
-        .where(eq(teams.id, opponentTeamId))
-        .limit(1);
-      if (!opponentTeam) {
-        throw new BadRequestException('Opponent team not found on Gaffer.');
-      }
-      friendlyFixtureOpponent = opponentTeam;
-    }
-
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
         'Matches cannot be started before match day.',
@@ -798,10 +374,7 @@ export class EventsService {
             dto.opponentCompetitionTeamId,
           )
         : null;
-    const opponentName =
-      competitionOpponent?.displayName ??
-      friendlyFixtureOpponent?.name ??
-      dto.opponentName;
+    const opponentName = competitionOpponent?.displayName ?? dto.opponentName;
 
     const gamePlan = dto.gamePlanId
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
@@ -838,19 +411,48 @@ export class EventsService {
       );
     }
 
-    const { teamAthletes, requestedIds } =
-      await this.loadSelectableTeamAthletes(
-        team.id,
-        dto.startingAthleteIds,
-        dto.benchAthleteIds,
+    const teamAthletes = await this.databaseService.database
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.teamId, team.id), isNull(athletes.archivedAt)));
+
+    const eligibleAthleteCount = teamAthletes.filter(
+      (athlete) => athlete.status !== 'injured',
+    ).length;
+    if (eligibleAthleteCount < requiredStarterCount) {
+      throw new BadRequestException(
+        `Your team needs at least ${requiredStarterCount} available athletes to start this match.`,
       );
+    }
+
+    const teamAthletesById = new Map(
+      teamAthletes.map((athlete) => [athlete.id, athlete]),
+    );
+    const requestedIds = dto.benchAthleteIds
+      ? [...dto.startingAthleteIds, ...dto.benchAthleteIds]
+      : dto.startingAthleteIds;
+
+    for (const athleteId of requestedIds) {
+      const athlete = teamAthletesById.get(athleteId);
+      if (!athlete) {
+        throw new BadRequestException(
+          dto.benchAthleteIds
+            ? 'One or more selected athletes are not on this team.'
+            : 'One or more starting athletes are not on this team.',
+        );
+      }
+      if (athlete.status === 'injured') {
+        throw new BadRequestException(
+          'Injured athletes cannot be selected for a match.',
+        );
+      }
+    }
 
     const startingIds = new Set(dto.startingAthleteIds);
     const teamColor = dto.teamColor ?? team.primaryColor ?? null;
     const matchValues = {
       opponentName,
       opponentCompetitionTeamId: competitionOpponent?.id ?? null,
-      opponentTeamId: friendlyFixtureOpponent?.id ?? null,
       isHome: dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
       gamePlanSnapshot: gamePlan
@@ -887,10 +489,6 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
-      // The live match squad supersedes any pre-match lineup record.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
       return existingMatch;
     }
 
@@ -900,7 +498,6 @@ export class EventsService {
         eventId: event.id,
         competitionId: event.competitionId,
         opponentCompetitionTeamId: matchValues.opponentCompetitionTeamId,
-        opponentTeamId: matchValues.opponentTeamId,
         opponentName: matchValues.opponentName,
         isHome: matchValues.isHome,
         gamePlanId: matchValues.gamePlanId,
@@ -958,13 +555,6 @@ export class EventsService {
       }
 
       await this.replaceOpponentSquad(match.id, dto);
-
-      // The match's own squad (athlete_match_stats) is now the source of
-      // truth; the pre-match lineup record is retired so the lineup
-      // endpoint and event details stop reporting a stale pre-kickoff XI.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
     } catch (error) {
       // Compensate for Neon HTTP's lack of interactive transactions so a
       // partially-created match can be retried from the confirmation screen.
@@ -996,48 +586,6 @@ export class EventsService {
         position: player.position ?? null,
       })),
     );
-  }
-
-  /**
-   * Loads the team's active athletes and validates a requested squad
-   * (starters plus optional bench) against them — shared by the pre-match
-   * lineup confirmation and the start-match squad write so both entry
-   * points enforce identical selection rules.
-   */
-  private async loadSelectableTeamAthletes(
-    teamId: string,
-    startingAthleteIds: string[],
-    benchAthleteIds?: string[],
-  ) {
-    const teamAthletes = await this.databaseService.database
-      .select()
-      .from(athletes)
-      .where(and(eq(athletes.teamId, teamId), isNull(athletes.archivedAt)));
-
-    const teamAthletesById = new Map(
-      teamAthletes.map((athlete) => [athlete.id, athlete]),
-    );
-    const requestedIds = benchAthleteIds
-      ? [...startingAthleteIds, ...benchAthleteIds]
-      : startingAthleteIds;
-
-    for (const athleteId of requestedIds) {
-      const athlete = teamAthletesById.get(athleteId);
-      if (!athlete) {
-        throw new BadRequestException(
-          benchAthleteIds
-            ? 'One or more selected athletes are not on this team.'
-            : 'One or more starting athletes are not on this team.',
-        );
-      }
-      if (athlete.status === 'injured') {
-        throw new BadRequestException(
-          'Injured athletes cannot be selected for a match.',
-        );
-      }
-    }
-
-    return { teamAthletes, requestedIds };
   }
 
   private async resolveGeneratedFixtureOpponent(
@@ -1194,97 +742,6 @@ export class EventsService {
       throw new BadRequestException('Competition not found.');
     }
     return competition;
-  }
-
-  /**
-   * Loads a friendly fixture by id. A missing fixture is a bad request — the
-   * link is always written together with the event itself.
-   */
-  private async requireFriendlyFixture(fixtureId: string) {
-    const [fixture] = await this.databaseService.database
-      .select()
-      .from(friendlyFixtures)
-      .where(eq(friendlyFixtures.id, fixtureId))
-      .limit(1);
-
-    if (!fixture) {
-      throw new BadRequestException('Friendly fixture not found.');
-    }
-
-    return fixture;
-  }
-
-  /** The other team on a friendly fixture, from `teamId`'s perspective. */
-  private friendlyOpponentTeamIdFor(
-    fixture: typeof friendlyFixtures.$inferSelect,
-    teamId: string,
-  ): string | null {
-    if (fixture.requesterTeamId === teamId) {
-      return fixture.opponentTeamId;
-    }
-    if (fixture.opponentTeamId === teamId) {
-      return fixture.requesterTeamId;
-    }
-    return null;
-  }
-
-  private async requireFriendlyOpponentTeam(
-    teamId: string,
-    opponentTeamId: string,
-  ) {
-    if (opponentTeamId === teamId) {
-      throw new BadRequestException(
-        'You cannot select your own team as the opponent.',
-      );
-    }
-
-    const [opponent] = await this.databaseService.database
-      .select({ id: teams.id, name: teams.name })
-      .from(teams)
-      .where(eq(teams.id, opponentTeamId))
-      .limit(1);
-
-    if (!opponent) {
-      throw new BadRequestException('Opponent team not found on Gaffer.');
-    }
-
-    return opponent;
-  }
-
-  /**
-   * Side-aware friendly context for one viewer: the requester is always
-   * identified so the UI can tell which side of the fixture is viewing,
-   * and the opponent is always the *other* team — never the viewer itself.
-   */
-  private async resolveFriendlyFixtureContext(
-    teamId: string,
-    fixtureId: string,
-  ): Promise<{
-    status: (typeof friendlyFixtures.status.enumValues)[number];
-    requester: { id: string; name: string } | null;
-    opponent: { id: string; name: string } | null;
-  }> {
-    const fixture = await this.requireFriendlyFixture(fixtureId);
-    const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, teamId);
-    const teamIds = [
-      ...new Set(
-        [fixture.requesterTeamId, opponentTeamId].filter((id): id is string =>
-          Boolean(id),
-        ),
-      ),
-    ];
-
-    const teamRows = await this.databaseService.database
-      .select({ id: teams.id, name: teams.name })
-      .from(teams)
-      .where(inArray(teams.id, teamIds));
-    const teamsById = new Map(teamRows.map((row) => [row.id, row]));
-
-    return {
-      status: fixture.status,
-      requester: teamsById.get(fixture.requesterTeamId) ?? null,
-      opponent: opponentTeamId ? (teamsById.get(opponentTeamId) ?? null) : null,
-    };
   }
 
   private async requireTeam(userId: string) {

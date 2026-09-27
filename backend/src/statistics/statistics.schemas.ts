@@ -144,20 +144,3 @@ export const updateStandingSchema = z
     },
   );
 export type UpdateStandingDto = z.infer<typeof updateStandingSchema>;
-
-export const generateSeasonInsightSchema = z.object({
-  seasonId: z.uuid('Invalid season id.').optional(),
-});
-export type GenerateSeasonInsightDto = z.infer<
-  typeof generateSeasonInsightSchema
->;
-
-export const askAssistantSchema = z.object({
-  question: z
-    .string()
-    .trim()
-    .min(3, 'Ask a longer question.')
-    .max(300, 'Keep questions under 300 characters.'),
-  seasonId: z.uuid('Invalid season id.').optional(),
-});
-export type AskAssistantDto = z.infer<typeof askAssistantSchema>;

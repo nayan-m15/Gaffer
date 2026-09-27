@@ -23,7 +23,7 @@ export function StandingsSection({
         </div>
         <Link
           to="/competitions"
-          className={cn("no-print", buttonVariants({ variant: "outline", size: "sm" }))}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
         >
           Manage competitions
         </Link>
@@ -97,7 +97,7 @@ function CompetitionCard({
         {competition.isAdmin && competition.type !== "friendly" && (
           <Link
             to={`/competitions/${competition.id}#results`}
-            className={cn("no-print", buttonVariants({ variant: "outline", size: "sm" }))}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             Manage results
           </Link>

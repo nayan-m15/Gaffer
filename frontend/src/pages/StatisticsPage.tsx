@@ -4,22 +4,17 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { useAuth } from "@/hooks/useAuth";
-import { AssistantChatPanel } from "@/features/statistics/AssistantChatPanel";
 import { AthleteComparisonSection } from "@/features/statistics/AthleteComparisonSection";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
 import { DeleteConfirmDialog } from "@/features/statistics/DeleteConfirmDialog";
 import { PlayerStatsTable } from "@/features/statistics/PlayerStatsTable";
 import { RecentFormSection } from "@/features/statistics/RecentFormSection";
-import { RecentInsightsSection } from "@/features/statistics/RecentInsightsSection";
 import { SeasonFormDialog } from "@/features/statistics/SeasonFormDialog";
-import { SeasonInsightSection } from "@/features/statistics/SeasonInsightSection";
 import { SeasonsSection } from "@/features/statistics/SeasonsSection";
 import { SeasonTrendsSection } from "@/features/statistics/SeasonTrendsSection";
 import { StandingsSection } from "@/features/statistics/StandingsSection";
 import { StatCardsGrid } from "@/features/statistics/StatCardsGrid";
 import { StatisticsFilters } from "@/features/statistics/StatisticsFilters";
-import { ReportActions } from "@/features/statistics/ReportActions";
-import { TeamPerformanceReport } from "@/features/statistics/TeamPerformanceReport";
 import { useStatisticsFilters } from "@/features/statistics/useStatisticsFilters";
 import { formatSeasonRange } from "@/features/statistics/season-trends-model";
 import {
@@ -96,18 +91,6 @@ export default function StatisticsPage() {
   const competitions = competitionsQuery.data ?? [];
   const seasons = seasonsQuery.data ?? [];
 
-  const playerSectionRef = useRef<HTMLDivElement>(null);
-  const comparisonSectionRef = useRef<HTMLDivElement>(null);
-
-  const handleViewPlayer = (id: string) => {
-    setAthleteId(id);
-    playerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const handleComparePlayers = () => {
-    comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   // Default to the current season once the list arrives. The server returns
   // all-time when unfiltered, so the default lives here rather than in the API
   // — and `replace` keeps it out of the back-button history.
@@ -128,7 +111,6 @@ export default function StatisticsPage() {
   }, [currentSeasonId, hasSeasonParam, setSeasonId]);
 
   const activeSeason = overview?.season ?? null;
-  const activeCompetition = competitions.find((competition) => competition.id === competitionId);
   const scopeLabel = activeSeason
     ? `${activeSeason.name} · ${formatSeasonRange(activeSeason.startDate, activeSeason.endDate)}`
     : "All time";
@@ -136,30 +118,6 @@ export default function StatisticsPage() {
   const subtitle = overview
     ? `${scopeLabel} — ${overview.matchesPlayed} matches — ${overview.wins}W / ${overview.draws}D / ${overview.losses}L — ${overview.goalsFor} GF / ${overview.goalsAgainst} GA`
     : "Team performance, player statistics, and standings.";
-
-  const assistantSeasonLabel = activeSeason ? `${activeSeason.name} season` : "All time";
-  const assistantCompetitionLabel = competitionId
-    ? (competitions.find((c) => c.id === competitionId)?.name ?? "All Competitions")
-    : "All Competitions";
-
-  const reportData = useMemo(
-    () =>
-      overview && team
-        ? {
-            overview,
-            context: {
-              teamName: team.name,
-              competitionName: activeCompetition?.name ?? "All competitions",
-              seasonName: activeSeason?.name ?? "All time",
-              dateRange: activeSeason
-                ? formatSeasonRange(activeSeason.startDate, activeSeason.endDate)
-                : "All recorded matches",
-              generatedAt: new Date(),
-            },
-          }
-        : null,
-    [activeCompetition?.name, activeSeason, overview, team],
-  );
 
   /* ── Season form handlers ─────────────────────────────────────────────── */
   const openAddSeason = () => setSeasonForm({ open: true, editing: null });
@@ -225,26 +183,22 @@ export default function StatisticsPage() {
 
   return (
     <>
-      <div className="statistics-page">
-        <PageHeader
+      <PageHeader
         title="Statistics"
         subtitle={subtitle}
-        actions={<div className="flex flex-wrap items-center gap-2">
-          <div className="report-filters no-print">
-            <StatisticsFilters
-              seasons={seasons}
-              competitions={competitions}
-              seasonId={seasonId}
-              competitionId={competitionId}
-              onSeasonChange={setSeasonId}
-              onCompetitionChange={setCompetitionId}
-            />
-          </div>
-          {isCoach && reportData && <ReportActions data={reportData} />}
-        </div>}
-        />
+        actions={
+          <StatisticsFilters
+            seasons={seasons}
+            competitions={competitions}
+            seasonId={seasonId}
+            competitionId={competitionId}
+            onSeasonChange={setSeasonId}
+            onCompetitionChange={setCompetitionId}
+          />
+        }
+      />
 
-        <div className="statistics-page-content mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {/* ── Statistics overview ──────────────────────────────────────────── */}
         {overviewQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -283,18 +237,6 @@ export default function StatisticsPage() {
           </div>
         )}
 
-        {reportData && (
-          <section aria-label="Team performance report preview">
-            <div className="no-print mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Report preview</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Updates automatically when season or competition filters change.</p>
-              </div>
-            </div>
-            <TeamPerformanceReport data={reportData} />
-          </section>
-        )}
-
         {overview && overview.matchesPlayed > 0 && (
           <>
             {/* Headline stat cards */}
@@ -313,21 +255,8 @@ export default function StatisticsPage() {
               rollingWindow={overview.rollingWindow}
             />
 
-            {/* AI-generated season-summary narrative */}
-            <SeasonInsightSection
-              seasonId={seasonId}
-              seasonLabel={overview.season?.name ?? "All Time"}
-              canGenerate={isCoach}
-            />
-
-            {/* AI-generated per-match narratives */}
-            <RecentInsightsSection insights={overview.recentInsights} />
-
             {/* Player stats + detail panel */}
-            <div
-              ref={playerSectionRef}
-              className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6"
-            >
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
               <AppCard className="p-4 md:p-6 lg:col-span-2">
                 <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-foreground">
                   Player Statistics
@@ -355,13 +284,11 @@ export default function StatisticsPage() {
             </div>
 
             {/* Side-by-side player comparison */}
-            <div ref={comparisonSectionRef}>
-              <AthleteComparisonSection
-                athleteIds={compareIds}
-                seasonId={seasonId}
-                onClear={clearCompare}
-              />
-            </div>
+            <AthleteComparisonSection
+              athleteIds={compareIds}
+              seasonId={seasonId}
+              onClear={clearCompare}
+            />
           </>
         )}
 
@@ -383,18 +310,7 @@ export default function StatisticsPage() {
           competitions={competitions}
           isLoading={competitionsQuery.isLoading}
         />
-        </div>
       </div>
-
-      {/* Floating AI stats assistant — fixed position, independent of overview load state */}
-      <AssistantChatPanel
-        seasonId={seasonId}
-        seasonLabel={assistantSeasonLabel}
-        competitionLabel={assistantCompetitionLabel}
-        players={overview?.players ?? []}
-        onViewPlayer={handleViewPlayer}
-        onComparePlayers={handleComparePlayers}
-      />
 
       {/* Dialogs */}
       <SeasonFormDialog

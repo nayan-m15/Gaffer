@@ -7,6 +7,5 @@ import { CompetitionsService } from './competitions.service';
   imports: [TeamsModule],
   controllers: [CompetitionsController],
   providers: [CompetitionsService],
-  exports: [CompetitionsService],
 })
 export class CompetitionsModule {}

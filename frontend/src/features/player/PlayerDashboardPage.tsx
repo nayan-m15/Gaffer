@@ -238,12 +238,10 @@ function EventItem({ event }: { event: PlayerEvent }) {
           >
             {typeStyle.label}
           </span>
-          {event.location && (
-            <span className="flex items-center gap-1">
-              <MapPin className="size-3" aria-hidden="true" />
-              {event.location}
-            </span>
-          )}
+          <span className="flex items-center gap-1">
+            <MapPin className="size-3" aria-hidden="true" />
+            {event.location}
+          </span>
         </div>
       </div>
       <div className="shrink-0 text-right">

@@ -18,19 +18,13 @@ import {
   competitionTeams,
   events,
   matchEvents,
-  matchProjectionState,
   matches,
   standings,
 } from '../database/schema';
-import { buildAssistantPrompt } from '../insights/assistant-prompt';
-import { InsightsService, type AssistantAnswer } from '../insights/insights.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import type { SeasonWindow } from '../seasons/season-window';
 import { TeamsService } from '../teams/teams.service';
-
-const RECENT_INSIGHTS_LIMIT = 1;
 import type {
-  AskAssistantDto,
   CompareAthletesDto,
   CreateCompetitionDto,
   CreateStandingDto,
@@ -75,7 +69,7 @@ function loggedEventCount(
       and ${matchEvents.athleteId} = ${athleteMatchStats.athleteId}
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = ${eventType}
-      and ${matchEvents.lifecycleStatus} not in ('voided', 'needs_review')
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   ), 0)`;
 }
 
@@ -85,7 +79,7 @@ function matchGoalCount(team: 'own' | 'opponent') {
     where ${matchEvents.matchId} = ${matches.id}
       and ${matchEvents.team} = ${team}
       and ${matchEvents.eventType} = 'goal'
-      and ${matchEvents.lifecycleStatus} not in ('voided', 'needs_review')
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   ), 0)`;
 }
 
@@ -96,7 +90,7 @@ function appearedInMatch() {
       and ${matchEvents.team} = 'own'
       and ${matchEvents.eventType} = 'substitution'
       and ${matchEvents.detail} = ${athleteMatchStats.athleteId}::text
-      and ${matchEvents.lifecycleStatus} not in ('voided', 'needs_review')
+      and ${matchEvents.lifecycleStatus} <> 'voided'
   )`;
 }
 
@@ -115,7 +109,7 @@ function countEvents(
 
   return sql<number>`count(*) filter (
     where ${matchEvents.eventType} = ${eventType}
-      and ${matchEvents.lifecycleStatus} not in ('voided', 'needs_review')${minutesClause}
+      and ${matchEvents.lifecycleStatus} <> 'voided'${minutesClause}
   )::int`;
 }
 
@@ -160,7 +154,6 @@ export class StatisticsService {
     private readonly databaseService: DatabaseService,
     private readonly teamsService: TeamsService,
     private readonly seasonsService: SeasonsService,
-    private readonly insightsService: InsightsService,
   ) {}
 
   /* ── Read endpoints ─────────────────────────────────────────────────────── */
@@ -283,11 +276,6 @@ export class StatisticsService {
         a.name.localeCompare(b.name),
     );
 
-    const recentInsights = await this.insightsService.getRecentForTeam(
-      team.id,
-      RECENT_INSIGHTS_LIMIT,
-    );
-
     return {
       ...totals,
       trends,
@@ -297,53 +285,7 @@ export class StatisticsService {
       rollingWindow: trendAnalysis.rollingWindow,
       form: trendAnalysis.form,
       periods: trendAnalysis.periods,
-      recentInsights,
     };
-  }
-
-  /**
-   * Answers a free-text stats question via Gemini, scoped to the same
-   * season totals, trend deltas, player table, match list, and recent match
-   * reports `getOverview` already computes — no separate data path to keep
-   * in sync. Fully stateless: the question and answer are never persisted,
-   * only returned to the caller.
-   */
-  async askAssistant(
-    userId: string,
-    dto: AskAssistantDto,
-  ): Promise<AssistantAnswer> {
-    const team = await this.requireTeam(userId);
-    const overview = await this.getOverview(userId, { seasonId: dto.seasonId });
-
-    const prompt = buildAssistantPrompt({
-      teamName: team.name,
-      seasonLabel: overview.season?.name ?? 'all matches',
-      question: dto.question,
-      totals: {
-        matchesPlayed: overview.matchesPlayed,
-        wins: overview.wins,
-        draws: overview.draws,
-        losses: overview.losses,
-        goalsFor: overview.goalsFor,
-        goalsAgainst: overview.goalsAgainst,
-        points: overview.points,
-      },
-      deltas: overview.periods.deltas,
-      players: overview.players.map((player) => ({
-        name: player.name,
-        appearances: player.appearances,
-        goals: player.goals,
-        assists: player.assists,
-        yellowCards: player.yellowCards,
-        redCards: player.redCards,
-      })),
-      matches: overview.trends,
-      recentNarratives: overview.recentInsights
-        .map((insight) => insight.narrativeText)
-        .filter((text): text is string => Boolean(text)),
-    });
-
-    return this.insightsService.answerQuestion(prompt);
   }
 
   /**
@@ -688,12 +630,8 @@ export class StatisticsService {
           ownCompetitionTeamId: competitionTeams.id,
           opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
           isHome: matches.isHome,
-          teamScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-            case when ${matches.isHome} then ${competitionFixtures.homeScore} else ${competitionFixtures.awayScore} end
-            else count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
-          opponentScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-            case when ${matches.isHome} then ${competitionFixtures.awayScore} else ${competitionFixtures.homeScore} end
-            else count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
+          teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
         })
         .from(matches)
         .innerJoin(events, eq(matches.eventId, events.id))
@@ -706,34 +644,15 @@ export class StatisticsService {
           ),
         )
         .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
-        .leftJoin(
-          matchProjectionState,
-          eq(matchProjectionState.matchId, matches.id),
-        )
-        .leftJoin(
-          competitionFixtures,
-          eq(competitionFixtures.linkedMatchId, matches.id),
-        )
         .where(
           and(
             inArray(matches.competitionId, competitionIds),
             eq(events.status, 'completed'),
             gte(matches.createdAt, competitions.resultTrackingStartedAt),
             sql`${matches.opponentCompetitionTeamId} is not null`,
-            sql`(${matchProjectionState.matchId} is null
-              or ${matchProjectionState.finalisationState} = 'finalised'
-              or ${competitionFixtures.status} = 'completed')`,
           ),
         )
-        .groupBy(
-          matches.id,
-          matches.competitionId,
-          competitionTeams.id,
-          matchProjectionState.finalisationState,
-          competitionFixtures.homeScore,
-          competitionFixtures.awayScore,
-          competitionFixtures.status,
-        ),
+        .groupBy(matches.id, matches.competitionId, competitionTeams.id),
       this.databaseService.database
         .select({
           competitionId: competitionFixtures.competitionId,

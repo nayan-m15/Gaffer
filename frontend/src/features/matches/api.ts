@@ -1,7 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import type {
   CreateMatchLogEventInput,
-  MatchInsight,
   MatchLogEvent,
   MatchRecord,
   MatchSquadAthlete,
@@ -24,7 +23,6 @@ import {
   readSyncedOpponentSquad,
   readSyncedPreparedMatch,
   readSyncedMatchEvents,
-  readSyncedObservationMemberships,
   readSyncedMatchProjection,
   rejectQueuedEvent,
   setQueuedItemOutcome,
@@ -57,9 +55,7 @@ export async function fetchMatch(matchId: string) {
 
 export async function fetchMatchSquad(matchId: string) {
   try {
-    const squad = await apiFetch<MatchSquadAthlete[]>(
-      `/matches/${matchId}/squad`,
-    );
+    const squad = await apiFetch<MatchSquadAthlete[]>(`/matches/${matchId}/squad`);
     await cacheResponse(`squad:${matchId}`, squad);
     return squad;
   } catch (error) {
@@ -67,9 +63,7 @@ export async function fetchMatchSquad(matchId: string) {
     if (synced.length > 0 || (await hasSyncedPreparedMatch(matchId))) {
       return synced;
     }
-    const cached = await readCachedResponse<MatchSquadAthlete[]>(
-      `squad:${matchId}`,
-    );
+    const cached = await readCachedResponse<MatchSquadAthlete[]>(`squad:${matchId}`);
     if (cached) return cached;
     throw error;
   }
@@ -95,28 +89,21 @@ export async function fetchMatchOpponentSquad(matchId: string) {
   }
 }
 
-export function fetchMatchInsight(matchId: string) {
-  return apiFetch<MatchInsight>(`/matches/${matchId}/insight`);
-}
-
 export async function fetchMatchEvents(matchId: string) {
   let events: MatchLogEvent[];
   try {
-    events = (
-      await apiFetch<MatchLogEvent[]>(`/matches/${matchId}/events`)
-    ).map((event) => ({ ...event, syncStatus: "reconciled" as const }));
+    events = (await apiFetch<MatchLogEvent[]>(`/matches/${matchId}/events`)).map(
+      (event) => ({ ...event, syncStatus: "reconciled" as const }),
+    );
     await cacheResponse(`events:${matchId}`, events);
   } catch (error) {
     const synced = await readSyncedMatchEvents(matchId);
-    const cached = await readCachedResponse<MatchLogEvent[]>(
-      `events:${matchId}`,
-    );
+    const cached = await readCachedResponse<MatchLogEvent[]>(`events:${matchId}`);
     if (synced.length > 0) events = synced;
     else if (cached) events = cached;
     else throw error;
   }
   const allQueued = await listQueuedEvents(matchId);
-  const memberships = await readSyncedObservationMemberships(matchId);
   const canonicalIds = new Set(events.map((event) => event.id));
   const observationIds = new Set(
     events.map((event) => event.clientRequestId).filter(Boolean),
@@ -125,7 +112,6 @@ export async function fetchMatchEvents(matchId: string) {
     if (
       row.state === "accepted" &&
       ((row.canonical_event_id && canonicalIds.has(row.canonical_event_id)) ||
-        memberships.has(row.id) ||
         observationIds.has(row.id))
     ) {
       await completeQueuedEvent(row.id);
@@ -135,10 +121,7 @@ export async function fetchMatchEvents(matchId: string) {
     .filter((row) => (row.kind ?? "observation") === "observation")
     .map(queuedEventAsTimelineRow);
   const queuedIds = new Set(queued.map((event) => event.clientRequestId));
-  return [
-    ...queued,
-    ...events.filter((event) => !queuedIds.has(event.clientRequestId)),
-  ];
+  return [...queued, ...events.filter((event) => !queuedIds.has(event.clientRequestId))];
 }
 
 async function uploadMatchLogEvent(
@@ -164,9 +147,7 @@ async function uploadSyncItems(items: unknown[]) {
   });
 }
 
-function syncItemForRow(
-  row: Awaited<ReturnType<typeof listQueuedEvents>>[number],
-) {
+function syncItemForRow(row: Awaited<ReturnType<typeof listQueuedEvents>>[number]) {
   if (row.kind === "operation") return JSON.parse(row.payload) as unknown;
   return {
     kind: "observation",
@@ -177,11 +158,7 @@ function syncItemForRow(
 
 async function applyReceipt(receipt: SyncReceipt) {
   if (receipt.outcome === "accepted") {
-    await setQueuedItemOutcome(
-      receipt.id,
-      "accepted",
-      receipt.canonicalEventId,
-    );
+    await setQueuedItemOutcome(receipt.id, "accepted", receipt.canonicalEventId);
   } else if (receipt.outcome === "dependency_pending") {
     await setQueuedItemOutcome(
       receipt.id,
@@ -239,26 +216,15 @@ export async function createMatchLogEvent(
     if (!receipt) throw new Error("The server did not acknowledge the event.");
     await applyReceipt(receipt);
     if (receipt.outcome === "rejected") {
-      const rejected = await queuedTimelineRow(
-        matchId,
-        enriched.clientRequestId,
-      );
+      const rejected = await queuedTimelineRow(matchId, enriched.clientRequestId);
       if (rejected) return rejected;
-      throw new Error(
-        receipt.safeErrorCode ?? "The server rejected the event.",
-      );
+      throw new Error(receipt.safeErrorCode ?? "The server rejected the event.");
     }
     const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
-    if (!queued)
-      throw new Error("The accepted event could not be read locally.");
+    if (!queued) throw new Error("The accepted event could not be read locally.");
     return queued;
   } catch (error) {
-    if (
-      error instanceof ApiError &&
-      error.status >= 400 &&
-      error.status < 500 &&
-      error.status !== 401
-    ) {
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401) {
       await rejectQueuedEvent(enriched.clientRequestId, error.message);
       throw error;
     }
@@ -368,20 +334,14 @@ export function finishMatch(matchId: string) {
   });
 }
 
-export function updateMatchClock(
-  matchId: string,
-  input: UpdateMatchClockInput,
-) {
+export function updateMatchClock(matchId: string, input: UpdateMatchClockInput) {
   return apiFetch<MatchRecord>(`/matches/${matchId}/clock`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
 }
 
-export function finaliseMatchProjection(
-  matchId: string,
-  expectedRevision: number,
-) {
+export function finaliseMatchProjection(matchId: string, expectedRevision: number) {
   return apiFetch(`/matches/${matchId}/finalise`, {
     method: "POST",
     body: JSON.stringify({ expectedRevision }),

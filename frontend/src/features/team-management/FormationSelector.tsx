@@ -12,14 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import {
   FORMAT_OPTIONS,
   getDefaultFormationIdForPlayerCount,
   getFormationOptionsForPlayerCount,
   getFormationPlayerCount,
 } from "./formations";
-
 import type { FormationPlayerCount } from "./types";
 
 interface FormationSelectorProps {
@@ -27,14 +25,9 @@ interface FormationSelectorProps {
   onChange: (formationId: string) => void;
 }
 
-export function FormationSelector({
-  value,
-  onChange,
-}: FormationSelectorProps) {
+export function FormationSelector({ value, onChange }: FormationSelectorProps) {
   const playerCount = getFormationPlayerCount(value);
-
-  const formationOptions =
-    getFormationOptionsForPlayerCount(playerCount);
+  const formationOptions = getFormationOptionsForPlayerCount(playerCount);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -44,30 +37,21 @@ export function FormationSelector({
       >
         Format
       </label>
-
       <Select
         value={String(playerCount)}
         onValueChange={(val) => {
           const next = Number(val) as FormationPlayerCount;
-
           if (next === 5 || next === 7 || next === 11) {
             onChange(getDefaultFormationIdForPlayerCount(next));
           }
         }}
       >
-        <SelectTrigger
-          id="format-select"
-          aria-label="Select match format"
-        >
+        <SelectTrigger id="format-select" aria-label="Select match format">
           <SelectValue placeholder="Select format" />
         </SelectTrigger>
-
         <SelectContent>
           {FORMAT_OPTIONS.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={String(option.value)}
-            >
+            <SelectItem key={option.value} value={String(option.value)}>
               {option.label}
             </SelectItem>
           ))}
@@ -80,31 +64,18 @@ export function FormationSelector({
       >
         Formation
       </label>
-
       <Select
         value={value}
         onValueChange={(val) => {
-          if (val) {
-            onChange(val);
-          }
+          if (val) onChange(val);
         }}
       >
-        <SelectTrigger
-          id="formation-select"
-          aria-label="Select formation"
-        >
+        <SelectTrigger id="formation-select" aria-label="Select formation">
           <SelectValue placeholder="Select formation" />
         </SelectTrigger>
-
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="max-h-[min(20rem,var(--available-height))]"
-        >
+        <SelectContent>
           {formationOptions.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-            >
+            <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>
           ))}

@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
-import { InsightsService } from '../insights/insights.service';
 import { StatisticsService } from '../statistics/statistics.service';
 import { TeamsService } from '../teams/teams.service';
 import { DashboardService } from './dashboard.service';
@@ -15,10 +14,6 @@ describe('DashboardService', () => {
 
   const mockStatisticsService = {
     getOverview: jest.fn(),
-  };
-
-  const mockInsightsService = {
-    getRecentForTeam: jest.fn(),
   };
 
   /**
@@ -54,7 +49,6 @@ describe('DashboardService', () => {
         { provide: TeamsService, useValue: mockTeamsService },
         { provide: DatabaseService, useValue: mockDatabaseService },
         { provide: StatisticsService, useValue: mockStatisticsService },
-        { provide: InsightsService, useValue: mockInsightsService },
       ],
     }).compile();
 
@@ -62,7 +56,6 @@ describe('DashboardService', () => {
     jest.clearAllMocks();
     queryLimits.length = 0;
     mockDatabaseService.database.select.mockImplementation(() => thenable([]));
-    mockInsightsService.getRecentForTeam.mockResolvedValue([]);
   });
 
   it('returns an empty summary without querying when the user has no team', async () => {
@@ -78,11 +71,9 @@ describe('DashboardService', () => {
       recentForm: [],
       seasonSummary: null,
       recentStats: [],
-      recentInsights: [],
     });
     expect(mockDatabaseService.database.select).not.toHaveBeenCalled();
     expect(mockStatisticsService.getOverview).not.toHaveBeenCalled();
-    expect(mockInsightsService.getRecentForTeam).not.toHaveBeenCalled();
   });
 
   it("computes the current season's summary and recent-match rate stats", async () => {

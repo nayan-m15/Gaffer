@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { brand } from "@/data/brand";
 
@@ -14,8 +14,11 @@ interface LoadingScreenProps {
  *
  * Behaviour:
  * 1. Renders a fixed overlay above all application content.
- * 2. Starts a smooth fade-out + slight scale transition once `appReady` is true.
- * 3. Calls `onDone` after the CSS transition completes so the parent can remove
+ * 2. Enforces a minimum display time (700 ms) to avoid a jarring flash on fast
+ *    connections.
+ * 3. Starts a smooth fade-out + slight scale transition once `appReady` is true
+ *    AND the minimum display time has elapsed.
+ * 4. Calls `onDone` after the CSS transition completes so the parent can remove
  *    the component from the React tree.
  *
  * The component uses existing CSS custom properties (--background, --foreground,
@@ -24,9 +27,29 @@ interface LoadingScreenProps {
  */
 export function LoadingScreen({ appReady, onDone }: LoadingScreenProps) {
   const [startFade, setStartFade] = useState(false);
+  const minTimeRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    if (appReady) setStartFade(true);
+    mountedRef.current = true;
+
+    // Enforce a minimum display time so the loader doesn't flash on fast connections.
+    const minTimer = window.setTimeout(() => {
+      minTimeRef.current = true;
+      if (mountedRef.current && appReady) setStartFade(true);
+    }, 700);
+
+    // If the parent already signalled ready (e.g. returning visitor with a
+    // cached session), start the fade immediately if the minimum time has
+    // already passed, or wait for it.
+    if (appReady && minTimeRef.current) {
+      setStartFade(true);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(minTimer);
+    };
   }, [appReady]);
 
   /** Lock body scroll while the overlay is visible. */

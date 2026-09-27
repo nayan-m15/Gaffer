@@ -10,7 +10,6 @@ import {
   deleteMatchLogEvent,
   fetchMatch,
   fetchMatchEvents,
-  fetchMatchInsight,
   fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
@@ -37,13 +36,8 @@ export const matchEventsQueryKey = (matchId: string) =>
   ["matches", matchId, "events"] as const;
 export const matchOpponentSquadQueryKey = (matchId: string) =>
   ["matches", matchId, "opponent-squad"] as const;
-export const matchInsightQueryKey = (matchId: string) =>
-  ["matches", matchId, "insight"] as const;
 
 const MATCH_QUERY_STALE_MS = 5_000;
-/** Insight generation runs in the background after finalisation, so this
- * polls briefly while a result is pending rather than requiring a refresh. */
-const MATCH_INSIGHT_POLL_MS = 3_000;
 
 export function useMatch(matchId: string | undefined) {
   return useQuery({
@@ -113,30 +107,6 @@ export function useMatchOpponentSquad(matchId: string | undefined) {
     queryFn: () => fetchMatchOpponentSquad(matchId!),
     enabled: Boolean(matchId),
     staleTime: MATCH_QUERY_STALE_MS,
-  });
-}
-
-/**
- * The finalised match's LLM-generated narrative summary. Generation runs
- * fire-and-forget on the backend right after finalisation, so this polls
- * briefly while the result is still "pending"/"unavailable" and stops once
- * it settles into "ready"/"failed"/"stale".
- *
- * `enabled` should reflect whether the match has ever been finalised (e.g.
- * `projection.finalisationState !== "open"`) — before that, no insight will
- * ever exist, so there is nothing worth polling for.
- */
-export function useMatchInsight(matchId: string | undefined, enabled: boolean) {
-  return useQuery({
-    queryKey: matchInsightQueryKey(matchId ?? ""),
-    queryFn: () => fetchMatchInsight(matchId!),
-    enabled: Boolean(matchId) && enabled,
-    staleTime: MATCH_QUERY_STALE_MS,
-    refetchInterval: (query) =>
-      query.state.data?.status === "pending" ||
-      query.state.data?.status === "unavailable"
-        ? MATCH_INSIGHT_POLL_MS
-        : false,
   });
 }
 
@@ -578,15 +548,8 @@ export function useFinaliseMatchProjection(matchId: string) {
   return useMutation({
     mutationFn: (expectedRevision: number) =>
       finaliseMatchProjection(matchId, expectedRevision),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
-      // Insight generation runs fire-and-forget on the backend; refetching
-      // now (and via useMatchInsight's poll while unavailable/pending) picks
-      // it up without the coach needing to reload the page.
-      void queryClient.invalidateQueries({
-        queryKey: matchInsightQueryKey(matchId),
-      });
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
   });
 }
 

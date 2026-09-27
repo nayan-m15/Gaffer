@@ -1,40 +1,14 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Patch,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
 import { TeamsService } from './teams.service';
-import {
-  createTeamSchema,
-  teamSearchSchema,
-  updateTeamSchema,
-} from './teams.schemas';
+import { createTeamSchema, updateTeamSchema } from './teams.schemas';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 
 @Controller('teams')
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
-
-  /**
-   * Searches other Gaffer teams by name for the friendly-fixture opponent
-   * picker. The caller's own team is excluded server-side.
-   */
-  @UseGuards(AuthGuard)
-  @Get('search')
-  async searchTeams(
-    @CurrentUser() user: AuthenticatedRequest['user'],
-    @Query('q') q: string | undefined,
-  ) {
-    const dto = zodValidate(teamSearchSchema, { q });
-    return this.teamsService.searchTeams(user.id, dto.q);
-  }
 
   @UseGuards(AuthGuard)
   @Post()

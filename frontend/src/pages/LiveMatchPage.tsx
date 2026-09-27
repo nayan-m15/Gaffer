@@ -60,6 +60,7 @@ import {
   PENALTY_MISSED_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
+  displayedGoalScore,
   eventDisplayLabel,
   hasPriorYellow,
   isPairedAssistEvent,
@@ -76,8 +77,6 @@ import {
   isSubOutCallout,
 } from "@/features/matches/live-callouts";
 import {
-  friendlyLineupPlayers,
-  friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
@@ -203,20 +202,6 @@ function formatClock(elapsedMs: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function LiveClockTime({ elapsedMs, running }: { elapsedMs: number; running: boolean }) {
-  const [displayMs, setDisplayMs] = useState(elapsedMs);
-
-  useEffect(() => {
-    setDisplayMs(elapsedMs);
-    if (!running) return;
-    const origin = Date.now() - elapsedMs;
-    const id = window.setInterval(() => setDisplayMs(Date.now() - origin), 1_000);
-    return () => window.clearInterval(id);
-  }, [elapsedMs, running]);
-
-  return formatClock(displayMs);
 }
 
 const FIRST_HALF_MS = 45 * 60_000;
@@ -443,10 +428,8 @@ export default function LiveMatchPage() {
     const origin = Date.now() - baseRef.current;
     const id = window.setInterval(() => {
       const next = Date.now() - origin;
-      const minuteChanged =
-        Math.floor(elapsedRef.current / 60_000) !== Math.floor(next / 60_000);
       elapsedRef.current = next;
-      if (minuteChanged) setElapsedMs(next);
+      setElapsedMs(next);
     }, 200);
     return () => window.clearInterval(id);
   }, [running]);
@@ -501,16 +484,6 @@ export default function LiveMatchPage() {
     [matchQuery.data?.opponentSquad],
   );
   const visibility = matchQuery.data?.opponentSquadVisibility ?? "none";
-  // Pitch and bench display only: manual entries win, otherwise show the
-  // shared lineup of an accepted Gaffer friendly. Event attribution keeps
-  // using the manual `opponentSquad` above, whose ids are real rows.
-  const opponentDisplaySquad = useMemo(
-    () =>
-      opponentSquad.length > 0
-        ? opponentSquad
-        : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
-    [matchQuery.data?.friendlyOpponentLineup, opponentSquad],
-  );
   const currentMinute = Math.floor(elapsedMs / 60_000);
 
   const rowKey = (event: MatchLogEvent) => event.optimisticKey ?? event.id;
@@ -538,22 +511,8 @@ export default function LiveMatchPage() {
       ? ownState.onPitch.length
       : 11;
   const oppState = useMemo(
-    () =>
-      opponentPitchState(
-        opponentDisplaySquad,
-        timeline,
-        matchPlayerCount,
-        opponentSquad.length > 0
-          ? undefined
-          : friendlyLineupStarterIds(matchQuery.data?.friendlyOpponentLineup),
-      ),
-    [
-      matchPlayerCount,
-      matchQuery.data?.friendlyOpponentLineup,
-      opponentDisplaySquad,
-      opponentSquad,
-      timeline,
-    ],
+    () => opponentPitchState(opponentSquad, timeline, matchPlayerCount),
+    [matchPlayerCount, opponentSquad, timeline],
   );
 
   const ownName = team?.name ?? "US";
@@ -568,34 +527,24 @@ export default function LiveMatchPage() {
   const awayColor = isHome ? oppColor : ownColor;
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  // Once the timeline is loaded, its effective rows determine the displayed
-  // score. A cached match total may be from a different projection revision.
-  const teamScore = eventsQuery.isSuccess
-    ? timeline.filter(
-        (event) =>
-          event.team === "own" &&
-          event.eventType === "goal" &&
-          event.lifecycleStatus !== "voided",
-      ).length
-    : (matchQuery.data?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
-    ? timeline.filter(
-        (event) =>
-          event.team === "opponent" &&
-          event.eventType === "goal" &&
-          event.lifecycleStatus !== "voided",
-      ).length
-    : (matchQuery.data?.opponentScore ?? 0);
+  // A reloaded offline page restores the last server score and the queued
+  // timeline independently. Include locally queued goals without adding them
+  // twice when the optimistic match cache already contains the same score.
+  const teamScore = displayedGoalScore(
+    matchQuery.data?.teamScore ?? 0,
+    timeline,
+    "own",
+  );
+  const oppScore = displayedGoalScore(
+    matchQuery.data?.opponentScore ?? 0,
+    timeline,
+    "opponent",
+  );
   const homeName = isHome ? ownName : oppName;
   const awayName = isHome ? oppName : ownName;
   const homeScore = isHome ? teamScore : oppScore;
   const awayScore = isHome ? oppScore : teamScore;
   const projection = matchQuery.data?.projection;
-  const projectionConsistent =
-    !projection ||
-    timeline
-      .filter((event) => event.syncStatus === "reconciled")
-      .every((event) => event.projectionRevision === projection.revision);
   const confirmedHomeScore = isHome
     ? projection?.confirmedTeamScore
     : projection?.confirmedOpponentScore;
@@ -696,7 +645,12 @@ export default function LiveMatchPage() {
         }
       })();
     },
-    [matchId, clockAuthorityRevision, refetchMatch, updateMatchClock],
+    [
+      matchId,
+      clockAuthorityRevision,
+      refetchMatch,
+      updateMatchClock,
+    ],
   );
 
   useEffect(() => {
@@ -740,7 +694,6 @@ export default function LiveMatchPage() {
   const pauseClock = () => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
-    setElapsedMs(elapsedRef.current);
     persistClock(period, false, elapsedRef.current);
   };
 
@@ -758,7 +711,6 @@ export default function LiveMatchPage() {
   const goHalfTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
-    setElapsedMs(elapsedRef.current);
     setCheckIn(null);
     setPeriod("half_time");
     persistClock("half_time", false, elapsedRef.current);
@@ -781,7 +733,6 @@ export default function LiveMatchPage() {
   const goFullTime = useCallback(() => {
     setRunning(false);
     baseRef.current = elapsedRef.current;
-    setElapsedMs(elapsedRef.current);
     setCheckIn(null);
     setPeriod("full_time");
     persistClock("full_time", false, elapsedRef.current);
@@ -839,7 +790,7 @@ export default function LiveMatchPage() {
     const tick = () =>
       setCheckInLeftMs(Math.max(0, checkIn.endsAt - Date.now()));
     tick();
-    const id = window.setInterval(tick, 1_000);
+    const id = window.setInterval(tick, 200);
     return () => window.clearInterval(id);
   }, [checkIn]);
 
@@ -1418,7 +1369,7 @@ export default function LiveMatchPage() {
     setActionError(null);
     try {
       await finishMatch.mutateAsync();
-      navigate(`/matches/${matchId}/report`);
+      navigate("/events");
     } catch (err) {
       setActionError(
         err instanceof ApiError ? err.message : "Could not finish this match.",
@@ -1779,15 +1730,13 @@ export default function LiveMatchPage() {
                       : "bg-[#5d6b76]/15 text-[#9fadb8]",
                 )}
               >
-                {!projectionConsistent
-                  ? "Syncing result and event log"
-                  : projection.finalisationState === "finalised"
-                    ? `Final result · revision ${projection.revision}`
-                    : projection.finalisationState === "amendment_required"
-                      ? "Result changed · amendment review required"
-                      : projection.unresolvedReviewCount > 0
-                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
-                        : `Live provisional · revision ${projection.revision}`}
+                {projection.finalisationState === "finalised"
+                  ? `Final result · revision ${projection.revision}`
+                  : projection.finalisationState === "amendment_required"
+                    ? "Result changed · amendment review required"
+                    : projection.unresolvedReviewCount > 0
+                      ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+                      : `Live provisional · revision ${projection.revision}`}
               </span>
             </div>
           ) : null}
@@ -1800,7 +1749,7 @@ export default function LiveMatchPage() {
                 )}
               />
               <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
-                <LiveClockTime elapsedMs={elapsedMs} running={running} />
+                {formatClock(elapsedMs)}
               </span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8e9ba8]">
                 {periodLabel}

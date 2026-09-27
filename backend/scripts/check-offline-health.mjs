@@ -7,21 +7,10 @@ if (!endpoint || !token) {
   );
 }
 
-const timeoutMs = 90_000;
-const startedAt = Date.now();
-let response;
-try {
-  response = await fetch(endpoint, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-} catch (error) {
-  const url = new URL(endpoint);
-  throw new Error(
-    `Operations health request to ${url.origin}${url.pathname} failed after ${Date.now() - startedAt}ms: ${error.message}`,
-    { cause: error },
-  );
-}
+const response = await fetch(endpoint, {
+  headers: { Authorization: `Bearer ${token}` },
+  signal: AbortSignal.timeout(30_000),
+});
 if (!response.ok) {
   throw new Error(`Operations health request failed with HTTP ${response.status}.`);
 }

@@ -6,7 +6,6 @@ import {
   Post,
   ServiceUnavailableException,
   ForbiddenException,
-  HttpException,
   UseGuards,
 } from '@nestjs/common';
 import { createHash, createHmac, createSign } from 'node:crypto';
@@ -87,45 +86,11 @@ export class SyncController {
   ) {
     const { items } = zodValidate(syncUploadSchema, body);
     const receipts: unknown[] = [];
-    let batch: SyncUploadItem[] = [];
-    const matchIds = new Set<string>();
-    const receiptIds = new Set<string>();
-    const flush = async () => {
-      if (batch.length === 0) return;
-      const results = await Promise.allSettled(
-        batch.map((item) => this.processUploadItem(user.id, item)),
-      );
-      batch = [];
-      matchIds.clear();
-      receiptIds.clear();
-      for (const result of results) {
-        if (result.status === 'rejected') throw result.reason;
-        receipts.push(result.value);
-      }
-    };
-
+    // Deliberately process each item independently: one rejected command must
+    // never prevent later valid offline observations from being accepted.
     for (const item of items) {
-      const id =
-        item.kind === 'observation' ? item.payload.clientRequestId : item.id;
-      const hasCausalParents =
-        item.kind === 'operation' && item.causalParentIds.length > 0;
-      if (
-        batch.length === 4 ||
-        matchIds.has(item.matchId) ||
-        receiptIds.has(id) ||
-        hasCausalParents
-      ) {
-        await flush();
-      }
-      if (hasCausalParents) {
-        receipts.push(await this.processUploadItem(user.id, item));
-        continue;
-      }
-      batch.push(item);
-      matchIds.add(item.matchId);
-      receiptIds.add(id);
+      receipts.push(await this.processUploadItem(user.id, item));
     }
-    await flush();
     return { receipts };
   }
 
@@ -319,11 +284,6 @@ export class SyncController {
         `Upload item ${id} failed`,
         error instanceof Error ? error.stack : String(error),
       );
-      // A timeout or database failure may occur after evidence committed.
-      // Leave the item retriable; an immutable observation ID makes retry safe.
-      if (!(error instanceof HttpException) || error.getStatus() >= 500) {
-        throw error;
-      }
       const fallback = {
         id,
         outcome: 'rejected',

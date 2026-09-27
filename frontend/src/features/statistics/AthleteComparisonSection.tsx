@@ -28,7 +28,7 @@ export function AthleteComparisonSection({
   if (athleteIds.length === 0) return null;
 
   return (
-    <section className="stats-chart-section rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
+    <section className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_20px_60px_-40px_rgba(0,0,0,0.75)] backdrop-blur-xl md:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
@@ -40,7 +40,7 @@ export function AthleteComparisonSection({
               : "Season totals and per-appearance rates, side by side."}
           </p>
         </div>
-        <Button className="no-print" variant="outline" size="sm" onClick={onClear}>
+        <Button variant="outline" size="sm" onClick={onClear}>
           <X className="size-4" />
           Clear
         </Button>

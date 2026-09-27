@@ -179,6 +179,7 @@ export default function PlayerEventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
+          onOpenEvent={handleOpenEvent}
         />
       )}
       {view === "week" && (
@@ -188,6 +189,7 @@ export default function PlayerEventsPage() {
           selectedDate={selectedDate}
           now={now}
           onCreateEvent={handleDayClick}
+          onOpenEvent={handleOpenEvent}
         />
       )}
       {view === "agenda" && (

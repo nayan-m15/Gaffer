@@ -37,6 +37,7 @@ interface MobileCalendarViewProps {
   hiddenTypes: ReadonlySet<EventType>;
   readOnly?: boolean;
   onToggleType: (type: EventType) => void;
+  onViewChange: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
   onToday: () => void;
@@ -62,6 +63,7 @@ export function MobileCalendarView({
   hiddenTypes,
   readOnly = false,
   onToggleType,
+  onViewChange,
   onSelectDate,
   onNavigate,
   onToday,
@@ -81,7 +83,7 @@ export function MobileCalendarView({
     view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   return (
-    <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col gap-3 sm:hidden">
+    <div className="flex w-full min-w-0 flex-col gap-3 pb-3 sm:hidden">
       {/* ── 1. Smartphone Top Navigation & Filter Bar ────────────────────── */}
       <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
         {/* Navigation & Period Title */}
@@ -176,6 +178,28 @@ export function MobileCalendarView({
           })}
         </div>
 
+        {/* View Switcher Tabs (Month / Week / Agenda) */}
+        <div className="grid w-full min-w-0 grid-cols-3 rounded-xl bg-muted/60 p-1 text-center">
+          {(["month", "week", "agenda"] as const).map((v) => {
+            const active = view === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => onViewChange(v)}
+                aria-pressed={active}
+                className={cn(
+                  "rounded-lg py-1 text-xs font-semibold capitalize transition-all",
+                  active
+                    ? "bg-background text-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {v}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── 2. Calendar Surfaces ────────────────────────────────────────── */}
@@ -187,7 +211,7 @@ export function MobileCalendarView({
           now={now}
           eventsByDay={eventsByDay}
           onSelectDate={onSelectDate}
-          onOpenEvent={onSelectDate}
+          onOpenEvent={onOpenEvent}
         />
       )}
 
@@ -222,6 +246,19 @@ export function MobileCalendarView({
         />
       )}
 
+      {/* ── 4. Floating Action Button (FAB) ────────────────────────────── */}
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => onCreateEvent(selectedDate)}
+          aria-label="Add new event"
+          className={cn(
+            "fixed bottom-6 right-5 z-40 flex size-13 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <Plus className="size-6" />
+        </button>
+      )}
     </div>
   );
 }
@@ -245,10 +282,10 @@ function MobileMonthGrid({
   now: Date;
   eventsByDay: Map<string, TeamEvent[]>;
   onSelectDate: (date: Date) => void;
-  onOpenEvent: (date: Date) => void;
+  onOpenEvent: (event: TeamEvent) => void;
 }) {
   return (
-    <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+    <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
       {/* Weekday Row Header (M T W T F S S) */}
       <div className="grid w-full min-w-0 grid-cols-7 border-b border-border/60 bg-muted/20 text-center py-1.5">
         {weekdayLabels.map((label, idx) => (
@@ -265,7 +302,7 @@ function MobileMonthGrid({
       </div>
 
       {/* Days Grid - Samsung full screen grid style */}
-      <div className="grid min-h-0 w-full min-w-0 flex-1 grid-cols-7 grid-rows-6">
+      <div className="grid w-full min-w-0 grid-cols-7">
         {grid.map((day, dayIndex) => {
           const isToday = isSameCalendarDay(day, now);
           const isSelected = isSameCalendarDay(day, selectedDate);
@@ -278,7 +315,7 @@ function MobileMonthGrid({
               key={day.toISOString()}
               onClick={() => onSelectDate(day)}
               className={cn(
-                "group relative flex min-h-0 min-w-0 flex-col items-stretch justify-start overflow-hidden p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
+                "group relative flex min-h-[64px] min-w-0 flex-col items-stretch justify-start p-1 transition-all border-b border-r border-border/40 text-left cursor-pointer",
                 outside && "bg-muted/15 opacity-40",
                 isSelected && !outside && "bg-accent/40",
                 "hover:bg-muted/30",
@@ -315,7 +352,7 @@ function MobileMonthGrid({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onOpenEvent(day);
+                        onOpenEvent(evt);
                       }}
                       title={evt.title}
                       className={cn(
@@ -588,7 +625,7 @@ function MobileAgendaList({
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
+    <div className="flex flex-col gap-4">
       {groups.map(([dayKey, dayEvents]) => {
         const [y, m, d] = dayKey.split("-").map(Number);
         const date = new Date(y, m - 1, d);

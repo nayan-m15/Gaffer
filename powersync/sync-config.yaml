@@ -20,37 +20,6 @@ streams:
       JOIN events ON events.id = matches.event_id
       WHERE events.team_id = auth.parameter('team_id')
 
-  team_match_observations:
-    auto_subscribe: true
-    query: |
-      SELECT match_event_observations.*
-      FROM match_event_observations
-      JOIN matches ON matches.id = match_event_observations.match_id
-      JOIN events ON events.id = matches.event_id
-      WHERE events.team_id = auth.parameter('team_id')
-
-  team_match_memberships:
-    auto_subscribe: true
-    query: |
-      SELECT match_event_memberships.observation_id AS id,
-             match_event_memberships.canonical_event_id,
-             match_event_memberships.projection_revision,
-             match_event_memberships.created_at
-      FROM match_event_memberships
-      JOIN match_event_observations ON match_event_observations.id = match_event_memberships.observation_id
-      JOIN matches ON matches.id = match_event_observations.match_id
-      JOIN events ON events.id = matches.event_id
-      WHERE events.team_id = auth.parameter('team_id')
-
-  team_match_operations:
-    auto_subscribe: true
-    query: |
-      SELECT match_event_operations.*
-      FROM match_event_operations
-      JOIN matches ON matches.id = match_event_operations.match_id
-      JOIN events ON events.id = matches.event_id
-      WHERE events.team_id = auth.parameter('team_id')
-
   team_match_projections:
     auto_subscribe: true
     query: |
