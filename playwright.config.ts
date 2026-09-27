@@ -74,8 +74,8 @@ export default defineConfig({
     },
     {
       command: production
-        ? `npm --prefix frontend run preview -- --host localhost --port ${frontendPort} --strictPort`
-        : `npm --prefix frontend run dev -- --port ${frontendPort} --strictPort`,
+        ? `npm --prefix frontend run preview -- --host 127.0.0.1 --port ${frontendPort} --strictPort`
+        : `npm --prefix frontend run dev -- --host 127.0.0.1 --port ${frontendPort} --strictPort`,
       url: frontendURL,
       reuseExistingServer: false,
       timeout: 60_000,
