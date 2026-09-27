@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Search, Plus, Users, Archive, Loader2, AlertCircle, UserPlus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, Plus, Users, Archive, Loader2, AlertCircle, UserPlus, Trash2, X, ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveConfirmDialog } from "@/components/roster/ArchiveConfirmDialog";
 import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
@@ -9,11 +9,11 @@ import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
-import { RosterTable } from "@/components/roster/RosterTable";
+import { RosterPlayerCard } from "@/components/roster/rosterPlayerCard";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
-import { BentoGrid } from "@/components/ui/bento-grid";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +63,9 @@ export default function AthletesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [isDesktopDetail, setIsDesktopDetail] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
+  );
 
   const [editingBackendAthlete, setEditingBackendAthlete] = useState<BackendAthlete | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -128,6 +131,19 @@ export default function AthletesPage() {
     const match = filteredAthletes.find((athlete) => athlete.id === selectedId);
     return match ?? filteredAthletes[0] ?? null;
   }, [filteredAthletes, selectedId]);
+
+  const explicitlySelectedAthlete = useMemo(
+    () => filteredAthletes.find((athlete) => athlete.id === selectedId) ?? null,
+    [filteredAthletes, selectedId],
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const syncViewport = () => setIsDesktopDetail(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
 
   const activeCount = activeAthletes.length;
   const archivedCount = archivedAthletes.length;
@@ -311,66 +327,58 @@ export default function AthletesPage() {
       <PageHeader
         title="Roster Command"
         subtitle="Manage active squad players, squad status, and athlete archives."
+        className="pb-4"
       />
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        <BentoGrid className="max-w-none grid-cols-1 gap-4 md:auto-rows-auto md:grid-cols-3">
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{activeCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active athletes</p></div>
-            <Users className="size-6 text-primary" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{unavailableCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unavailable</p></div>
-            <AlertCircle className="size-6 text-amber-500" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{archivedCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Archived</p></div>
-            <Archive className="size-6 text-muted-foreground" aria-hidden="true" />
-          </AppCard>
-        </BentoGrid>
-        {/* Main layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
-            {/* Squad management card */}
-            <AppCard className="p-4 md:p-6 lg:col-span-2">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
-                    {showArchived ? "Archived Athletes" : "Squad Management"}
-                  </h2>
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand">
-                  {showArchived
-                    ? `${archivedCount} ARCHIVED`
-                    : `${activeCount} PLAYERS REGULARLY ACTIVE`}
-                </p>
-              </div>
+      <div className="roster-page mx-auto w-full min-w-0 max-w-[1600px] space-y-5 overflow-x-hidden px-3 pb-24 sm:px-8 sm:pb-8 lg:px-10">
+        <div className="grid min-w-0 grid-cols-3 gap-2 sm:gap-4">
+          <SummaryCard
+            value={activeCount}
+            label="Active Athletes"
+            icon={<Users className="size-5 text-brand sm:size-6" aria-hidden="true" />}
+          />
+          <SummaryCard
+            value={unavailableCount}
+            label="Unavailable"
+            icon={<AlertCircle className="size-5 text-warning sm:size-6" aria-hidden="true" />}
+          />
+          <SummaryCard
+            value={archivedCount}
+            label="Archived"
+            icon={<Archive className="size-5 text-muted-foreground sm:size-6" aria-hidden="true" />}
+          />
+        </div>
 
+        {/* Main layout */}
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            {/* Squad management card */}
+            <AppCard className="min-w-0 max-w-full p-3 sm:p-4 md:p-5">
               {/* Toolbar: tabs + search + add athlete */}
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+              <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1">
                   <TabButton
                     active={!showArchived}
                     onClick={() => switchTab(false)}
                     icon={<Users className="size-3.5" />}
-                    label="Active"
+                    label={`Active (${activeCount})`}
                   />
                   <TabButton
                     active={showArchived}
                     onClick={() => switchTab(true)}
                     icon={<Archive className="size-3.5" />}
-                    label="Archived"
+                    label={`Archived (${archivedCount})`}
                   />
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="relative w-full sm:max-w-xs">
+                <div className="flex min-w-0 flex-1 items-center gap-2 lg:max-w-md lg:justify-end">
+                  <div className="relative min-w-0 flex-1">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder="Search athletes..."
-                      className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
+                      className="h-9 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
                     />
                   </div>
 
@@ -378,7 +386,7 @@ export default function AthletesPage() {
                     <Button
                       type="button"
                       onClick={openAddForm}
-                      className="w-full gap-1.5 sm:w-auto"
+                      className="hidden shrink-0 gap-1.5 sm:inline-flex"
                     >
                       <Plus className="size-4" />
                       Add Athlete
@@ -402,17 +410,22 @@ export default function AthletesPage() {
                 </div>
               ) : (
                 <>
-                  <RosterTable
-                    athletes={filteredAthletes}
-                    selectedId={selectedId}
-                    showArchived={showArchived}
-                    readOnly={!canManageRoster}
-                    showClaimStatus={canManageClaims}
-                    onSelect={handleSelect}
-                    onEdit={openEditForm}
-                    onArchive={openArchiveDialog}
-                    onRestore={handleRestore}
-                  />
+                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
+                    {filteredAthletes.map((athlete) => (
+                      <RosterPlayerCard
+                        key={athlete.id}
+                        athlete={athlete}
+                        selected={athlete.id === selectedId}
+                        showArchived={showArchived}
+                        readOnly={!canManageRoster}
+                        showClaimStatus={canManageClaims}
+                        onSelect={handleSelect}
+                        onEdit={openEditForm}
+                        onArchive={openArchiveDialog}
+                        onRestore={handleRestore}
+                      />
+                    ))}
+                  </div>
 
                   {filteredAthletes.length === 0 && (
                     <div className="py-12 text-center">
@@ -432,8 +445,8 @@ export default function AthletesPage() {
             {/* Selected athlete details */}
             <section
               className={cn(
-                "min-h-[560px] lg:col-span-1",
-                !selectedAthlete && "hidden lg:flex",
+                "hidden min-h-[620px] min-w-0 xl:block",
+                !selectedAthlete && "xl:flex",
               )}
             >
               {selectedAthlete ? (
@@ -451,12 +464,24 @@ export default function AthletesPage() {
                 </div>
               )}
             </section>
-          </div>
+        </div>
+
+        {!showArchived && canManageRoster && (
+          <Button
+            type="button"
+            size="icon-lg"
+            onClick={openAddForm}
+            className="fixed bottom-20 right-4 z-30 rounded-full shadow-lg sm:hidden"
+            aria-label="Add athlete"
+          >
+            <Plus className="size-5" />
+          </Button>
+        )}
 
         {/* ── Assistants management card (coach-only) ────────────────── */}
         {canManageRoster && (
           <AppCard className="p-4 md:p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
                   Assistants
@@ -473,7 +498,7 @@ export default function AthletesPage() {
                   setInviteResult(null);
                   setIsInviteDialogOpen(true);
                 }}
-                className="gap-1.5"
+                className="w-full gap-1.5 sm:w-auto"
               >
                 <UserPlus className="size-4" />
                 Invite Assistant
@@ -592,6 +617,56 @@ export default function AthletesPage() {
         )}
       </div>
 
+      <Dialog
+        open={!isDesktopDetail && explicitlySelectedAthlete !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="inset-0 top-0 left-0 flex h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-background p-0 sm:max-w-none"
+        >
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSelectedId(null)}
+                aria-label="Back to roster"
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+              <DialogTitle className="truncate text-sm font-bold text-foreground">
+                Player Details
+              </DialogTitle>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setSelectedId(null)}
+              aria-label="Close player details"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5">
+            {explicitlySelectedAthlete && (
+              <AthleteDetailPanel
+                athlete={explicitlySelectedAthlete}
+                onEdit={openEditForm}
+                onArchive={openArchiveDialog}
+                onRestore={handleRestore}
+                onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                readOnly={!canManageRoster}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AthleteFormDialog
         isOpen={isFormOpen}
         onClose={closeForm}
@@ -669,6 +744,28 @@ interface TabButtonProps {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+}
+
+interface SummaryCardProps {
+  value: number;
+  label: string;
+  icon: React.ReactNode;
+}
+
+function SummaryCard({ value, label, icon }: SummaryCardProps) {
+  return (
+    <AppCard className="flex min-w-0 items-center justify-between gap-1.5 p-2.5 sm:gap-3 sm:px-4 sm:py-3.5">
+      <div className="min-w-0">
+        <p className="text-lg font-bold leading-none tabular-nums text-foreground sm:text-2xl">
+          {value}
+        </p>
+        <p className="mt-1 text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground sm:text-xs sm:tracking-wider">
+          {label}
+        </p>
+      </div>
+      <span className="hidden shrink-0 min-[375px]:block">{icon}</span>
+    </AppCard>
+  );
 }
 
 function TabButton({ active, onClick, icon, label }: TabButtonProps) {
