@@ -15,7 +15,10 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Footer } from "@/components/landing/Footer";
 import { ChapterRail } from "@/components/landing/ChapterRail";
-import { LandingScene } from "@/components/landing/LandingScene";
+import {
+  LandingScene,
+  type LandingSceneStatus,
+} from "@/components/landing/LandingScene";
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
@@ -29,24 +32,23 @@ import { cn } from "@/lib/utils";
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function LandingPage() {
-  const [sceneReady, setSceneReady] = useState(false);
+  const [sceneStatus, setSceneStatus] = useState<LandingSceneStatus>("loading");
 
   return (
     <div
       className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
     >
-      {/* One persistent environmental background for the complete page. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <img
-          src="/hero-stadium-bg.png"
-          alt=""
-          className={cn(
-            "absolute inset-0 size-full object-cover object-center transition-opacity duration-700",
-            sceneReady ? "opacity-0" : "opacity-100",
-          )}
-        />
-      </div>
-      <LandingScene onReadyChange={setSceneReady} />
+      {/* Static artwork is reserved for reduced-motion and WebGL failure states. */}
+      {sceneStatus === "fallback" && (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+          <img
+            src="/hero-stadium-bg.png"
+            alt=""
+            className="absolute inset-0 size-full object-cover object-center"
+          />
+        </div>
+      )}
+      <LandingScene onStatusChange={setSceneStatus} />
 
       {/* Sticky Navbar */}
       <Navbar />

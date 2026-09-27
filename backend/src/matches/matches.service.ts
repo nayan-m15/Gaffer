@@ -44,6 +44,11 @@ import type {
   UpdateMatchClockDto,
 } from './matches.schemas';
 
+function isGoalkeeperPosition(position: string | null | undefined) {
+  const normalized = position?.trim().toLowerCase();
+  return normalized === 'gk' || normalized === 'goalkeeper';
+}
+
 /**
  * Live match logging. Every query is scoped to the team returned by
  * `TeamsService.findTeamForUser`; matches on other teams are treated as
@@ -275,6 +280,13 @@ export class MatchesService {
     const opponentLabel =
       attribution.opponentLabel ?? dto.opponentLabel ?? null;
     const opponentPlayerId = attribution.opponentPlayerId ?? null;
+    await this.validateGoalkeeperSave(
+      match.id,
+      dto.team,
+      dto.eventType,
+      dto.athleteId ?? null,
+      opponentPlayerId,
+    );
     const payload = {
       team: dto.team,
       eventType: dto.eventType,
@@ -682,6 +694,17 @@ export class MatchesService {
       opponentPlayerId: dto.opponentPlayerId,
       opponentLabel: dto.opponentLabel,
     });
+    await this.validateGoalkeeperSave(
+      match.id,
+      logged.team,
+      dto.eventType ?? logged.eventType,
+      dto.athleteId === undefined ? logged.athleteId : dto.athleteId,
+      attribution.opponentPlayerId !== undefined
+        ? attribution.opponentPlayerId
+        : dto.opponentPlayerId === undefined
+          ? logged.opponentPlayerId
+          : dto.opponentPlayerId,
+    );
 
     let goalDelta = 0;
     if (event.status === 'completed' && logged.lifecycleStatus !== 'voided') {
@@ -1454,6 +1477,61 @@ export class MatchesService {
     if (status === 'cancelled') {
       throw new BadRequestException('Cancelled matches cannot be edited.');
     }
+  }
+
+  private async validateGoalkeeperSave(
+    matchId: string,
+    team: 'own' | 'opponent',
+    eventType: string,
+    athleteId: string | null,
+    opponentPlayerId: string | null,
+  ) {
+    if (eventType !== 'goalkeeper_save') return;
+
+    const position =
+      team === 'own'
+        ? await this.ownAthletePosition(matchId, athleteId)
+        : await this.opponentPlayerPosition(matchId, opponentPlayerId);
+
+    if (!isGoalkeeperPosition(position)) {
+      throw new BadRequestException(
+        'Goalkeeper saves can only be logged for a goalkeeper.',
+      );
+    }
+  }
+
+  private async ownAthletePosition(matchId: string, athleteId: string | null) {
+    if (!athleteId) return null;
+    const [athlete] = await this.databaseService.database
+      .select({ position: athletes.position })
+      .from(athletes)
+      .innerJoin(
+        athleteMatchStats,
+        eq(athleteMatchStats.athleteId, athletes.id),
+      )
+      .where(
+        and(eq(athletes.id, athleteId), eq(athleteMatchStats.matchId, matchId)),
+      )
+      .limit(1);
+    return athlete?.position ?? null;
+  }
+
+  private async opponentPlayerPosition(
+    matchId: string,
+    opponentPlayerId: string | null,
+  ) {
+    if (!opponentPlayerId) return null;
+    const [player] = await this.databaseService.database
+      .select({ position: opponentMatchPlayers.position })
+      .from(opponentMatchPlayers)
+      .where(
+        and(
+          eq(opponentMatchPlayers.id, opponentPlayerId),
+          eq(opponentMatchPlayers.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    return player?.position ?? null;
   }
 
   private async validateSubstitution(

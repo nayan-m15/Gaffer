@@ -22,6 +22,7 @@ export type PitchHalf = "left" | "right";
 export interface MarkerStats {
   goals: number;
   assists: number;
+  saves: number;
   yellow: boolean;
   red: boolean;
   secondYellow: boolean;
@@ -30,9 +31,15 @@ export interface MarkerStats {
   subIn: boolean;
 }
 
-export type MarkerBadgeKind = "sub-out" | "sub-in" | "card" | "assist" | "goal";
+export type MarkerBadgeKind = "sub-out" | "sub-in" | "card" | "assist" | "goal" | "save";
 
-export type MarkerBadgeSlot = "top-left" | "middle-left" | "bottom-left" | "bottom-right";
+export type MarkerBadgeSlot =
+  | "top-left"
+  | "middle-left"
+  | "bottom-left"
+  | "bottom-right"
+  | "top-right"
+  | "middle-right";
 
 export interface MarkerBadge {
   slot: MarkerBadgeSlot;
@@ -55,6 +62,9 @@ export function markerBadgeSlots(stats: MarkerStats): MarkerBadge[] {
   }
   if (stats.goals > 0) {
     badges.push({ slot: "bottom-right", kind: "goal" });
+  }
+  if (stats.saves > 0) {
+    badges.push({ slot: "top-right", kind: "save" });
   }
   return badges;
 }
@@ -544,6 +554,7 @@ export function markerStatsFor(
   const stats: MarkerStats = {
     goals: 0,
     assists: 0,
+    saves: 0,
     yellow: false,
     red: false,
     secondYellow: false,
@@ -573,6 +584,9 @@ function updateMarkerStats(
 
     if (isSubject && event.eventType === "goal") {
       stats.goals += 1;
+    }
+    if (isSubject && event.eventType === "goalkeeper_save") {
+      stats.saves += 1;
     }
     if (
       isSubject &&

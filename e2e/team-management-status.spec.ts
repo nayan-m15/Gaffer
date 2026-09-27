@@ -1,9 +1,21 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIResponse } from '@playwright/test';
 import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
-import { FRONTEND_URL } from './utils/auth';
+import {
+  BACKEND_URL,
+  E2E_PASSWORD,
+  registerVerifiedUser,
+} from './utils/auth';
 
 const PASSWORD = 'password123';
 const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
+
+async function expectApiOk(response: APIResponse, operation: string) {
+  if (!response.ok()) {
+    throw new Error(
+      `${operation} failed (${response.status()}): ${await response.text()}`,
+    );
+  }
+}
 
 /**
  * Athlete-status integration with Team Management, through the real UI.
@@ -21,7 +33,9 @@ const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
  */
 test('team management reflects athlete status badges and roster edits', async ({
   page,
+  request,
 }) => {
+  test.setTimeout(process.env.CI ? 240_000 : 180_000);
   const { email, teamName } = uniqueTestIdentity('tm-status-e2e');
   const coach = 'TM Status Coach';
 
@@ -32,79 +46,51 @@ test('team management reflects athlete status badges and roster edits', async ({
     page.getByLabel('Main navigation').getByRole('link', { name });
 
   try {
-    await test.step('register a new coach', async () => {
-      await page.goto('/signup');
-      await page.getByLabel('Full name').fill(coach);
-      await page.getByLabel('Email address').fill(email);
-      await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-      await page
-        .getByLabel('Confirm password', { exact: true })
-        .fill(PASSWORD);
-      await page.getByRole('checkbox').check();
-      await page.getByRole('button', { name: /join the dugout/i }).click();
-
-      // Email verification is required: the UI parks on /verify-email.
-      await expect(page).toHaveURL(/\/verify-email$/, NETWORK);
-    });
-
-    await test.step('verify email with a Better Auth-compatible token', async () => {
-      const { signJWT } = await import('better-auth/crypto');
-      const token = await signJWT(
-        { email: email.toLowerCase() },
-        process.env.BETTER_AUTH_SECRET!,
-        60 * 60,
-      );
-      // Real browser navigation through the Vite /auth proxy: Better Auth
-      // marks the address verified, auto-signs-in (session cookie), and 302s
-      // to the login page with the verified notice.
-      const callbackURL = encodeURIComponent(
-        `${FRONTEND_URL}/login?verified=1`,
-      );
-      await page.goto(
-        `/auth/verify-email?token=${token}&callbackURL=${callbackURL}`,
-      );
-      await expect(page).toHaveURL(/\/login\?verified=1$/, NETWORK);
-    });
-
-    await test.step('sign in and create the team', async () => {
+    await test.step('register the coach and seed team athletes', async () => {
+      // This spec focuses on status rendering and edits. Seed its base fixture
+      // through the API so browser setup does not dominate shard runtime.
+      await registerVerifiedUser(request, email, coach, E2E_PASSWORD);
+      await page.goto('/login');
       await page.getByLabel('Email address').fill(email);
       await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
       await page.getByRole('button', { name: /sign in to dugout/i }).click();
-
       await expect(page).toHaveURL(/\/dashboard$/, NETWORK);
 
-      // No team yet — the dashboard header offers team creation.
-      await page.getByRole('button', { name: 'Add Team' }).click();
-      const teamDialog = page.getByRole('dialog', { name: 'Add your team' });
-      await teamDialog.getByLabel('Team name').fill(teamName);
-      await teamDialog.getByRole('button', { name: 'Create Team' }).click();
-      await expect(teamDialog).toBeHidden();
-    });
+      await expectApiOk(
+        await page.context().request.post(`${BACKEND_URL}/teams`, {
+          data: { name: teamName },
+        }),
+        'team creation',
+      );
 
-    await test.step('create one athlete per status from the roster', async () => {
+      // The dashboard already fetched "no team yet" on first load, and
+      // creating the team via the API (instead of through the UI's own
+      // create-team dialog) doesn't invalidate that cache. Reload so the
+      // sidebar picks up the new team instead of staying on its
+      // "Add a team first" placeholders.
+      await page.reload();
+      await expect(
+        page.getByLabel('Main navigation').getByRole('link', { name: 'Team' }),
+      ).toBeVisible(NETWORK);
+
       const athletes = [
-        { first: 'Domi', last: 'Available', status: 'available' },
-        { first: 'Ines', last: 'Injured', status: 'injured' },
-        { first: 'Suri', last: 'Suspended', status: 'suspended' },
+        { firstName: 'Domi', lastName: 'Available', status: 'available' },
+        { firstName: 'Ines', lastName: 'Injured', status: 'injured' },
+        { firstName: 'Suri', lastName: 'Suspended', status: 'suspended' },
       ];
-
-      for (const athlete of athletes) {
-        await sidebarLink('Roster').click();
-        await expect(page).toHaveURL(/\/athletes$/);
-        await page.getByRole('button', { name: 'Add Athlete' }).click();
-
-        const dialog = page.getByRole('dialog', { name: 'Add Athlete' });
-        await dialog.getByLabel('First name').fill(athlete.first);
-        await dialog.getByLabel('Last name').fill(athlete.last);
-        await dialog.getByLabel('Jersey number').fill('9');
-        if (athlete.status !== 'available') {
-          await dialog.getByLabel('Status').selectOption(athlete.status);
-        }
-        await dialog.getByRole('button', { name: 'Add Athlete' }).click();
-        await expect(dialog).toBeHidden();
+      for (const [index, athlete] of athletes.entries()) {
+        await expectApiOk(
+          await page.context().request.post(`${BACKEND_URL}/athletes`, {
+            data: {
+              ...athlete,
+              position: ['ST', 'CM', 'GK'][index],
+              squadNumber: index + 9,
+            },
+          }),
+          `creation of ${athlete.firstName} ${athlete.lastName}`,
+        );
       }
     });
-
     await test.step('team management bench shows each status badge', async () => {
       await sidebarLink('Team').click();
       await expect(page).toHaveURL(/\/team$/);
@@ -167,12 +153,18 @@ test('team management reflects athlete status badges and roster edits', async ({
       await expect(dialog).toBeHidden();
 
       // Navigate to Team Management — the same shared athletes cache was
-      // invalidated, so the bench badge updates without a hard reload.
+      // invalidated, so the bench badge updates without a hard reload. That
+      // update rides on a background refetch against the real database
+      // though, so it needs the same network-round-trip allowance as the
+      // rest of this spec's data-dependent assertions, not the default
+      // expect timeout.
       await sidebarLink('Team').click();
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
-      await expect(inesCard).toBeVisible();
-      await expect(inesCard.getByText('Available', { exact: true })).toBeVisible();
+      await expect(inesCard).toBeVisible(NETWORK);
+      await expect(
+        inesCard.getByText('Available', { exact: true }),
+      ).toBeVisible(NETWORK);
       await expect(inesCard.getByText('Injured', { exact: true })).toHaveCount(0);
       await expect(page.getByText('Injured: 1')).toHaveCount(0);
     });
@@ -184,12 +176,14 @@ test('team management reflects athlete status badges and roster edits', async ({
       ).toBeVisible(NETWORK);
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
-      await expect(inesCard).toBeVisible();
-      await expect(inesCard.getByText('Available', { exact: true })).toBeVisible();
+      await expect(inesCard).toBeVisible(NETWORK);
+      await expect(
+        inesCard.getByText('Available', { exact: true }),
+      ).toBeVisible(NETWORK);
       await expect(
         bench.getByRole('button', { name: /Suri Suspended —/ }),
-      ).toBeVisible();
-      await expect(page.getByText('Suspended: 1')).toBeVisible();
+      ).toBeVisible(NETWORK);
+      await expect(page.getByText('Suspended: 1')).toBeVisible(NETWORK);
     });
   } finally {
     await cleanupUser({ email, teamName });

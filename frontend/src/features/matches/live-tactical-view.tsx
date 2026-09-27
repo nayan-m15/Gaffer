@@ -25,6 +25,7 @@ import {
   type MarkerStats,
   type PitchHalf,
 } from "./live-match-model";
+import { Hand } from "lucide-react";
 import { BootIcon, SoccerBallIcon } from "./match-icons";
 
 const TOKEN_FACE =
@@ -138,6 +139,9 @@ function badgeAnchorStyle(kind: MarkerBadgeKind): CSSProperties {
   if (kind === "assist") {
     return { bottom: "-6px", left: "-6px" };
   }
+  if (kind === "save") {
+    return { top: "-6px", right: "-6px" };
+  }
   return { bottom: "-6px", right: "-6px" };
 }
 
@@ -161,6 +165,8 @@ function markerBadgeKey(kind: MarkerBadgeKind, stats: MarkerStats): string {
       return `goal-${stats.goals}`;
     case "assist":
       return `assist-${stats.assists}`;
+    case "save":
+      return `save-${stats.saves}`;
     case "card":
       return `card-${stats.secondYellow ? "2y" : stats.red ? "r" : "y"}`;
     case "sub-in":
@@ -219,6 +225,12 @@ function MarkerBadge({
           <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#ecefed] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
             <BootIcon className="size-5" />
             <BadgeCount value={stats.assists} />
+          </span>
+        ) : null}
+        {kind === "save" ? (
+          <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#67e8f9] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+            <Hand className="size-3.5" strokeWidth={2.25} />
+            <BadgeCount value={stats.saves} />
           </span>
         ) : null}
         {kind === "card" ? (

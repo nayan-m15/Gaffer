@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   ChevronsRight,
+  Hand,
   HeartPulse,
   Target,
 } from "lucide-react";
@@ -37,6 +38,8 @@ function eventIcon(eventType: MatchEventType): ReactNode {
       return <Target className="size-3.5" />;
     case "injury":
       return <HeartPulse className="size-3.5" />;
+    case "goalkeeper_save":
+      return <Hand className="size-3.5" />;
     default:
       return null;
   }
