@@ -162,6 +162,67 @@ function buildSummary(
   return summary;
 }
 
+function getMissingPlayerCreateReply(
+  collected: Record<string, unknown>,
+): AssistantTurnResult | undefined {
+  const missing = missingHardRequired(collected);
+  if (!missing.includes('firstName') && !missing.includes('lastName')) {
+    return undefined;
+  }
+  return {
+    reply: "What is the player's first name, surname and primary position?",
+    requiresConfirmation: false,
+  };
+}
+
+function askOptionalPlayerFields(
+  state: AssistantConversationState,
+): AssistantTurnResult | undefined {
+  if (state.askedOptionalGroup) return undefined;
+  const hasOptional =
+    state.collectedFields.dateOfBirth !== undefined ||
+    state.collectedFields.squadNumber !== undefined;
+  state.askedOptionalGroup = true;
+  if (hasOptional) return undefined;
+  return {
+    reply: `What is ${String(state.collectedFields.firstName)}'s date of birth and squad number? Both are optional — say "skip" if you don't have them yet.`,
+    requiresConfirmation: false,
+  };
+}
+
+function resolveUpdatePlayer(
+  state: AssistantConversationState,
+  roster: RosterAthlete[],
+  message: string,
+): AssistantTurnResult | undefined {
+  if (state.collectedFields.athleteId !== undefined) return undefined;
+  const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
+    | string[]
+    | undefined;
+  const candidates = pendingIds
+    ? roster.filter((athlete) => pendingIds.includes(athlete.id))
+    : roster;
+  const matches = matchPlayersInMessage(candidates, message);
+  if (matches.length === 1) {
+    state.collectedFields.athleteId = matches[0].id;
+    state.resolvedPlayerName = `${matches[0].firstName} ${matches[0].lastName}`;
+    delete state.collectedFields.__pendingPlayerOptionIds;
+    return undefined;
+  }
+  if (matches.length > 1) {
+    state.collectedFields.__pendingPlayerOptionIds = matches.map((athlete) => athlete.id);
+    return {
+      reply: `I found ${matches.length} players matching that. Which one do you mean?`,
+      requiresConfirmation: false,
+      playerOptions: matches.map(toPlayerOption),
+    };
+  }
+  return {
+    reply: "Which player's profile would you like to complete?",
+    requiresConfirmation: false,
+  };
+}
+
 interface RosterAthlete {
   id: string;
   firstName: string;
@@ -281,33 +342,11 @@ export class RosterAssistant {
       );
     }
 
-    const missing = missingHardRequired(state.collectedFields);
-    if (missing.length > 0) {
-      if (missing.includes('firstName') || missing.includes('lastName')) {
-        return {
-          reply:
-            "What is the player's first name, surname and primary position?",
-          requiresConfirmation: false,
-        };
-      }
-    }
-
-    if (!state.askedOptionalGroup) {
-      // `position` is deliberately excluded here: it's asked alongside the
-      // hard-required name in the very first question, so a coach who
-      // answers it in turn one must not be treated as having already
-      // answered the *second* (DOB/squad number) question too.
-      const hasOptional =
-        state.collectedFields.dateOfBirth !== undefined ||
-        state.collectedFields.squadNumber !== undefined;
-      state.askedOptionalGroup = true;
-      if (!hasOptional) {
-        return {
-          reply: `What is ${String(state.collectedFields.firstName)}'s date of birth and squad number? Both are optional — say "skip" if you don't have them yet.`,
-          requiresConfirmation: false,
-        };
-      }
-    }
+    const missingReply = getMissingPlayerCreateReply(state.collectedFields);
+    if (missingReply) return missingReply;
+    // Position is asked alongside the required name, not with optional fields.
+    const optionalReply = askOptionalPlayerFields(state);
+    if (optionalReply) return optionalReply;
 
     const parsed = createAthleteSchema.safeParse(state.collectedFields);
     if (!parsed.success) {
@@ -363,34 +402,8 @@ export class RosterAssistant {
       teamId,
     )) as RosterAthlete[];
 
-    if (state.collectedFields.athleteId === undefined) {
-      const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
-        string[] | undefined;
-      const candidates = pendingIds
-        ? roster.filter((athlete) => pendingIds.includes(athlete.id))
-        : roster;
-      const matches = matchPlayersInMessage(candidates, message);
-
-      if (matches.length === 1) {
-        state.collectedFields.athleteId = matches[0].id;
-        state.resolvedPlayerName = `${matches[0].firstName} ${matches[0].lastName}`;
-        delete state.collectedFields.__pendingPlayerOptionIds;
-      } else if (matches.length > 1) {
-        state.collectedFields.__pendingPlayerOptionIds = matches.map(
-          (a) => a.id,
-        );
-        return {
-          reply: `I found ${matches.length} players matching that. Which one do you mean?`,
-          requiresConfirmation: false,
-          playerOptions: matches.map(toPlayerOption),
-        };
-      } else {
-        return {
-          reply: "Which player's profile would you like to complete?",
-          requiresConfirmation: false,
-        };
-      }
-    }
+    const playerReply = resolveUpdatePlayer(state, roster, message);
+    if (playerReply) return playerReply;
 
     const athleteId = state.collectedFields.athleteId as string;
     const existing = roster.find((athlete) => athlete.id === athleteId);

@@ -42,10 +42,12 @@ import {
 import { useCreateEvent, useUpdateEvent } from "./hooks";
 import { searchLocations } from "./api";
 import type {
+  CreateEventInput,
   EventType,
   FriendlyFixtureStatus,
   LocationSearchResult,
   TeamEvent,
+  UpdateEventInput,
 } from "./types";
 import { searchGafferTeams } from "@/services/teams";
 import type { GafferTeamSearchResult } from "@/services/teams";
@@ -96,6 +98,74 @@ function opponentSuggestionsFromStandings(
     names.push(name);
   }
   return names;
+}
+
+type EventFormValues = {
+  title: string;
+  type: EventType;
+  scheduledAt: string;
+  location: string;
+  venueAddress: string;
+  forecastLocation: LocationSearchResult | null;
+  notes: string;
+  competitionId: string;
+  opponentTeamId: string | null;
+};
+
+function commonEventInput(values: EventFormValues) {
+  return {
+    title: values.title.trim(),
+    type: values.type,
+    scheduledAt: values.scheduledAt,
+    location: values.location.trim(),
+    venueAddress: values.venueAddress.trim() || null,
+    weatherLocation: values.forecastLocation?.displayName ?? null,
+    weatherLatitude: values.forecastLocation?.latitude ?? null,
+    weatherLongitude: values.forecastLocation?.longitude ?? null,
+    weatherTimezone: values.forecastLocation?.timezone ?? null,
+    competitionId:
+      values.type === "match" && values.competitionId !== "none"
+        ? values.competitionId
+        : null,
+    friendlyOpponentTeamId:
+      values.type === "match" && values.competitionId === "none"
+        ? values.opponentTeamId
+        : null,
+  };
+}
+
+function createEventInput(values: EventFormValues): CreateEventInput {
+  return {
+    ...commonEventInput(values),
+    ...(values.notes.length > 0 ? { notes: values.notes } : {}),
+  };
+}
+
+function updateEventInput(
+  values: EventFormValues,
+  friendlyFixtureLocked: boolean,
+): UpdateEventInput {
+  const input = commonEventInput(values);
+  return {
+    ...input,
+    notes: values.notes.length > 0 ? values.notes : null,
+    ...(friendlyFixtureLocked
+      ? {}
+      : { friendlyOpponentTeamId: input.friendlyOpponentTeamId }),
+  };
+}
+
+function eventScheduleError(
+  scheduledAt: string,
+  isEditing: boolean,
+  allowPastDate: boolean,
+): string | undefined {
+  const timestamp = new Date(scheduledAt).getTime();
+  if (Number.isNaN(timestamp)) return "Enter a valid date and time.";
+  if (!isEditing && !allowPastDate && timestamp <= Date.now()) {
+    return "Choose a date and time in the future.";
+  }
+  return undefined;
 }
 
 interface EventFormDialogProps {
@@ -409,69 +479,33 @@ export function EventFormDialog({
     }
 
     const scheduledAt = combineScheduledAt(formatLocalDate(date), time);
-    if (Number.isNaN(new Date(scheduledAt).getTime())) {
-      setError("Enter a valid date and time.");
+    const scheduleError = eventScheduleError(scheduledAt, Boolean(event), allowPastDate);
+    if (scheduleError) {
+      setError(scheduleError);
       return;
     }
 
-    if (!event && !allowPastDate && new Date(scheduledAt).getTime() <= Date.now()) {
-      setError("Choose a date and time in the future.");
-      return;
-    }
-
-    const notesValue = notes.trim();
-    const forecastLocation = weatherOverride
-      ? selectedLocation
-      : selectedVenueLocation;
+    const values: EventFormValues = {
+      title,
+      type,
+      scheduledAt,
+      location,
+      venueAddress,
+      forecastLocation: weatherOverride ? selectedLocation : selectedVenueLocation,
+      notes: notes.trim(),
+      competitionId,
+      opponentTeamId: gafferOpponentPick?.id ?? null,
+    };
 
     try {
       if (event) {
         await updateEvent.mutateAsync({
           id: event.id,
-          input: {
-            title: title.trim(),
-            type,
-            scheduledAt,
-            location: location.trim(),
-            venueAddress: venueAddress.trim() || null,
-            weatherLocation: forecastLocation?.displayName ?? null,
-            weatherLatitude: forecastLocation?.latitude ?? null,
-            weatherLongitude: forecastLocation?.longitude ?? null,
-            weatherTimezone: forecastLocation?.timezone ?? null,
-            notes: notesValue.length > 0 ? notesValue : null,
-            competitionId:
-              type === "match" && competitionId !== "none" ? competitionId : null,
-            // Accepted fixtures keep their opponent link (send nothing) —
-            // a pending request can still be swapped or removed.
-            ...(friendlyFixtureLocked
-              ? {}
-              : {
-                  friendlyOpponentTeamId:
-                    type === "match" && competitionId === "none"
-                      ? (gafferOpponentPick?.id ?? null)
-                      : null,
-                }),
-          },
+          // Accepted fixtures keep their opponent link; pending ones can change.
+          input: updateEventInput(values, friendlyFixtureLocked),
         });
       } else {
-        await createEvent.mutateAsync({
-          title: title.trim(),
-          type,
-          scheduledAt,
-          location: location.trim(),
-          venueAddress: venueAddress.trim() || null,
-          weatherLocation: forecastLocation?.displayName ?? null,
-          weatherLatitude: forecastLocation?.latitude ?? null,
-          weatherLongitude: forecastLocation?.longitude ?? null,
-          weatherTimezone: forecastLocation?.timezone ?? null,
-          ...(notesValue.length > 0 ? { notes: notesValue } : {}),
-          competitionId:
-            type === "match" && competitionId !== "none" ? competitionId : null,
-          friendlyOpponentTeamId:
-            type === "match" && competitionId === "none"
-              ? (gafferOpponentPick?.id ?? null)
-              : null,
-        });
+        await createEvent.mutateAsync(createEventInput(values));
       }
       onOpenChange(false);
     } catch (err) {
@@ -1308,6 +1342,45 @@ function Field({
   );
 }
 
+function friendlyFixtureCopy(status: FriendlyFixtureStatus | null) {
+  const copy: Record<
+    FriendlyFixtureStatus | "new",
+    { heading: string; tone: string; headingTone: string; hint: string }
+  > = {
+    pending: {
+      heading: "Friendly fixture request sent",
+      tone: "border-emerald-500/30 bg-emerald-500/5",
+      headingTone: "text-emerald-500",
+      hint: "Waiting for them to accept — you can still change the date, venue, or opponent.",
+    },
+    declined: {
+      heading: "Friendly fixture declined",
+      tone: "border-destructive/30 bg-destructive/5",
+      headingTone: "text-destructive",
+      hint: "They declined this fixture. Pick another Gaffer team or remove the opponent.",
+    },
+    cancelled: {
+      heading: "Friendly fixture cancelled",
+      tone: "border-border bg-muted/30",
+      headingTone: "text-muted-foreground",
+      hint: "This request was cancelled. Pick a team to send a new one.",
+    },
+    accepted: {
+      heading: "Friendly fixture request will be sent",
+      tone: "border-emerald-500/30 bg-emerald-500/5",
+      headingTone: "text-emerald-500",
+      hint: "They confirm the match before it appears on their calendar.",
+    },
+    new: {
+      heading: "Friendly fixture request will be sent",
+      tone: "border-emerald-500/30 bg-emerald-500/5",
+      headingTone: "text-emerald-500",
+      hint: "They confirm the match before it appears on their calendar.",
+    },
+  };
+  return copy[status ?? "new"];
+}
+
 /**
  * Selected-Gaffer-opponent summary card. `status` is null for a fresh pick,
  * or the live fixture status when the pick matches the event's existing
@@ -1322,34 +1395,7 @@ function GafferOpponentCard({
   status: FriendlyFixtureStatus | null;
   onRemove: () => void;
 }) {
-  const heading =
-    status === "pending"
-      ? "Friendly fixture request sent"
-      : status === "declined"
-        ? "Friendly fixture declined"
-        : status === "cancelled"
-          ? "Friendly fixture cancelled"
-          : "Friendly fixture request will be sent";
-  const tone =
-    status === "declined"
-      ? "border-destructive/30 bg-destructive/5"
-      : status === "cancelled"
-        ? "border-border bg-muted/30"
-        : "border-emerald-500/30 bg-emerald-500/5";
-  const headingTone =
-    status === "declined"
-      ? "text-destructive"
-      : status === "cancelled"
-        ? "text-muted-foreground"
-        : "text-emerald-500";
-  const hint =
-    status === "pending"
-      ? "Waiting for them to accept — you can still change the date, venue, or opponent."
-      : status === "declined"
-        ? "They declined this fixture. Pick another Gaffer team or remove the opponent."
-        : status === "cancelled"
-          ? "This request was cancelled. Pick a team to send a new one."
-          : "They confirm the match before it appears on their calendar.";
+  const { heading, tone, headingTone, hint } = friendlyFixtureCopy(status);
   return (
     <div className={cn("rounded-md border p-2 text-xs text-foreground", tone)}>
       <p className={cn("flex items-center gap-1 font-medium", headingTone)}>

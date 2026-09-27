@@ -713,71 +713,12 @@ export class EventsService {
       throw new BadRequestException('Only scheduled matches can be started.');
     }
 
-    let generatedFixtureOpponent: { id: string; displayName: string } | null =
-      null;
-    if (event.competitionFixtureId) {
-      const fixtureContext = await this.resolveGeneratedFixtureOpponent(
-        team.id,
-        event.competitionFixtureId,
-        event.competitionId,
-      );
-      if (!fixtureContext.scheduleConfirmedAt) {
-        throw new ForbiddenException(
-          'Both teams must confirm the fixture date before this match can start.',
-        );
-      }
-      if (!fixtureContext.opponent) {
-        throw new BadRequestException(
-          'The opponent for this generated fixture is not known yet.',
-        );
-      }
-      if (
-        dto.opponentCompetitionTeamId &&
-        dto.opponentCompetitionTeamId !== fixtureContext.opponent.id
-      ) {
-        throw new BadRequestException(
-          'The opponent is fixed by this generated competition fixture.',
-        );
-      }
-      generatedFixtureOpponent = fixtureContext.opponent;
-    }
-
-    let friendlyFixtureOpponent: { id: string; name: string } | null = null;
-    if (event.friendlyFixtureId) {
-      const fixture = await this.requireFriendlyFixture(
-        event.friendlyFixtureId,
-      );
-      if (fixture.status === 'pending') {
-        throw new ForbiddenException(
-          'Waiting for the opponent to accept this friendly fixture.',
-        );
-      }
-      if (fixture.status === 'declined') {
-        throw new ForbiddenException(
-          'The opponent declined this friendly fixture.',
-        );
-      }
-      if (fixture.status === 'cancelled') {
-        throw new ForbiddenException(
-          'This friendly fixture has been cancelled.',
-        );
-      }
-      const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, team.id);
-      if (!opponentTeamId) {
-        throw new BadRequestException(
-          'This event is not linked to the friendly fixture.',
-        );
-      }
-      const [opponentTeam] = await this.databaseService.database
-        .select({ id: teams.id, name: teams.name })
-        .from(teams)
-        .where(eq(teams.id, opponentTeamId))
-        .limit(1);
-      if (!opponentTeam) {
-        throw new BadRequestException('Opponent team not found on Gaffer.');
-      }
-      friendlyFixtureOpponent = opponentTeam;
-    }
+    const generatedFixtureOpponent = event.competitionFixtureId
+      ? await this.getConfirmedGeneratedOpponent(team.id, event, dto)
+      : null;
+    const friendlyFixtureOpponent = event.friendlyFixtureId
+      ? await this.getAcceptedFriendlyOpponent(team.id, event.friendlyFixtureId)
+      : null;
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
@@ -939,6 +880,60 @@ export class EventsService {
     }
 
     return match;
+  }
+
+  private async getConfirmedGeneratedOpponent(
+    teamId: string,
+    event: typeof events.$inferSelect,
+    dto: StartMatchDto,
+  ) {
+    const fixtureContext = await this.resolveGeneratedFixtureOpponent(
+      teamId,
+      event.competitionFixtureId!,
+      event.competitionId,
+    );
+    if (!fixtureContext.scheduleConfirmedAt) {
+      throw new ForbiddenException(
+        'Both teams must confirm the fixture date before this match can start.',
+      );
+    }
+    const opponent = fixtureContext.opponent;
+    if (!opponent) {
+      throw new BadRequestException(
+        'The opponent for this generated fixture is not known yet.',
+      );
+    }
+    if (dto.opponentCompetitionTeamId && dto.opponentCompetitionTeamId !== opponent.id) {
+      throw new BadRequestException(
+        'The opponent is fixed by this generated competition fixture.',
+      );
+    }
+    return opponent;
+  }
+
+  private async getAcceptedFriendlyOpponent(teamId: string, fixtureId: string) {
+    const fixture = await this.requireFriendlyFixture(fixtureId);
+    const blockedStatuses = {
+      pending: 'Waiting for the opponent to accept this friendly fixture.',
+      declined: 'The opponent declined this friendly fixture.',
+      cancelled: 'This friendly fixture has been cancelled.',
+    } as const;
+    const blockedMessage = blockedStatuses[fixture.status as keyof typeof blockedStatuses];
+    if (blockedMessage) throw new ForbiddenException(blockedMessage);
+
+    const opponentTeamId = this.friendlyOpponentTeamIdFor(fixture, teamId);
+    if (!opponentTeamId) {
+      throw new BadRequestException('This event is not linked to the friendly fixture.');
+    }
+    const [opponentTeam] = await this.databaseService.database
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(eq(teams.id, opponentTeamId))
+      .limit(1);
+    if (!opponentTeam) {
+      throw new BadRequestException('Opponent team not found on Gaffer.');
+    }
+    return opponentTeam;
   }
 
   private async replaceOpponentSquad(matchId: string, dto: StartMatchDto) {

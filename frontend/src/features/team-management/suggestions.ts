@@ -122,10 +122,20 @@ function buildReason(
     parts.push(rsvpLabel(rsvpByAthleteId[athlete.id]));
   }
 
+  appendMatchContribution(parts, athlete, slot.role);
+
+  return parts.join(" · ");
+}
+
+function appendMatchContribution(
+  parts: string[],
+  athlete: SuggestionAthlete,
+  role: string,
+): void {
   const appearances = athlete.appearances ?? 0;
   const goals = athlete.goals ?? 0;
   const assists = athlete.assists ?? 0;
-  if (slot.role === "GK" || slot.role === "DEF") {
+  if (role === "GK" || role === "DEF") {
     if (appearances > 0) parts.push(pluralize(appearances, "appearance"));
     else if (goals > 0) parts.push(pluralize(goals, "goal"));
     else if (assists > 0) parts.push(pluralize(assists, "assist"));
@@ -137,7 +147,6 @@ function buildReason(
     }
   }
 
-  return parts.join(" · ");
 }
 
 export function suggestStartingXi(
@@ -149,13 +158,7 @@ export function suggestStartingXi(
     options.athletes.map((athlete) => [athlete.id, athlete]),
   );
 
-  const planEngaged = new Set<string>();
-  for (const athleteId of Object.values(options.gamePlanAssignments ?? {})) {
-    if (athleteId) planEngaged.add(athleteId);
-  }
-  for (const athleteId of options.gamePlanSubstituteIds ?? []) {
-    planEngaged.add(athleteId);
-  }
+  const planEngaged = collectPlanAthleteIds(options);
 
   const compare = (a: SuggestionAthlete, b: SuggestionAthlete): number => {
     const byRsvp =
@@ -225,4 +228,15 @@ export function suggestStartingXi(
   }
 
   return { startingIds, reasons };
+}
+
+function collectPlanAthleteIds(
+  options: StartingXiSuggestionOptions,
+): Set<string> {
+  const ids = new Set<string>();
+  Object.values(options.gamePlanAssignments ?? {}).forEach((id) => {
+    if (id) ids.add(id);
+  });
+  (options.gamePlanSubstituteIds ?? []).forEach((id) => ids.add(id));
+  return ids;
 }

@@ -148,74 +148,84 @@ function MarkerOverlays({ stats }: { stats: MarkerStats }) {
   }
   return (
     <>
-      {badges.map((badge) => {
-        const isSubOut = badge.kind === "sub-out";
-        const isSubIn = badge.kind === "sub-in";
-        const badgeKey =
-          badge.kind === "goal"
-            ? `goal-${stats.goals}`
-            : badge.kind === "assist"
-              ? `assist-${stats.assists}`
-              : badge.kind === "card"
-                ? `card-${stats.secondYellow ? "2y" : stats.red ? "r" : "y"}`
-                : isSubIn
-                  ? `sub-in-${stats.subMinute ?? ""}`
-                  : `sub-out-${stats.subMinute ?? ""}`;
-        const subColor = isSubIn ? "text-[#16d99a]" : "text-[#e36a6d]";
-        return (
-          <span
-            key={badgeKey}
-            data-marker-badge={badge.kind}
-            className="pointer-events-none absolute z-10"
-            style={badgeAnchorStyle(badge.kind)}
-            aria-hidden="true"
-          >
-            <span className="live-marker-badge-enter flex items-center justify-center">
-              {isSubOut || isSubIn ? (
-                <span
-                  className={cn(
-                    "relative flex size-4 items-center justify-center rounded-full bg-[#141414] shadow-[0_1px_2px_rgba(0,0,0,0.55)] ring-1",
-                    subColor,
-                    isSubIn ? "ring-[#16d99a]/70" : "ring-[#e36a6d]/70",
-                  )}
-                >
-                  {stats.subMinute != null ? (
-                    <span
-                      className={cn(
-                        "absolute bottom-full left-1/2 mb-px -translate-x-1/2 text-[8px] font-bold leading-none tabular-nums",
-                        subColor,
-                      )}
-                    >
-                      {stats.subMinute}&apos;
-                    </span>
-                  ) : null}
-                  <SubArrowIcon incoming={isSubIn} />
-                </span>
-              ) : null}
-              {badge.kind === "goal" ? (
-                <span className="relative size-5 text-[#f4f4f5] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                  <SoccerBallIcon className="size-5" />
-                  <BadgeCount value={stats.goals} />
-                </span>
-              ) : null}
-              {badge.kind === "assist" ? (
-                <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#ecefed] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
-                  <BootIcon className="size-5" />
-                  <BadgeCount value={stats.assists} />
-                </span>
-              ) : null}
-              {badge.kind === "card" ? (
-                <CardGlyph
-                  yellow={stats.yellow}
-                  red={stats.red}
-                  stacked={stats.secondYellow}
-                />
-              ) : null}
-            </span>
-          </span>
-        );
-      })}
+      {badges.map((badge) => (
+        <MarkerBadge key={markerBadgeKey(badge.kind, stats)} kind={badge.kind} stats={stats} />
+      ))}
     </>
+  );
+}
+
+function markerBadgeKey(kind: MarkerBadgeKind, stats: MarkerStats): string {
+  switch (kind) {
+    case "goal":
+      return `goal-${stats.goals}`;
+    case "assist":
+      return `assist-${stats.assists}`;
+    case "card":
+      return `card-${stats.secondYellow ? "2y" : stats.red ? "r" : "y"}`;
+    case "sub-in":
+      return `sub-in-${stats.subMinute ?? ""}`;
+    case "sub-out":
+      return `sub-out-${stats.subMinute ?? ""}`;
+  }
+}
+
+function MarkerBadge({
+  kind,
+  stats,
+}: {
+  kind: MarkerBadgeKind;
+  stats: MarkerStats;
+}) {
+  const isSubOut = kind === "sub-out";
+  const isSubIn = kind === "sub-in";
+  const subColor = isSubIn ? "text-[#16d99a]" : "text-[#e36a6d]";
+  return (
+    <span
+      data-marker-badge={kind}
+      className="pointer-events-none absolute z-10"
+      style={badgeAnchorStyle(kind)}
+      aria-hidden="true"
+    >
+      <span className="live-marker-badge-enter flex items-center justify-center">
+        {isSubOut || isSubIn ? (
+          <span
+            className={cn(
+              "relative flex size-4 items-center justify-center rounded-full bg-[#141414] shadow-[0_1px_2px_rgba(0,0,0,0.55)] ring-1",
+              subColor,
+              isSubIn ? "ring-[#16d99a]/70" : "ring-[#e36a6d]/70",
+            )}
+          >
+            {stats.subMinute != null ? (
+              <span
+                className={cn(
+                  "absolute bottom-full left-1/2 mb-px -translate-x-1/2 text-[8px] font-bold leading-none tabular-nums",
+                  subColor,
+                )}
+              >
+                {stats.subMinute}&apos;
+              </span>
+            ) : null}
+            <SubArrowIcon incoming={isSubIn} />
+          </span>
+        ) : null}
+        {kind === "goal" ? (
+          <span className="relative size-5 text-[#f4f4f5] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <SoccerBallIcon className="size-5" />
+            <BadgeCount value={stats.goals} />
+          </span>
+        ) : null}
+        {kind === "assist" ? (
+          <span className="relative flex size-5 items-center justify-center rounded-full bg-[#141414] text-[#ecefed] shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+            <BootIcon className="size-5" />
+            <BadgeCount value={stats.assists} />
+          </span>
+        ) : null}
+        {kind === "card" ? (
+          <CardGlyph yellow={stats.yellow} red={stats.red} stacked={stats.secondYellow} />
+        ) : null}
+      </span>
+    </span>
   );
 }
 

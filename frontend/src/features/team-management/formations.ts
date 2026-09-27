@@ -490,53 +490,85 @@ export function previewAssignmentsForStarters(
     assignments[pos.id] = null;
   }
 
-  if (preferredAssignments) {
-    for (const pos of formation.positions) {
-      const athleteId = preferredAssignments[pos.id];
-      if (athleteId && starterSet.has(athleteId) && !used.has(athleteId)) {
-        assignments[pos.id] = athleteId;
-        used.add(athleteId);
-      }
-    }
-  }
-
+  assignPreferredStarters(formation.positions, preferredAssignments, starterSet, used, assignments);
   const remaining = starterIds.filter((id) => !used.has(id));
-
-  for (const pos of formation.positions) {
-    if (assignments[pos.id]) continue;
-    const candidate = remaining.find((id) => {
-      if (used.has(id)) return false;
-      return (
-        (getPosition(id) ?? "").trim().toUpperCase() ===
-        pos.label.trim().toUpperCase()
-      );
-    });
-    if (candidate) {
-      assignments[pos.id] = candidate;
-      used.add(candidate);
-    }
-  }
-
-  for (const pos of formation.positions) {
-    if (assignments[pos.id]) continue;
-    const candidate = remaining.find((id) => {
-      if (used.has(id)) return false;
-      return getPositionRole(getPosition(id)) === pos.role;
-    });
-    if (candidate) {
-      assignments[pos.id] = candidate;
-      used.add(candidate);
-    }
-  }
-
-  for (const pos of formation.positions) {
-    if (assignments[pos.id]) continue;
-    const candidate = remaining.find((id) => !used.has(id));
-    if (candidate) {
-      assignments[pos.id] = candidate;
-      used.add(candidate);
-    }
-  }
+  assignStartersByPosition(formation.positions, remaining, getPosition, used, assignments);
+  assignStartersByRole(formation.positions, remaining, getPosition, used, assignments);
+  assignRemainingStarters(formation.positions, remaining, used, assignments);
 
   return assignments;
+}
+
+function assignPreferredStarters(
+  positions: Formation["positions"],
+  preferred: PitchAssignments | undefined,
+  starters: ReadonlySet<string>,
+  used: Set<string>,
+  assignments: PitchAssignments,
+): void {
+  if (!preferred) return;
+  for (const position of positions) {
+    const athleteId = preferred[position.id];
+    if (!athleteId || !starters.has(athleteId) || used.has(athleteId)) continue;
+    assignments[position.id] = athleteId;
+    used.add(athleteId);
+  }
+}
+
+function assignStartersByPosition(
+  positions: Formation["positions"],
+  remaining: string[],
+  getPosition: (athleteId: string) => string | null,
+  used: Set<string>,
+  assignments: PitchAssignments,
+): void {
+  for (const position of positions) {
+    if (assignments[position.id]) continue;
+    const candidate = remaining.find(
+      (id) =>
+        !used.has(id) &&
+        (getPosition(id) ?? "").trim().toUpperCase() ===
+          position.label.trim().toUpperCase(),
+    );
+    if (candidate) assignStarter(position.id, candidate, used, assignments);
+  }
+}
+
+function assignStartersByRole(
+  positions: Formation["positions"],
+  remaining: string[],
+  getPosition: (athleteId: string) => string | null,
+  used: Set<string>,
+  assignments: PitchAssignments,
+): void {
+  for (const position of positions) {
+    if (assignments[position.id]) continue;
+    const candidate = remaining.find(
+      (id) => !used.has(id) && getPositionRole(getPosition(id)) === position.role,
+    );
+    if (candidate) assignStarter(position.id, candidate, used, assignments);
+  }
+}
+
+function assignRemainingStarters(
+  positions: Formation["positions"],
+  remaining: string[],
+  used: Set<string>,
+  assignments: PitchAssignments,
+): void {
+  for (const position of positions) {
+    if (assignments[position.id]) continue;
+    const candidate = remaining.find((id) => !used.has(id));
+    if (candidate) assignStarter(position.id, candidate, used, assignments);
+  }
+}
+
+function assignStarter(
+  positionId: string,
+  athleteId: string,
+  used: Set<string>,
+  assignments: PitchAssignments,
+): void {
+  assignments[positionId] = athleteId;
+  used.add(athleteId);
 }

@@ -1,4 +1,5 @@
 import { CloudSun, Droplets, Wind } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEventWeather } from "./hooks";
 
 interface WeatherEvent {
@@ -10,24 +11,11 @@ interface WeatherEvent {
   weatherTimezone: string | null;
 }
 
-export function EventWeatherCard({
-  event,
-  enabled = true,
-  compact = false,
-}: {
-  event: WeatherEvent;
-  enabled?: boolean;
-  compact?: boolean;
-}) {
-  const query = useEventWeather(
-    event.id,
-    event.scheduledAt,
-    event.weatherLatitude,
-    event.weatherLongitude,
-    enabled,
-  );
+function renderWeatherState(
+  query: ReturnType<typeof useEventWeather>,
+  compact: boolean,
+): ReactNode | undefined {
   const weather = query.data;
-
   if (query.isLoading) {
     return <p className="text-xs text-muted-foreground">Loading forecast…</p>;
   }
@@ -55,6 +43,29 @@ export function EventWeatherCard({
       </p>
     );
   }
+  return undefined;
+}
+
+export function EventWeatherCard({
+  event,
+  enabled = true,
+  compact = false,
+}: {
+  event: WeatherEvent;
+  enabled?: boolean;
+  compact?: boolean;
+}) {
+  const query = useEventWeather(
+    event.id,
+    event.scheduledAt,
+    event.weatherLatitude,
+    event.weatherLongitude,
+    enabled,
+  );
+  const weather = query.data;
+  const statusView = renderWeatherState(query, compact);
+  if (statusView !== undefined) return statusView;
+  if (!weather) return null;
 
   const isArchived = Boolean(
     weather.forecastAt && new Date(weather.forecastAt).getTime() < Date.now(),
