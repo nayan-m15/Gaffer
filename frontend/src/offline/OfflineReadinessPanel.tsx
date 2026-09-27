@@ -87,23 +87,23 @@ export function OfflineReadinessPanel({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-2xl border border-[#1c2b36] bg-[#101920] p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-[#2a2e31] bg-[#111315] p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-oswald text-xl tracking-wide text-white">Prepare for offline use</h2>
-          <button type="button" onClick={onClose} className="text-sm text-[#9fadb8]">Close</button>
+          <button type="button" onClick={onClose} className="text-sm text-[#9ca39f]">Close</button>
         </div>
-        <p className="mt-2 text-sm text-[#9fadb8]">
+        <p className="mt-2 text-sm text-[#9ca39f]">
           Run this while online before leaving for the match.
         </p>
         {error ? <p className="mt-3 text-sm text-[#ff7377]">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-[#00d99a]">{message}</p> : null}
+        {message ? <p className="mt-3 text-sm text-[#16d99a]">{message}</p> : null}
         <div className="mt-4 space-y-2">
           {readiness ? checks.map(([label, passed, fallback]) => (
-            <div key={label} className="flex items-center justify-between rounded-lg bg-[#0c1218] px-3 py-2 text-sm">
-              <span className="text-[#c5ced6]">{label}</span>
-              <span className={passed ? "text-[#00d99a]" : "text-[#ffbe2e]"}>{passed ? "Ready" : fallback}</span>
+            <div key={label} className="flex items-center justify-between rounded-lg bg-[#0d0f10] px-3 py-2 text-sm">
+              <span className="text-[#c7ccc9]">{label}</span>
+              <span className={passed ? "text-[#16d99a]" : "text-[#d6a447]"}>{passed ? "Ready" : fallback}</span>
             </div>
-          )) : <p className="text-sm text-[#9fadb8]">Checking this device…</p>}
+          )) : <p className="text-sm text-[#9ca39f]">Checking this device…</p>}
         </div>
         {readiness ? (
           <div className="mt-3 space-y-1 text-xs text-[#7f8d98]">
@@ -116,7 +116,7 @@ export function OfflineReadinessPanel({
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
-          <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-[#00d99a] px-3 py-2 text-sm font-semibold text-[#05130f]">Check again</button>
+          <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-[#16d99a] px-3 py-2 text-sm font-semibold text-[#05130f]">Check again</button>
           <button type="button" onClick={() => void downloadExport()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Export unsent events</button>
           <button type="button" onClick={() => importRef.current?.click()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Import unsent events</button>
           <input ref={importRef} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void importExport(event.target.files?.[0])} />

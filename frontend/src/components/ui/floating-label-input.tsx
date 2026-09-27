@@ -103,8 +103,8 @@ export function FloatingLabelInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          "w-full rounded-md border border-border bg-card px-4 py-3 text-sm text-foreground",
-          "outline-none transition-colors duration-200",
+          "w-full rounded-md border border-input bg-surface-nested px-4 py-3 text-sm text-foreground",
+          "outline-none transition-colors duration-200 hover:border-border-strong disabled:cursor-not-allowed disabled:bg-muted disabled:text-text-disabled",
           "placeholder:text-transparent",
           "focus:border-brand focus:ring-1 focus:ring-brand/30",
           rightSlot ? "pr-11" : "",

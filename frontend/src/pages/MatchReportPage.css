@@ -1,14 +1,18 @@
 @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
 
 .match-report {
-  --mr-bg: #070d12;
-  --mr-panel: #101920;
-  --mr-line: #1c2b36;
-  --mr-green: #00d99a;
-  --mr-amber: #ffbe2e;
-  --mr-red: #ff5b5f;
-  --mr-muted: #8e9ba8;
-  --mr-white: #e8ecef;
+  --mr-bg: #090a0b;
+  --mr-panel: #111315;
+  --mr-nested: #0d0f10;
+  --mr-line: #2a2e31;
+  --mr-line-strong: #3e4448;
+  --mr-green: #16d99a;
+  --mr-amber: #d6a447;
+  --mr-red: #e36a6d;
+  --mr-info: #72a7d5;
+  --mr-muted: #9ca39f;
+  --mr-secondary: #c7ccc9;
+  --mr-white: #ecefed;
   font-family: "Inter Variable", Inter, system-ui, sans-serif;
   background: var(--mr-bg);
   color: var(--mr-white);

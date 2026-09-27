@@ -36,7 +36,7 @@ export function AnimatedTabs<T extends string>({
       <TabsPrimitive.List
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/65 p-1 shadow-inner backdrop-blur-xl",
+          "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border-subtle bg-surface-nested p-1",
           className,
         )}
       >
@@ -52,7 +52,7 @@ export function AnimatedTabs<T extends string>({
               {active && (
                 <motion.span
                   layoutId={layoutId}
-                  className="absolute inset-0 -z-10 rounded-lg border border-primary/25 bg-primary/12 shadow-[0_10px_30px_-18px_var(--primary)]"
+                  className="absolute inset-0 -z-10 rounded-md border border-border-default bg-surface-active shadow-sm"
                   transition={
                     reduceMotion
                       ? { duration: 0 }

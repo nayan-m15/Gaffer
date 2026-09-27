@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
@@ -12,18 +11,6 @@ import { cn } from "@/lib/utils";
  * only the player nav items (Dashboard / Team / Events / Standings) appear.
  */
 export function PlayerShell() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains("dark");
-    root.classList.add("dark");
-
-    return () => {
-      if (!wasDark) {
-        root.classList.remove("dark");
-      }
-    };
-  }, []);
-
   return (
     <SidebarProvider>
       <PlayerShellContent />
@@ -37,11 +24,11 @@ function PlayerShellContent() {
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_5%,transparent),transparent_30%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--foreground)_3%,transparent),transparent_26%)]"
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none fixed inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
+        className="pointer-events-none fixed inset-0 opacity-[0.022] [background-image:linear-gradient(to_right,currentColor_1px,transparent_1px),linear-gradient(to_bottom,currentColor_1px,transparent_1px)] [background-size:36px_36px]"
         aria-hidden="true"
       />
       <Sidebar variant="player" />

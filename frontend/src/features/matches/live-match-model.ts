@@ -13,7 +13,7 @@ import type {
   OpponentMatchPlayer,
 } from "./types";
 
-export const FALLBACK_OWN_COLOR = "#00D99A";
+export const FALLBACK_OWN_COLOR = "#16d99a";
 export const FALLBACK_OPP_COLOR = "#D4566A";
 
 export type PitchHalf = "left" | "right";
