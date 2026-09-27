@@ -1344,6 +1344,11 @@ export const matchEventReviews = pgTable(
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    observationIds: jsonb('observation_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    reviewVersion: integer('review_version').default(1).notNull(),
     reason: text('reason').notNull(),
     status: text('status').default('open').notNull(),
     resolution: text('resolution'),
@@ -1356,9 +1361,6 @@ export const matchEventReviews = pgTable(
       table.matchId,
       table.status,
     ),
-    uniqueIndex('match_event_reviews_open_canonical_unique')
-      .on(table.canonicalEventId)
-      .where(sql`${table.status} = 'open'`),
   ],
 );
 

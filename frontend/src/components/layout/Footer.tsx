@@ -53,12 +53,36 @@ export function Footer({ variant = "coach", className }: FooterProps) {
   ];
 
   return (
-    <footer className={cn("mx-auto mt-8 w-full max-w-[1600px] border-t border-border/50 px-6 py-6 text-sm text-muted-foreground sm:px-10", className)}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+    <footer className={cn("mx-auto mt-3 w-full max-w-[1600px] border-t border-border/50 px-3 py-2 text-[10px] text-muted-foreground sm:mt-8 sm:px-10 sm:py-6 sm:text-sm", className)}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex items-center justify-between gap-2 sm:hidden">
+          <div className="flex items-center gap-1.5">
+            <SportLogo size={16} className="rounded" />
+            <span className="font-display text-[10px] font-bold tracking-wide text-foreground">
+              Gaffer
+            </span>
+          </div>
+          <nav aria-label="Legal links" className="flex items-center gap-3">
+            <a
+              href={`/terms-of-service.html?returnTo=${encodeURIComponent(returnTo)}`}
+              className="transition-colors hover:text-foreground"
+            >
+              T&apos;s&amp;C&apos;s
+            </a>
+            <a
+              href={`/privacy-policy.html?returnTo=${encodeURIComponent(returnTo)}`}
+              className="transition-colors hover:text-foreground"
+            >
+              Privacy policy
+            </a>
+          </nav>
+        </div>
+        <p className="sm:hidden">@Gaffer {year} all rights reserved.</p>
+
+        <div className="hidden items-center gap-2 sm:flex">
           <SportLogo size={20} className="rounded" />
           <span className="font-display text-xs font-bold tracking-wide text-foreground">
-            GAFFER
+            Gaffer
           </span>
           <span aria-hidden="true">·</span>
           <span>
@@ -66,7 +90,7 @@ export function Footer({ variant = "coach", className }: FooterProps) {
           </span>
         </div>
 
-        <nav aria-label="Footer navigation">
+        <nav aria-label="Footer navigation" className="hidden sm:block">
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {links.map((link) => (
               <li key={link.path}>
@@ -90,7 +114,7 @@ export function Footer({ variant = "coach", className }: FooterProps) {
           </ul>
         </nav>
 
-        <span className="text-xs">v{APP_VERSION}</span>
+        <span className="hidden text-xs sm:inline">v{APP_VERSION}</span>
       </div>
     </footer>
   );
