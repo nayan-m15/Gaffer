@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Search, Plus, Users, Archive, Loader2, AlertCircle, UserPlus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, Plus, Users, Archive, Loader2, AlertCircle, UserPlus, Trash2, X, ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveConfirmDialog } from "@/components/roster/ArchiveConfirmDialog";
 import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
@@ -9,11 +9,14 @@ import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
+import { MobileRoster, MobileRosterSkeleton } from "@/components/roster/MobileRoster";
+import { MobilePlayerProfile } from "@/components/roster/MobilePlayerProfile";
+import { getPositionLabel } from "@/components/roster/position";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
-import { BentoGrid } from "@/components/ui/bento-grid";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +50,29 @@ const QUERY_KEY_ARCHIVED = ["athletes", "archived"] as const;
 const QUERY_KEY_TEAM_INVITES = ["team-invites"] as const;
 const QUERY_KEY_TEAM_ASSISTANTS = ["team-assistants"] as const;
 
+const POSITION_GROUPS = [
+  new Set(["GK"]),
+  new Set(["CB", "LB", "RB", "LWB", "RWB", "SW", "DEF", "DF"]),
+  new Set(["DM", "CM", "AM", "LM", "RM", "MID", "MF"]),
+  new Set(["LW", "RW", "ST", "CF", "SS", "FWD", "FW"]),
+] as const;
+
+function positionGroup(position: string): number {
+  const normalizedPosition = position.trim().toUpperCase();
+  const groupIndex = POSITION_GROUPS.findIndex((group) => group.has(normalizedPosition));
+  return groupIndex === -1 ? POSITION_GROUPS.length : groupIndex;
+}
+
+function compareAthletesByPositionAndNumber(left: Athlete, right: Athlete): number {
+  const groupDifference = positionGroup(left.position) - positionGroup(right.position);
+  if (groupDifference !== 0) return groupDifference;
+
+  const numberDifference = left.jerseyNumber - right.jerseyNumber;
+  if (numberDifference !== 0) return numberDifference;
+
+  return left.name.localeCompare(right.name);
+}
+
 /**
  * AthletesPage — Squad roster command centre (S1-03).
  *
@@ -63,7 +89,9 @@ export default function AthletesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-
+  const [isDesktopDetail, setIsDesktopDetail] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
+  );
   const [editingBackendAthlete, setEditingBackendAthlete] = useState<BackendAthlete | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -106,21 +134,25 @@ export default function AthletesPage() {
   const error = showArchived ? archivedQuery.error : activeQuery.error;
 
   /**
-   * Filter the roster by the search query.
-   * Search matches name, position, status or jersey number.
+   * Filter the roster by the search query, then keep it in football order:
+   * goalkeeper, defenders, midfielders and forwards. Players within each
+   * positional group are ordered by squad number.
    */
   const filteredAthletes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) return currentAthletes;
+    const matchingAthletes = query
+      ? currentAthletes.filter(
+          (athlete) =>
+            athlete.name.toLowerCase().includes(query) ||
+            athlete.position.toLowerCase().includes(query) ||
+            getPositionLabel(athlete.position).toLowerCase().includes(query) ||
+            athlete.status.toLowerCase().includes(query) ||
+            athlete.jerseyNumber.toString().includes(query),
+        )
+      : currentAthletes;
 
-    return currentAthletes.filter(
-      (athlete) =>
-        athlete.name.toLowerCase().includes(query) ||
-        athlete.position.toLowerCase().includes(query) ||
-        athlete.status.toLowerCase().includes(query) ||
-        athlete.jerseyNumber.toString().includes(query),
-    );
+    return [...matchingAthletes].sort(compareAthletesByPositionAndNumber);
   }, [currentAthletes, searchQuery]);
 
   /** Selected athlete must belong to the current filtered view. */
@@ -128,6 +160,19 @@ export default function AthletesPage() {
     const match = filteredAthletes.find((athlete) => athlete.id === selectedId);
     return match ?? filteredAthletes[0] ?? null;
   }, [filteredAthletes, selectedId]);
+
+  const explicitlySelectedAthlete = useMemo(
+    () => filteredAthletes.find((athlete) => athlete.id === selectedId) ?? null,
+    [filteredAthletes, selectedId],
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const syncViewport = () => setIsDesktopDetail(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
 
   const activeCount = activeAthletes.length;
   const archivedCount = archivedAthletes.length;
@@ -307,70 +352,80 @@ export default function AthletesPage() {
   };
 
   return (
-    <>
-      <PageHeader
-        title="Roster Command"
-        subtitle="Manage active squad players, squad status, and athlete archives."
-      />
+    <div className="roster-page relative isolate min-h-full">
+      <div className="roster-page-backdrop" aria-hidden="true" />
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        <BentoGrid className="max-w-none grid-cols-1 gap-4 md:auto-rows-auto md:grid-cols-3">
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{activeCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active athletes</p></div>
-            <Users className="size-6 text-primary" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{unavailableCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unavailable</p></div>
-            <AlertCircle className="size-6 text-amber-500" aria-hidden="true" />
-          </AppCard>
-          <AppCard className="flex items-center justify-between py-4">
-            <div><p className="text-2xl font-bold tabular-nums">{archivedCount}</p><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Archived</p></div>
-            <Archive className="size-6 text-muted-foreground" aria-hidden="true" />
-          </AppCard>
-        </BentoGrid>
+      <div className="relative z-10">
+        <PageHeader
+          title="Roster Command"
+          subtitle="Manage active squad players, squad status, and athlete archives."
+          className="pb-4"
+        />
+
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 overflow-x-hidden px-3 pb-24 sm:px-8 sm:pb-8 lg:px-10">
+        <div className="hidden min-w-0 grid-cols-3 gap-2 sm:grid sm:gap-4">
+          <SummaryCard
+            value={activeCount}
+            label="Active Athletes"
+            icon={<Users className="size-5 text-brand sm:size-6" aria-hidden="true" />}
+          />
+          <SummaryCard
+            value={unavailableCount}
+            label="Unavailable"
+            icon={<AlertCircle className="size-5 text-warning sm:size-6" aria-hidden="true" />}
+          />
+          <SummaryCard
+            value={archivedCount}
+            label="Archived"
+            icon={<Archive className="size-5 text-muted-foreground sm:size-6" aria-hidden="true" />}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 text-xs sm:hidden">
+          <span className="rounded-full border border-border-subtle bg-surface-card px-3 py-2 font-bold tabular-nums text-foreground shadow-sm">
+            {activeCount} players
+          </span>
+          <span
+            className={cn(
+              "rounded-full border border-border-subtle bg-surface-card px-3 py-2 font-semibold tabular-nums shadow-sm",
+              unavailableCount > 0 ? "text-warning" : "text-muted-foreground",
+            )}
+          >
+            {unavailableCount} unavailable
+          </span>
+        </div>
+
         {/* Main layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+        <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {/* Squad management card */}
-            <AppCard className="p-4 md:p-6 lg:col-span-2">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
-                    {showArchived ? "Archived Athletes" : "Squad Management"}
-                  </h2>
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand">
-                  {showArchived
-                    ? `${archivedCount} ARCHIVED`
-                    : `${activeCount} PLAYERS REGULARLY ACTIVE`}
-                </p>
-              </div>
-
+            <AppCard className="min-w-0 max-w-full p-3 sm:p-4 md:p-5">
               {/* Toolbar: tabs + search + add athlete */}
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+              <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="order-2 flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1 lg:order-1">
                   <TabButton
                     active={!showArchived}
                     onClick={() => switchTab(false)}
                     icon={<Users className="size-3.5" />}
-                    label="Active"
+                    label={`Active (${activeCount})`}
                   />
                   <TabButton
                     active={showArchived}
                     onClick={() => switchTab(true)}
                     icon={<Archive className="size-3.5" />}
-                    label="Archived"
+                    label={`Archived (${archivedCount})`}
                   />
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="relative w-full sm:max-w-xs">
+                <div className="order-1 flex min-w-0 flex-1 items-center gap-2 lg:order-2 lg:max-w-md lg:justify-end">
+                  <div className="relative min-w-0 flex-1">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search athletes..."
-                      className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50"
+                      placeholder="Search players..."
+                      aria-label="Search players by name, number, position or status"
+                      className="h-11 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50 sm:h-9"
                     />
                   </div>
 
@@ -378,7 +433,7 @@ export default function AthletesPage() {
                     <Button
                       type="button"
                       onClick={openAddForm}
-                      className="w-full gap-1.5 sm:w-auto"
+                      className="hidden shrink-0 gap-1.5 sm:inline-flex"
                     >
                       <Plus className="size-4" />
                       Add Athlete
@@ -388,9 +443,12 @@ export default function AthletesPage() {
               </div>
 
               {isPending || isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <div>
+                  <MobileRosterSkeleton />
+                  <div className="hidden items-center justify-center gap-2 py-12 text-sm text-muted-foreground md:flex">
                   <Loader2 className="size-4 animate-spin" />
                   Loading roster…
+                  </div>
                 </div>
               ) : error ? (
                 <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -402,17 +460,20 @@ export default function AthletesPage() {
                 </div>
               ) : (
                 <>
-                  <RosterTable
-                    athletes={filteredAthletes}
-                    selectedId={selectedId}
-                    showArchived={showArchived}
-                    readOnly={!canManageRoster}
-                    showClaimStatus={canManageClaims}
-                    onSelect={handleSelect}
-                    onEdit={openEditForm}
-                    onArchive={openArchiveDialog}
-                    onRestore={handleRestore}
-                  />
+                  <MobileRoster athletes={filteredAthletes} onSelect={handleSelect} />
+
+                  <div className="hidden min-w-0 md:block">
+                    <RosterTable
+                      athletes={filteredAthletes}
+                      selectedId={selectedId}
+                      showArchived={showArchived}
+                      readOnly={!canManageRoster}
+                      onSelect={handleSelect}
+                      onEdit={openEditForm}
+                      onArchive={openArchiveDialog}
+                      onRestore={handleRestore}
+                    />
+                  </div>
 
                   {filteredAthletes.length === 0 && (
                     <div className="py-12 text-center">
@@ -432,8 +493,8 @@ export default function AthletesPage() {
             {/* Selected athlete details */}
             <section
               className={cn(
-                "min-h-[560px] lg:col-span-1",
-                !selectedAthlete && "hidden lg:flex",
+                "hidden min-h-[620px] min-w-0 xl:block",
+                !selectedAthlete && "xl:flex",
               )}
             >
               {selectedAthlete ? (
@@ -443,6 +504,7 @@ export default function AthletesPage() {
                   onArchive={openArchiveDialog}
                   onRestore={handleRestore}
                   onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                  showClaimStatus={canManageClaims}
                   readOnly={!canManageRoster}
                 />
               ) : (
@@ -451,12 +513,24 @@ export default function AthletesPage() {
                 </div>
               )}
             </section>
-          </div>
+        </div>
+
+        {!showArchived && canManageRoster && (
+          <Button
+            type="button"
+            size="icon-lg"
+            onClick={openAddForm}
+            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-30 rounded-full shadow-lg sm:hidden"
+            aria-label="Add athlete"
+          >
+            <Plus className="size-5" />
+          </Button>
+        )}
 
         {/* ── Assistants management card (coach-only) ────────────────── */}
         {canManageRoster && (
           <AppCard className="p-4 md:p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">
                   Assistants
@@ -473,7 +547,7 @@ export default function AthletesPage() {
                   setInviteResult(null);
                   setIsInviteDialogOpen(true);
                 }}
-                className="gap-1.5"
+                className="w-full gap-1.5 sm:w-auto"
               >
                 <UserPlus className="size-4" />
                 Invite Assistant
@@ -590,7 +664,60 @@ export default function AthletesPage() {
             </div>
           </AppCard>
         )}
+        </div>
       </div>
+
+      <Dialog
+        open={!isDesktopDetail && explicitlySelectedAthlete !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="inset-0 top-0 left-0 flex h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-background p-0 sm:max-w-none"
+        >
+          <div className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-3 pt-[env(safe-area-inset-top)] sm:px-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSelectedId(null)}
+                aria-label="Back to roster"
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+              <DialogTitle className="truncate text-sm font-bold text-foreground">
+                Player Profile
+              </DialogTitle>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setSelectedId(null)}
+              aria-label="Close player details"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+            {explicitlySelectedAthlete ? (
+              <MobilePlayerProfile
+                key={explicitlySelectedAthlete.id}
+                athlete={explicitlySelectedAthlete}
+                onEdit={openEditForm}
+                onArchive={openArchiveDialog}
+                onRestore={handleRestore}
+                onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                showClaimStatus={canManageClaims}
+                readOnly={!canManageRoster}
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AthleteFormDialog
         isOpen={isFormOpen}
@@ -658,7 +785,7 @@ export default function AthletesPage() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -669,6 +796,28 @@ interface TabButtonProps {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+}
+
+interface SummaryCardProps {
+  value: number;
+  label: string;
+  icon: React.ReactNode;
+}
+
+function SummaryCard({ value, label, icon }: SummaryCardProps) {
+  return (
+    <AppCard className="flex min-w-0 items-center justify-between gap-1.5 p-2.5 sm:gap-3 sm:px-4 sm:py-3.5">
+      <div className="min-w-0">
+        <p className="text-lg font-bold leading-none tabular-nums text-foreground sm:text-2xl">
+          {value}
+        </p>
+        <p className="mt-1 text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground sm:text-xs sm:tracking-wider">
+          {label}
+        </p>
+      </div>
+      <span className="hidden shrink-0 min-[375px]:block">{icon}</span>
+    </AppCard>
+  );
 }
 
 function TabButton({ active, onClick, icon, label }: TabButtonProps) {

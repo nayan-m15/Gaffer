@@ -272,6 +272,7 @@ function stadiumStand(side: "east" | "west" | "north" | "south", lowPower: boole
   const supports = lowPower ? 5 : 8;
   for (let i = 0; i < supports; i += 1) {
     const at = -length / 2 + 6 + i * (length - 12) / Math.max(supports - 1, 1);
+    if (side === "west" && at > -8 && at < 22) continue;
     if (alongZ) group.add(box([.32, upper + 9.4, .32], [sign * (back + 2.7), (upper + 9.4) / 2, at], kit.metal), box([9.5, .22, .26], [sign * (back - 1.1), upper + 9.25, at], kit.metal));
     else group.add(box([.32, upper + 9.4, .32], [at, (upper + 9.4) / 2, sign * (back + 2.7)], kit.metal), box([.26, .22, 9.5], [at, upper + 9.25, sign * (back - 1.1)], kit.metal));
   }

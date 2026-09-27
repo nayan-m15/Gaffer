@@ -13,6 +13,8 @@ interface AthleteDetailPanelProps {
   onArchive: (athlete: Athlete) => void;
   onRestore: (athlete: Athlete) => void;
   onInviteClaim?: (athlete: Athlete) => void;
+  /** Whether staff-only claim lifecycle information is visible. */
+  showClaimStatus?: boolean;
   /** When true, hides the Edit / Archive / Restore / Invite buttons — used
    * for assistants, who can view the roster but not mutate it. */
   readOnly?: boolean;
@@ -32,6 +34,7 @@ export function AthleteDetailPanel({
   onArchive,
   onRestore,
   onInviteClaim,
+  showClaimStatus = false,
   readOnly = false,
 }: AthleteDetailPanelProps) {
   const [showingStats, setShowingStats] = useState(false);
@@ -67,17 +70,17 @@ export function AthleteDetailPanel({
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto rounded-2xl border border-border bg-card p-6">
+    <div className="flex h-full min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-card p-4 sm:p-5">
       {/* Profile header */}
       <div className="flex flex-col items-center text-center">
-        <div className="relative mb-4">
+        <div className="relative mb-3">
           <div
             className={cn(
-              "flex size-28 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/50 ring-2 ring-offset-2 ring-offset-card",
+              "flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/50 ring-2 ring-offset-2 ring-offset-card sm:size-24",
               athlete.isArchived ? "ring-muted-foreground/30" : "ring-brand/30",
             )}
           >
-            <span className="text-3xl font-bold text-foreground">
+            <span className="text-2xl font-bold text-foreground">
               {athlete.initials}
             </span>
           </div>
@@ -91,12 +94,13 @@ export function AthleteDetailPanel({
           </span>
         </div>
 
-        <h2 className="text-xl font-bold text-foreground">{athlete.name}</h2>
-        <p className="text-sm font-medium text-cyan-400">
-          {athlete.positionLong} ({athlete.position})
+        <h2 className="text-lg font-bold text-foreground">{athlete.name}</h2>
+        <p className="text-xs font-semibold text-info sm:text-sm">
+          {athlete.position} ({athlete.positionLong})
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           <StatusBadge status={athlete.status} />
+          {showClaimStatus && <StatusBadge status={athlete.claimStatus} />}
           {athlete.isArchived && (
             <span className="inline-flex items-center rounded-full border border-muted-foreground/30 bg-muted/50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Archived
@@ -108,72 +112,70 @@ export function AthleteDetailPanel({
             hidden for assistants via readOnly; the player claim invite stays
             available to every team member, mirroring the backend where the
             claim-invite routes are not coach-gated. */}
-        {(!readOnly || showClaimInvite) && (
-          <div className="mt-4 flex items-center gap-2">
-            {!readOnly &&
-              (athlete.isArchived ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onRestore(athlete)}
-                  className="gap-1.5"
-                >
-                  <RotateCcw className="size-4 text-brand" />
-                  Restore
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onEdit(athlete)}
-                    className="gap-1.5"
-                  >
-                    <Pencil className="size-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onArchive(athlete)}
-                    className="gap-1.5 border-amber-400/30 text-amber-400 hover:bg-amber-400/10 hover:text-amber-400"
-                  >
-                    <Archive className="size-4" />
-                    Archive
-                  </Button>
-                </>
-              ))}
-            {showClaimInvite && (
+        <div className="mt-4 grid w-full grid-cols-2 gap-2">
+          {!readOnly &&
+            (athlete.isArchived ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => onInviteClaim?.(athlete)}
-                className="gap-1.5"
+                onClick={() => onRestore(athlete)}
+                className="col-span-2 gap-1.5"
               >
-                <UserPlus className="size-4" />
-                Invite
+                <RotateCcw className="size-4 text-brand" />
+                Restore Player
               </Button>
-            )}
-          </div>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowingStats(true)}
-          className="mt-4 gap-1.5"
-        >
-          <BarChart3 className="size-4" />
-          View Statistics
-        </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(athlete)}
+                className={cn("gap-1.5", !showClaimInvite && "col-span-2")}
+              >
+                <Pencil className="size-4" />
+                Edit Player
+              </Button>
+            ))}
+          {showClaimInvite && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onInviteClaim?.(athlete)}
+              className={cn("gap-1.5", readOnly && "col-span-2")}
+            >
+              <UserPlus className="size-4" />
+              Invite
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowingStats(true)}
+            className="col-span-2 gap-1.5"
+          >
+            <BarChart3 className="size-4" />
+            View Statistics
+          </Button>
+          {!readOnly && !athlete.isArchived && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onArchive(athlete)}
+              className="col-span-2 gap-1.5 border-danger/40 text-danger hover:bg-danger/10 hover:text-danger"
+            >
+              <Archive className="size-4" />
+              Archive Player
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Quick info cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <InfoCard label="AGE" value={`${athlete.age} Years`} />
         <InfoCard label="JOINED" value={athlete.joinedDate} />
         <InfoCard
@@ -188,24 +190,27 @@ export function AthleteDetailPanel({
         <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
           Season Performance
         </h3>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Goals" value={athlete.goals} valueClassName="text-brand" />
-          <StatCard label="Assists" value={athlete.assists} valueClassName="text-brand" />
+        <div className="grid grid-cols-6 gap-2">
+          <StatCard className="col-span-2" label="Apps" value={athlete.appearances} />
+          <StatCard className="col-span-2" label="Goals" value={athlete.goals} valueClassName="text-brand" />
+          <StatCard className="col-span-2" label="Assists" value={athlete.assists} valueClassName="text-brand" />
           <StatCard
-            label="Yellow Cards"
+            className="col-span-3"
+            label="YC"
             value={athlete.yellowCards}
-            valueClassName="text-amber-400"
+            valueClassName="text-warning"
           />
           <StatCard
-            label="Red Cards"
+            className="col-span-3"
+            label="RC"
             value={athlete.redCards}
-            valueClassName="text-red-400"
+            valueClassName="text-danger"
           />
         </div>
       </section>
 
       {/* Recent appearances */}
-      <section className="flex-1">
+      {athlete.recentAppearances.length > 0 && <section className="flex-1">
         <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
           Recent Logged Appearances
         </h3>
@@ -214,7 +219,7 @@ export function AthleteDetailPanel({
             <AppearanceRow key={`${appearance.opponent}-${index}`} appearance={appearance} />
           ))}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
@@ -229,11 +234,11 @@ interface InfoCardProps {
 
 function InfoCard({ label, value, valueClassName }: InfoCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-background p-3 text-center">
+    <div className="min-w-0 rounded-lg border border-border bg-background p-2.5 text-center">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className={cn("mt-1 text-sm font-bold text-foreground", valueClassName)}>
+      <p className={cn("mt-1 break-words text-xs font-bold leading-tight text-foreground sm:text-sm", valueClassName)}>
         {value}
       </p>
     </div>
@@ -244,15 +249,16 @@ interface StatCardProps {
   label: string;
   value: number;
   valueClassName?: string;
+  className?: string;
 }
 
-function StatCard({ label, value, valueClassName }: StatCardProps) {
+function StatCard({ label, value, valueClassName, className }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-background p-3">
+    <div className={cn("rounded-lg border border-border bg-background p-2.5 text-center", className)}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className={cn("mt-1 text-2xl font-bold tabular-nums", valueClassName)}>
+      <p className={cn("mt-1 text-lg font-bold tabular-nums", valueClassName)}>
         {value}
       </p>
     </div>
