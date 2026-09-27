@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   ChevronsRight,
+  Hand,
   HeartPulse,
   Target,
 } from "lucide-react";
@@ -62,6 +63,8 @@ export function EventTypeGlyph({
       <Target className="size-3.5" />
     ) : eventType === "injury" ? (
       <HeartPulse className="size-3.5" />
+    ) : eventType === "goalkeeper_save" ? (
+      <Hand className="size-3.5" />
     ) : null;
 
   return (

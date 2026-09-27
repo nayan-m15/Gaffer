@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
+  Hand,
   HeartPulse,
   LayoutDashboard,
   Loader2,
@@ -56,6 +57,7 @@ import type {
 } from "@/features/matches/types";
 import {
   PENALTY_MISSED_DETAIL,
+  PENALTY_SAVED_BY_GOALKEEPER_DETAIL,
   PENALTY_SCORED_DETAIL,
   SECOND_YELLOW_DETAIL,
   eventDisplayLabel,
@@ -97,6 +99,10 @@ import {
   LivePitch,
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
+import {
+  findOpposingGoalkeeper,
+  isGoalkeeperPosition,
+} from "@/features/matches/opposing-goalkeeper";
 import "./LiveMatchPage.css";
 
 type Period =
@@ -112,6 +118,7 @@ type LogTarget =
 type Composer =
   | { kind: "closed" }
   | { kind: "penalty-outcome" }
+  | { kind: "penalty-miss-reason" }
   | {
       /**
        * The injury-specification step. Own-team, on-pitch players only —
@@ -849,7 +856,7 @@ export default function LiveMatchPage() {
   const persistEvent = useCallback(
     async (input: PersistInput) => {
       if (!matchId || persistLockRef.current) {
-        return;
+        return false;
       }
       const dismissed =
         (input.team === "own" &&
@@ -865,7 +872,7 @@ export default function LiveMatchPage() {
         setActionError(
           "That player has been sent off. Undo the red card before logging another action.",
         );
-        return;
+        return false;
       }
       persistLockRef.current = true;
       setActionError(null);
@@ -1014,7 +1021,9 @@ export default function LiveMatchPage() {
               scorerOpponentPlayerId: input.opponentPlayerId,
             });
           }
+          return created.id;
         }
+        return false;
       } catch (err) {
         const message =
           err instanceof ApiError
@@ -1028,6 +1037,7 @@ export default function LiveMatchPage() {
         if (keepComposerForFollowUp) {
           closeComposer();
         }
+        return false;
       } finally {
         persistLockRef.current = false;
       }
@@ -1089,6 +1099,71 @@ export default function LiveMatchPage() {
     });
   };
 
+  const opposingGoalkeeper = () => {
+    if (!target) {
+      return null;
+    }
+    return findOpposingGoalkeeper({
+      shooterTeam: target.kind === "own" ? "own" : "opponent",
+      squad,
+      opponentSquad,
+      ownOnPitchIds: new Set(ownState.onPitch.map((athlete) => athlete.id)),
+      opponentOnPitchIds: new Set(oppState.onPitch.map((player) => player.id)),
+      dismissedOwnIds,
+      dismissedOpponentIds: dismissedOppIds,
+    });
+  };
+
+  const persistPenaltySavedByKeeper = async () => {
+    if (!target) {
+      setActionError("Select a player first.");
+      return;
+    }
+    const keeper = opposingGoalkeeper();
+    const penaltyId = await persistEvent(
+      target.kind === "own"
+        ? {
+            team: "own",
+            eventType: "penalty",
+            athleteId: target.athlete.id,
+            detail: PENALTY_SAVED_BY_GOALKEEPER_DETAIL,
+          }
+        : target.kind === "opp"
+          ? {
+              team: "opponent",
+              eventType: "penalty",
+              opponentPlayerId: target.player.id,
+              opponentLabel: opponentShirtLabel(target.player, visibility),
+              detail: PENALTY_SAVED_BY_GOALKEEPER_DETAIL,
+            }
+          : {
+              team: "opponent",
+              eventType: "penalty",
+              opponentLabel: oppName,
+              detail: PENALTY_SAVED_BY_GOALKEEPER_DETAIL,
+            },
+    );
+    if (!penaltyId || !keeper) {
+      return;
+    }
+    if (keeper.team === "own") {
+      await persistEvent({
+        team: "own",
+        eventType: "goalkeeper_save",
+        athleteId: keeper.athlete.id,
+        detail: penaltyId,
+      });
+      return;
+    }
+    await persistEvent({
+      team: "opponent",
+      eventType: "goalkeeper_save",
+      opponentPlayerId: keeper.player.id,
+      opponentLabel: opponentShirtLabel(keeper.player, visibility),
+      detail: penaltyId,
+    });
+  };
+
   const handleAction = (eventType: LogAction) => {
     if (!target) {
       setActionError("Tap a player marker to log an event.");
@@ -1104,7 +1179,8 @@ export default function LiveMatchPage() {
       (eventType === "goal" ||
         eventType === "key_pass" ||
         eventType === "penalty" ||
-        eventType === "injury")
+        eventType === "injury" ||
+        eventType === "goalkeeper_save")
     ) {
       setActionError(
         "That event can only be logged for a player on the pitch.",
@@ -1436,6 +1512,12 @@ export default function LiveMatchPage() {
     (target?.kind === "own" && !ownPitchIds.has(target.athlete.id)) ||
     (target?.kind === "opp" && !oppPitchIds.has(target.player.id));
   const pitchLogEnabled = logEnabled && !targetIsBench;
+  const targetIsGoalkeeper =
+    target?.kind === "own"
+      ? isGoalkeeperPosition(target.athlete.position)
+      : target?.kind === "opp"
+        ? isGoalkeeperPosition(target.player.position)
+        : false;
   const benchIncomingCallout = isBenchIncomingCallout(composer.kind);
   const subOutCallout = composer.kind === "sub-out";
   const assistPick = composer.kind === "assist-pick";
@@ -2356,6 +2438,15 @@ export default function LiveMatchPage() {
               onClick={() => handleAction("injury")}
               icon={<HeartPulse className="size-7" />}
             />
+            {targetIsGoalkeeper ? (
+              <LogButton
+                label="Save"
+                color="#67e8f9"
+                disabled={!pitchLogEnabled}
+                onClick={() => handleAction("goalkeeper_save")}
+                icon={<Hand className="size-7" />}
+              />
+            ) : null}
           </div>
           {targetIsBench && (
             <p className="mt-3 text-xs text-[#8e9ba8]">
@@ -2435,11 +2526,36 @@ export default function LiveMatchPage() {
             <button
               type="button"
               className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest"
+              onClick={() => setComposer({ kind: "penalty-miss-reason" })}
+            >
+              MISSED
+            </button>
+          </div>
+        </Overlay>
+      )}
+
+      {composer.kind === "penalty-miss-reason" && (
+        <Overlay onClose={closeComposer}>
+          <p className="font-oswald text-2xl tracking-widest">MISSED</p>
+          <p className="mt-1 text-sm text-[#8e9ba8]">
+            {loggingForLabel(target, visibility)}
+          </p>
+          <div className="mt-8 grid gap-3">
+            <button
+              type="button"
+              className="rounded-2xl border-2 border-[#8e9ba8] bg-[#101920] py-6 font-oswald text-xl tracking-widest"
               onClick={() =>
                 persistFromTarget("penalty", PENALTY_MISSED_DETAIL)
               }
             >
-              MISSED
+              MISSED TARGET
+            </button>
+            <button
+              type="button"
+              className="rounded-2xl border-2 border-[#67e8f9] bg-[#67e8f9]/10 py-6 font-oswald text-xl tracking-widest text-[#67e8f9]"
+              onClick={() => void persistPenaltySavedByKeeper()}
+            >
+              SAVED BY KEEPER
             </button>
           </div>
         </Overlay>

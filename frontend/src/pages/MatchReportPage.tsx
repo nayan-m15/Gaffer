@@ -45,6 +45,7 @@ import {
   opponentPlayerLabel,
   planAddEvent,
   planEditEvent,
+  type GoalkeeperSaveSubject,
   usesOpponentRoster,
   type EventFormDraft,
   type PenaltyOutcome,
@@ -66,6 +67,7 @@ import {
   isPairedAssistEvent,
   isSecondYellow,
   linkedAssistsForGoal,
+  linkedGoalkeeperSavesForPenalty,
   pairAssistsToGoals,
   uniqueTimelineEvents,
 } from "@/features/matches/event-visuals";
@@ -93,6 +95,10 @@ import {
   resolveOwnColor,
   teamAbbrev,
 } from "@/features/matches/live-match-model";
+import {
+  findOpposingGoalkeeper,
+  isGoalkeeperPosition,
+} from "@/features/matches/opposing-goalkeeper";
 import "./LiveMatchPage.css";
 import "./MatchReportPage.css";
 
@@ -105,6 +111,7 @@ const EVENT_TYPES: { value: MatchEventType; label: string }[] = [
   { value: "substitution", label: EVENT_LABEL.substitution },
   { value: "penalty", label: EVENT_LABEL.penalty },
   { value: "injury", label: EVENT_LABEL.injury },
+  { value: "goalkeeper_save", label: EVENT_LABEL.goalkeeper_save },
 ];
 
 const TABS: { id: Tab; label: string }[] = [
@@ -354,6 +361,9 @@ export default function MatchReportPage() {
         yellow: ownEvents.filter((event) => event.eventType === "yellow_card")
           .length,
         red: ownEvents.filter((event) => event.eventType === "red_card").length,
+        saves: ownEvents.filter(
+          (event) => event.eventType === "goalkeeper_save",
+        ).length,
       };
     });
   }, [squad, timeline]);
@@ -447,16 +457,68 @@ export default function MatchReportPage() {
     }
   };
 
+  const opposingKeeperFor = (
+    shooterTeam: MatchEventTeam,
+  ): GoalkeeperSaveSubject | null => {
+    const dismissedOwnIds = new Set(
+      timeline.flatMap((event) =>
+        event.team === "own" && event.eventType === "red_card" && event.athleteId
+          ? [event.athleteId]
+          : [],
+      ),
+    );
+    const dismissedOpponentIds = new Set(
+      timeline.flatMap((event) =>
+        event.team === "opponent" &&
+        event.eventType === "red_card" &&
+        event.opponentPlayerId
+          ? [event.opponentPlayerId]
+          : [],
+      ),
+    );
+    const opponentSquad = match?.opponentSquad ?? [];
+    const keeper = findOpposingGoalkeeper({
+      shooterTeam,
+      squad,
+      opponentSquad,
+      ownOnPitchIds: new Set(
+        ownPitchState(squad, timeline).onPitch.map((athlete) => athlete.id),
+      ),
+      opponentOnPitchIds: new Set(
+        opponentPitchState(opponentSquad, timeline).onPitch.map(
+          (player) => player.id,
+        ),
+      ),
+      dismissedOwnIds,
+      dismissedOpponentIds,
+    });
+    if (!keeper) {
+      return null;
+    }
+    if (keeper.team === "own") {
+      return { team: "own", athleteId: keeper.athlete.id };
+    }
+    return {
+      team: "opponent",
+      opponentPlayerId: keeper.player.id,
+      opponentLabel: opponentPlayerLabel(keeper.player, visibility),
+    };
+  };
+
   const confirmDeleteEvent = async () => {
     if (!deleting || deleting.pending) {
       return;
     }
     setDeleteError(null);
     const linkedAssists = linkedAssistsForGoal(timeline, deleting);
+    const linkedSaves = linkedGoalkeeperSavesForPenalty(timeline, deleting);
     try {
       await deleteEvent.mutateAsync(deleting.id);
       for (const assist of linkedAssists) {
         await deleteEvent.mutateAsync(assist.id);
+      }
+      for (const save of linkedSaves) {
+        await deleteEvent.mutateAsync(save.id);
       }
       setDeleting(null);
     } catch (err) {
@@ -471,7 +533,11 @@ export default function MatchReportPage() {
     for (const op of ops) {
       if (op.kind === "create") {
         if (op.detailFromPrimary && !primaryId) {
-          throw new Error("Could not link the assist to the goal.");
+          throw new Error(
+            op.input.eventType === "goalkeeper_save"
+              ? "Could not link the save to the penalty."
+              : "Could not link the assist to the goal.",
+          );
         }
         const input = op.detailFromPrimary
           ? { ...op.input, detail: primaryId }
@@ -858,6 +924,7 @@ export default function MatchReportPage() {
                                         event.eventType !== "assist" &&
                                         event.eventType !== "goal" &&
                                         event.eventType !== "penalty" &&
+                                        event.eventType !== "goalkeeper_save" &&
                                         !isSecondYellow(event) && (
                                           <p className="mt-0.5 text-[11px] text-[#8e9ba8]">
                                             {event.detail}
@@ -1055,12 +1122,19 @@ export default function MatchReportPage() {
                             {row.athlete.started ? "Starting XI" : "Bench"}
                           </span>
                         </div>
-                        <div className="mt-2 grid grid-cols-4 gap-2 text-center">
+                        <div className="mt-2 grid grid-cols-5 gap-2 text-center">
                           {[
                             ["G", row.goals, "text-[#00d99a]"],
                             ["A", row.assists, "text-[#c084fc]"],
                             ["Y", row.yellow, "text-[#ffbe2e]"],
                             ["R", row.red, "text-[#ff5b5f]"],
+                            [
+                              "S",
+                              isGoalkeeperPosition(row.athlete.position)
+                                ? row.saves
+                                : "",
+                              "text-[#67e8f9]",
+                            ],
                           ].map(([label, value, color]) => (
                             <div
                               key={String(label)}
@@ -1097,6 +1171,9 @@ export default function MatchReportPage() {
                           <th className="px-2 py-2 text-right font-medium">
                             R
                           </th>
+                          <th className="px-2 py-2 text-right font-medium">
+                            S
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1125,6 +1202,11 @@ export default function MatchReportPage() {
                             </td>
                             <td className="px-2 py-3 text-right font-oswald text-[#ff5b5f]">
                               {row.red}
+                            </td>
+                            <td className="px-2 py-3 text-right font-oswald text-[#67e8f9]">
+                              {isGoalkeeperPosition(row.athlete.position)
+                                ? row.saves
+                                : null}
                             </td>
                           </tr>
                         ))}
@@ -1156,7 +1238,15 @@ export default function MatchReportPage() {
           onSave={async (draft) => {
             setAddError(null);
             try {
-              await persistPlannedOps(planAddEvent(draft));
+              await persistPlannedOps(
+                planAddEvent(draft, {
+                  opposingKeeper:
+                    draft.eventType === "penalty" &&
+                    draft.penaltyOutcome === "saved"
+                      ? opposingKeeperFor(draft.team)
+                      : null,
+                }),
+              );
               setAdding(false);
             } catch (err) {
               setAddError(
@@ -1173,6 +1263,9 @@ export default function MatchReportPage() {
         <DeleteEventOverlay
           event={deleting}
           linkedAssistCount={linkedAssistsForGoal(timeline, deleting).length}
+          linkedSaveCount={
+            linkedGoalkeeperSavesForPenalty(timeline, deleting).length
+          }
           pending={deleteEvent.isPending}
           error={deleteError}
           onClose={() => {
@@ -1209,6 +1302,15 @@ export default function MatchReportPage() {
                     linkedAssistsForGoal(timeline, editing)[0] ?? null,
                   linkedSub:
                     linkedSubstitutionForInjury(timeline, editing) ?? null,
+                  linkedGoalkeeperSaves: linkedGoalkeeperSavesForPenalty(
+                    timeline,
+                    editing,
+                  ),
+                  opposingKeeper:
+                    draft.eventType === "penalty" &&
+                    draft.penaltyOutcome === "saved"
+                      ? opposingKeeperFor(draft.team)
+                      : null,
                 }),
               );
               setEditing(null);
@@ -1304,6 +1406,7 @@ function FactCard({
 function DeleteEventOverlay({
   event,
   linkedAssistCount,
+  linkedSaveCount,
   pending,
   error,
   onClose,
@@ -1311,6 +1414,7 @@ function DeleteEventOverlay({
 }: {
   event: MatchLogEvent;
   linkedAssistCount: number;
+  linkedSaveCount: number;
   pending: boolean;
   error: string | null;
   onClose: () => void;
@@ -1323,6 +1427,7 @@ function DeleteEventOverlay({
         {event.minute}&apos; {eventDisplayLabel(event)} will be removed from
         this match.
         {linkedAssistCount > 0 ? " The linked assist will be removed too." : ""}
+        {linkedSaveCount > 0 ? " The linked save will be removed too." : ""}
       </p>
       {error && (
         <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
@@ -1459,6 +1564,9 @@ function subjectLabel(eventType: MatchEventType) {
   if (eventType === "injury") {
     return "Injured player";
   }
+  if (eventType === "goalkeeper_save") {
+    return "Goalkeeper";
+  }
   return "Player";
 }
 
@@ -1535,6 +1643,13 @@ function EventComposerOverlay({
   const isGoal = eventType === "goal";
   const isInjury = eventType === "injury";
   const isPenalty = eventType === "penalty";
+  const isSave = eventType === "goalkeeper_save";
+  const ownGoalkeepers = squad.filter((athlete) =>
+    isGoalkeeperPosition(athlete.position),
+  );
+  const opponentGoalkeepers = opponentSquad.filter((player) =>
+    isGoalkeeperPosition(player.position),
+  );
   const showNote = !isSub && !isPenalty;
   const showIncoming = isSub || (isInjury && injuryLedToSub);
   const selectedOpponent = opponentSquad.find(
@@ -1583,9 +1698,21 @@ function EventComposerOverlay({
       return;
     }
     const draft = buildDraft(parsedMinute);
-    if (isPenalty && penaltyOutcome !== "goal" && penaltyOutcome !== "miss") {
-      setFormError("Choose whether the penalty was a goal or a miss.");
+    if (
+      isPenalty &&
+      penaltyOutcome !== "goal" &&
+      penaltyOutcome !== "miss" &&
+      penaltyOutcome !== "saved"
+    ) {
+      setFormError("Choose whether the penalty was a goal, a miss, or saved.");
       return;
+    }
+    if (isSave) {
+      const keeperId = team === "own" ? draft.athleteId : draft.opponentPlayerId;
+      if (!keeperId) {
+        setFormError("Pick a goalkeeper.");
+        return;
+      }
     }
     if (isSub || (isInjury && injuryLedToSub)) {
       const offOk =
@@ -1716,6 +1843,26 @@ function EventComposerOverlay({
                   setIncomingOpponentLabel("");
                   setInjuryLedToSub(false);
                 }
+                if (next === "goalkeeper_save") {
+                  if (
+                    !squad.some(
+                      (athlete) =>
+                        athlete.id === athleteId &&
+                        isGoalkeeperPosition(athlete.position),
+                    )
+                  ) {
+                    setAthleteId("");
+                  }
+                  if (
+                    !opponentSquad.some(
+                      (player) =>
+                        player.id === opponentPlayerId &&
+                        isGoalkeeperPosition(player.position),
+                    )
+                  ) {
+                    setOpponentPlayerId("");
+                  }
+                }
               }}
               className={fieldClassName}
             >
@@ -1738,11 +1885,12 @@ function EventComposerOverlay({
             >
               Outcome
             </legend>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {(
                 [
                   { id: "goal" as const, label: "Goal" },
                   { id: "miss" as const, label: "Miss" },
+                  { id: "saved" as const, label: "Saved" },
                 ] as const
               ).map((option) => (
                 <button
@@ -1772,7 +1920,7 @@ function EventComposerOverlay({
               {subjectLabel(eventType)}
             </p>
             <AthletePicker
-              squad={squad}
+              squad={isSave ? ownGoalkeepers : squad}
               value={athleteId}
               onChange={setAthleteId}
               compact
@@ -1785,7 +1933,7 @@ function EventComposerOverlay({
               {subjectLabel(eventType)}
             </p>
             <OpponentPlayerPicker
-              players={opponentSquad}
+              players={isSave ? opponentGoalkeepers : opponentSquad}
               value={opponentPlayerId}
               onChange={setOpponentPlayerId}
               visibility={visibility}
@@ -1793,6 +1941,10 @@ function EventComposerOverlay({
               aria-label={subjectLabel(eventType)}
             />
           </div>
+        ) : isSave ? (
+          <p className="text-sm text-[#8e9ba8]">
+            Add the opponent goalkeeper to the squad before logging a save.
+          </p>
         ) : (
           <label className="block">
             <span className={fieldLabelClassName}>

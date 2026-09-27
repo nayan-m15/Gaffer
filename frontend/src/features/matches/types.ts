@@ -8,7 +8,8 @@ export type MatchEventType =
   | "red_card"
   | "substitution"
   | "penalty"
-  | "injury";
+  | "injury"
+  | "goalkeeper_save";
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
 export type MatchClockPeriod =

@@ -45,7 +45,7 @@ const appearances = sql<number>`coalesce((
 ), 0)`;
 
 function loggedEventTotal(
-  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save',
 ) {
   return sql<number>`coalesce((
     select count(*)::int from ${matchEvents}
