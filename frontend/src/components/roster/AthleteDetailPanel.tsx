@@ -13,6 +13,8 @@ interface AthleteDetailPanelProps {
   onArchive: (athlete: Athlete) => void;
   onRestore: (athlete: Athlete) => void;
   onInviteClaim?: (athlete: Athlete) => void;
+  /** Whether staff-only claim lifecycle information is visible. */
+  showClaimStatus?: boolean;
   /** When true, hides the Edit / Archive / Restore / Invite buttons — used
    * for assistants, who can view the roster but not mutate it. */
   readOnly?: boolean;
@@ -32,6 +34,7 @@ export function AthleteDetailPanel({
   onArchive,
   onRestore,
   onInviteClaim,
+  showClaimStatus = false,
   readOnly = false,
 }: AthleteDetailPanelProps) {
   const [showingStats, setShowingStats] = useState(false);
@@ -97,6 +100,7 @@ export function AthleteDetailPanel({
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           <StatusBadge status={athlete.status} />
+          {showClaimStatus && <StatusBadge status={athlete.claimStatus} />}
           {athlete.isArchived && (
             <span className="inline-flex items-center rounded-full border border-muted-foreground/30 bg-muted/50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Archived

@@ -9,7 +9,6 @@ interface RosterPlayerCardProps {
   selected?: boolean;
   showArchived?: boolean;
   readOnly?: boolean;
-  showClaimStatus?: boolean;
   onSelect: (athlete: Athlete) => void;
   onEdit?: (athlete: Athlete) => void;
   onArchive?: (athlete: Athlete) => void;
@@ -33,7 +32,6 @@ export function RosterPlayerCard({
   selected = false,
   showArchived = false,
   readOnly = false,
-  showClaimStatus = false,
   onSelect,
   onEdit,
   onArchive,
@@ -79,9 +77,6 @@ export function RosterPlayerCard({
                 </p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={athlete.status} className="px-2 py-0 text-[10px]" />
-                  {showClaimStatus && (
-                    <StatusBadge status={athlete.claimStatus} className="px-2 py-0 text-[10px]" />
-                  )}
                 </div>
               </div>
 

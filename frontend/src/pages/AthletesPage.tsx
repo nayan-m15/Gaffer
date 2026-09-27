@@ -10,6 +10,7 @@ import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
 import { RosterPlayerCard } from "@/components/roster/rosterPlayerCard";
+import { RosterTable } from "@/components/roster/RosterTable";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -410,7 +411,7 @@ export default function AthletesPage() {
                 </div>
               ) : (
                 <>
-                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:hidden">
                     {filteredAthletes.map((athlete) => (
                       <RosterPlayerCard
                         key={athlete.id}
@@ -418,13 +419,25 @@ export default function AthletesPage() {
                         selected={athlete.id === selectedId}
                         showArchived={showArchived}
                         readOnly={!canManageRoster}
-                        showClaimStatus={canManageClaims}
                         onSelect={handleSelect}
                         onEdit={openEditForm}
                         onArchive={openArchiveDialog}
                         onRestore={handleRestore}
                       />
                     ))}
+                  </div>
+
+                  <div className="hidden min-w-0 xl:block">
+                    <RosterTable
+                      athletes={filteredAthletes}
+                      selectedId={selectedId}
+                      showArchived={showArchived}
+                      readOnly={!canManageRoster}
+                      onSelect={handleSelect}
+                      onEdit={openEditForm}
+                      onArchive={openArchiveDialog}
+                      onRestore={handleRestore}
+                    />
                   </div>
 
                   {filteredAthletes.length === 0 && (
@@ -456,6 +469,7 @@ export default function AthletesPage() {
                   onArchive={openArchiveDialog}
                   onRestore={handleRestore}
                   onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                  showClaimStatus={canManageClaims}
                   readOnly={!canManageRoster}
                 />
               ) : (
@@ -660,6 +674,7 @@ export default function AthletesPage() {
                 onArchive={openArchiveDialog}
                 onRestore={handleRestore}
                 onInviteClaim={canManageClaims ? handleInviteClaim : undefined}
+                showClaimStatus={canManageClaims}
                 readOnly={!canManageRoster}
               />
             )}
