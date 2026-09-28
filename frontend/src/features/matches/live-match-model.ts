@@ -1,9 +1,12 @@
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
+  getDefaultFormationIdForPlayerCount,
   inferFormationIdFromPositions,
   previewAssignmentsForStarters,
+  resolveFormation,
 } from "@/features/team-management/formations";
+import type { FormationPlayerCount } from "@/features/team-management/types";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
 import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals";
@@ -296,11 +299,22 @@ export function friendlyLineupStarterIds(
   );
 }
 
+
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
   timeline: MatchLogEvent[],
-  preferredStarterIds?: ReadonlySet<string>,
+  starterLimitOrPreferred: number | ReadonlySet<string> = 11,
+  preferredIds?: ReadonlySet<string>,
 ) {
+  const starterLimit =
+    typeof starterLimitOrPreferred === "number"
+      ? starterLimitOrPreferred
+      : 11;
+
+  const preferredStarterIds =
+    typeof starterLimitOrPreferred === "number"
+      ? preferredIds
+      : starterLimitOrPreferred;
   const unique = uniqueOpponents(players);
   const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
   const positioned = sorted.filter(hasRecordedPosition);
@@ -310,6 +324,7 @@ export function opponentPitchState(
     positioned,
     unpositioned,
     new Set(preferredStarterIds ?? []),
+    starterLimit,
   );
 
   const starterIds = new Set(starters.map((player) => player.id));
@@ -330,11 +345,12 @@ function selectOpponentStarters(
   positioned: OpponentMatchPlayer[],
   unpositioned: OpponentMatchPlayer[],
   preferred: ReadonlySet<string>,
+  starterLimit = 11,
 ): OpponentMatchPlayer[] {
   const starters: OpponentMatchPlayer[] = [];
   const seenNumbers = new Set<number>();
   const takeStarter = (player: OpponentMatchPlayer) => {
-    if (seenNumbers.has(player.shirtNumber) || starters.length >= 11) return;
+    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) return;
     seenNumbers.add(player.shirtNumber);
     starters.push(player);
   };
@@ -374,10 +390,18 @@ export function placeOwnPlayers(
   timeline: MatchLogEvent[],
   layout: "full" | "own" = "full",
 ): PlacedOwnPlayer[] {
-  const formationId = gamePlan?.formationId ?? DEFAULT_FORMATION_ID;
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
   const uniqueOnPitch = uniqueAthletes(onPitch);
+  const inferredPlayerCount: FormationPlayerCount =
+    uniqueOnPitch.length === 5 || uniqueOnPitch.length === 7
+      ? uniqueOnPitch.length
+      : 11;
+  const formationId =
+    gamePlan?.formationId ??
+    getDefaultFormationIdForPlayerCount(inferredPlayerCount);
+  const formation = resolveFormation(
+    formationId,
+    gamePlan?.customPositions,
+  );
   const byId = new Map(uniqueOnPitch.map((athlete) => [athlete.id, athlete]));
 
   const preferred = applyOwnSubstitutions(gamePlan?.assignments ?? {}, timeline);
@@ -387,6 +411,7 @@ export function placeOwnPlayers(
     uniqueOnPitch.map((athlete) => athlete.id),
     (id) => byId.get(id)?.position ?? null,
     preferred,
+    gamePlan?.customPositions,
   );
 
   return formation
@@ -433,13 +458,16 @@ export function placeOppPlayers(
   onPitch: OpponentMatchPlayer[],
   half: PitchHalf,
   timeline: MatchLogEvent[] = [],
+  formatPlayerCount?: FormationPlayerCount,
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
   const byId = new Map(unique.map((player) => [player.id, player]));
   const hasPositions = unique.some(hasRecordedPosition);
   const formationId = hasPositions
     ? inferFormationIdFromPositions(unique.map((player) => player.position))
-    : DEFAULT_FORMATION_ID;
+    : formatPlayerCount
+      ? getDefaultFormationIdForPlayerCount(formatPlayerCount)
+      : inferFormationIdFromPositions(unique.map((player) => player.position));
   const formation =
     FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
   const placed: PlacedOppPlayer[] = [];

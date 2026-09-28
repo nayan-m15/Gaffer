@@ -110,6 +110,7 @@ function SettingsSummary({ competition, onEdit, locked, editDisabled = false }: 
   const rows = [
     ["Format", format === "league" ? "League" : format === "knockout" ? "Knockout only" : "League + Knockout"],
     ["Teams", competition.configuredTeamCount?.toString() ?? "Not configured"],
+    ["Match format", `${competition.playersPerSide}-a-side`],
     ["Maximum substitutes", String(competition.maxSubstitutes)],
     ["Red-card suspension", `${competition.redCardSuspensionMatches} match${competition.redCardSuspensionMatches === 1 ? "" : "es"}`],
     ["Yellow-card threshold", `${competition.accumulatedYellowThreshold} cards`],

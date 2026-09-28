@@ -263,10 +263,18 @@ export const offensiveStyle = pgEnum('offensive_style', [
   'long_ball',
 ]);
 
+export interface GamePlanFormationPosition {
+  id: string;
+  label: string;
+  role: 'GK' | 'DEF' | 'MID' | 'FWD';
+  x: number;
+  y: number;
+}
+
 // A named tactical profile ("game plan") for a team, modeled on FIFA 20's
 // Custom Tactics. A team keeps several (e.g. "Balanced", "Cup final low
 // block") and swaps between them per fixture; names are unique per team. Each
-// row is a complete snapshot of the matchday plan: the starting XI and bench
+// row is a complete snapshot of the matchday plan: the starting lineup and bench
 // alongside the formation + defensive/offensive settings + set-piece takers.
 export const gamePlans = pgTable(
   'game_plans',
@@ -283,6 +291,10 @@ export const gamePlans = pgTable(
       .notNull()
       .default({})
       .$type<Record<string, string | null>>(),
+    // Coach-defined slot coordinates for custom formations. Preset formations
+    // leave this null and continue to use the static formation catalog.
+    customPositions: jsonb('custom_positions')
+      .$type<GamePlanFormationPosition[] | null>(),
     // Athlete IDs on the substitutes bench.
     substituteIds: jsonb('substitute_ids')
       .notNull()
@@ -327,6 +339,7 @@ export interface GamePlanSnapshot {
   name: string;
   formationId: string;
   assignments: Record<string, string | null>;
+  customPositions: GamePlanFormationPosition[] | null;
   substituteIds: string[];
   defensiveStyle: (typeof defensiveStyle.enumValues)[number];
   defensiveWidth: number;
@@ -596,6 +609,8 @@ export const competitions = pgTable(
     // Null configuration preserves competitions created by legacy callers.
     format: competitionFormat('format'),
     configuredTeamCount: integer('configured_team_count'),
+    // Match format enforced for every fixture/event linked to this competition.
+    playersPerSide: integer('players_per_side').default(11).notNull(),
     maxSubstitutes: integer('max_substitutes').default(5).notNull(),
     redCardSuspensionMatches: integer('red_card_suspension_matches')
       .default(1)
@@ -633,6 +648,7 @@ export const competitions = pgTable(
       'competitions_settings_valid',
       sql`
       (${table.configuredTeamCount} is null or ${table.configuredTeamCount} between 2 and 128)
+      and ${table.playersPerSide} in (5,7,11)
       and ${table.maxSubstitutes} between 0 and 99
       and ${table.redCardSuspensionMatches} between 0 and 99
       and ${table.accumulatedYellowThreshold} between 1 and 99
@@ -854,7 +870,7 @@ export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
 
 // Per-match opponent players. Empty when visibility is `none`. `name` is
 // null in numbers-only mode and required in full mode. `position` is optional
-// so numbers-only / unknown-formation squads still persist without a XI.
+// so numbers-only / unknown-formation squads still persist without a recorded formation.
 export const opponentMatchPlayers = pgTable(
   'opponent_match_players',
   {

@@ -65,7 +65,7 @@ const STEPS = [
   {
     num: "04",
     title: "Prepare Your Lineup",
-    desc: "Select your starting XI, choose a formation and position players on the pitch.",
+    desc: "Choose 5-, 7-, or 11-a-side, select your starting lineup, and position players on the pitch.",
   },
   {
     num: "05",
@@ -414,11 +414,11 @@ function LineupSection() {
     <FeatureSection
       id="lineup-heading"
       icon={<Shield className="size-5 text-brand" />}
-      title="Build Your Starting XI"
+      title="Build Your Starting Lineup"
       eyebrow="Team & Lineup"
-      description="Prepare your team before every event. Select your starting eleven, choose a formation, position players on the pitch and manage substitutes — all through an interactive tactical board."
+      description="Prepare your team before every event. Choose 5-, 7-, or 11-a-side, select your starting lineup, position players on the pitch and manage substitutes — all through an interactive tactical board."
       bullets={[
-        "Select 11 players for your starting lineup",
+        "Choose 5-, 7-, or 11-a-side and select the required starters",
         "Exactly 1 goalkeeper is always required",
         "Choose from multiple formations (4-3-3, 4-4-2, 3-5-2 and more)",
         "Drag and drop players between the pitch and substitutes bench",
@@ -852,7 +852,7 @@ function FormationMockup() {
       </div>
 
       <p className="mt-3 text-center text-xs text-foreground dark:text-white/50">
-        4-3-3 formation &middot; 11 players on the pitch
+        5-, 7-, or 11-a-side formations &middot; match-ready lineups
       </p>
     </div>
   );

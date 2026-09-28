@@ -24,6 +24,30 @@ function startMatchBody(
   };
 }
 
+describe('startMatchSchema starter-count envelope', () => {
+  it('accepts 5-, 7-, and 11-player starting lineups', () => {
+    expect(
+      startMatchSchema.parse(
+        startMatchBody({ startingAthleteIds: starterIds.slice(0, 5) }),
+      ).startingAthleteIds,
+    ).toHaveLength(5);
+    expect(
+      startMatchSchema.parse(
+        startMatchBody({ startingAthleteIds: starterIds.slice(0, 7) }),
+      ).startingAthleteIds,
+    ).toHaveLength(7);
+    expect(startMatchSchema.parse(startMatchBody()).startingAthleteIds).toHaveLength(
+      11,
+    );
+  });
+
+  it('still rejects an empty lineup', () => {
+    expect(() =>
+      startMatchSchema.parse(startMatchBody({ startingAthleteIds: [] })),
+    ).toThrow();
+  });
+});
+
 describe('startMatchSchema opponent positions', () => {
   it('accepts an omitted position', () => {
     const parsed = startMatchSchema.parse(startMatchBody());

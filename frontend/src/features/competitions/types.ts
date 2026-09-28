@@ -1,5 +1,6 @@
 export type CompetitionType = "league" | "cup";
 export type CompetitionFormat = "league" | "knockout" | "league_knockout";
+export type CompetitionPlayersPerSide = 5 | 7 | 11;
 
 export interface CompetitionInput {
   name: string;
@@ -7,6 +8,7 @@ export interface CompetitionInput {
   season?: string;
   format: CompetitionFormat;
   configuredTeamCount: number;
+  playersPerSide: CompetitionPlayersPerSide;
   maxSubstitutes: number;
   redCardSuspensionMatches: number;
   accumulatedYellowThreshold: number;
@@ -31,6 +33,7 @@ export interface Competition {
   createdAt: string;
   format: CompetitionFormat | null;
   configuredTeamCount: number | null;
+  playersPerSide: CompetitionPlayersPerSide;
   maxSubstitutes: number;
   redCardSuspensionMatches: number;
   accumulatedYellowThreshold: number;

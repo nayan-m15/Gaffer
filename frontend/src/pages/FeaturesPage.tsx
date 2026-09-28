@@ -13,7 +13,7 @@
  *   3. Core Pillars (Three Commitments)
  *   4. Athlete Roster Management (Profile, squad numbers, active/inactive)
  *   5. Events & Fixture Management (Matches, training, venues, notes)
- *   6. Team & Lineup Management (Starting XI, 1 GK rule, formation tactical pitch)
+ *   6. Team & Lineup Management (Starting Lineup, 1 GK rule, formation tactical pitch)
  *   7. Context-Aware Dashboard (Live match HUD vs general squad summary)
  *   8. Live Match Tracking (Single-tap events, match clock, undo/edit)
  *   9. Reliable Match Records (Persisted clock and corrections)
@@ -418,11 +418,11 @@ function LineupFeatureSection() {
       id="feature-lineup"
       badge="Team & Lineup"
       icon={<Shield className="size-5 text-brand" />}
-      title="Interactive Tactical Pitch & Starting XI Builder"
+      title="Interactive Tactical Pitch & Starting Lineup Builder"
       description="Prepare your match tactics visually before setting foot on the pitch. Position players, test tactical formations, and manage your substitute bench with confidence."
       bullets={[
         "Interactive tactical pitch board: drag and position squad members into exact pitch coordinates with realistic turf markings.",
-        "Enforced matchday rules: select 11 unique starters and keep bench athletes separate.",
+        "Enforced matchday rules: select the format's required number of unique starters and keep bench athletes separate.",
         "Formation presets: switch between supported shapes including 4-3-3, 4-4-2, 3-5-2, 4-2-3-1, and 5-3-2.",
         "Substitutes bench drawer: manage reserve players and plan tactical substitution rotations prior to kickoff.",
       ]}
@@ -811,7 +811,7 @@ function LineupTacticalMockup() {
       <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2.5">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-white">Tactical Pitch</span>
-          <p className="text-[10px] text-white/50">Formation 4-3-3 &bull; 11 Starters Selected</p>
+          <p className="text-[10px] text-white/50">11-a-side &bull; Formation 4-3-3 &bull; Lineup Selected</p>
         </div>
         <div className="flex gap-1">
           {["4-3-3", "4-4-2", "3-5-2"].map((f) => (

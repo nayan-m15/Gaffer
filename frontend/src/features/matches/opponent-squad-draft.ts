@@ -4,7 +4,10 @@ import {
   remapPlayers,
 } from "@/features/team-management/formations";
 import type { OpponentSquadVisibility } from "@/features/events/types";
-import type { PitchAssignments } from "@/features/team-management/types";
+import type {
+  FormationPlayerCount,
+  PitchAssignments,
+} from "@/features/team-management/types";
 
 export interface DraftOpponentPlayer {
   shirtNumber: number;
@@ -16,6 +19,7 @@ export interface OpponentSquadSetupContext {
   visibility: OpponentSquadVisibility;
   players: DraftOpponentPlayer[];
   formationId: string;
+  playerCount: FormationPlayerCount;
   opponentColor: string;
   onSave: (next: {
     visibility: OpponentSquadVisibility;

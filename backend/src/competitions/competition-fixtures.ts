@@ -5,6 +5,7 @@ import { competitions } from '../database/schema';
 export const settingKeys = [
   'format',
   'configuredTeamCount',
+  'playersPerSide',
   'maxSubstitutes',
   'redCardSuspensionMatches',
   'accumulatedYellowThreshold',
@@ -40,6 +41,9 @@ export function validateSettings(
     (row.type === 'cup' && format === 'league')
   ) {
     throw new BadRequestException('Format must match the competition type.');
+  }
+  if (row.playersPerSide != null && ![5, 7, 11].includes(row.playersPerSide)) {
+    throw new BadRequestException('Players per side must be 5, 7 or 11.');
   }
   if (
     format === 'knockout' &&
