@@ -42,12 +42,20 @@ export default function LoginPage() {
     location.state as { from?: string | { pathname?: string } } | null
   )?.from;
 
-  const from =
+  const requestedPath =
     typeof rawFrom === "string"
       ? rawFrom
       : typeof rawFrom === "object" && rawFrom?.pathname
-        ? rawFrom.pathname
-        : "/dashboard";
+        ? `${rawFrom.pathname}${(rawFrom as { search?: string }).search ?? ""}${(rawFrom as { hash?: string }).hash ?? ""}`
+        : "/";
+  // Router state is internal today, but constrain it to a same-origin app path
+  // so future callers cannot turn login into an open redirect.
+  const from =
+    requestedPath.startsWith("/") &&
+    !requestedPath.startsWith("//") &&
+    !requestedPath.includes("\\")
+      ? requestedPath
+      : "/";
 
   const errorParam = searchParams.get("error");
   const verifiedParam = searchParams.get("verified");
@@ -131,7 +139,7 @@ export default function LoginPage() {
     setIsGoogleLoading(true);
 
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(from);
     } catch (err) {
       console.error("Google sign-in failed:", err);
       setIsGoogleLoading(false);
@@ -223,15 +231,21 @@ export default function LoginPage() {
               }
             />
 
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="size-4 cursor-pointer accent-primary"
-              />
-              <span>Remember me</span>
-            </label>
+            <div className="space-y-1">
+              <label htmlFor="remember-me" className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  id="remember-me"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="size-4 cursor-pointer accent-primary"
+                />
+                <span>Keep me signed in on this device</span>
+              </label>
+              <p className="pl-6 text-xs text-muted-foreground">
+                Applies to email and password sign-in. Leave unchecked on shared devices.
+              </p>
+            </div>
 
             {notice && !error && (
               <p role="status" className="text-sm text-brand">

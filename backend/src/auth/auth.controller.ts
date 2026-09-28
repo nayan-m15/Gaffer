@@ -76,7 +76,8 @@ function forwardSetCookie(res: Response, headers: Headers): void {
  */
 function expireDontRememberCookie(res: Response): void {
   const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
-  const secure = baseURL.startsWith('https://');
+  // Keep in sync with auth.ts advanced.defaultCookieAttributes.secure.
+  const secure = process.env.NODE_ENV === 'production';
   const name = `${secure ? '__Secure-' : ''}better-auth.dont_remember`;
   const expired = `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${
     secure ? '; Secure' : ''

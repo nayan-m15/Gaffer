@@ -96,7 +96,7 @@ interface AuthContextValue {
   retrySession: () => Promise<void>;
   signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (callbackPath?: string) => Promise<void>;
   signOut: (options?: { pendingData?: "retain" | "discard" }) => Promise<void>;
   refreshSession: () => Promise<SessionPayload | null>;
   resendVerificationEmail: (
@@ -229,10 +229,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (callbackPath = "/dashboard") => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: `${window.location.origin}/dashboard`,
+      callbackURL: `${window.location.origin}${callbackPath}`,
       errorCallbackURL: `${window.location.origin}/login?error=google`,
     });
   }, []);
