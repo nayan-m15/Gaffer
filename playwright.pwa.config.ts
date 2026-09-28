@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL = 'http://127.0.0.1:4173';
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './frontend/e2e',
   testMatch: 'pwa-production.spec.ts',
   outputDir: 'test-results/pwa',
   timeout: 90_000,
