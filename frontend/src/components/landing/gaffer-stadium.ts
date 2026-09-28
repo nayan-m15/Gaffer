@@ -78,6 +78,22 @@ function opening(side: Side, along: number, row: number, tier: number) {
   return false;
 }
 
+function createPlayerEntrance(materials: ReturnType<typeof makeMaterials>) {
+  const entrance = new THREE.Group();
+  entrance.name = "West stand player entrance";
+  const width = 7.1, depth = 7.8, height = 4.05;
+  entrance.add(
+    block([.34, height, depth], [-width / 2, height / 2, depth / 2], materials.darkConcrete),
+    block([.34, height, depth], [width / 2, height / 2, depth / 2], materials.darkConcrete),
+    block([width + .34, .34, depth], [0, height, depth / 2], materials.darkConcrete),
+    block([.16, height - .38, depth - .2], [-width / 2 + .2, (height - .38) / 2, depth / 2], materials.steel),
+    block([.16, height - .38, depth - .2], [width / 2 - .2, (height - .38) / 2, depth / 2], materials.steel),
+    block([width - .34, .16, depth - .2], [0, height - .2, depth / 2], materials.steel),
+    block([width - .7, .08, depth], [0, .04, depth / 2], materials.aisle),
+  );
+  return entrance;
+}
+
 function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>, textures: THREE.Texture[]) {
   const stand = new THREE.Group();
   stand.name = `Gaffer ${spec.name} stand`;
@@ -156,6 +172,8 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const stairDummy = new THREE.Object3D(); let stairIndex = 0;
     for (let aisleIndex = 0; aisleIndex < aisleCount; aisleIndex++) {
       const x = -spec.length / 2 + (aisleIndex + 1) * sectionWidth + aisleIndex * aisleWidth + aisleWidth / 2;
+      const crossesPlayerEntrance = spec.side === "west" && tierIndex === 0 && Math.abs(x) < 4.3;
+      if (crossesPlayerEntrance) continue;
       for (let row = 0; row < tier.rows; row++) {
         const z = tier.start + (row + .5) * tier.depth;
         const y = tier.base + (row + 1) * tier.rise;
@@ -169,6 +187,7 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
         stand.add(strut(a, b, .045, rail));
       }
     }
+    stairMesh.count = stairIndex;
     stairMesh.instanceMatrix.needsUpdate = true; stand.add(stairMesh);
     if (tierIndex > 0) {
       const walkway = tier.start - .6;
@@ -192,7 +211,17 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     if (spec.side === "west" && Math.abs(x) < 5) continue;
     stand.add(block([.075, 1.1, .075], [x, 1.2, -.5], rail));
   }
-  stand.add(block([spec.length, .12, .1], [0, 1.74, -.5], rail));
+  if (spec.side === "west") {
+    const entranceHalfWidth = 4.3;
+    const railLength = spec.length / 2 - entranceHalfWidth;
+    stand.add(
+      block([railLength, .12, .1], [-(entranceHalfWidth + railLength / 2), 1.74, -.5], rail),
+      block([railLength, .12, .1], [entranceHalfWidth + railLength / 2, 1.74, -.5], rail),
+      createPlayerEntrance(materials),
+    );
+  } else {
+    stand.add(block([spec.length, .12, .1], [0, 1.74, -.5], rail));
+  }
 
   const roofFront = spec.side === "north" ? 2.8 : 3.8;
   const roofBack = totalDepth + 4;
@@ -252,6 +281,60 @@ function makeMaterials() {
   };
 }
 
+type AdvertisingBoardSegment = { axis: "x" | "z"; fixed: number; start: number; end: number };
+
+function createAdvertisingBoards(material: THREE.Material, aisle: THREE.Material) {
+  const group = new THREE.Group();
+  group.name = "Pitch advertising perimeter";
+  const segments: AdvertisingBoardSegment[] = [];
+  const segmentGap = .14, targetLength = 6.1;
+
+  const addRun = (axis: "x" | "z", fixed: number, start: number, end: number, openings: Array<[number, number]> = []) => {
+    let spans: Array<[number, number]> = [[start, end]];
+    for (const [openingStart, openingEnd] of openings) {
+      spans = spans.flatMap(([spanStart, spanEnd]) => {
+        if (openingEnd <= spanStart || openingStart >= spanEnd) return [[spanStart, spanEnd]];
+        return [[spanStart, Math.min(spanEnd, openingStart)], [Math.max(spanStart, openingEnd), spanEnd]]
+          .filter(([a, b]) => b - a > .5) as Array<[number, number]>;
+      });
+    }
+    for (const [spanStart, spanEnd] of spans) {
+      const count = Math.max(1, Math.ceil((spanEnd - spanStart) / targetLength));
+      const length = (spanEnd - spanStart) / count;
+      for (let i = 0; i < count; i++) {
+        segments.push({
+          axis,
+          fixed,
+          start: spanStart + i * length + segmentGap / 2,
+          end: spanStart + (i + 1) * length - segmentGap / 2,
+        });
+      }
+    }
+  };
+
+  // The west touchline has separate openings for the tunnel and home dugout.
+  addRun("z", -35.7, -49.4, 49.4, [[-4.4, 4.4], [6.5, 20.5]]);
+  addRun("z", 35.7, -49.4, 49.4);
+  // Goal-line boards sit behind the net depth and leave each goal mouth open.
+  addRun("x", -55.3, -31.2, 31.2, [[-4.8, 4.8]]);
+  addRun("x", 55.3, -31.2, 31.2, [[-4.8, 4.8]]);
+
+  const boards = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, segments.length);
+  const dummy = new THREE.Object3D();
+  segments.forEach((segment, index) => {
+    const length = segment.end - segment.start;
+    const centre = (segment.start + segment.end) / 2;
+    dummy.position.set(segment.axis === "x" ? centre : segment.fixed, .52, segment.axis === "z" ? centre : segment.fixed);
+    dummy.scale.set(segment.axis === "x" ? length : .24, .92, segment.axis === "z" ? length : .24);
+    dummy.updateMatrix();
+    boards.setMatrixAt(index, dummy.matrix);
+  });
+  boards.instanceMatrix.needsUpdate = true;
+  boards.receiveShadow = true;
+  group.add(boards, block([2.6, .12, 15], [-36.9, .07, 14], aisle));
+  return group;
+}
+
 export function createGafferStadium(lowPower: boolean) {
   const group = new THREE.Group(); group.name = "Gaffer Stadium";
   const textures: THREE.Texture[] = [];
@@ -287,17 +370,9 @@ export function createGafferStadium(lowPower: boolean) {
   for (const x of [-4.5, 4.5]) board.add(strut(new THREE.Vector3(x, 3.1, 0), new THREE.Vector3(x, 6.8, -3.6), .16, materials.steel));
   group.add(board);
 
-  // Small pitch-side walkway and restrained LED boards, split at the west tunnel.
+  // Low, restrained LED boards follow the pitch perimeter and preserve access gaps.
   const adMap = signTexture("GAFFER  •  COACH SMARTER"); textures.push(adMap);
   const adMaterial = new THREE.MeshStandardMaterial({ map: adMap, emissive: 0x073a2a, emissiveIntensity: .22, roughness: .7 });
-  for (const side of [-1, 1]) {
-    for (let z = -48; z < 50; z += 6.4) {
-      if (side < 0 && z > -7 && z < 22) continue;
-      const boardMesh = block([.32, 1.02, 6.1], [side * 35.7, .58, z + 3], adMaterial);
-      boardMesh.rotation.y = side * Math.PI / 2; group.add(boardMesh);
-    }
-    for (let x = -31; x < 32; x += 6.4) group.add(block([6.1, 1.02, .32], [x + 3, .58, side * 54.5], adMaterial));
-  }
-  group.add(block([2.6, .12, 15], [-36.9, .07, 14], materials.aisle));
+  group.add(createAdvertisingBoards(adMaterial, materials.aisle));
   return { group, textures };
 }
