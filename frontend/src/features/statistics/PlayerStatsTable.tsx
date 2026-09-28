@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { isGoalkeeperPosition } from "@/features/matches/opposing-goalkeeper";
 import type { PlayerStatLine } from "./types";
 import { MAX_COMPARE_ATHLETES } from "./useStatisticsFilters";
 
@@ -10,6 +11,7 @@ const PLAYER_COLUMNS = [
   { key: "assists", label: "AST", className: "w-14 text-center" },
   { key: "yellowCards", label: "YELLOW", className: "w-14 text-center" },
   { key: "redCards", label: "RED", className: "w-14 text-center" },
+  { key: "saves", label: "SAVES", className: "w-14 text-center" },
 ] as const;
 
 export function PlayerStatsTable({
@@ -115,6 +117,18 @@ export function PlayerStatsTable({
                 </td>
                 <td className="px-4 py-3 text-center tabular-nums text-danger">
                   {player.redCards}
+                </td>
+                <td className="px-4 py-3 text-center tabular-nums">
+                  {isGoalkeeperPosition(player.position) ? (
+                    <span className="text-[#67e8f9]">{player.saves}</span>
+                  ) : (
+                    <span
+                      className="text-xs font-normal text-muted-foreground opacity-40"
+                      aria-hidden="true"
+                    >
+                      -
+                    </span>
+                  )}
                 </td>
               </tr>
             );
