@@ -223,7 +223,7 @@ function decoratePopover(popover: PopoverDOM, stepNumber: number, data: TourStep
     skip.className = "gaffer-tour-skip";
     skip.textContent = "Skip tour";
     skip.addEventListener("click", () => tour.destroy());
-    popover.footer.insertBefore(skip, popover.footer.firstChild);
+    popover.footer.append(skip);
   }
 
   if (data?.maybeLater) {
@@ -238,6 +238,12 @@ function decoratePopover(popover: PopoverDOM, stepNumber: number, data: TourStep
   if (data?.celebration && !prefersReducedMotion()) {
     popover.wrapper.prepend(createCelebrationBurst());
   }
+}
+
+function focusTourPrimaryButton(popover: PopoverDOM) {
+  queueMicrotask(() => {
+    popover.nextButton.focus({ preventScroll: true });
+  });
 }
 
 function buildSteps(options: StartCoachTourOptions): DriveStep[] {
@@ -346,6 +352,7 @@ export function startCoachTour(options: StartCoachTourOptions) {
       const data = opts.state.activeStep?.data as TourStepData | undefined;
       const stepNumber = data?.stepNumber ?? (opts.index ?? 0) + 1;
       decoratePopover(popover, stepNumber, data, tour);
+      focusTourPrimaryButton(popover);
     },
     onDestroyed: () => {
       if (activeDriver === tour) activeDriver = null;

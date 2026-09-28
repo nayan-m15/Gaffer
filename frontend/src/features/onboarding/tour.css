@@ -188,6 +188,7 @@
   all: unset;
   box-sizing: border-box;
   display: inline;
+  order: -1;
   cursor: pointer;
   flex-shrink: 0;
   margin-right: auto;
@@ -203,6 +204,7 @@
   color: var(--foreground);
 }
 
+.driver-popover.gaffer-tour .driver-popover-next-btn:focus,
 .driver-popover.gaffer-tour .driver-popover-footer-btn:focus-visible,
 .gaffer-tour-skip:focus-visible,
 .gaffer-tour-secondary:focus-visible {
