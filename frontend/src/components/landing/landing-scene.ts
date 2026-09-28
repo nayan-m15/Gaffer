@@ -362,8 +362,8 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
 
   const centre=ROOM_EXIT+TUNNEL_LENGTH/2;
   scene.add(box([TUNNEL_LENGTH,.25,6.4],[centre,-.1,0],dark),box([TUNNEL_LENGTH,.28,6.4],[centre,3.9,0],dark),box([TUNNEL_LENGTH,4,.25],[centre,1.9,-3.2],concrete),box([TUNNEL_LENGTH,4,.25],[centre,1.9,3.2],concrete));
-  const beams=new THREE.InstancedMesh(new THREE.BoxGeometry(.28,.25,6.5),metal,6), tunnelLights=new THREE.InstancedMesh(new THREE.BoxGeometry(1.8,.08,.32),light,5);
-  for(let i=0;i<6;i+=1){const x=ROOM_EXIT+i*TUNNEL_LENGTH/5;dummy.position.set(x,3.7,0);dummy.updateMatrix();beams.setMatrixAt(i,dummy.matrix);if(i<5){dummy.position.x=x+TUNNEL_LENGTH/10;dummy.position.y=3.72;dummy.updateMatrix();tunnelLights.setMatrixAt(i,dummy.matrix);}} scene.add(beams,tunnelLights);
+  const tunnelLights=new THREE.InstancedMesh(new THREE.BoxGeometry(1.8,.08,.32),light,5);
+  for(let i=0;i<5;i+=1){dummy.position.set(ROOM_EXIT+(i+.5)*TUNNEL_LENGTH/5,3.72,0);dummy.updateMatrix();tunnelLights.setMatrixAt(i,dummy.matrix);} scene.add(tunnelLights);
   const bannerTexture=labelTexture("GAFFER",lowPower?512:1024), bannerMat=new THREE.MeshStandardMaterial({map:bannerTexture,emissive:0x062219,emissiveIntensity:.22,roughness:.7});
   for(const side of [-1,1]) for(const x of [-57.5,-51.2,-46.2]){const banner=box([4.5,1.15,.1],[x,2.05,side*3.055],bannerMat);if(side>0)banner.rotation.y=Math.PI;scene.add(banner);}
   scene.add(box([.5,4.55,.55],[TUNNEL_EXIT,2.15,-3.3],metal),box([.5,4.55,.55],[TUNNEL_EXIT,2.15,3.3],metal),box([.5,.55,7.15],[TUNNEL_EXIT,4.25,0],metal),box([10.5,.18,6.4],[-39.25,-.04,0],dark));

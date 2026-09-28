@@ -103,7 +103,24 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   const backHeight = spec.roof - 3.3;
 
   // A solid building volume and open concourse sit behind the stepped seating.
-  stand.add(block([spec.length + 2, backHeight * .55, 2.5], [0, backHeight * .275, totalDepth + 1.9], darkConcrete));
+  // Split the west volume around the player entrance so it does not cap the
+  // dressing-room tunnel. Keep a lintel above the opening to preserve the
+  // stand's mass when viewed from the pitch.
+  const lowerBuildingHeight = backHeight * .55;
+  if (spec.side === "west") {
+    const entranceHalfWidth = 4.3;
+    const entranceHeight = 4.05;
+    const buildingWidth = spec.length + 2;
+    const sideWidth = buildingWidth / 2 - entranceHalfWidth;
+    const buildingDepth = totalDepth + 1.9;
+    stand.add(
+      block([sideWidth, lowerBuildingHeight, 2.5], [-(entranceHalfWidth + sideWidth / 2), lowerBuildingHeight / 2, buildingDepth], darkConcrete),
+      block([sideWidth, lowerBuildingHeight, 2.5], [entranceHalfWidth + sideWidth / 2, lowerBuildingHeight / 2, buildingDepth], darkConcrete),
+      block([entranceHalfWidth * 2, lowerBuildingHeight - entranceHeight, 2.5], [0, entranceHeight + (lowerBuildingHeight - entranceHeight) / 2, buildingDepth], darkConcrete),
+    );
+  } else {
+    stand.add(block([spec.length + 2, lowerBuildingHeight, 2.5], [0, lowerBuildingHeight / 2, totalDepth + 1.9], darkConcrete));
+  }
   stand.add(block([spec.length + 2, 1.25, 4.3], [0, backHeight - .5, totalDepth + 1.1], concrete));
   stand.add(block([spec.length + 4, .45, totalDepth + 4], [0, -.25, (totalDepth + 4) / 2], darkConcrete));
   for (let i = 0; i < spec.columns; i++) {
