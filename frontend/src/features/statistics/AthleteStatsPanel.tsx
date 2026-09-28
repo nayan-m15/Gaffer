@@ -1,6 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isGoalkeeperPosition } from "@/features/matches/opposing-goalkeeper";
 import { formatDate } from "./formatting";
 import { ResultBadge } from "./ResultBadge";
 import type { AthleteMatchBreakdown, AthleteStatistics } from "./types";
@@ -66,6 +67,13 @@ export function AthleteStatsPanel({
           value={stats.redCards}
           valueClassName="text-red-400"
         />
+        {isGoalkeeperPosition(stats.position) ? (
+          <DetailStat
+            label="SAVES"
+            value={stats.saves ?? 0}
+            valueClassName="text-[#67e8f9]"
+          />
+        ) : null}
       </div>
 
       {/* Match-by-match */}

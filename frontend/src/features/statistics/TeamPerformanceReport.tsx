@@ -1,6 +1,7 @@
 import { Award, CalendarDays, MapPin, Trophy } from "lucide-react";
 import type { ReactNode } from "react";
 import { AppCard } from "@/components/app/AppCard";
+import { isGoalkeeperPosition } from "@/features/matches/opposing-goalkeeper";
 import { StatCardsGrid } from "./StatCardsGrid";
 import { formatDate } from "./formatting";
 import { reportHighlights, resultLabel, type TeamReportData } from "./team-report-model";
@@ -77,15 +78,30 @@ export function TeamPerformanceReport({ data }: { data: TeamReportData }) {
       <ReportTableSection title="Player performance">
         {overview.players.length > 0 && (
           <table className="w-full min-w-[620px] text-sm">
-            <thead><tr><Th>Player</Th><Th numeric>Apps</Th><Th numeric>Goals</Th><Th numeric>Assists</Th><Th numeric>Yellow</Th><Th numeric>Red</Th></tr></thead>
+            <thead><tr><Th>Player</Th><Th numeric>Apps</Th><Th numeric>Goals</Th><Th numeric>Assists</Th><Th numeric>Yellow</Th><Th numeric>Red</Th><Th numeric>Saves</Th></tr></thead>
             <tbody>
-              {overview.players.map((player) => (
-                <tr key={player.athleteId} className="border-b border-border/70 last:border-0">
-                  <Td strong>{player.name}</Td><Td numeric>{player.appearances}</Td>
-                  <Td numeric>{player.goals}</Td><Td numeric>{player.assists}</Td>
-                  <Td numeric>{player.yellowCards}</Td><Td numeric>{player.redCards}</Td>
-                </tr>
-              ))}
+              {overview.players.map((player) => {
+                const saves = isGoalkeeperPosition(player.position) ? player.saves : null;
+                return (
+                  <tr key={player.athleteId} className="border-b border-border/70 last:border-0">
+                    <Td strong>{player.name}</Td><Td numeric>{player.appearances}</Td>
+                    <Td numeric>{player.goals}</Td><Td numeric>{player.assists}</Td>
+                    <Td numeric>{player.yellowCards}</Td><Td numeric>{player.redCards}</Td>
+                    <Td numeric>
+                      {saves !== null ? (
+                        saves
+                      ) : (
+                        <span
+                          className="text-xs font-normal text-muted-foreground opacity-40"
+                          aria-hidden="true"
+                        >
+                          -
+                        </span>
+                      )}
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

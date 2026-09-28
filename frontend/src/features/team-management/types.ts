@@ -2,13 +2,19 @@
  * Type definitions for the Team Management / Tactical Board feature.
  *
  * These types model formations, pitch positions, lineup state, and the
- * drag-and-drop interactions used to configure a starting XI.
+ * drag-and-drop interactions used to configure a starting lineup.
  */
 
 /* ─── Formation types ─────────────────────────────────────────────────── */
 
 /** Role category for a position on the pitch. */
 export type PositionRole = "GK" | "DEF" | "MID" | "FWD";
+
+/** Supported match formats, expressed as the number of players on the pitch. */
+export type FormationPlayerCount = 5 | 7 | 11;
+
+/** Internal IDs used for coach-defined shapes in each supported match format. */
+export type CustomFormationId = "custom-5" | "custom-7" | "custom-11";
 
 /**
  * A single position slot within a formation.
@@ -38,7 +44,9 @@ export interface Formation {
   id: string;
   /** Human-readable name (e.g. "4-3-3"). */
   name: string;
-  /** Exactly 11 positions including one goalkeeper. */
+  /** Number of players this formation puts on the pitch. */
+  playerCount: FormationPlayerCount;
+  /** Position slots including one goalkeeper. */
   positions: FormationPosition[];
 }
 
@@ -55,8 +63,10 @@ export type PitchAssignments = Record<string, string | null>;
 export interface LineupState {
   /** ID of the currently selected formation. */
   formationId: string;
-  /** Position-to-athlete mapping for the starting XI. */
+  /** Position-to-athlete mapping for the starting lineup. */
   assignments: PitchAssignments;
+  /** Coach-defined slot coordinates when `formationId` is a custom formation. */
+  customPositions: FormationPosition[] | null;
   /** Athlete IDs currently on the substitutes bench. */
   substituteIds: string[];
 }
@@ -66,7 +76,7 @@ export interface LineupState {
  * game plan (see `GamePlanSquad` in `@/services/gamePlans`).
  *
  * Used to hydrate `useLineupState` when a game plan is opened, so a coach's
- * saved XI survives a page reload and follows the plan they select.
+ * saved lineup survives a page reload and follows the plan they select.
  */
 export type SavedLineup = LineupState;
 

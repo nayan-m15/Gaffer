@@ -18,11 +18,13 @@ export interface TrendEntry {
 export interface PlayerStatLine {
   athleteId: string;
   name: string;
+  position: string | null;
   appearances: number;
   goals: number;
   assists: number;
   yellowCards: number;
   redCards: number;
+  saves: number;
 }
 
 /** One AI-generated match narrative, as surfaced on the statistics/dashboard pages. */
@@ -103,6 +105,7 @@ export interface AthleteStatistics {
   assists: number;
   yellowCards: number;
   redCards: number;
+  saves: number;
   matches: AthleteMatchBreakdown[];
 }
 

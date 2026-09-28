@@ -38,6 +38,10 @@ import {
   unavailableFriendlyOpponentLineup,
 } from '../friendly-fixtures/friendly-fixtures.service';
 import { TeamsService } from '../teams/teams.service';
+import {
+  DEFAULT_FORMATION_ID,
+  getFormationPlayerCount,
+} from '../common/formations';
 import type {
   ConfirmLineupDto,
   CreateEventDto,
@@ -802,6 +806,37 @@ export class EventsService {
     const gamePlan = dto.gamePlanId
       ? await this.requireTeamGamePlan(team.id, dto.gamePlanId)
       : null;
+    const gamePlanPlayerCount = gamePlan
+      ? getFormationPlayerCount(gamePlan.formationId)
+      : null;
+    if (gamePlan && !gamePlanPlayerCount) {
+      throw new BadRequestException('Formation is not supported.');
+    }
+
+    const competition = event.competitionId
+      ? await this.requireTeamCompetition(team.id, event.competitionId)
+      : null;
+    const requiredStarterCount =
+      competition?.playersPerSide ??
+      gamePlanPlayerCount ??
+      getFormationPlayerCount(DEFAULT_FORMATION_ID);
+    if (!requiredStarterCount) {
+      throw new BadRequestException('Match format is not supported.');
+    }
+    if (
+      competition &&
+      gamePlanPlayerCount &&
+      gamePlanPlayerCount !== requiredStarterCount
+    ) {
+      throw new BadRequestException(
+        `This competition is ${requiredStarterCount}-a-side. Choose a compatible game plan.`,
+      );
+    }
+    if (dto.startingAthleteIds.length !== requiredStarterCount) {
+      throw new BadRequestException(
+        `This match format requires exactly ${requiredStarterCount} starting athletes.`,
+      );
+    }
 
     const { teamAthletes, requestedIds } =
       await this.loadSelectableTeamAthletes(
@@ -823,6 +858,7 @@ export class EventsService {
             name: gamePlan.name,
             formationId: gamePlan.formationId,
             assignments: gamePlan.assignments,
+            customPositions: gamePlan.customPositions,
             substituteIds: gamePlan.substituteIds,
             defensiveStyle: gamePlan.defensiveStyle,
             defensiveWidth: gamePlan.defensiveWidth,
@@ -1136,7 +1172,10 @@ export class EventsService {
 
   private async requireTeamCompetition(teamId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
-      .select({ id: competitions.id })
+      .select({
+        id: competitions.id,
+        playersPerSide: competitions.playersPerSide,
+      })
       .from(competitionTeams)
       .innerJoin(
         competitions,
@@ -1154,6 +1193,7 @@ export class EventsService {
     if (!competition) {
       throw new BadRequestException('Competition not found.');
     }
+    return competition;
   }
 
   /**

@@ -13,9 +13,13 @@ import {
 } from "@/components/ui/select";
 import { FootballPitch } from "@/features/team-management/FootballPitch";
 import {
+  FORMAT_OPTIONS,
   FORMATIONS,
-  FORMATION_OPTIONS,
+  getDefaultFormationIdForPlayerCount,
+  getFormationOptionsForPlayerCount,
+  getFormationPlayerCount,
 } from "@/features/team-management/formations";
+import type { FormationPlayerCount } from "@/features/team-management/types";
 
 interface FormationTabProps {
   formationId: string;
@@ -29,6 +33,8 @@ export function FormationTab({
   disabled,
 }: FormationTabProps) {
   const formation = FORMATIONS[formationId] ?? FORMATIONS["4-3-3"];
+  const playerCount = getFormationPlayerCount(formation.id);
+  const formationOptions = getFormationOptionsForPlayerCount(playerCount);
 
   return (
     <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
@@ -42,27 +48,54 @@ export function FormationTab({
           </p>
         </div>
 
-        <Select
-          value={formationId}
-          onValueChange={(val) => {
-            if (val) onChange(val);
-          }}
-          disabled={disabled}
-        >
-          <SelectTrigger
-            aria-label="Select formation"
-            className="h-10 min-w-32 font-semibold"
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={String(playerCount)}
+            onValueChange={(val) => {
+              const next = Number(val) as FormationPlayerCount;
+              if (next === 5 || next === 7 || next === 11) {
+                onChange(getDefaultFormationIdForPlayerCount(next));
+              }
+            }}
+            disabled={disabled}
           >
-            <SelectValue placeholder="Select formation" />
-          </SelectTrigger>
-          <SelectContent>
-            {FORMATION_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              aria-label="Select match format"
+              className="h-10 min-w-32 font-semibold"
+            >
+              <SelectValue placeholder="Select format" />
+            </SelectTrigger>
+            <SelectContent>
+              {FORMAT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={String(option.value)}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={formationId}
+            onValueChange={(val) => {
+              if (val) onChange(val);
+            }}
+            disabled={disabled}
+          >
+            <SelectTrigger
+              aria-label="Select formation"
+              className="h-10 min-w-32 font-semibold"
+            >
+              <SelectValue placeholder="Select formation" />
+            </SelectTrigger>
+            <SelectContent>
+              {formationOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <FootballPitch>

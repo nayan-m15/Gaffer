@@ -17,6 +17,7 @@ const FORMATIONS_EXAMPLE = {
       id: '4-3-3',
       name: '4-3-3',
       shape: '4-3-3',
+      playerCount: 11,
       description:
         'A balanced formation with width in attack and a three-player midfield that can dominate possession.',
     },
@@ -24,6 +25,7 @@ const FORMATIONS_EXAMPLE = {
       id: '4-4-2',
       name: '4-4-2',
       shape: '4-4-2',
+      playerCount: 11,
       description:
         'A classic, compact shape with two flat banks of four and two strikers who support each other up front.',
     },
