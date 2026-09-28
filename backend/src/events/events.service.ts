@@ -420,6 +420,9 @@ export class EventsService {
         teamId: team.id,
         startingAthleteIds: dto.startingAthleteIds,
         benchAthleteIds: dto.benchAthleteIds ?? [],
+        formationId: dto.formationId ?? null,
+        pitchAssignments: dto.pitchAssignments ?? null,
+        customPositions: dto.customPositions ?? null,
         confirmedByUserId: userId,
         confirmedAt,
       })
@@ -428,6 +431,9 @@ export class EventsService {
         set: {
           startingAthleteIds: dto.startingAthleteIds,
           benchAthleteIds: dto.benchAthleteIds ?? [],
+          formationId: dto.formationId ?? null,
+          pitchAssignments: dto.pitchAssignments ?? null,
+          customPositions: dto.customPositions ?? null,
           confirmedByUserId: userId,
           confirmedAt,
           updatedAt: confirmedAt,
@@ -460,6 +466,9 @@ export class EventsService {
     return {
       startingAthleteIds: lineup.startingAthleteIds,
       benchAthleteIds: lineup.benchAthleteIds,
+      formationId: lineup.formationId,
+      pitchAssignments: lineup.pitchAssignments,
+      customPositions: lineup.customPositions,
       confirmedAt: lineup.confirmedAt,
     };
   }

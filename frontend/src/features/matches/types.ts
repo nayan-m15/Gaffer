@@ -106,6 +106,10 @@ export interface FriendlyOpponentLineup {
   teamId: string | null;
   teamName: string | null;
   players: MatchSquadAthlete[];
+  formationId?: string | null;
+  pitchAssignments?: Record<string, string | null> | null;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
+  confirmedAt?: string | null;
 }
 
 export interface MatchLogEvent {

@@ -64,6 +64,7 @@ export default function OpponentSquadSetupPage() {
       ? context.formationId
       : getDefaultFormationIdForPlayerCount(context.playerCount);
   const [formationId, setFormationId] = useState(initialFormationId);
+  const [customPositions, setCustomPositions] = useState(context.customPositions ?? null);
   const [assignments, setAssignments] = useState(() =>
     assignmentsFromPlayers(initialFormationId, context.players),
   );
@@ -164,6 +165,7 @@ export default function OpponentSquadSetupPage() {
     const stillPlaced = Object.values(remapped).filter(Boolean).length;
     const movedToBench = previouslyPlaced - stillPlaced;
     setFormationId(nextId);
+    setCustomPositions(null);
     setAssignments(remapped);
     setPlayers((current) =>
       applyAssignmentsToPlayers(current, nextId, remapped),
@@ -510,6 +512,7 @@ export default function OpponentSquadSetupPage() {
               <div className="min-w-0">
                 <OpponentFormationPitch
                   formationId={formationId}
+                  customPositions={customPositions}
                   assignments={assignments}
                   players={players}
                   opponentColor={oppColor}

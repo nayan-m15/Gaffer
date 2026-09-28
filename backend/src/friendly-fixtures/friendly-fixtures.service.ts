@@ -49,6 +49,10 @@ export interface FriendlyOpponentLineup {
   teamId: string | null;
   teamName: string | null;
   players: FriendlyOpponentLineupPlayer[];
+  formationId?: string | null;
+  pitchAssignments?: Record<string, string | null> | null;
+  customPositions?: typeof eventLineups.$inferSelect.customPositions;
+  confirmedAt?: Date | null;
 }
 
 /** The neutral result for lookups where no shared lineup can exist. */
@@ -357,6 +361,10 @@ export class FriendlyFixturesService {
     return {
       ...base,
       available: true,
+      formationId: opponentLineup.formationId,
+      pitchAssignments: opponentLineup.pitchAssignments,
+      customPositions: opponentLineup.customPositions,
+      confirmedAt: opponentLineup.confirmedAt,
       players: lineupAthletes.map((athlete) => ({
         ...athlete,
         started: startingIds.has(athlete.id),

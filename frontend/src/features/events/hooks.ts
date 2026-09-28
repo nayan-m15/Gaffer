@@ -70,6 +70,7 @@ export function useFriendlyOpponentLineup(
     queryKey: [...eventsQueryKey, eventId, "friendly-opponent-lineup"],
     queryFn: () => fetchFriendlyOpponentLineup(eventId!),
     enabled: enabled && Boolean(eventId),
+    refetchInterval: (query) => query.state.data?.available ? 15000 : 5000,
   });
 }
 
