@@ -115,11 +115,11 @@ function App() {
   return (
     <>
       <PwaUpdatePrompt />
-      <PwaInstallExperience />
       {!loadingDone && (
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
+      <PwaInstallExperience />
       <ClaimResumer />
       <TeamInviteResumer />
       <CompetitionInviteResumer />
