@@ -6,6 +6,7 @@ import {
   requestPersistentStorage,
   type OfflineReadiness,
 } from "./match-store";
+import { fetchMatch, fetchMatchEvents, fetchMatchSquad } from "@/features/matches/api";
 
 const formatBytes = (value: number | null) =>
   value == null ? "Unavailable" : `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -20,6 +21,7 @@ export function OfflineReadinessPanel({
   const [readiness, setReadiness] = useState<OfflineReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const runCheck = useCallback(async () => {
@@ -62,6 +64,26 @@ export function OfflineReadinessPanel({
     }
   };
 
+  const downloadMatchData = async () => {
+    if (!navigator.onLine) {
+      setError("Connect to the internet before downloading match data.");
+      return;
+    }
+    setDownloading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await Promise.all([fetchMatch(matchId), fetchMatchSquad(matchId), fetchMatchEvents(matchId)]);
+      await requestPersistentStorage();
+      setReadiness(await checkOfflineReadiness(matchId));
+      setMessage("Match, squad and event data are saved on this device.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not download match data.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const checks = readiness
     ? [
         ["Match downloaded", readiness.matchCached, "Needs attention"],
@@ -93,7 +115,7 @@ export function OfflineReadinessPanel({
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Close</button>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          Run this while online before leaving for the match.
+          Prepare while online before leaving. “Ready” means this device has the match, current squad and events locally, and its local database passed a write/read check.
         </p>
         {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
         {message ? <p role="status" className="mt-3 text-sm text-success">{message}</p> : null}
@@ -116,11 +138,13 @@ export function OfflineReadinessPanel({
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
+          <button type="button" disabled={downloading || !navigator.onLine} onClick={() => void downloadMatchData()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/88 disabled:cursor-not-allowed disabled:opacity-50">{downloading ? "Downloading…" : "Download match data"}</button>
           <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Check again</button>
           <button type="button" onClick={() => void downloadExport()} className="rounded-lg border border-border-default bg-surface-nested px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Export unsent events</button>
           <button type="button" onClick={() => importRef.current?.click()} className="rounded-lg border border-border-default bg-surface-nested px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Import unsent events</button>
           <input ref={importRef} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void importExport(event.target.files?.[0])} />
         </div>
+        {!readiness?.persistentStorage ? <p className="mt-3 text-xs text-warning">Browser storage may be cleared automatically. Export unsent events and keep the file safe if this device is low on storage.</p> : null}
       </div>
     </div>
   );

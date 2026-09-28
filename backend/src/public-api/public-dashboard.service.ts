@@ -248,7 +248,7 @@ export class PublicDashboardService {
       }
     >();
 
-    for (const row of rows) {
+    const addPlayerStatistics = (row: (typeof rows)[number]) => {
       let player = byAthlete.get(row.id);
       if (!player) {
         player = {
@@ -278,7 +278,8 @@ export class PublicDashboardService {
         player.statistics.yellowCards += row.yellowCards;
         player.statistics.redCards += row.redCards;
       }
-    }
+    };
+    rows.forEach(addPlayerStatistics);
 
     return page.map(({ id }) => byAthlete.get(id)!);
   }

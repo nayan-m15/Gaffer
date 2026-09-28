@@ -308,7 +308,7 @@ export function StadiumScene() {
       // distracting new colour pattern whenever the dashboard is revisited.
       let randomState = 0x5f3759df;
       const random = () => {
-        randomState = (randomState + 0x6d2b79f5) | 0;
+        randomState = Math.trunc(randomState + 0x6d2b79f5);
         let value = Math.imul(randomState ^ (randomState >>> 15), 1 | randomState);
         value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
         return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
@@ -333,13 +333,13 @@ export function StadiumScene() {
       const aisleHalfWidth = 5 * scale;
       const rowStep = height / rowCount;
 
-      for (let row = 0; row < rowCount; row += 1) {
+      function drawCrowdRow(
+        row: number,
+        randomValue: () => number,
+      ) {
         const rowTop = row * rowStep;
         const personHeight = (7.2 + (row / rowCount) * 1.6) * scale;
-        const spacing = (6.2 + random() * 1.4) * scale;
-
-        // Seat lips and risers give the figures a physical place in the bowl
-        // and remain readable after mipmapping.
+        const spacing = (6.2 + randomValue() * 1.4) * scale;
         context.fillStyle = row % 2 === 0 ? "#273236" : "#20292d";
         context.fillRect(0, rowTop + rowStep - 1.3 * scale, width, 1.3 * scale);
         context.fillStyle = "rgba(109, 130, 126, 0.22)";
@@ -349,22 +349,21 @@ export function StadiumScene() {
           const distanceFromAisle = Math.abs(
             ((x + sectionWidth * 0.5) % sectionWidth) - sectionWidth * 0.5,
           );
-          const isAisle = distanceFromAisle < aisleHalfWidth;
-          const isEmptySeat = random() < 0.085;
-          if (isAisle || isEmptySeat) continue;
+          const isEmptySeat = randomValue() < 0.085;
+          if (distanceFromAisle < aisleHalfWidth || isEmptySeat) continue;
 
-          const jitterX = (random() - 0.5) * 1.5 * scale;
-          const jitterY = (random() - 0.5) * 1.1 * scale;
+          const jitterX = (randomValue() - 0.5) * 1.5 * scale;
+          const jitterY = (randomValue() - 0.5) * 1.1 * scale;
           const figureX = x + jitterX;
           const feetY = rowTop + rowStep - 1.8 * scale + jitterY;
-          const headRadius = (1.05 + random() * 0.28) * scale;
-          const torsoWidth = (3.1 + random() * 0.9) * scale;
-          const torsoHeight = personHeight * (0.48 + random() * 0.08);
-          const shirtIndex = Math.floor(random() * shirtColors.length);
-          const skinIndex = Math.floor(random() * skinColors.length);
-          const pose = Math.floor(random() * 6);
+          const headRadius = (1.05 + randomValue() * 0.28) * scale;
+          const torsoWidth = (3.1 + randomValue() * 0.9) * scale;
+          const torsoHeight = personHeight * (0.48 + randomValue() * 0.08);
+          const shirtIndex = Math.floor(randomValue() * shirtColors.length);
+          const skinIndex = Math.floor(randomValue() * skinColors.length);
+          const pose = Math.floor(randomValue() * 6);
 
-          context.globalAlpha = 0.86 + random() * 0.14;
+          context.globalAlpha = 0.86 + randomValue() * 0.14;
           context.fillStyle = shirtColors[shirtIndex];
           context.beginPath();
           context.moveTo(figureX - torsoWidth * 0.55, feetY);
@@ -379,8 +378,6 @@ export function StadiumScene() {
           context.closePath();
           context.fill();
 
-          // A small proportion of raised or offset arms breaks up the row
-          // silhouette without introducing animation or extra geometry.
           if (pose === 0 || pose === 1) {
             context.strokeStyle = shirtColors[shirtIndex];
             context.lineWidth = Math.max(1, 1.05 * scale);
@@ -405,6 +402,10 @@ export function StadiumScene() {
           );
           context.fill();
         }
+      }
+
+      for (let row = 0; row < rowCount; row += 1) {
+        drawCrowdRow(row, random);
       }
 
       // Dark stair aisles separate the audience into believable sections and

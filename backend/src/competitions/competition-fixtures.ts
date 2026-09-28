@@ -84,59 +84,84 @@ export function planFixtures(
   competition: typeof competitions.$inferSelect,
   participantIds: string[],
 ): PlannedFixture[] {
-  validateSettings(competition);
-  if (competition.type === 'friendly')
-    throw new BadRequestException(
-      'Friendly matches do not use fixture generation.',
-    );
-  const size = competition.configuredTeamCount;
-  if (!size)
-    throw new BadRequestException(
-      'Configure the team count before generating fixtures.',
-    );
-  if (participantIds.length < size)
-    throw new BadRequestException(
-      `Add ${size - participantIds.length} more teams before generating fixtures (${participantIds.length}/${size}).`,
-    );
-  if (participantIds.length > size)
-    throw new BadRequestException(
-      `Remove ${participantIds.length - size} teams to match the configured count of ${size}.`,
-    );
-  if (new Set(participantIds).size !== size)
-    throw new BadRequestException('Participants must be unique.');
-  if (!competition.startDate || !competition.allowedPlayingDays?.length)
-    throw new BadRequestException(
-      'Configure a start date and allowed playing days.',
-    );
-  const format =
-    competition.format ?? (competition.type === 'cup' ? 'knockout' : 'league');
-  if (format === 'league_knockout' && !competition.qualifierCount)
-    throw new BadRequestException(
-      'Configure the qualifier count before generating fixtures.',
-    );
-  const date = new Date(
-    `${competition.startDate}T${competition.defaultKickoffTime}:00.000Z`,
+  const { size, format } = validateFixtureParticipants(
+    competition,
+    participantIds,
   );
-  if (
-    !Number.isFinite(date.getTime()) ||
-    competition.allowedPlayingDays.some((day) => day < 0 || day > 6)
-  )
+  const nextDate = createFixtureDatePicker(competition);
+  const add = createFixtureFactory(format);
+  if (format === 'knockout') {
+    return planKnockoutFixtures(size, participantIds, nextDate, add);
+  }
+  return planLeagueFixtures(
+    size,
+    participantIds,
+    competition.fixturesPerOpponent,
+    nextDate,
+    add,
+  );
+}
+
+type FixtureFormat = 'league' | 'knockout' | 'league_knockout';
+type NextFixtureDate = () => string;
+type AddFixture = (
+  round: number,
+  position: number,
+  home: string | null,
+  away: string | null,
+  scheduledAt: string,
+) => PlannedFixture;
+
+function validateFixtureParticipants(
+  competition: typeof competitions.$inferSelect,
+  participantIds: string[],
+): { size: number; format: FixtureFormat } {
+  validateSettings(competition);
+  if (competition.type === 'friendly') {
+    throw new BadRequestException('Friendly matches do not use fixture generation.');
+  }
+  const size = competition.configuredTeamCount;
+  if (!size) {
+    throw new BadRequestException('Configure the team count before generating fixtures.');
+  }
+  if (participantIds.length !== size) {
+    throw new BadRequestException(
+      participantIds.length < size
+        ? `Add ${size - participantIds.length} more teams before generating fixtures (${participantIds.length}/${size}).`
+        : `Remove ${participantIds.length - size} teams to match the configured count of ${size}.`,
+    );
+  }
+  if (new Set(participantIds).size !== size) {
+    throw new BadRequestException('Participants must be unique.');
+  }
+  if (!competition.startDate || !competition.allowedPlayingDays?.length) {
+    throw new BadRequestException('Configure a start date and allowed playing days.');
+  }
+  const format = competition.format ?? (competition.type === 'cup' ? 'knockout' : 'league');
+  if (format === 'league_knockout' && !competition.qualifierCount) {
+    throw new BadRequestException('Configure the qualifier count before generating fixtures.');
+  }
+  return { size, format };
+}
+
+function createFixtureDatePicker(
+  competition: typeof competitions.$inferSelect,
+): NextFixtureDate {
+  const date = new Date(`${competition.startDate}T${competition.defaultKickoffTime}:00.000Z`);
+  const days = competition.allowedPlayingDays ?? [];
+  if (!Number.isFinite(date.getTime()) || days.some((day) => day < 0 || day > 6)) {
     throw new BadRequestException('Invalid fixture schedule settings.');
-  const nextDate = () => {
-    while (!competition.allowedPlayingDays.includes(date.getUTCDay()))
-      date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return () => {
+    while (!days.includes(date.getUTCDay())) date.setUTCDate(date.getUTCDate() + 1);
     const scheduled = date.toISOString();
     date.setUTCDate(date.getUTCDate() + 1);
     return scheduled;
   };
-  const fixtures: PlannedFixture[] = [];
-  const add = (
-    round: number,
-    position: number,
-    home: string | null,
-    away: string | null,
-    scheduledAt: string,
-  ): PlannedFixture => ({
+}
+
+function createFixtureFactory(format: FixtureFormat): AddFixture {
+  return (round, position, home, away, scheduledAt) => ({
     id: randomUUID(),
     stage: format === 'knockout' ? 'knockout' : 'league',
     round,
@@ -147,61 +172,94 @@ export function planFixtures(
     nextFixtureId: null,
     nextFixtureSlot: null,
   });
-  if (format === 'knockout') {
-    let previous: PlannedFixture[] = [];
-    for (let round = 1, games = size / 2; games >= 1; round++, games /= 2) {
-      const scheduled = nextDate();
-      const current = Array.from({ length: games }, (_, i) =>
-        add(
-          round,
-          i + 1,
-          round === 1 ? participantIds[i * 2] : null,
-          round === 1 ? participantIds[i * 2 + 1] : null,
-          scheduled,
-        ),
-      );
-      previous.forEach((fixture, i) => {
-        fixture.nextFixtureId = current[Math.floor(i / 2)].id;
-        fixture.nextFixtureSlot = i % 2 === 0 ? 'home' : 'away';
-      });
-      fixtures.push(...current);
-      previous = current;
-    }
-    return fixtures;
+}
+
+function planKnockoutFixtures(
+  size: number,
+  participantIds: string[],
+  nextDate: NextFixtureDate,
+  add: AddFixture,
+): PlannedFixture[] {
+  const fixtures: PlannedFixture[] = [];
+  let previous: PlannedFixture[] = [];
+  for (let round = 1, games = size / 2; games >= 1; round++, games /= 2) {
+    const scheduled = nextDate();
+    const current = Array.from({ length: games }, (_, index) =>
+      add(
+        round,
+        index + 1,
+        round === 1 ? participantIds[index * 2] : null,
+        round === 1 ? participantIds[index * 2 + 1] : null,
+        scheduled,
+      ),
+    );
+    previous.forEach((fixture, index) => {
+      fixture.nextFixtureId = current[Math.floor(index / 2)].id;
+      fixture.nextFixtureSlot = index % 2 === 0 ? 'home' : 'away';
+    });
+    fixtures.push(...current);
+    previous = current;
   }
+  return fixtures;
+}
+
+function planLeagueFixtures(
+  size: number,
+  participantIds: string[],
+  fixturesPerOpponent: number | null,
+  nextDate: NextFixtureDate,
+  add: AddFixture,
+): PlannedFixture[] {
+  const fixtures: PlannedFixture[] = [];
   const rotating: (string | null)[] = [...participantIds];
   if (size % 2) rotating.push(null);
   for (let round = 1; round < rotating.length; round++) {
-    const scheduled = nextDate();
-    for (let i = 0; i < rotating.length / 2; i++) {
-      const a = rotating[i],
-        b = rotating[rotating.length - 1 - i];
-      if (a && b)
-        fixtures.push(
-          add(round, i + 1, round % 2 ? a : b, round % 2 ? b : a, scheduled),
-        );
-    }
-    rotating.splice(1, 0, rotating.pop()!);
+    addLeagueRound(fixtures, rotating, round, nextDate(), add);
   }
-  if (competition.fixturesPerOpponent === 2) {
-    const firstLeg = [...fixtures];
-    const rounds = rotating.length - 1;
-    for (let round = 1; round <= rounds; round++) {
-      const scheduled = nextDate();
-      firstLeg
-        .filter((f) => f.round === round)
-        .forEach((f) =>
-          fixtures.push(
-            add(
-              round + rounds,
-              f.position,
-              f.awayCompetitionTeamId,
-              f.homeCompetitionTeamId,
-              scheduled,
-            ),
-          ),
-        );
-    }
+  if (fixturesPerOpponent === 2) {
+    addReturnLegs(fixtures, rotating.length - 1, nextDate, add);
   }
   return fixtures;
+}
+
+function addLeagueRound(
+  fixtures: PlannedFixture[],
+  rotating: (string | null)[],
+  round: number,
+  scheduled: string,
+  add: AddFixture,
+): void {
+  for (let index = 0; index < rotating.length / 2; index++) {
+    const home = rotating[index];
+    const away = rotating[rotating.length - 1 - index];
+    if (home && away) {
+      fixtures.push(
+        add(round, index + 1, round % 2 ? home : away, round % 2 ? away : home, scheduled),
+      );
+    }
+  }
+  rotating.splice(1, 0, rotating.pop()!);
+}
+
+function addReturnLegs(
+  fixtures: PlannedFixture[],
+  rounds: number,
+  nextDate: NextFixtureDate,
+  add: AddFixture,
+): void {
+  const firstLeg = [...fixtures];
+  for (let round = 1; round <= rounds; round++) {
+    const scheduled = nextDate();
+    firstLeg.filter((fixture) => fixture.round === round).forEach((fixture) => {
+      fixtures.push(
+        add(
+          round + rounds,
+          fixture.position,
+          fixture.awayCompetitionTeamId,
+          fixture.homeCompetitionTeamId,
+          scheduled,
+        ),
+      );
+    });
+  }
 }

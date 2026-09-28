@@ -195,23 +195,14 @@ function MatchRow({
             Match
           </p>
         </div>
-        {cancelled ? (
-          <StatusBadge status="cancelled" />
-        ) : reportable ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary">
-            <FileText className="size-3" />
-            View Match Report
-          </span>
-        ) : completed ? (
-          <StatusBadge status="completed" />
-        ) : locked ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground">
-            <Lock className="size-3" />
-            Unlocks {unlockLabel}
-          </span>
-        ) : (
-          <StatusBadge status={event.status} />
-        )}
+        <MatchRowBadge
+          event={event}
+          cancelled={cancelled}
+          reportable={reportable}
+          completed={completed}
+          locked={locked}
+          unlockLabel={unlockLabel}
+        />
       </div>
 
       <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
@@ -238,4 +229,38 @@ function MatchRow({
   }
 
   return <div className={className}>{body}</div>;
+}
+
+function MatchRowBadge({
+  event,
+  cancelled,
+  reportable,
+  completed,
+  locked,
+  unlockLabel,
+}: {
+  event: TeamEvent;
+  cancelled: boolean;
+  reportable: boolean;
+  completed: boolean;
+  locked: boolean;
+  unlockLabel: string;
+}) {
+  if (cancelled) return <StatusBadge status="cancelled" />;
+  if (reportable) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary">
+        <FileText className="size-3" />View Match Report
+      </span>
+    );
+  }
+  if (completed) return <StatusBadge status="completed" />;
+  if (locked) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground">
+        <Lock className="size-3" />Unlocks {unlockLabel}
+      </span>
+    );
+  }
+  return <StatusBadge status={event.status} />;
 }

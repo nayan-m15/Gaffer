@@ -8,6 +8,7 @@ import {
 } from "../team-management/formations.ts";
 import type { FormationPlayerCount } from "@/features/team-management/types";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
+import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals.ts";
 import type {
   FriendlyOpponentLineup,
@@ -318,72 +319,68 @@ export function opponentPitchState(
   const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
   const positioned = sorted.filter(hasRecordedPosition);
   const unpositioned = sorted.filter((player) => !hasRecordedPosition(player));
-  const preferred = new Set(preferredStarterIds ?? []);
-  const starters: OpponentMatchPlayer[] = [];
-  const seenNumbers = new Set<number>();
-
-  const takeStarter = (player: OpponentMatchPlayer) => {
-    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) {
-      return false;
-    }
-    seenNumbers.add(player.shirtNumber);
-    starters.push(player);
-    return true;
-  };
-
-  if (positioned.length > 0) {
-    for (const player of positioned) {
-      takeStarter(player);
-    }
-    for (const player of unpositioned) {
-      takeStarter(player);
-    }
-  } else {
-    // Shared friendly lineups know exactly who started, so honour that
-    // before guessing from shirt order. Manual squads pass no preferences
-    // and keep the lower-shirt-number behaviour unchanged.
-    for (const player of sorted) {
-      if (preferred.has(player.id)) {
-        takeStarter(player);
-      }
-    }
-    for (const player of sorted) {
-      takeStarter(player);
-    }
-  }
+  const starters = selectOpponentStarters(
+    sorted,
+    positioned,
+    unpositioned,
+    new Set(preferredStarterIds ?? []),
+    starterLimit,
+  );
 
   const starterIds = new Set(starters.map((player) => player.id));
   const extras = unique.filter((player) => !starterIds.has(player.id));
   const onPitch = new Set(starters.map((player) => player.id));
   const bench = new Set(extras.map((player) => player.id));
 
-  for (const event of chronological(timeline)) {
-    if (event.team !== "opponent") {
-      continue;
-    }
-    if (event.eventType !== "substitution") {
-      continue;
-    }
-    const outgoingId = event.opponentPlayerId;
-    const incomingId = event.detail;
-    if (outgoingId) {
-      onPitch.delete(outgoingId);
-      bench.add(outgoingId);
-    }
-    if (incomingId && unique.some((player) => player.id === incomingId)) {
-      onPitch.add(incomingId);
-      bench.delete(incomingId);
-    }
-  }
-
-  for (const id of onPitch) {
-    bench.delete(id);
-  }
+  applyOpponentSubstitutions(unique, timeline, onPitch, bench);
 
   return {
     onPitch: unique.filter((player) => onPitch.has(player.id)),
     bench: unique.filter((player) => bench.has(player.id)),
   };
+}
+
+function selectOpponentStarters(
+  sorted: OpponentMatchPlayer[],
+  positioned: OpponentMatchPlayer[],
+  unpositioned: OpponentMatchPlayer[],
+  preferred: ReadonlySet<string>,
+  starterLimit = 11,
+): OpponentMatchPlayer[] {
+  const starters: OpponentMatchPlayer[] = [];
+  const seenNumbers = new Set<number>();
+  const takeStarter = (player: OpponentMatchPlayer) => {
+    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) return;
+    seenNumbers.add(player.shirtNumber);
+    starters.push(player);
+  };
+  if (positioned.length > 0) {
+    [...positioned, ...unpositioned].forEach(takeStarter);
+    return starters;
+  }
+  sorted.filter((player) => preferred.has(player.id)).forEach(takeStarter);
+  sorted.forEach(takeStarter);
+  return starters;
+}
+
+function applyOpponentSubstitutions(
+  unique: OpponentMatchPlayer[],
+  timeline: MatchLogEvent[],
+  onPitch: Set<string>,
+  bench: Set<string>,
+): void {
+  for (const event of chronological(timeline)) {
+    if (event.team !== "opponent" || event.eventType !== "substitution") continue;
+    if (event.opponentPlayerId) {
+      onPitch.delete(event.opponentPlayerId);
+      bench.add(event.opponentPlayerId);
+    }
+    if (event.detail && unique.some((player) => player.id === event.detail)) {
+      onPitch.add(event.detail);
+      bench.delete(event.detail);
+    }
+  }
+  onPitch.forEach((id) => bench.delete(id));
 }
 
 export function placeOwnPlayers(
@@ -407,26 +404,7 @@ export function placeOwnPlayers(
   );
   const byId = new Map(uniqueOnPitch.map((athlete) => [athlete.id, athlete]));
 
-  const preferred: Record<string, string | null> = {
-    ...(gamePlan?.assignments ?? {}),
-  };
-
-  for (const event of chronological(timeline)) {
-    if (event.eventType !== "substitution" || event.team !== "own") {
-      continue;
-    }
-    const outgoingId = event.athleteId;
-    const incomingId = event.detail;
-    if (!outgoingId || !incomingId) {
-      continue;
-    }
-    const slot = Object.keys(preferred).find(
-      (key) => preferred[key] === outgoingId,
-    );
-    if (slot) {
-      preferred[slot] = incomingId;
-    }
-  }
+  const preferred = applyOwnSubstitutions(gamePlan?.assignments ?? {}, timeline);
 
   const assignments = previewAssignmentsForStarters(
     formationId,
@@ -436,24 +414,43 @@ export function placeOwnPlayers(
     gamePlan?.customPositions,
   );
 
+  return formation
+    ? collectPlacedOwnPlayers(formation, assignments, byId, half, layout)
+    : [];
+}
+
+function applyOwnSubstitutions(
+  initial: Record<string, string | null>,
+  timeline: MatchLogEvent[],
+): Record<string, string | null> {
+  const preferred = { ...initial };
+  for (const event of chronological(timeline)) {
+    if (event.eventType !== "substitution" || event.team !== "own") continue;
+    if (!event.athleteId || !event.detail) continue;
+    const slot = Object.keys(preferred).find(
+      (key) => preferred[key] === event.athleteId,
+    );
+    if (slot) preferred[slot] = event.detail;
+  }
+  return preferred;
+}
+
+function collectPlacedOwnPlayers(
+  formation: Formation,
+  assignments: Record<string, string | null>,
+  byId: Map<string, MatchSquadAthlete>,
+  half: PitchHalf,
+  layout: "full" | "own",
+): PlacedOwnPlayer[] {
   const placed: PlacedOwnPlayer[] = [];
   const usedIds = new Set<string>();
-
-  if (formation) {
-    for (const position of formation.positions) {
-      const athleteId = assignments[position.id];
-      const athlete = athleteId ? byId.get(athleteId) : undefined;
-      if (!athlete || usedIds.has(athlete.id)) {
-        continue;
-      }
-      usedIds.add(athlete.id);
-      placed.push({
-        athlete,
-        ...formationToHalf(position.x, position.y, half, layout),
-      });
-    }
+  for (const position of formation.positions) {
+    const athleteId = assignments[position.id];
+    const athlete = athleteId ? byId.get(athleteId) : undefined;
+    if (!athlete || usedIds.has(athlete.id)) continue;
+    usedIds.add(athlete.id);
+    placed.push({ athlete, ...formationToHalf(position.x, position.y, half, layout) });
   }
-
   return placed;
 }
 
@@ -478,57 +475,7 @@ export function placeOppPlayers(
     return placed;
   }
 
-  const preferred: Record<string, string | null> = {};
-  for (const position of formation.positions) {
-    preferred[position.id] = null;
-  }
-
-  if (hasPositions) {
-    const used = new Set<string>();
-    for (const position of formation.positions) {
-      const candidate = unique.find((player) => {
-        if (used.has(player.id)) {
-          return false;
-        }
-        return (
-          (player.position ?? "").trim().toUpperCase() ===
-          position.label.trim().toUpperCase()
-        );
-      });
-      if (candidate) {
-        preferred[position.id] = candidate.id;
-        used.add(candidate.id);
-      }
-    }
-  } else {
-    const ordered = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
-    let index = 0;
-    for (const position of formation.positions) {
-      const player = ordered[index];
-      if (!player) {
-        break;
-      }
-      preferred[position.id] = player.id;
-      index += 1;
-    }
-  }
-
-  for (const event of chronological(timeline)) {
-    if (event.eventType !== "substitution" || event.team !== "opponent") {
-      continue;
-    }
-    const outgoingId = event.opponentPlayerId;
-    const incomingId = event.detail;
-    if (!outgoingId || !incomingId) {
-      continue;
-    }
-    const slot = Object.keys(preferred).find(
-      (key) => preferred[key] === outgoingId,
-    );
-    if (slot) {
-      preferred[slot] = incomingId;
-    }
-  }
+  const preferred = opponentPreferredAssignments(formation, unique, hasPositions, timeline);
 
   const assignments = hasPositions
     ? previewAssignmentsForStarters(
@@ -553,6 +500,61 @@ export function placeOppPlayers(
     });
   }
   return placed;
+}
+
+function opponentPreferredAssignments(
+  formation: Formation,
+  players: OpponentMatchPlayer[],
+  hasPositions: boolean,
+  timeline: MatchLogEvent[],
+): Record<string, string | null> {
+  const preferred = Object.fromEntries(
+    formation.positions.map((position) => [position.id, null]),
+  ) as Record<string, string | null>;
+  if (hasPositions) {
+    assignRecordedOpponentPositions(formation, players, preferred);
+  } else {
+    assignShirtOrderedOpponents(formation, players, preferred);
+  }
+  for (const event of chronological(timeline)) {
+    if (event.eventType !== "substitution" || event.team !== "opponent") continue;
+    if (!event.opponentPlayerId || !event.detail) continue;
+    const slot = Object.keys(preferred).find(
+      (key) => preferred[key] === event.opponentPlayerId,
+    );
+    if (slot) preferred[slot] = event.detail;
+  }
+  return preferred;
+}
+
+function assignRecordedOpponentPositions(
+  formation: Formation,
+  players: OpponentMatchPlayer[],
+  assignments: Record<string, string | null>,
+): void {
+  const used = new Set<string>();
+  for (const position of formation.positions) {
+    const candidate = players.find(
+      (player) =>
+        !used.has(player.id) &&
+        (player.position ?? "").trim().toUpperCase() ===
+          position.label.trim().toUpperCase(),
+    );
+    if (!candidate) continue;
+    assignments[position.id] = candidate.id;
+    used.add(candidate.id);
+  }
+}
+
+function assignShirtOrderedOpponents(
+  formation: Formation,
+  players: OpponentMatchPlayer[],
+  assignments: Record<string, string | null>,
+): void {
+  const ordered = [...players].sort((a, b) => a.shirtNumber - b.shirtNumber);
+  formation.positions.forEach((position, index) => {
+    assignments[position.id] = ordered[index]?.id ?? null;
+  });
 }
 
 function matchesPlayer(
@@ -590,6 +592,17 @@ export function markerStatsFor(
   };
 
   for (const event of chronological(timeline)) {
+    updateMarkerStats(stats, event, athleteId, opponentPlayerId);
+  }
+  return stats;
+}
+
+function updateMarkerStats(
+  stats: MarkerStats,
+  event: MatchLogEvent,
+  athleteId?: string,
+  opponentPlayerId?: string,
+): void {
     const isSubject = athleteId
       ? event.athleteId === athleteId
       : event.opponentPlayerId === opponentPlayerId;
@@ -623,9 +636,6 @@ export function markerStatsFor(
       stats.subOut = isSubject && !isIncoming;
       stats.subIn = isIncoming && !isSubject;
     }
-  }
-
-  return stats;
 }
 
 export function runningScoreByEvent(

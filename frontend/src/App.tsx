@@ -13,6 +13,7 @@ import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 import { Loader2 } from 'lucide-react'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
+import { PwaInstallExperience } from '@/components/PwaInstallExperience'
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const SignUpPage = lazy(() => import('@/pages/SignUpPage'))
@@ -114,6 +115,7 @@ function App() {
   return (
     <>
       <PwaUpdatePrompt />
+      <PwaInstallExperience />
       {!loadingDone && (
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}

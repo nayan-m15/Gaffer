@@ -33,6 +33,82 @@ const knockoutSizes = [4, 8, 16, 32] as const;
 
 type Step = 1 | 2 | 3;
 
+function isCompetitionBasicValid(input: {
+  nameError: string | null;
+  seasonError: string | null;
+  teamCount: number;
+  format: CompetitionFormat;
+  validQualifierCount: number;
+  qualifierCount: number;
+}) {
+  if (input.nameError || input.seasonError || !Number.isInteger(input.teamCount) || input.teamCount < 2 || input.teamCount > 128) return false;
+  if (input.format === "knockout" && !knockoutSizes.includes(input.teamCount as 4 | 8 | 16 | 32)) return false;
+  if (input.format === "league_knockout" && (!input.validQualifierCount || input.qualifierCount > input.teamCount)) return false;
+  return true;
+}
+
+function isCompetitionRulesValid(input: {
+  maxSubstitutes: number;
+  redCardSuspensionMatches: number;
+  accumulatedYellowThreshold: number;
+  yellowSuspensionMatches: number;
+  isLeaguePhase: boolean;
+  pointsWin: number;
+  pointsDraw: number;
+  pointsLoss: number;
+}) {
+  const boundedInteger = (value: number, min: number) => Number.isInteger(value) && value >= min && value <= 99;
+  const rules = [
+    [input.maxSubstitutes, 0],
+    [input.redCardSuspensionMatches, 0],
+    [input.accumulatedYellowThreshold, 1],
+    [input.yellowSuspensionMatches, 0],
+  ] as const;
+  if (rules.some(([value, min]) => !boundedInteger(value, min))) return false;
+  if (!input.isLeaguePhase) return true;
+  return [input.pointsWin, input.pointsDraw, input.pointsLoss].every((value) => boundedInteger(value, 0));
+}
+
+function createCompetitionFormInput(values: {
+  name: string;
+  type: CompetitionType;
+  season: string;
+  format: CompetitionFormat;
+  configuredTeamCount: number;
+  maxSubstitutes: number;
+  redCardSuspensionMatches: number;
+  accumulatedYellowThreshold: number;
+  yellowSuspensionMatches: number;
+  startDate: string;
+  allowedPlayingDays: number[];
+  defaultKickoffTime: string;
+  fixturesPerOpponent: 1 | 2;
+  pointsWin: number;
+  pointsDraw: number;
+  pointsLoss: number;
+  effectiveQualifier: 4 | 8 | 16 | 32;
+}): CompetitionInput {
+  return {
+    name: values.name.trim(),
+    type: values.type,
+    season: values.season.trim(),
+    format: values.format,
+    configuredTeamCount: values.configuredTeamCount,
+    maxSubstitutes: values.maxSubstitutes,
+    redCardSuspensionMatches: values.redCardSuspensionMatches,
+    accumulatedYellowThreshold: values.accumulatedYellowThreshold,
+    yellowSuspensionMatches: values.yellowSuspensionMatches,
+    startDate: values.startDate,
+    allowedPlayingDays: [...values.allowedPlayingDays].sort((a, b) => a - b),
+    defaultKickoffTime: values.defaultKickoffTime,
+    fixturesPerOpponent: values.fixturesPerOpponent,
+    pointsWin: values.pointsWin,
+    pointsDraw: values.pointsDraw,
+    pointsLoss: values.pointsLoss,
+    qualifierCount: values.format === "league_knockout" ? values.effectiveQualifier : null,
+  };
+}
+
 function inferredFormat(competition?: CompetitionDetail): CompetitionFormat {
   if (competition?.format) return competition.format;
   return competition?.type === "cup" ? "knockout" : "league";
@@ -48,6 +124,99 @@ function NumberField({ label, value, min, max = 99, disabled, onChange }: {
   label: string; value: number; min: number; max?: number; disabled?: boolean; onChange: (value: number) => void;
 }) {
   return <label className="grid gap-2 text-sm">{label}<input className={fieldClass} type="number" min={min} max={max} step={1} disabled={disabled} value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+}
+
+function CompetitionBasicFields({
+  name, setName, nameError, season, setSeason, seasonError, type, chooseType,
+  format, setFormat, configuredTeamCount, setConfiguredTeamCount, locked,
+}: {
+  name: string; setName: (value: string) => void; nameError: string | null;
+  season: string; setSeason: (value: string) => void; seasonError: string | null;
+  type: CompetitionType; chooseType: (value: CompetitionType) => void;
+  format: CompetitionFormat; setFormat: (value: CompetitionFormat) => void;
+  configuredTeamCount: number; setConfiguredTeamCount: (value: number) => void;
+  locked: boolean;
+}) {
+  return (
+    <>
+      <label className="grid gap-2 text-sm">Competition name<input className={fieldClass} autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "competition-name-error" : undefined} /></label>
+      {nameError && <p id="competition-name-error" className="text-sm text-destructive">{nameError}</p>}
+      <label className="grid gap-2 text-sm">Season (optional)<input className={fieldClass} maxLength={20} placeholder="e.g. 2026/27" value={season} onChange={(event) => setSeason(event.target.value)} aria-invalid={Boolean(seasonError)} aria-describedby={seasonError ? "competition-season-error" : undefined} /></label>
+      {seasonError && <p id="competition-season-error" className="text-sm text-destructive">{seasonError}</p>}
+      <div className="space-y-2"><p className="text-sm font-medium">Competition type</p><div className="grid gap-3 sm:grid-cols-2">
+        {(["league", "cup"] as const).map((value) => <button key={value} type="button" disabled={locked} onClick={() => chooseType(value)} className={`rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${type === value ? "border-primary/50 bg-primary/10" : "border-border hover:bg-muted/40"}`}><span className="font-semibold">{value === "league" ? "League" : "Cup"}</span><span className="mt-1 block text-sm text-muted-foreground">{value === "league" ? "Round-robin standings competition." : "Knockout, or league phase followed by knockout."}</span></button>)}
+      </div></div>
+      {type === "cup" && <div className="grid gap-2 text-sm"><label htmlFor="competition-format">Cup format</label><Select disabled={locked} value={format} onValueChange={(value) => { if (value === "knockout" || value === "league_knockout") { setFormat(value); if (value === "knockout" && !knockoutSizes.includes(configuredTeamCount as 4 | 8 | 16 | 32)) setConfiguredTeamCount(8); } }}><SelectTrigger id="competition-format" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="knockout">Knockout only</SelectItem><SelectItem value="league_knockout">League + Knockout</SelectItem></SelectContent></Select></div>}
+      {format === "knockout" ? <div className="grid gap-2 text-sm"><label htmlFor="team-count">Number of teams</label><Select disabled={locked} value={String(configuredTeamCount)} onValueChange={(value) => setConfiguredTeamCount(Number(value))}><SelectTrigger id="team-count" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{knockoutSizes.map((size) => <SelectItem key={size} value={String(size)}>{size} teams</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Knockout-only cups currently use clean bracket sizes.</p></div> : <NumberField label="Number of teams" min={format === "league_knockout" ? 4 : 2} max={128} disabled={locked} value={configuredTeamCount} onChange={setConfiguredTeamCount} />}
+    </>
+  );
+}
+
+function CompetitionRulesFields({
+  locked, isLeaguePhase, playersPerSide, setPlayersPerSide, maxSubstitutes, setMaxSubstitutes,
+  redCardSuspensionMatches, setRedCardSuspensionMatches,
+  accumulatedYellowThreshold, setAccumulatedYellowThreshold,
+  yellowSuspensionMatches, setYellowSuspensionMatches,
+  fixturesPerOpponent, setFixturesPerOpponent, pointsWin, setPointsWin,
+  pointsDraw, setPointsDraw, pointsLoss, setPointsLoss, format,
+  validQualifierOptions, effectiveQualifier, setQualifierCount,
+}: {
+  locked: boolean; isLeaguePhase: boolean;
+  playersPerSide: CompetitionPlayersPerSide; setPlayersPerSide: (value: CompetitionPlayersPerSide) => void;
+  maxSubstitutes: number; setMaxSubstitutes: (value: number) => void;
+  redCardSuspensionMatches: number; setRedCardSuspensionMatches: (value: number) => void;
+  accumulatedYellowThreshold: number; setAccumulatedYellowThreshold: (value: number) => void;
+  yellowSuspensionMatches: number; setYellowSuspensionMatches: (value: number) => void;
+  fixturesPerOpponent: 1 | 2; setFixturesPerOpponent: (value: 1 | 2) => void;
+  pointsWin: number; setPointsWin: (value: number) => void;
+  pointsDraw: number; setPointsDraw: (value: number) => void;
+  pointsLoss: number; setPointsLoss: (value: number) => void;
+  format: CompetitionFormat; validQualifierOptions: (4 | 8 | 16 | 32)[];
+  effectiveQualifier: 4 | 8 | 16 | 32; setQualifierCount: (value: 4 | 8 | 16 | 32) => void;
+}) {
+  return (
+    <>
+      <div className="grid gap-2 text-sm">
+        <label htmlFor="players-per-side">Players per side</label>
+        <Select disabled={locked} value={String(playersPerSide)} onValueChange={(value) => setPlayersPerSide(Number(value) as CompetitionPlayersPerSide)}>
+          <SelectTrigger id="players-per-side" className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="5">5-a-side</SelectItem><SelectItem value="7">7-a-side</SelectItem><SelectItem value="11">11-a-side</SelectItem></SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">Every match requires exactly {playersPerSide} starters per team.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <NumberField label="Maximum substitutes allowed" min={0} disabled={locked} value={maxSubstitutes} onChange={setMaxSubstitutes} />
+        <NumberField label="Red-card suspension (matches)" min={0} disabled={locked} value={redCardSuspensionMatches} onChange={setRedCardSuspensionMatches} />
+        <NumberField label="Yellow cards before suspension" min={1} disabled={locked} value={accumulatedYellowThreshold} onChange={setAccumulatedYellowThreshold} />
+        <NumberField label="Yellow-card suspension (matches)" min={0} disabled={locked} value={yellowSuspensionMatches} onChange={setYellowSuspensionMatches} />
+      </div>
+      {isLeaguePhase && <div className="space-y-4 rounded-xl border border-border bg-muted/15 p-4">
+        <h3 className="font-medium">League phase</h3>
+        <div className="grid gap-2 text-sm"><label htmlFor="fixtures-per-opponent">Fixtures per opponent</label><Select disabled={locked} value={String(fixturesPerOpponent)} onValueChange={(value) => setFixturesPerOpponent(value === "2" ? 2 : 1)}><SelectTrigger id="fixtures-per-opponent" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Once</SelectItem><SelectItem value="2">Twice (home and away)</SelectItem></SelectContent></Select></div>
+        <div className="grid gap-4 sm:grid-cols-3"><NumberField label="Points for win" min={0} disabled={locked} value={pointsWin} onChange={setPointsWin} /><NumberField label="Points for draw" min={0} disabled={locked} value={pointsDraw} onChange={setPointsDraw} /><NumberField label="Points for loss" min={0} disabled={locked} value={pointsLoss} onChange={setPointsLoss} /></div>
+        <p className="text-xs text-muted-foreground">Tiebreak order: points, goal difference, goals scored.</p>
+        {format === "league_knockout" && <div className="grid gap-2 text-sm"><label htmlFor="qualifier-count">Teams qualifying for knockout</label><Select disabled={locked || !validQualifierOptions.length} value={String(effectiveQualifier)} onValueChange={(value) => setQualifierCount(Number(value) as 4 | 8 | 16 | 32)}><SelectTrigger id="qualifier-count" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{validQualifierOptions.map((size) => <SelectItem key={size} value={String(size)}>Top {size}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">The highest-ranked teams are seeded automatically when the league phase is complete.</p></div>}
+      </div>}
+    </>
+  );
+}
+
+function CompetitionScheduleFields({
+  locked, startDate, setStartDate, allowedPlayingDays, onAllowedDaysChange,
+  defaultKickoffTime, setDefaultKickoffTime,
+}: {
+  locked: boolean; startDate: string; setStartDate: (value: string) => void;
+  allowedPlayingDays: number[]; onAllowedDaysChange: (days: number[]) => void;
+  defaultKickoffTime: string; setDefaultKickoffTime: (value: string) => void;
+}) {
+  return (
+    <>
+      <label className="grid gap-2 text-sm">Competition start date<input className={fieldClass} type="date" disabled={locked} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+      <div className="space-y-2"><p className="text-sm font-medium">Allowed playing days</p><div className="flex flex-wrap gap-2">{weekdayOptions.map((day) => { const selected = allowedPlayingDays.includes(day.value); return <button key={day.value} type="button" disabled={locked} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-sm ${selected ? "border-primary/45 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/40"}`} onClick={() => onAllowedDaysChange(selected ? allowedPlayingDays.filter((value) => value !== day.value) : [...allowedPlayingDays, day.value])}>{day.label}</button>; })}</div>{!allowedPlayingDays.length && <p className="text-sm text-destructive">Choose at least one playing day.</p>}</div>
+      <label className="grid gap-2 text-sm">Default kickoff time (UTC)<input className={fieldClass} type="time" disabled={locked} value={defaultKickoffTime} onChange={(event) => setDefaultKickoffTime(event.target.value)} /></label>
+      <p className="text-xs text-muted-foreground">The fixture generator moves each round to the next allowed playing day and uses this kickoff time.</p>
+    </>
+  );
 }
 
 export function CompetitionFormDialog({ competition, locked = false, onClose, onSaved }: {
@@ -92,17 +261,27 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
     : null;
 
   const basicValid = useMemo(() => {
-    if (nameError || seasonError || !Number.isInteger(configuredTeamCount) || configuredTeamCount < 2 || configuredTeamCount > 128) return false;
-    if (format === "knockout" && !knockoutSizes.includes(configuredTeamCount as 4 | 8 | 16 | 32)) return false;
-    if (format === "league_knockout" && (!validQualifierOptions.length || effectiveQualifier > configuredTeamCount)) return false;
-    return true;
+    return isCompetitionBasicValid({
+      nameError,
+      seasonError,
+      teamCount: configuredTeamCount,
+      format,
+      validQualifierCount: validQualifierOptions.length,
+      qualifierCount: effectiveQualifier,
+    });
   }, [configuredTeamCount, effectiveQualifier, format, nameError, seasonError, validQualifierOptions.length]);
 
   const rulesValid = useMemo(() => {
-    const boundedInteger = (value: number, min: number) => Number.isInteger(value) && value >= min && value <= 99;
-    if (!boundedInteger(maxSubstitutes, 0) || !boundedInteger(redCardSuspensionMatches, 0) || !boundedInteger(accumulatedYellowThreshold, 1) || !boundedInteger(yellowSuspensionMatches, 0)) return false;
-    if (!isLeaguePhase) return true;
-    return boundedInteger(pointsWin, 0) && boundedInteger(pointsDraw, 0) && boundedInteger(pointsLoss, 0);
+    return isCompetitionRulesValid({
+      maxSubstitutes,
+      redCardSuspensionMatches,
+      accumulatedYellowThreshold,
+      yellowSuspensionMatches,
+      isLeaguePhase,
+      pointsWin,
+      pointsDraw,
+      pointsLoss,
+    });
   }, [accumulatedYellowThreshold, isLeaguePhase, maxSubstitutes, pointsDraw, pointsLoss, pointsWin, redCardSuspensionMatches, yellowSuspensionMatches]);
 
   const scheduleValid = Boolean(
@@ -128,10 +307,10 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
 
   const submit = () => {
     if (competition && locked ? Boolean(nameError || seasonError) : !formValid) return;
-    const fullInput: CompetitionInput = {
-      name: name.trim(),
+    const fullInput = createCompetitionFormInput({
+      name,
       type,
-      season: season.trim(),
+      season,
       format,
       configuredTeamCount,
       playersPerSide,
@@ -140,14 +319,14 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
       accumulatedYellowThreshold,
       yellowSuspensionMatches,
       startDate,
-      allowedPlayingDays: [...allowedPlayingDays].sort((a, b) => a - b),
+      allowedPlayingDays,
       defaultKickoffTime,
       fixturesPerOpponent,
       pointsWin,
       pointsDraw,
       pointsLoss,
-      qualifierCount: format === "league_knockout" ? effectiveQualifier : null,
-    };
+      effectiveQualifier: effectiveQualifier as 4 | 8 | 16 | 32,
+    });
     const input = competition && locked ? { name: fullInput.name, season: fullInput.season } : fullInput;
     save.mutate(input, { onSuccess: (result) => onSaved(result.id) });
   };
@@ -180,55 +359,32 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
         {locked && competition && <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-foreground">Fixtures or results already exist, so format, rules and schedule are locked. The competition name and season label can still be changed safely.</p>}
 
         <fieldset disabled={save.isPending} className="space-y-4">
-          {step === 1 && <>
-            <label className="grid gap-2 text-sm">Competition name<input className={fieldClass} autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "competition-name-error" : undefined} /></label>
-            {nameError && <p id="competition-name-error" className="text-sm text-destructive">{nameError}</p>}
-            <label className="grid gap-2 text-sm">Season (optional)<input className={fieldClass} maxLength={20} placeholder="e.g. 2026/27" value={season} onChange={(event) => setSeason(event.target.value)} aria-invalid={Boolean(seasonError)} aria-describedby={seasonError ? "competition-season-error" : undefined} /></label>
-            {seasonError && <p id="competition-season-error" className="text-sm text-destructive">{seasonError}</p>}
-
-            <div className="space-y-2"><p className="text-sm font-medium">Competition type</p><div className="grid gap-3 sm:grid-cols-2">
-              {(["league", "cup"] as const).map((value) => <button key={value} type="button" disabled={locked} onClick={() => chooseType(value)} className={`rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${type === value ? "border-primary/50 bg-primary/10" : "border-border hover:bg-muted/40"}`}><span className="font-semibold">{value === "league" ? "League" : "Cup"}</span><span className="mt-1 block text-sm text-muted-foreground">{value === "league" ? "Round-robin standings competition." : "Knockout, or league phase followed by knockout."}</span></button>)}
-            </div></div>
-
-            {type === "cup" && <div className="grid gap-2 text-sm"><label htmlFor="competition-format">Cup format</label><Select disabled={locked} value={format} onValueChange={(value) => { if (value === "knockout" || value === "league_knockout") { setFormat(value); if (value === "knockout" && !knockoutSizes.includes(configuredTeamCount as 4 | 8 | 16 | 32)) setConfiguredTeamCount(8); } }}><SelectTrigger id="competition-format" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="knockout">Knockout only</SelectItem><SelectItem value="league_knockout">League + Knockout</SelectItem></SelectContent></Select></div>}
-
-            {format === "knockout" ? <div className="grid gap-2 text-sm"><label htmlFor="team-count">Number of teams</label><Select disabled={locked} value={String(configuredTeamCount)} onValueChange={(value) => setConfiguredTeamCount(Number(value))}><SelectTrigger id="team-count" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{knockoutSizes.map((size) => <SelectItem key={size} value={String(size)}>{size} teams</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Knockout-only cups currently use clean bracket sizes.</p></div> : <NumberField label="Number of teams" min={format === "league_knockout" ? 4 : 2} max={128} disabled={locked} value={configuredTeamCount} onChange={setConfiguredTeamCount} />}
-          </>}
-
-          {step === 2 && <>
-            <div className="grid gap-2 text-sm">
-              <label htmlFor="players-per-side">Players per side</label>
-              <Select disabled={locked} value={String(playersPerSide)} onValueChange={(value) => setPlayersPerSide(Number(value) as CompetitionPlayersPerSide)}>
-                <SelectTrigger id="players-per-side" className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5-a-side</SelectItem>
-                  <SelectItem value="7">7-a-side</SelectItem>
-                  <SelectItem value="11">11-a-side</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Every match in this competition requires exactly {playersPerSide} starters per team. Compatible formations are enforced on match day.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <NumberField label="Maximum substitutes allowed" min={0} disabled={locked} value={maxSubstitutes} onChange={setMaxSubstitutes} />
-              <NumberField label="Red-card suspension (matches)" min={0} disabled={locked} value={redCardSuspensionMatches} onChange={setRedCardSuspensionMatches} />
-              <NumberField label="Yellow cards before suspension" min={1} disabled={locked} value={accumulatedYellowThreshold} onChange={setAccumulatedYellowThreshold} />
-              <NumberField label="Yellow-card suspension (matches)" min={0} disabled={locked} value={yellowSuspensionMatches} onChange={setYellowSuspensionMatches} />
-            </div>
-            {isLeaguePhase && <div className="space-y-4 rounded-xl border border-border bg-muted/15 p-4">
-              <h3 className="font-medium">League phase</h3>
-              <div className="grid gap-2 text-sm"><label htmlFor="fixtures-per-opponent">Fixtures per opponent</label><Select disabled={locked} value={String(fixturesPerOpponent)} onValueChange={(value) => setFixturesPerOpponent(value === "2" ? 2 : 1)}><SelectTrigger id="fixtures-per-opponent" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Once</SelectItem><SelectItem value="2">Twice (home and away)</SelectItem></SelectContent></Select></div>
-              <div className="grid gap-4 sm:grid-cols-3"><NumberField label="Points for win" min={0} disabled={locked} value={pointsWin} onChange={setPointsWin} /><NumberField label="Points for draw" min={0} disabled={locked} value={pointsDraw} onChange={setPointsDraw} /><NumberField label="Points for loss" min={0} disabled={locked} value={pointsLoss} onChange={setPointsLoss} /></div>
-              <p className="text-xs text-muted-foreground">Tiebreak order: points, goal difference, goals scored.</p>
-              {format === "league_knockout" && <div className="grid gap-2 text-sm"><label htmlFor="qualifier-count">Teams qualifying for knockout</label><Select disabled={locked || !validQualifierOptions.length} value={String(effectiveQualifier)} onValueChange={(value) => setQualifierCount(Number(value) as 4 | 8 | 16 | 32)}><SelectTrigger id="qualifier-count" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{validQualifierOptions.map((size) => <SelectItem key={size} value={String(size)}>Top {size}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">The highest-ranked teams are seeded automatically when the league phase is complete.</p></div>}
-            </div>}
-          </>}
-
-          {step === 3 && <>
-            <label className="grid gap-2 text-sm">Competition start date<input className={fieldClass} type="date" disabled={locked} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-            <div className="space-y-2"><p className="text-sm font-medium">Allowed playing days</p><div className="flex flex-wrap gap-2">{weekdayOptions.map((day) => { const selected = allowedPlayingDays.includes(day.value); return <button key={day.value} type="button" disabled={locked} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-sm ${selected ? "border-primary/45 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/40"}`} onClick={() => setAllowedPlayingDays((current) => selected ? current.filter((value) => value !== day.value) : [...current, day.value])}>{day.label}</button>; })}</div>{!allowedPlayingDays.length && <p className="text-sm text-destructive">Choose at least one playing day.</p>}</div>
-            <label className="grid gap-2 text-sm">Default kickoff time (UTC)<input className={fieldClass} type="time" disabled={locked} value={defaultKickoffTime} onChange={(event) => setDefaultKickoffTime(event.target.value)} /></label>
-            <p className="text-xs text-muted-foreground">The fixture generator moves each round to the next allowed playing day and uses this kickoff time.</p>
-          </>}
+          {step === 1 && <CompetitionBasicFields
+            name={name} setName={setName} nameError={nameError}
+            season={season} setSeason={setSeason} seasonError={seasonError}
+            type={type} chooseType={chooseType} format={format} setFormat={setFormat}
+            configuredTeamCount={configuredTeamCount} setConfiguredTeamCount={setConfiguredTeamCount}
+            locked={locked}
+          />}
+          {step === 2 && <CompetitionRulesFields
+            locked={locked} isLeaguePhase={isLeaguePhase}
+            playersPerSide={playersPerSide} setPlayersPerSide={setPlayersPerSide}
+            maxSubstitutes={maxSubstitutes} setMaxSubstitutes={setMaxSubstitutes}
+            redCardSuspensionMatches={redCardSuspensionMatches} setRedCardSuspensionMatches={setRedCardSuspensionMatches}
+            accumulatedYellowThreshold={accumulatedYellowThreshold} setAccumulatedYellowThreshold={setAccumulatedYellowThreshold}
+            yellowSuspensionMatches={yellowSuspensionMatches} setYellowSuspensionMatches={setYellowSuspensionMatches}
+            fixturesPerOpponent={fixturesPerOpponent} setFixturesPerOpponent={setFixturesPerOpponent}
+            pointsWin={pointsWin} setPointsWin={setPointsWin} pointsDraw={pointsDraw} setPointsDraw={setPointsDraw}
+            pointsLoss={pointsLoss} setPointsLoss={setPointsLoss} format={format}
+            validQualifierOptions={validQualifierOptions} effectiveQualifier={effectiveQualifier as 4 | 8 | 16 | 32}
+            setQualifierCount={setQualifierCount}
+          />}
+          {step === 3 && <CompetitionScheduleFields
+            locked={locked} startDate={startDate} setStartDate={setStartDate}
+            allowedPlayingDays={allowedPlayingDays}
+            onAllowedDaysChange={(days) => setAllowedPlayingDays(days)}
+            defaultKickoffTime={defaultKickoffTime} setDefaultKickoffTime={setDefaultKickoffTime}
+          />}
         </fieldset>
 
         <RequestError error={save.error} />

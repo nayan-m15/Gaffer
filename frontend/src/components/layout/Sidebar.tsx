@@ -61,6 +61,66 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
   { label: "Leagues & Competitions", path: "/player/competitions", icon: Trophy },
 ];
 
+function SidebarNavigation({
+  items,
+  hasTeam,
+  expanded,
+  pathname,
+  onNavigate,
+}: {
+  items: NavItem[];
+  hasTeam: boolean;
+  expanded: boolean;
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Main navigation">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const isRelatedMatchReport =
+          item.path === "/live-logger" &&
+          /^\/matches\/[^/]+\/report\/?$/.test(pathname);
+        if (item.requiresTeam && !hasTeam) {
+          return (
+            <span
+              key={item.label}
+              className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40"
+              title="Add a team first"
+            >
+              <Icon className="size-5 shrink-0" aria-hidden="true" />
+              <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
+            </span>
+          );
+        }
+        return (
+          <NavLink
+            key={item.label}
+            to={item.path}
+            aria-current={isRelatedMatchReport ? "page" : undefined}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
+                isActive || isRelatedMatchReport
+                  ? "border-sidebar-border bg-surface-active text-sidebar-foreground"
+                  : "border-transparent text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )
+            }
+          >
+            <span
+              className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary opacity-0 transition-opacity group-aria-[current=page]:opacity-100"
+              aria-hidden="true"
+            />
+            <Icon className="size-[18px] shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground group-aria-[current=page]:text-primary" aria-hidden="true" />
+            <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SIDEBAR COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -135,55 +195,14 @@ export function Sidebar({ className, variant }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Main navigation">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isRelatedMatchReport =
-            item.path === "/live-logger" &&
-            /^\/matches\/[^/]+\/report\/?$/.test(pathname);
+      <SidebarNavigation
+        items={navItems}
+        hasTeam={Boolean(team)}
+        expanded={expanded}
+        pathname={pathname}
+        onNavigate={() => setIsMobileOpen(false)}
+      />
 
-          if (item.requiresTeam && !team) {
-            return (
-              <span
-                key={item.label}
-                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-disabled"
-                title="Add a team first"
-                aria-disabled="true"
-              >
-                <Icon className="size-5 shrink-0" aria-hidden="true" />
-                <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
-              </span>
-            );
-          }
-
-          return (
-            <NavLink
-              key={item.label}
-              to={item.path}
-              aria-current={isRelatedMatchReport ? "page" : undefined}
-              onClick={() => setIsMobileOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-sidebar-ring motion-reduce:transition-none",
-                  isActive || isRelatedMatchReport
-                    ? "border-sidebar-border bg-surface-active text-sidebar-foreground"
-                    : "border-transparent text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                )
-              }
-            >
-              <span
-                className={cn(
-                  "absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary opacity-0 transition-opacity group-aria-[current=page]:opacity-100",
-                )}
-                aria-hidden="true"
-              />
-              <Icon className="size-[18px] shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground group-aria-[current=page]:text-primary" aria-hidden="true" />
-              <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
-            </NavLink>
-          );
-        })}
-
-      </nav>
 
       {/* Footer */}
       <div className="border-t border-sidebar-border/70 px-4 py-4">

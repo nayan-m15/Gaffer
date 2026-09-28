@@ -234,86 +234,15 @@ export class SyncController {
     }
 
     try {
-      let canonicalEventId: string | null = null;
-      if (item.kind === 'observation') {
-        await this.matchesService.logEvent(userId, item.matchId, item.payload);
-        canonicalEventId =
-          await this.matchesService.canonicalEventIdForObservation(
-            item.matchId,
-            item.payload.clientRequestId,
-          );
-      } else if (item.operationType === 'correct') {
-        const event = await this.matchesService.submitCorrectionOperation(
-          userId,
-          item.matchId,
-          item.canonicalEventId,
-          item.replacement,
-          item.id,
-          item.causalParentIds,
-        );
-        canonicalEventId = event.id;
-      } else if (item.operationType === 'void') {
-        const event = await this.matchesService.deleteEvent(
-          userId,
-          item.matchId,
-          item.canonicalEventId,
-          item.id,
-          item.causalParentIds,
-          item.reason,
-        );
-        canonicalEventId = event.id;
-      } else {
-        const review = await this.matchesService.resolveEventReview(
-          userId,
-          item.matchId,
-          item.reviewId,
-          { resolution: item.resolution },
-          item.id,
-          item.causalParentIds,
-        );
-        canonicalEventId = review.canonicalEventId;
-      }
-      let receipt: typeof syncUploadReceipts.$inferSelect | undefined;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (item.kind === 'observation') {
-          canonicalEventId =
-            await this.matchesService.canonicalEventIdForObservation(
-              item.matchId,
-              item.payload.clientRequestId,
-            );
-        }
-        try {
-          [receipt] = await this.databaseService.database
-            .insert(syncUploadReceipts)
-            .values({
-              id,
-              submittedByUserId: userId,
-              matchId: item.matchId,
-              itemType: item.kind,
-              payloadHash,
-              outcome: 'accepted',
-              canonicalEventId,
-              processingDurationMs: Math.round(performance.now() - startedAt),
-            })
-            .onConflictDoUpdate({
-              target: syncUploadReceipts.id,
-              set: {
-                payloadHash,
-                outcome: 'accepted',
-                safeErrorCode: null,
-                canonicalEventId,
-                processingDurationMs: Math.round(performance.now() - startedAt),
-                updatedAt: new Date(),
-              },
-            })
-            .returning();
-          break;
-        } catch (error) {
-          if (item.kind !== 'observation' || attempt === 1) throw error;
-        }
-      }
-      if (!receipt) throw new Error('Could not commit the upload receipt.');
-      return receipt;
+      const canonicalEventId = await this.executeUploadItem(userId, item);
+      return await this.recordAcceptedUpload(
+        userId,
+        item,
+        id,
+        payloadHash,
+        canonicalEventId,
+        startedAt,
+      );
     } catch (error) {
       this.logger.error(
         `Upload item ${id} failed`,
@@ -324,30 +253,77 @@ export class SyncController {
       if (!(error instanceof HttpException) || error.getStatus() >= 500) {
         throw error;
       }
-      const fallback = {
+      return this.recordRejectedUpload(
+        userId,
+        item,
         id,
-        outcome: 'rejected',
-        safeErrorCode:
-          error instanceof ForbiddenException
-            ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
-            : 'INVALID_OR_UNAUTHORISED',
-      };
+        payloadHash,
+        error,
+        startedAt,
+      );
+    }
+  }
+
+  private async executeUploadItem(userId: string, item: SyncUploadItem) {
+    if (item.kind === 'observation') {
+      await this.matchesService.logEvent(userId, item.matchId, item.payload);
+      return this.matchesService.canonicalEventIdForObservation(
+        item.matchId,
+        item.payload.clientRequestId,
+      );
+    }
+    if (item.operationType === 'correct') {
+      const event = await this.matchesService.submitCorrectionOperation(
+        userId,
+        item.matchId,
+        item.canonicalEventId,
+        item.replacement,
+        item.id,
+        item.causalParentIds,
+      );
+      return event.id;
+    }
+    if (item.operationType === 'void') {
+      const event = await this.matchesService.deleteEvent(
+        userId,
+        item.matchId,
+        item.canonicalEventId,
+        item.id,
+        item.causalParentIds,
+        item.reason,
+      );
+      return event.id;
+    }
+    const review = await this.matchesService.resolveEventReview(
+      userId,
+      item.matchId,
+      item.reviewId,
+      { resolution: item.resolution },
+      item.id,
+      item.causalParentIds,
+    );
+    return review.canonicalEventId;
+  }
+
+  private async recordAcceptedUpload(
+    userId: string,
+    item: SyncUploadItem,
+    id: string,
+    payloadHash: string,
+    initialCanonicalEventId: string | null,
+    startedAt: number,
+  ) {
+    let canonicalEventId = initialCanonicalEventId;
+    let receipt: typeof syncUploadReceipts.$inferSelect | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (item.kind === 'observation') {
+        canonicalEventId = await this.matchesService.canonicalEventIdForObservation(
+          item.matchId,
+          item.payload.clientRequestId,
+        );
+      }
       try {
-        const [committed] = await this.databaseService.database
-          .select()
-          .from(syncUploadReceipts)
-          .where(eq(syncUploadReceipts.id, id))
-          .limit(1);
-        if (committed) {
-          if (
-            committed.payloadHash !== payloadHash ||
-            committed.submittedByUserId !== userId
-          ) {
-            return { id, outcome: 'rejected', safeErrorCode: 'ID_REUSED' };
-          }
-          if (committed.outcome !== 'dependency_pending') return committed;
-        }
-        const [receipt] = await this.databaseService.database
+        [receipt] = await this.databaseService.database
           .insert(syncUploadReceipts)
           .values({
             id,
@@ -355,26 +331,81 @@ export class SyncController {
             matchId: item.matchId,
             itemType: item.kind,
             payloadHash,
-            outcome: 'rejected',
-            safeErrorCode: fallback.safeErrorCode,
+            outcome: 'accepted',
+            canonicalEventId,
             processingDurationMs: Math.round(performance.now() - startedAt),
           })
           .onConflictDoUpdate({
             target: syncUploadReceipts.id,
             set: {
-              outcome: 'rejected',
-              safeErrorCode: fallback.safeErrorCode,
+              payloadHash,
+              outcome: 'accepted',
+              safeErrorCode: null,
+              canonicalEventId,
               processingDurationMs: Math.round(performance.now() - startedAt),
               updatedAt: new Date(),
             },
           })
           .returning();
-        return receipt ?? fallback;
-      } catch {
-        // A syntactically valid but nonexistent match cannot satisfy the
-        // receipt FK. Keep processing the remaining independent batch items.
-        return fallback;
+        break;
+      } catch (error) {
+        if (item.kind !== 'observation' || attempt === 1) throw error;
       }
+    }
+    if (!receipt) throw new Error('Could not commit the upload receipt.');
+    return receipt;
+  }
+
+  private async recordRejectedUpload(
+    userId: string,
+    item: SyncUploadItem,
+    id: string,
+    payloadHash: string,
+    error: HttpException,
+    startedAt: number,
+  ) {
+    const safeErrorCode = error instanceof ForbiddenException
+      ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
+      : 'INVALID_OR_UNAUTHORISED';
+    const fallback = { id, outcome: 'rejected', safeErrorCode };
+    try {
+      const [committed] = await this.databaseService.database
+        .select()
+        .from(syncUploadReceipts)
+        .where(eq(syncUploadReceipts.id, id))
+        .limit(1);
+      if (committed) {
+        if (committed.payloadHash !== payloadHash || committed.submittedByUserId !== userId) {
+          return { id, outcome: 'rejected', safeErrorCode: 'ID_REUSED' };
+        }
+        if (committed.outcome !== 'dependency_pending') return committed;
+      }
+      const [receipt] = await this.databaseService.database
+        .insert(syncUploadReceipts)
+        .values({
+          id,
+          submittedByUserId: userId,
+          matchId: item.matchId,
+          itemType: item.kind,
+          payloadHash,
+          outcome: 'rejected',
+          safeErrorCode,
+          processingDurationMs: Math.round(performance.now() - startedAt),
+        })
+        .onConflictDoUpdate({
+          target: syncUploadReceipts.id,
+          set: {
+            outcome: 'rejected',
+            safeErrorCode,
+            processingDurationMs: Math.round(performance.now() - startedAt),
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return receipt ?? fallback;
+    } catch {
+      // A nonexistent match cannot satisfy the receipt FK; continue the batch.
+      return fallback;
     }
   }
 

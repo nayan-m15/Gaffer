@@ -113,7 +113,7 @@ export function EventReviewPanel({
           causalParentIds = operations
             .filter((operation) => operation.decision.reviewId === reviewId)
             .map((operation) => operation.id)
-            .sort();
+            .sort((left, right) => left.localeCompare(right));
         }
         if (causalParentIds.length === 0) {
           throw new Error("The conflicting decisions have not synced yet.");
