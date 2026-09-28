@@ -169,9 +169,9 @@ function autoFit(root: THREE.Object3D, rotationY: number) {
  * Only regions with a recorded injury are interactive at all — hovering
  * elsewhere on the body does nothing, matching how this viewer is only ever
  * used to browse an athlete's *existing* injuries (a new injury's region is
- * chosen elsewhere, in the log-injury dialog's region list). Hovering an
- * injured region glows it red; it never turns red just from being selected,
- * only from the pointer being over it right now.
+ * chosen elsewhere, in the log-injury dialog's region list). Every injured
+ * region glows red at all times, so a coach doesn't need to hover to spot
+ * one.
  *
  * Falls back to an accessible region list whenever WebGL is unavailable — the
  * page must never depend on the canvas.
@@ -705,26 +705,28 @@ export function BodyModelViewer({
       camera.position.set(x, y, z);
       camera.lookAt(target);
 
-      /* Anatomy only ever glows red while actively hovered — selecting a
-       * region (clicking it) keeps its marker/callout emphasised but does
-       * not, by itself, highlight anatomy. */
+      /* Anatomy glows red for every injured region all the time, at the same
+       * intensity hovering used to require — a coach shouldn't have to
+       * hover to find one. */
       const hoveredNow = hoveredRegionRef.current;
       const activeRegion = hoveredNow ?? selectedRef.current;
+      const injuredNow = injuredRef.current;
       const pulse = reducedMotion ? 0.55 : 0.42 + Math.sin(now / 420) * 0.22;
+      const idlePulse = reducedMotion ? 0.85 : 0.85 + Math.sin(now / 650) * 0.08;
+      const activePulse = reducedMotion ? 1 : 1 + Math.sin(now / 420) * 0.22;
 
       for (const entry of meshEntries) {
-        const highlighted =
-          hoveredNow !== null && entry.regions.includes(hoveredNow);
-        entry.material.color.set(highlighted ? HOVER_COLOR : BODY_COLOR);
-        entry.material.emissiveIntensity = highlighted ? pulse : 0;
+        const isInjured = entry.regions.some((region) =>
+          injuredNow.includes(region),
+        );
+        entry.material.color.set(isInjured ? HOVER_COLOR : BODY_COLOR);
+        entry.material.emissiveIntensity = isInjured ? pulse : 0;
       }
 
       /* Injury markers: idle and faint by default, stronger for the active
        * region — kept in sync with the injuredRegions prop every frame since
        * there are only ever a handful at once. */
-      syncMarkers(injuredRef.current);
-      const idlePulse = reducedMotion ? 0.85 : 0.85 + Math.sin(now / 650) * 0.08;
-      const activePulse = reducedMotion ? 1 : 1 + Math.sin(now / 420) * 0.22;
+      syncMarkers(injuredNow);
       for (const [region, marker] of markers) {
         const position = regionHotspots.get(region);
         if (!position) {

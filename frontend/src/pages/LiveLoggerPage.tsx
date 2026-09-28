@@ -1,8 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarDays, FileText, Lock, MapPin, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/features/events/EventDetailDialog";
 import {
   formatDateLabel,
@@ -10,8 +17,17 @@ import {
   formatLocalDate,
 } from "@/features/events/event-utils";
 import { useEvents } from "@/features/events/hooks";
-import type { TeamEvent } from "@/features/events/types";
+import type { EventStatus, TeamEvent } from "@/features/events/types";
 import { cn } from "@/lib/utils";
+
+type MatchStatusFilter = EventStatus | "all";
+
+const STATUS_FILTER_OPTIONS: { value: MatchStatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 function isFutureCalendarDate(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
@@ -28,10 +44,19 @@ function isFutureCalendarDate(scheduledAt: string, now = new Date()) {
 export default function LiveLoggerPage() {
   const { data: events, isLoading, isError, error, refetch } = useEvents();
   const navigate = useNavigate();
+  const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>("scheduled");
 
-  const matches = useMemo(
+  const allMatches = useMemo(
     () => (events ?? []).filter((event) => event.type === "match"),
     [events],
+  );
+
+  const matches = useMemo(
+    () =>
+      statusFilter === "all"
+        ? allMatches
+        : allMatches.filter((event) => event.status === statusFilter),
+    [allMatches, statusFilter],
   );
 
   return (
@@ -39,7 +64,29 @@ export default function LiveLoggerPage() {
       <PageHeader
         title="Live Logger"
         subtitle="Select a match to confirm the squad and start logging."
-      />
+      >
+        <Select
+          items={STATUS_FILTER_OPTIONS}
+          value={statusFilter}
+          onValueChange={(value) =>
+            value && setStatusFilter(value as MatchStatusFilter)
+          }
+        >
+          <SelectTrigger
+            aria-label="Filter matches by status"
+            className="w-44 justify-between"
+          >
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            {STATUS_FILTER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PageHeader>
 
       <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {isLoading && (
@@ -67,10 +114,12 @@ export default function LiveLoggerPage() {
           <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
             <Radio className="mx-auto size-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium text-foreground">
-              No matches yet
+              {allMatches.length === 0 ? "No matches yet" : "No matches found"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create a match event from the Events page to start logging.
+              {allMatches.length === 0
+                ? "Create a match event from the Events page to start logging."
+                : "Try a different status filter."}
             </p>
           </div>
         )}
