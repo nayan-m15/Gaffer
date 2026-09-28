@@ -242,9 +242,6 @@ export default function LoginPage() {
                 />
                 <span>Keep me signed in on this device</span>
               </label>
-              <p className="pl-6 text-xs text-muted-foreground">
-                Applies to email and password sign-in. Leave unchecked on shared devices.
-              </p>
             </div>
 
             {notice && !error && (
