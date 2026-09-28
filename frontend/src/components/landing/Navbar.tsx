@@ -14,11 +14,10 @@ import { cn } from "@/lib/utils";
  */
 const NAV_LINKS = [
   { label: "Public Dashboard", href: "/public-dashboard" },
-  { label: "Philosophy", href: "/#philosophy" },
-  { label: "Roster", href: "/#roster" },
+  { label: "Workflow", href: "/#philosophy" },
+  { label: "Squad", href: "/#roster" },
   { label: "Tactics", href: "/#tactics" },
-  { label: "Matchday", href: "/#matchday" },
-  { label: "Analytics", href: "/#analytics" },
+  { label: "Injuries", href: "/#injuries" },
 ] as const;
 
 /**
@@ -99,12 +98,7 @@ export function Navbar() {
 
         {/* ── Desktop actions ──────────────────────────────────────────── */}
         <div className="hidden items-center gap-3 md:flex">
-          <a
-            href="/public-dashboard"
-            className={cn("rounded-md px-3 py-2 text-sm font-medium transition-colors", sceneLinkClass)}
-          >
-            Public Dashboard
-          </a>
+          <a href="/public-dashboard" className={cn("hidden rounded-md px-2 py-2 text-xs font-medium transition-colors xl:block xl:px-3 xl:text-sm", sceneLinkClass)}>Public Dashboard</a>
 
           {/* Theme toggle */}
           <Button
