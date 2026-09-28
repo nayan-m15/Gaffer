@@ -328,7 +328,7 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   for(let i=0;i<5;i+=1){dummy.position.set(ROOM_EXIT+(i+.5)*TUNNEL_LENGTH/5,3.72,0);dummy.updateMatrix();tunnelLights.setMatrixAt(i,dummy.matrix);} scene.add(tunnelLights);
   scene.add(box([10.5,.18,TUNNEL_WIDTH],[-39.25,-.04,0],dark));
 
-  return { floorTexture, crestMap, tacticsMap, numberMaps, bannerTexture, scoreTexture, ballTexture, bannerMat, footballMat, metal, green, dark, dummy, light };
+  return { floorTexture, crestMap, tacticsMap, numberMaps, scoreTexture, ballTexture, footballMat, metal, green, dark, dummy, light, cushion };
 }
 
 function buildPitchAndStadium(
@@ -337,7 +337,7 @@ function buildPitchAndStadium(
   lowPower: boolean,
   roomAssets: ReturnType<typeof buildDressingRoomAndTunnel>,
 ) {
-  const { dummy, green, metal, dark, bannerMat, footballMat, light } = roomAssets;
+  const { dark, footballMat, metal, cushion } = roomAssets;
   const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassMat=new THREE.MeshStandardMaterial({map:grassTexture,roughness:.96});const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
   const ball=new THREE.Mesh(new THREE.SphereGeometry(.22,lowPower?12:18,lowPower?8:12),footballMat);ball.position.set(0,.225,0);ball.rotation.set(.16,-.5,.08);ball.castShadow=!lowPower;scene.add(ball);
   const glass=new THREE.MeshPhysicalMaterial({color:0xb9d8d0,roughness:.24,transparent:true,opacity:.25,side:THREE.DoubleSide}),dugout=new THREE.Group();dugout.position.set(-39.2,0,13.5);dugout.add(box([2.8,.3,13],[0,.15,0],dark),box([.3,3.2,13],[-1.25,1.75,0],glass),box([2.8,.32,13],[0,3.25,0],metal));
@@ -355,7 +355,7 @@ function buildPitchAndStadium(
   const portalLight=new THREE.PointLight(0x38bb82,.32,9,2);portalLight.position.set(ROOM_EXIT-.65,2.35,0);
   const exitLight=new THREE.PointLight(0xcaf2df,.78,22,2);exitLight.position.set(TUNNEL_EXIT+1.5,3.6,0);scene.add(roomLight,lockerLightLeft,lockerLightRight,portalLight,exitLight);
 
-  return grassTexture;
+  return { grassTexture, stadium };
 }
 export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
@@ -386,20 +386,21 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const cameraPath = new THREE.CatmullRomCurve3([-73, -67, -61, -55.5, -50, TUNNEL_EXIT, -38, -29, -15, 0].map(x => new THREE.Vector3(x, 1.72, 0)), false, "centripetal");
 
   const roomAssets = buildDressingRoomAndTunnel(scene, lowPower);
-  const { floorTexture, crestMap, tacticsMap, numberMaps, bannerTexture, scoreTexture, ballTexture } = roomAssets;
-  const grassTexture = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
+  const { floorTexture, crestMap, tacticsMap, numberMaps, scoreTexture, ballTexture } = roomAssets;
+  const { grassTexture, stadium } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
   const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
-  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);
+  let idleMotion = 0;
+  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion){position.y+=Math.sin(progress*Math.PI*30)*.014;position.x+=Math.sin(idleMotion)*.42;position.z+=Math.cos(idleMotion*.72)*.32;}camera.position.copy(position);
     // Once fully outside, pan across the complete right side, then finish on the left stand.
     const rightSweep=smooth(.58,.73,progress),leftSweep=smooth(.76,.98,progress);
     const yaw=reducedMotion?0:rightSweep*1.12-leftSweep*2.18;
     direction.set(Math.cos(yaw),smooth(.58,.78,progress)*.06,Math.sin(yaw));target.copy(position).addScaledVector(direction,18);camera.lookAt(target);};
   const render=()=>{if(disposed)return;renderer.render(scene,camera);if(!readySent){readySent=true;onReadyChange(true);}};
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
-  const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(difference)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
+  const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(difference)<.00008)currentProgress=targetProgress;if(!reducedMotion)idleMotion+=lowPower?.006:.003;updateCamera(currentProgress);render();frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();tacticsMap.dispose();numberMaps.forEach(value=>value.dispose());scoreTexture.dispose();ballTexture.dispose();stadium.textures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();tacticsMap.dispose();numberMaps.forEach(value=>value.dispose());scoreTexture.dispose();ballTexture.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
