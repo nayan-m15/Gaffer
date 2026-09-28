@@ -1,10 +1,19 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
+import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import {
+  usePageCelebrated,
+  useUnlockRequirements,
+  type UnlockPageKey,
+} from "@/features/onboarding/unlocks";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const StadiumScene = lazy(() =>
@@ -13,6 +22,82 @@ const StadiumScene = lazy(() =>
   })),
 );
 
+const UNLOCK_FADE_MS = 600;
+
+function normalizePath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
+function pageKeyFromPath(pathname: string): UnlockPageKey | null {
+  const path = normalizePath(pathname);
+
+  if (/^\/events\/[^/]+\/confirm-squad(\/|$)/.test(path)) {
+    return "live-logger";
+  }
+  if (path === "/live-logger" || path.startsWith("/live-logger/")) {
+    return "live-logger";
+  }
+  if (path === "/matches" || path.startsWith("/matches/")) {
+    return "live-logger";
+  }
+  if (path === "/events" || path.startsWith("/events/")) {
+    return "events";
+  }
+  if (path === "/injuries" || path.startsWith("/injuries/")) {
+    return "injuries";
+  }
+  if (path === "/statistics" || path.startsWith("/statistics/")) {
+    return "statistics";
+  }
+  return null;
+}
+
+function PageUnlockGate({
+  pageKey,
+  userId,
+  fading,
+  onUnlocked,
+}: {
+  pageKey: UnlockPageKey;
+  userId: string;
+  fading: boolean;
+  onUnlocked: () => void;
+}) {
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-full flex-1 items-center justify-center py-16">
+        <Loader2
+          className="size-6 animate-spin text-primary motion-reduce:animate-none"
+          role="status"
+          aria-label="Loading"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-full flex-1 items-center justify-center px-6 py-8",
+        fading &&
+          "pointer-events-none opacity-0 transition-opacity duration-[600ms] ease-out motion-reduce:transition-none",
+      )}
+    >
+      <UnlockGateCard
+        pageKey={pageKey}
+        userId={userId}
+        hasPlayers={hasPlayers}
+        hasGamePlan={hasGamePlan}
+        onUnlocked={onUnlocked}
+      />
+    </div>
+  );
+}
 
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
@@ -31,6 +116,51 @@ export function AppShell() {
 function AppShellContent() {
   const { expanded } = useSidebar();
   const { pathname } = useLocation();
+  const { user, team } = useAuth();
+  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const pageKey = pageKeyFromPath(pathname);
+  const celebrated = usePageCelebrated(user?.id, pageKey ?? "events");
+  const [fading, setFading] = useState(false);
+  const fadeTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setFading(false);
+    if (fadeTimeoutRef.current != null) {
+      window.clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+  }, [pageKey]);
+
+  useEffect(
+    () => () => {
+      if (fadeTimeoutRef.current != null) {
+        window.clearTimeout(fadeTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const gateEligible = Boolean(
+    pageKey &&
+      user?.id &&
+      team &&
+      team.role === "coach" &&
+      onboardingActive,
+  );
+  const showingGate = Boolean(gateEligible && pageKey && user?.id && (!celebrated || fading));
+
+  const handleUnlocked = () => {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) return;
+    setFading(true);
+    fadeTimeoutRef.current = window.setTimeout(() => {
+      fadeTimeoutRef.current = null;
+      setFading(false);
+    }, UNLOCK_FADE_MS);
+  };
+
   const showDashboardScene =
     pathname === "/dashboard" || pathname === "/dashboard/";
   const isEventsPage = pathname === "/events" || pathname === "/events/";
@@ -70,8 +200,23 @@ function AppShellContent() {
             </span>
           </div>
         </div>
-        <div className={cn("app-shell-content flex-1", isEventsPage && "min-h-0")}>
-          <Outlet />
+        <div
+          className={cn(
+            "app-shell-content flex-1",
+            isEventsPage && "min-h-0",
+            showingGate && "flex min-h-0 flex-col overflow-y-auto",
+          )}
+        >
+          {showingGate && pageKey && user?.id ? (
+            <PageUnlockGate
+              pageKey={pageKey}
+              userId={user.id}
+              fading={fading}
+              onUnlocked={handleUnlocked}
+            />
+          ) : (
+            <Outlet />
+          )}
         </div>
         <div className="no-print">
           <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:py-3" : undefined} />

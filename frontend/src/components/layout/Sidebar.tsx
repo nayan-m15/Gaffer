@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { startCoachTour } from "@/features/onboarding/startTour";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import {
+  PAGE_UNLOCKS,
+  pageRequirementsMet,
+  usePageCelebrated,
+  useUnlockRequirements,
+  type UnlockPageKey,
+} from "@/features/onboarding/unlocks";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { motion, useReducedMotion } from "motion/react";
@@ -28,6 +36,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Compass,
+  Lock,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +84,71 @@ const TOUR_ID_BY_PATH: Record<string, string> = {
   "/team": "nav-team",
 };
 
+const PATH_TO_UNLOCK_KEY: Partial<Record<string, UnlockPageKey>> = {
+  "/dashboard": "dashboard",
+  "/events": "events",
+  "/injuries": "injuries",
+  "/live-logger": "live-logger",
+  "/statistics": "statistics",
+};
+
+type NavUnlockStatus =
+  | { kind: "none" }
+  | { kind: "locked"; title: string }
+  | { kind: "claim"; title: string };
+
+function UnlockNavController({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: (getStatus: (key: UnlockPageKey) => NavUnlockStatus) => ReactNode;
+}) {
+  if (!enabled) {
+    return <>{children(() => ({ kind: "none" }))}</>;
+  }
+  return (
+    <UnlockNavControllerActive>{children}</UnlockNavControllerActive>
+  );
+}
+
+function UnlockNavControllerActive({
+  children,
+}: {
+  children: (getStatus: (key: UnlockPageKey) => NavUnlockStatus) => ReactNode;
+}) {
+  const { user } = useAuth();
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
+  const eventsCelebrated = usePageCelebrated(user?.id, "events");
+  const injuriesCelebrated = usePageCelebrated(user?.id, "injuries");
+  const liveLoggerCelebrated = usePageCelebrated(user?.id, "live-logger");
+  const statisticsCelebrated = usePageCelebrated(user?.id, "statistics");
+  const celebratedByKey: Record<UnlockPageKey, boolean> = {
+    dashboard: dashboardCelebrated,
+    events: eventsCelebrated,
+    injuries: injuriesCelebrated,
+    "live-logger": liveLoggerCelebrated,
+    statistics: statisticsCelebrated,
+  };
+
+  const getStatus = (key: UnlockPageKey): NavUnlockStatus => {
+    if (isLoading || celebratedByKey[key]) {
+      return { kind: "none" };
+    }
+    if (!pageRequirementsMet(key, hasPlayers, hasGamePlan)) {
+      const page = PAGE_UNLOCKS[key];
+      if (page.needsPlayers && !hasPlayers) {
+        return { kind: "locked", title: "Locked: add at least one player" };
+      }
+      return { kind: "locked", title: "Locked: save your first game plan" };
+    }
+    return { kind: "claim", title: "Unlocked, open to claim" };
+  };
+
+  return <>{children(getStatus)}</>;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SIDEBAR COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -98,6 +172,10 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const resolvedVariant = variant ?? (accountKind === "player" ? "player" : "coach");
   const navItems = resolvedVariant === "player" ? PLAYER_NAV_ITEMS : COACH_NAV_ITEMS;
   const isFirstTime = !team && getPendingTeamInviteToken() === null;
+  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const applyUnlocks =
+    resolvedVariant !== "player" &&
+    Boolean(team && onboardingActive && user?.id);
 
   const handleSignOut = async () => {
     try {
@@ -151,12 +229,18 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Main navigation">
-        {navItems.map((item) => {
+        <UnlockNavController enabled={applyUnlocks}>
+          {(getUnlockStatus) =>
+            navItems.map((item) => {
           const Icon = item.icon;
           const tourId = resolvedVariant === "player" ? undefined : TOUR_ID_BY_PATH[item.path];
           const isRelatedMatchReport =
             item.path === "/live-logger" &&
             /^\/matches\/[^/]+\/report\/?$/.test(pathname);
+          const unlockKey = PATH_TO_UNLOCK_KEY[item.path];
+          const unlockStatus = unlockKey
+            ? getUnlockStatus(unlockKey)
+            : { kind: "none" as const };
 
           if (item.requiresTeam && !team) {
             return (
@@ -182,6 +266,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
               key={item.label}
               to={item.path}
               data-tour={tourId}
+              title={unlockStatus.kind === "none" ? undefined : unlockStatus.title}
               aria-current={isRelatedMatchReport ? "page" : undefined}
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
@@ -200,11 +285,27 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 aria-hidden="true"
               />
               <Icon className="size-[18px] shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground group-aria-[current=page]:text-primary" aria-hidden="true" />
-              <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
+              <span className={cn("min-w-0 flex-1", !expanded && "lg:hidden")}>{item.label}</span>
+              {unlockStatus.kind === "locked" && (
+                <Lock
+                  className={cn(
+                    "ml-auto size-3.5 shrink-0 text-muted-foreground",
+                    !expanded && "lg:hidden",
+                  )}
+                  aria-hidden="true"
+                />
+              )}
+              {unlockStatus.kind === "claim" && (
+                <span
+                  className="ml-auto size-1.5 shrink-0 rounded-full bg-primary animate-pulse motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              )}
             </NavLink>
           );
-        })}
-
+            })
+          }
+        </UnlockNavController>
       </nav>
 
       {/* Footer */}
