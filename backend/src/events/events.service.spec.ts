@@ -345,20 +345,32 @@ describe('EventsService', () => {
         teamName: 'Linked opponent',
         players: [],
       };
-      mockFriendlyFixturesService.resolveCompetitionOpponentLineup.mockResolvedValue(resolved);
+      mockFriendlyFixturesService.resolveCompetitionOpponentLineup.mockResolvedValue(
+        resolved,
+      );
       mockDatabaseService.database = {
-        select: jest.fn().mockReturnValue(selectChain([{
-          ...teamEvent,
-          competitionId: 'competition-id',
-          competitionFixtureId: 'fixture-id',
-          friendlyFixtureId: null,
-        }])),
+        select: jest.fn().mockReturnValue(
+          selectChain([
+            {
+              ...teamEvent,
+              competitionId: 'competition-id',
+              competitionFixtureId: 'fixture-id',
+              friendlyFixtureId: null,
+            },
+          ]),
+        ),
       };
-      const result = await service.getFriendlyOpponentLineup('user-id', 'event-id');
+      const result = await service.getFriendlyOpponentLineup(
+        'user-id',
+        'event-id',
+      );
       expect(result).toBe(resolved);
-      expect(mockFriendlyFixturesService.resolveCompetitionOpponentLineup)
-        .toHaveBeenCalledWith('fixture-id', 'team-id');
-      expect(mockFriendlyFixturesService.resolveOpponentLineup).not.toHaveBeenCalled();
+      expect(
+        mockFriendlyFixturesService.resolveCompetitionOpponentLineup,
+      ).toHaveBeenCalledWith('fixture-id', 'team-id');
+      expect(
+        mockFriendlyFixturesService.resolveOpponentLineup,
+      ).not.toHaveBeenCalled();
     });
 
     it('delegates to the friendly fixture resolver scoped to the caller team', async () => {
