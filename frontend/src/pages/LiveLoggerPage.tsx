@@ -19,6 +19,7 @@ import {
 import { useEvents } from "@/features/events/hooks";
 import type { EventStatus, TeamEvent } from "@/features/events/types";
 import { cn } from "@/lib/utils";
+import "./LiveLoggerPage.css";
 
 type MatchStatusFilter = EventStatus | "all";
 
@@ -60,33 +61,36 @@ export default function LiveLoggerPage() {
   );
 
   return (
-    <>
-      <PageHeader
-        title="Live Logger"
-        subtitle="Select a match to confirm the squad and start logging."
-      >
-        <Select
-          items={STATUS_FILTER_OPTIONS}
-          value={statusFilter}
-          onValueChange={(value) =>
-            value && setStatusFilter(value as MatchStatusFilter)
-          }
+    <div className="live-logger-page relative isolate min-h-full">
+      <div className="live-logger-page-backdrop" aria-hidden="true" />
+
+      <div className="relative z-10">
+        <PageHeader
+          title="Live Logger"
+          subtitle="Select a match to confirm the squad and start logging."
         >
-          <SelectTrigger
-            aria-label="Filter matches by status"
-            className="w-44 justify-between"
+          <Select
+            items={STATUS_FILTER_OPTIONS}
+            value={statusFilter}
+            onValueChange={(value) =>
+              value && setStatusFilter(value as MatchStatusFilter)
+            }
           >
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            {STATUS_FILTER_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </PageHeader>
+            <SelectTrigger
+              aria-label="Filter matches by status"
+              className="w-44 justify-between"
+            >
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </PageHeader>
 
       <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {isLoading && (
@@ -143,7 +147,8 @@ export default function LiveLoggerPage() {
           </ul>
         )}
       </div>
-    </>
+      </div>
+    </div>
   );
 }
 

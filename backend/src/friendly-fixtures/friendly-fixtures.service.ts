@@ -309,8 +309,11 @@ export class FriendlyFixturesService {
     const opponentTeamId = participants.find(
       (row) => row.id === opponentParticipantId,
     )?.teamId;
-    if (!opponentTeamId || opponentTeamId === ownTeamId ||
-        (expectedOpponentTeamId && opponentTeamId !== expectedOpponentTeamId)) {
+    if (
+      !opponentTeamId ||
+      opponentTeamId === ownTeamId ||
+      (expectedOpponentTeamId && opponentTeamId !== expectedOpponentTeamId)
+    ) {
       return unavailableFriendlyOpponentLineup();
     }
 

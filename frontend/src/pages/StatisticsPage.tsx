@@ -38,6 +38,7 @@ import type {
 import { ApiError } from "@/lib/api";
 import { emptySeasonFormValues, toSeasonFormValues } from "@/services/seasons";
 import { cn } from "@/lib/utils";
+import "@/features/statistics/statistics-background.css";
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE COMPONENT
@@ -225,8 +226,11 @@ export default function StatisticsPage() {
 
   return (
     <>
-      <div className="statistics-page">
+      <div className="statistics-page relative isolate min-h-full">
+        <div className="statistics-page-backdrop" aria-hidden="true" />
+
         <PageHeader
+        className="relative z-10"
         title="Statistics"
         subtitle={subtitle}
         actions={<div className="flex flex-wrap items-center gap-2">
@@ -244,7 +248,7 @@ export default function StatisticsPage() {
         </div>}
         />
 
-        <div className="statistics-page-content mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
+        <div className="statistics-page-content relative z-10 mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
         {/* ── Statistics overview ──────────────────────────────────────────── */}
         {overviewQuery.isLoading && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">

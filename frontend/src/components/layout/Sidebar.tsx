@@ -203,6 +203,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         onNavigate={() => setIsMobileOpen(false)}
       />
 
+
       {/* Footer */}
       <div className="border-t border-sidebar-border/70 px-4 py-4">
         {/* Profile — clickable to open the profile editor (coach only) */}
@@ -240,7 +241,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
         >
           <span className="shrink-0" aria-hidden="true">
@@ -258,7 +259,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         {/* Sign out */}
         <button
           onClick={() => void handleSignOut()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <LogOut className="size-5 shrink-0" aria-hidden="true" />
           <span className={cn(!expanded && "lg:hidden")}>Sign Out</span>
@@ -298,7 +299,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Mobile toggle button ──────────────────────────────────────────── */}
       <button
         onClick={() => setIsMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-lg border border-border-subtle bg-surface-elevated p-2 shadow-lg lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-lg border border-border-subtle bg-surface-elevated p-2 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         aria-label="Open navigation menu"
       >
         <Menu className="size-5 text-foreground" aria-hidden="true" />
@@ -324,7 +325,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
             {/* Close button */}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="absolute right-3 top-4 rounded-lg p-1.5 text-sidebar-foreground hover:bg-sidebar-accent"
+              className="absolute right-3 top-4 rounded-lg p-1.5 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close navigation menu"
             >
               <X className="size-5" aria-hidden="true" />

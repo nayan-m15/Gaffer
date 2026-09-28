@@ -9,11 +9,13 @@ export interface ChapterItem {
 
 export const CHAPTERS: ChapterItem[] = [
   { id: "home", label: "Overview" },
-  { id: "philosophy", label: "Philosophy" },
-  { id: "roster", label: "Squad Roster" },
-  { id: "tactics", label: "Tactical Pitch" },
-  { id: "matchday", label: "Live Match" },
-  { id: "analytics", label: "Analytics" },
+  { id: "philosophy", label: "Workflow" },
+  { id: "roster", label: "Squad" },
+  { id: "tactics", label: "Tactics" },
+  { id: "matchday", label: "Matchday" },
+  { id: "analytics", label: "Performance" },
+  { id: "injuries", label: "Injuries" },
+  { id: "competitions", label: "Club" },
   { id: "cta", label: "Get Started" },
 ];
 

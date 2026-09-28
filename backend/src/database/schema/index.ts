@@ -293,8 +293,9 @@ export const gamePlans = pgTable(
       .$type<Record<string, string | null>>(),
     // Coach-defined slot coordinates for custom formations. Preset formations
     // leave this null and continue to use the static formation catalog.
-    customPositions: jsonb('custom_positions')
-      .$type<GamePlanFormationPosition[] | null>(),
+    customPositions: jsonb('custom_positions').$type<
+      GamePlanFormationPosition[] | null
+    >(),
     // Athlete IDs on the substitutes bench.
     substituteIds: jsonb('substitute_ids')
       .notNull()
@@ -513,8 +514,11 @@ export const eventLineups = pgTable(
     benchAthleteIds: jsonb('bench_athlete_ids').$type<string[]>().notNull(),
     // Immutable-on-confirmation tactical snapshot; never read a mutable game plan for sharing.
     formationId: text('formation_id'),
-    pitchAssignments: jsonb('pitch_assignments').$type<Record<string, string | null>>(),
-    customPositions: jsonb('custom_positions').$type<GamePlanFormationPosition[] | null>(),
+    pitchAssignments:
+      jsonb('pitch_assignments').$type<Record<string, string | null>>(),
+    customPositions: jsonb('custom_positions').$type<
+      GamePlanFormationPosition[] | null
+    >(),
     confirmedByUserId: text('confirmed_by_user_id')
       .notNull()
       .references(() => user.id),

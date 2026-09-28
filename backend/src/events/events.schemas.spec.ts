@@ -36,9 +36,9 @@ describe('startMatchSchema starter-count envelope', () => {
         startMatchBody({ startingAthleteIds: starterIds.slice(0, 7) }),
       ).startingAthleteIds,
     ).toHaveLength(7);
-    expect(startMatchSchema.parse(startMatchBody()).startingAthleteIds).toHaveLength(
-      11,
-    );
+    expect(
+      startMatchSchema.parse(startMatchBody()).startingAthleteIds,
+    ).toHaveLength(11);
   });
 
   it('still rejects an empty lineup', () => {
@@ -150,22 +150,28 @@ describe('confirmLineupSchema', () => {
   });
 
   it('accepts an exact tactical snapshot and rejects missing or duplicate pitch assignments', () => {
-    const slots = Object.fromEntries(starterIds.map((id, i) => [`slot-${i}`, id]));
+    const slots = Object.fromEntries(
+      starterIds.map((id, i) => [`slot-${i}`, id]),
+    );
     const valid = confirmLineupSchema.parse({
       startingAthleteIds: starterIds,
       formationId: '4-3-3',
       pitchAssignments: slots,
     });
     expect(valid.pitchAssignments).toEqual(slots);
-    expect(() => confirmLineupSchema.parse({
-      startingAthleteIds: starterIds,
-      formationId: '4-3-3',
-      pitchAssignments: { ...slots, 'slot-0': starterIds[1] },
-    })).toThrow();
-    expect(() => confirmLineupSchema.parse({
-      startingAthleteIds: starterIds,
-      pitchAssignments: slots,
-    })).toThrow();
+    expect(() =>
+      confirmLineupSchema.parse({
+        startingAthleteIds: starterIds,
+        formationId: '4-3-3',
+        pitchAssignments: { ...slots, 'slot-0': starterIds[1] },
+      }),
+    ).toThrow();
+    expect(() =>
+      confirmLineupSchema.parse({
+        startingAthleteIds: starterIds,
+        pitchAssignments: slots,
+      }),
+    ).toThrow();
   });
 
   it('rejects a starting list that is not exactly 11', () => {

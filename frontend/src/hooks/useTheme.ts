@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "sport-coaching-theme";
+const THEME_CHANGE_EVENT = "gaffer-theme-change";
 
 /**
  * Reads the visitor's previously chosen theme from `localStorage`, falling back
@@ -44,7 +45,7 @@ function getInitialTheme(): Theme {
  * ```
  */
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [theme, setActiveTheme] = useState<Theme>(getInitialTheme);
 
   /** Apply the `.dark` class to `<html>` whenever the theme changes. */
   useEffect(() => {
@@ -57,12 +58,48 @@ export function useTheme() {
     }
 
     window.localStorage.setItem(STORAGE_KEY, theme);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? "#090A0B" : "#F5F3F0");
   }, [theme]);
+
+  // Keep every mounted theme control in sync, including controls rendered in
+  // separate layouts or tabs. System preference changes remain live until the
+  // visitor makes an explicit choice.
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncFromStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) setActiveTheme(getInitialTheme());
+    };
+    const syncFromApp = (event: Event) => {
+      const next = (event as CustomEvent<Theme>).detail;
+      if (next === "light" || next === "dark") setActiveTheme(next);
+    };
+    const syncFromSystem = () => {
+      if (!window.localStorage.getItem(STORAGE_KEY)) setActiveTheme(getInitialTheme());
+    };
+
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener(THEME_CHANGE_EVENT, syncFromApp);
+    media.addEventListener("change", syncFromSystem);
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener(THEME_CHANGE_EVENT, syncFromApp);
+      media.removeEventListener("change", syncFromSystem);
+    };
+  }, []);
+
+  const setTheme = useCallback((next: Theme) => {
+    setActiveTheme(next);
+    window.dispatchEvent(
+      new CustomEvent<Theme>(THEME_CHANGE_EVENT, { detail: next }),
+    );
+  }, []);
 
   /** Flip between light and dark. */
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
+    setTheme(theme === "dark" ? "light" : "dark");
+  }, [setTheme, theme]);
 
   return { theme, setTheme, toggleTheme } as const;
 }

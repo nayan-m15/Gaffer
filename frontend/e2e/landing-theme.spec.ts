@@ -80,7 +80,7 @@ for (const theme of ["light", "dark"] as const) {
     expect(contrast(parseRgb(ratios.strongBorder[0]), parseRgb(ratios.strongBorder[1]))).toBeGreaterThanOrEqual(3);
 
     await page.locator("#roster").scrollIntoViewIfNeeded();
-    await expect(page.getByRole("heading", { name: /Complete Digital Squad/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Every player. One reliable record/ })).toBeVisible();
     await expect(page.locator("header")).toHaveClass(/bg-background\/95/);
     expect(consoleErrors.filter((message) => !message.includes("401 (Unauthorized)"))).toEqual([]);
   });
@@ -92,7 +92,7 @@ test("mobile landing navigation and content do not overflow", async ({ page }) =
 
   await page.getByRole("button", { name: "Open menu" }).click();
   const mobileNavigation = page.getByRole("banner");
-  await expect(mobileNavigation.getByRole("link", { name: "Philosophy" })).toBeVisible();
+  await expect(mobileNavigation.getByRole("link", { name: "Workflow" })).toBeVisible();
   await expect(mobileNavigation.getByRole("link", { name: "Get Started", exact: true })).toBeVisible();
 
   const dimensions = await page.evaluate(() => ({

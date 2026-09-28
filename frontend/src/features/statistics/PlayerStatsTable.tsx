@@ -123,7 +123,7 @@ export function PlayerStatsTable({
                     <span className="text-[#67e8f9]">{player.saves}</span>
                   ) : (
                     <span
-                      className="text-xs font-normal text-muted-foreground opacity-40"
+                      className="text-xs font-normal text-muted-foreground opacity-65"
                       aria-hidden="true"
                     >
                       -

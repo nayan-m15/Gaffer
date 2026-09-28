@@ -329,6 +329,31 @@ body {
   background: color-mix(in srgb, var(--primary) 72%, transparent);
 }
 
+/* Keep native controls and browser autofill on the active theme. */
+input,
+select,
+textarea {
+  color: inherit;
+  accent-color: var(--primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  box-shadow: 0 0 0 1000px var(--surface-nested) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* ─── Reduced-motion preference ─────────────────────────────────────────── *
  * Disables transitions and animations for users who prefer reduced motion.   */
 @media (prefers-reduced-motion: reduce) {
@@ -359,7 +384,7 @@ body {
 }
 
 .landing-scene[data-ready="true"] .landing-scene__canvas {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* The WebGL scene is deliberately dark in both themes. Content placed
@@ -397,7 +422,7 @@ body {
 
 @media (max-width: 767px) {
   .landing-scene[data-ready="true"] .landing-scene__canvas {
-    opacity: 0.78;
+    opacity: 1;
   }
 
 }
@@ -627,7 +652,7 @@ body {
   height: 20px;
   width: 20px;
   border-radius: 9999px;
-  background: #1c1c1c;
+  background: var(--foreground);
   border: 2px solid var(--card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   transition: transform 0.1s ease;
@@ -646,7 +671,7 @@ body {
   height: 18px;
   width: 18px;
   border-radius: 9999px;
-  background: #1c1c1c;
+  background: var(--foreground);
   border: 2px solid var(--card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }

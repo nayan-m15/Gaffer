@@ -14,6 +14,7 @@ import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type Acti
 import { CompetitionResultDialog } from "./CompetitionResultDialog";
 import { CompetitionFixturesView } from "./CompetitionFixturesView";
 import type { CompetitionDetail, CompetitionFixture, CompetitionFormat, CompetitionInvite, CompetitionResult, CompetitionSummary, Participant } from "./types";
+import "./competitions-background.css";
 
 const contentClass = "mx-auto w-full max-w-[1600px] space-y-6 px-6 pb-10 sm:px-8 lg:px-10";
 const badgeClass = "rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary";
@@ -36,7 +37,14 @@ function formatLabel(type: CompetitionSummary["type"], format: CompetitionSummar
 
 export default function CompetitionsPage() {
   const { id } = useParams();
-  return id ? <CompetitionDetails key={id} id={id} /> : <CompetitionWorkspace />;
+  return (
+    <div className="competitions-page relative isolate min-h-full">
+      <div className="competitions-page-backdrop" aria-hidden="true" />
+      <div className="relative z-10">
+        {id ? <CompetitionDetails key={id} id={id} /> : <CompetitionWorkspace />}
+      </div>
+    </div>
+  );
 }
 
 function CompetitionList({ rows, empty, basePath }: { rows: CompetitionSummary[]; empty: string; basePath: string }) {

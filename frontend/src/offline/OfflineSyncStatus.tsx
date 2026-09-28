@@ -27,8 +27,8 @@ function getSyncLabel(input: {
 }
 
 function getSyncIndicatorClass(hasIssue: boolean, online: boolean) {
-  if (hasIssue) return "bg-[#e36a6d]";
-  return online ? "bg-[#16d99a]" : "bg-[#d6a447]";
+  if (hasIssue) return "bg-danger";
+  return online ? "bg-success" : "bg-warning";
 }
 
 export function OfflineSyncStatus({ matchId }: { matchId: string }) {
@@ -131,13 +131,14 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       role="status"
       title="Offline event synchronisation status"
       aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#111315] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c7ccc9]"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-surface-elevated px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground shadow-sm"
     >
       <span
         className={`size-1.5 rounded-full ${getSyncIndicatorClass(
           Boolean(rejected || quarantined),
           online,
         )}`}
+
       />
       {label}
     </span>
