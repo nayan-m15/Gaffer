@@ -1855,34 +1855,6 @@ export default function LiveMatchPage() {
               ) : null}
             </span>
           </div>
-          {visibility === "none" ? (
-            <div className="mt-2 flex justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    isAssistCallout(composer.kind) ||
-                    isBenchIncomingCallout(composer.kind) ||
-                    isSubOutCallout(composer.kind)
-                  ) {
-                    return;
-                  }
-                  setComposer({ kind: "closed" });
-                  setTarget({ kind: "opp-generic" });
-                  setEventPickerOpen(liveLogging);
-                  setActionError(null);
-                }}
-                className={cn(
-                  "rounded-lg bg-[#B45309] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-sm sm:px-6 sm:py-3 sm:text-sm",
-                  "hover:bg-[#92400e]",
-                  selectedKey === "opp-generic" && "ring-2 ring-white/80",
-                )}
-              >
-                {oppAbbrev} · log opponent
-              </button>
-            </div>
-          ) : null}
-
           {period === "full_time" && (
             <PeriodSummary
               title="FULL TIME"
@@ -1907,6 +1879,34 @@ export default function LiveMatchPage() {
             </p>
           )}
         </div>
+
+        {visibility === "none" ? (
+          <div className="live-match-opponent-action">
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  isAssistCallout(composer.kind) ||
+                  isBenchIncomingCallout(composer.kind) ||
+                  isSubOutCallout(composer.kind)
+                ) {
+                  return;
+                }
+                setComposer({ kind: "closed" });
+                setTarget({ kind: "opp-generic" });
+                setEventPickerOpen(liveLogging);
+                setActionError(null);
+              }}
+              className={cn(
+                "w-full rounded-lg bg-[#B45309] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-sm sm:px-6 sm:py-3 sm:text-sm",
+                "hover:bg-[#92400e]",
+                selectedKey === "opp-generic" && "ring-2 ring-white/80",
+              )}
+            >
+              {oppAbbrev} · log opponent
+            </button>
+          </div>
+        ) : null}
 
         <section className="live-match-pitch-area flex min-h-0 flex-col">
           <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">

@@ -69,10 +69,10 @@
 
 .live-match-layout {
   display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(16rem, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 18rem);
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-areas:
-    "score ."
+    "score opponentAction"
     "pitch activity"
     "callout activity"
     "bench activity";
@@ -80,12 +80,25 @@
 }
 
 .live-match-score { grid-area: score; }
+.live-match-opponent-action {
+  grid-area: opponentAction;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.35rem;
+}
 .live-match-pitch-area {
   grid-area: pitch;
   overflow: hidden;
 }
-.live-match-activity { grid-area: activity; min-height: 0; }
-.live-match-activity > section { height: 100%; }
+.live-match-activity {
+  grid-area: activity;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.live-match-activity > section { min-height: 0; flex: 1; }
 .live-match-bench-area {
   grid-area: bench;
   min-height: 0;
@@ -145,9 +158,10 @@
 @media (max-width: 1024px) {
   .live-match-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto minmax(20rem, 28rem);
+    grid-template-rows: auto auto auto auto auto minmax(20rem, 28rem);
     grid-template-areas:
       "score"
+      "opponentAction"
       "pitch"
       "callout"
       "bench"
@@ -217,6 +231,41 @@
   }
 
   .live-match-activity { min-height: 20rem; }
+
+  .live-match-opponent-action {
+    align-items: center;
+    padding: 0;
+  }
+
+  .live-match-opponent-action > button {
+    width: auto;
+    min-width: min(100%, 18rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .live-match > header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .live-match > header > div:first-child {
+    min-width: 0;
+  }
+
+  .live-match > header > div:nth-child(2) {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.375rem;
+  }
+
+  .live-match > header > div:nth-child(2) > button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
 }
 
 @keyframes live-timeline-in {
