@@ -5,7 +5,7 @@ import {
   type APIResponse,
   type Page,
 } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import {
   BACKEND_URL,
   registerVerifiedUser,

@@ -27,6 +27,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { fetchPlayerEvents } from "@/services/player";
 import type { EventType, TeamEvent } from "@/features/events/types";
+import "@/features/events/events-background.css";
 
 type Panel =
   | { kind: "closed" }
@@ -204,7 +205,10 @@ export default function PlayerEventsPage() {
   );
 
   return (
-    <>
+    <div className="events-page relative isolate min-h-full">
+      <div className="events-page-backdrop" aria-hidden="true" />
+
+      <div className="relative z-10">
       <PageHeader
         title="Events"
         subtitle="Your team's schedule and your RSVP responses."
@@ -333,6 +337,7 @@ export default function PlayerEventsPage() {
         }}
         onEdit={() => {}}
       />
-    </>
+      </div>
+    </div>
   );
 }

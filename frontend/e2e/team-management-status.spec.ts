@@ -1,5 +1,5 @@
 import { expect, test, type APIResponse } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import {
   BACKEND_URL,
   E2E_PASSWORD,

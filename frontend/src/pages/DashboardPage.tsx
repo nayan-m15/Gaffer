@@ -169,7 +169,7 @@ function SectionTitle({
 function EmptyState({ message, icon }: { message: string; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-      {icon && <div className="mb-2 opacity-40">{icon}</div>}
+      {icon && <div className="mb-2 opacity-60">{icon}</div>}
       <p className="text-sm">{message}</p>
     </div>
   );

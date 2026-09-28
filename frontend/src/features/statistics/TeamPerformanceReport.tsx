@@ -92,7 +92,7 @@ export function TeamPerformanceReport({ data }: { data: TeamReportData }) {
                         saves
                       ) : (
                         <span
-                          className="text-xs font-normal text-muted-foreground opacity-40"
+                          className="text-xs font-normal text-muted-foreground opacity-65"
                           aria-hidden="true"
                         >
                           -

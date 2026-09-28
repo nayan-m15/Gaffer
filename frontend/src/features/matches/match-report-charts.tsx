@@ -23,7 +23,7 @@ import {
 } from "./match-report-chart-stats";
 import type { MatchLogEvent } from "./types";
 
-const TICK = { fill: "#9ca39f", fontSize: 10 };
+const TICK = { fill: "var(--mr-muted)", fontSize: 10 };
 
 function ComparisonTick({
   x = 0,
@@ -36,7 +36,7 @@ function ComparisonTick({
 }) {
   const lines = (payload?.value ?? "").split(" ");
   return (
-    <text x={x} y={y + 10} textAnchor="middle" fill="#9ca39f" fontSize={10}>
+    <text x={x} y={y + 10} textAnchor="middle" fill="var(--mr-muted)" fontSize={10}>
       {lines.map((line, index) => (
         <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : 11}>
           {line}
@@ -80,7 +80,7 @@ export function TeamComparisonChart({
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 18, right: 4, left: -18, bottom: 12 }}>
-            <CartesianGrid stroke="#2a2e31" vertical={false} />
+            <CartesianGrid stroke="var(--mr-line)" vertical={false} />
             <XAxis
               dataKey="category"
               axisLine={false}
@@ -90,10 +90,10 @@ export function TeamComparisonChart({
             />
             <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={TICK} />
             <Bar dataKey="own" fill={ownColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
-              <LabelList dataKey="own" position="top" fill="#ecefed" fontSize={11} />
+              <LabelList dataKey="own" position="top" fill="var(--mr-white)" fontSize={11} />
             </Bar>
             <Bar dataKey="opp" fill={oppColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
-              <LabelList dataKey="opp" position="top" fill="#ecefed" fontSize={11} />
+              <LabelList dataKey="opp" position="top" fill="var(--mr-white)" fontSize={11} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -156,7 +156,7 @@ export function ScoreProgressionChart({
             data={points}
             margin={{ top: 12, right: 12, left: -18, bottom: 0 }}
           >
-            <CartesianGrid stroke="#2a2e31" vertical={false} />
+            <CartesianGrid stroke="var(--mr-line)" vertical={false} />
             <XAxis
               dataKey="minute"
               type="number"
@@ -212,7 +212,7 @@ export function ScoreProgressionChart({
                       cy={cy}
                       r={3}
                       fill={payload?.color ?? "#d7ba55"}
-                      stroke="#090a0b"
+                      stroke="var(--mr-bg)"
                       strokeWidth={1}
                     />
                   );
@@ -261,7 +261,7 @@ export function EventBreakdownChart({
                   innerRadius={52}
                   outerRadius={76}
                   paddingAngle={2}
-                  stroke="#090a0b"
+                  stroke="var(--mr-bg)"
                   strokeWidth={2}
                 >
                   {slices.map((slice) => (

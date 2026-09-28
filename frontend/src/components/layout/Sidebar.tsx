@@ -146,8 +146,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
             return (
               <span
                 key={item.label}
-                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40"
+                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-disabled"
                 title="Add a team first"
+                aria-disabled="true"
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
                 <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
@@ -163,7 +164,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
+                  "group relative flex w-full items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-sidebar-ring motion-reduce:transition-none",
                   isActive || isRelatedMatchReport
                     ? "border-sidebar-border bg-surface-active text-sidebar-foreground"
                     : "border-transparent text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -221,7 +222,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
         >
           <span className="shrink-0" aria-hidden="true">
@@ -239,7 +240,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         {/* Sign out */}
         <button
           onClick={() => void handleSignOut()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <LogOut className="size-5 shrink-0" aria-hidden="true" />
           <span className={cn(!expanded && "lg:hidden")}>Sign Out</span>
@@ -279,7 +280,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       {/* ── Mobile toggle button ──────────────────────────────────────────── */}
       <button
         onClick={() => setIsMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-lg border border-border-subtle bg-surface-elevated p-2 shadow-lg lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-lg border border-border-subtle bg-surface-elevated p-2 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         aria-label="Open navigation menu"
       >
         <Menu className="size-5 text-foreground" aria-hidden="true" />
@@ -305,7 +306,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
             {/* Close button */}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="absolute right-3 top-4 rounded-lg p-1.5 text-sidebar-foreground hover:bg-sidebar-accent"
+              className="absolute right-3 top-4 rounded-lg p-1.5 text-sidebar-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close navigation menu"
             >
               <X className="size-5" aria-hidden="true" />

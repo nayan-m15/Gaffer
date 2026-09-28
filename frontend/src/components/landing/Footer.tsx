@@ -4,9 +4,10 @@ import { motion, type Variants } from "motion/react";
 
 const PRIMARY_LINKS = [
   { label: "Public Dashboard", href: "/public-dashboard" },
-  { label: "Philosophy", href: "/#philosophy" },
-  { label: "Tactical Pitch", href: "/#tactics" },
-  { label: "Analytics", href: "/#analytics" },
+  { label: "Workflow", href: "/#philosophy" },
+  { label: "Tactics", href: "/#tactics" },
+  { label: "Matchday", href: "/#matchday" },
+  { label: "Injury Recovery", href: "/#injuries" },
 ] as const;
 
 const LEGAL_LINKS = [
