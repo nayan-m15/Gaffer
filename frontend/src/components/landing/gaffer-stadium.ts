@@ -73,25 +73,9 @@ function standTransform(group: THREE.Group, side: Side) {
 
 function opening(side: Side, along: number, row: number, tier: number) {
   // The existing walk-out is on the west touchline at z=0. Keep its sightline clear.
-  if (side === "west" && tier === 0 && Math.abs(along) < 4.3) return true;
+  if (side === "west" && tier === 0 && Math.abs(along) < 6.5) return true;
   if (side === "west" && tier === 0 && along > 7.2 && along < 20.5 && row < 4) return true; // dugout
   return false;
-}
-
-function createPlayerEntrance(materials: ReturnType<typeof makeMaterials>) {
-  const entrance = new THREE.Group();
-  entrance.name = "West stand player entrance";
-  const width = 7.1, depth = 7.8, height = 4.05;
-  entrance.add(
-    block([.34, height, depth], [-width / 2, height / 2, depth / 2], materials.darkConcrete),
-    block([.34, height, depth], [width / 2, height / 2, depth / 2], materials.darkConcrete),
-    block([width + .34, .34, depth], [0, height, depth / 2], materials.darkConcrete),
-    block([.16, height - .38, depth - .2], [-width / 2 + .2, (height - .38) / 2, depth / 2], materials.steel),
-    block([.16, height - .38, depth - .2], [width / 2 - .2, (height - .38) / 2, depth / 2], materials.steel),
-    block([width - .34, .16, depth - .2], [0, height - .2, depth / 2], materials.steel),
-    block([width - .7, .08, depth], [0, .04, depth / 2], materials.aisle),
-  );
-  return entrance;
 }
 
 function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>, textures: THREE.Texture[]) {
@@ -102,23 +86,10 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   const totalDepth = Math.max(...spec.tiers.map(t => t.start + t.rows * t.depth));
   const backHeight = spec.roof - 3.3;
 
-  // A solid building volume and open concourse sit behind the stepped seating.
-  // Split the west volume around the player entrance so it does not cap the
-  // dressing-room tunnel. Keep a lintel above the opening to preserve the
-  // stand's mass when viewed from the pitch.
+  // Keep the west touchline open so the dressing-room walk-out flows directly
+  // onto the pitch without a blocky entrance facade.
   const lowerBuildingHeight = backHeight * .55;
-  if (spec.side === "west") {
-    const entranceHalfWidth = 4.3;
-    const entranceHeight = 4.05;
-    const buildingWidth = spec.length + 2;
-    const sideWidth = buildingWidth / 2 - entranceHalfWidth;
-    const buildingDepth = totalDepth + 1.9;
-    stand.add(
-      block([sideWidth, lowerBuildingHeight, 2.5], [-(entranceHalfWidth + sideWidth / 2), lowerBuildingHeight / 2, buildingDepth], darkConcrete),
-      block([sideWidth, lowerBuildingHeight, 2.5], [entranceHalfWidth + sideWidth / 2, lowerBuildingHeight / 2, buildingDepth], darkConcrete),
-      block([entranceHalfWidth * 2, lowerBuildingHeight - entranceHeight, 2.5], [0, entranceHeight + (lowerBuildingHeight - entranceHeight) / 2, buildingDepth], darkConcrete),
-    );
-  } else {
+  if (spec.side !== "west") {
     stand.add(block([spec.length + 2, lowerBuildingHeight, 2.5], [0, lowerBuildingHeight / 2, totalDepth + 1.9], darkConcrete));
   }
   stand.add(block([spec.length + 2, 1.25, 4.3], [0, backHeight - .5, totalDepth + 1.1], concrete));
@@ -148,7 +119,7 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
         const x0 = -spec.length / 2 + section * (sectionWidth + aisleWidth);
         let spans: Array<[number, number]> = [[x0, x0 + sectionWidth]];
         if (spec.side === "west" && tierIndex === 0) {
-          const cuts: Array<[number, number]> = row < 4 ? [[-4.3, 4.3], [7.2, 20.5]] : [[-4.3, 4.3]];
+          const cuts: Array<[number, number]> = row < 4 ? [[-6.5, 6.5], [7.2, 20.5]] : [[-6.5, 6.5]];
           for (const [cutStart, cutEnd] of cuts) spans = spans.flatMap(([start, end]) => {
             if (cutEnd <= start || cutStart >= end) return [[start, end]];
             return [[start, Math.min(end, cutStart)], [Math.max(start, cutEnd), end]].filter(([a, b]) => b - a > .2) as Array<[number, number]>;
@@ -189,7 +160,7 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const stairDummy = new THREE.Object3D(); let stairIndex = 0;
     for (let aisleIndex = 0; aisleIndex < aisleCount; aisleIndex++) {
       const x = -spec.length / 2 + (aisleIndex + 1) * sectionWidth + aisleIndex * aisleWidth + aisleWidth / 2;
-      const crossesPlayerEntrance = spec.side === "west" && tierIndex === 0 && Math.abs(x) < 4.3;
+      const crossesPlayerEntrance = spec.side === "west" && tierIndex === 0 && Math.abs(x) < 6.5;
       if (crossesPlayerEntrance) continue;
       for (let row = 0; row < tier.rows; row++) {
         const z = tier.start + (row + .5) * tier.depth;
@@ -220,23 +191,15 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   // Vomitories, front wall and fascia have their own depth instead of a thin shell.
   for (let i = 0; i < spec.columns - 1; i++) {
     const x = -spec.length / 2 + (i + 1) * spec.length / spec.columns;
-    if (spec.side === "west" && Math.abs(x) < 6) continue;
+    if (spec.side === "west" && Math.abs(x) < 7) continue;
     stand.add(block([2.2, 2.35, .9], [x, 1.18, 3.8], darkConcrete));
     stand.add(block([2.5, .22, 1], [x, 2.4, 3.8], concrete));
   }
   for (let x = -spec.length / 2 + 3; x < spec.length / 2; x += 8) {
-    if (spec.side === "west" && Math.abs(x) < 5) continue;
+    if (spec.side === "west" && Math.abs(x) < 7) continue;
     stand.add(block([.075, 1.1, .075], [x, 1.2, -.5], rail));
   }
-  if (spec.side === "west") {
-    const entranceHalfWidth = 4.3;
-    const railLength = spec.length / 2 - entranceHalfWidth;
-    stand.add(
-      block([railLength, .12, .1], [-(entranceHalfWidth + railLength / 2), 1.74, -.5], rail),
-      block([railLength, .12, .1], [entranceHalfWidth + railLength / 2, 1.74, -.5], rail),
-      createPlayerEntrance(materials),
-    );
-  } else {
+  if (spec.side !== "west") {
     stand.add(block([spec.length, .12, .1], [0, 1.74, -.5], rail));
   }
 

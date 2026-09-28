@@ -12,6 +12,7 @@ interface SceneOptions { container: HTMLElement; onReadyChange: (ready: boolean)
 
 const ROOM_EXIT = -61;
 const TUNNEL_LENGTH = 16.5; // 25% shorter than the former 22-unit tunnel.
+const TUNNEL_WIDTH = 12.8;
 const TUNNEL_EXIT = ROOM_EXIT + TUNNEL_LENGTH;
 
 function context(canvas: HTMLCanvasElement) {
@@ -326,10 +327,6 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     box([18,.3,18],[-70,-.15,0],floor),
     box([18,.35,18],[-70,4.35,0],dark),
     box([.35,4.5,18],[-79,2.1,0],concrete),
-    box([18,4.5,.35],[-70,2.1,-9],concrete),
-    box([18,4.5,.35],[-70,2.1,9],concrete),
-    box([.35,4.5,5.7],[ROOM_EXIT,2.1,-6.15],concrete),
-    box([.35,4.5,5.7],[ROOM_EXIT,2.1,6.15],concrete),
   );
   // Large matte ceiling panels, seams and paired linear lights create strong lines into the tunnel.
   for (let i = 0; i < 6; i += 1) scene.add(box([2.72, .08, 16.9], [-77.45 + i * 2.98, 4.12, 0], i % 2 ? metal : dark));
@@ -350,23 +347,12 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const scoreboard=new THREE.Mesh(new THREE.PlaneGeometry(3.3,1.38),scoreMat);scoreboard.position.set(-61.305,2.68,5.55);scoreboard.rotation.y=-Math.PI/2;scene.add(scoreboardFrame,scoreboard);
   const ballTexture=footballTexture(), footballMat = new THREE.MeshStandardMaterial({map:ballTexture,roughness:.72});
   scene.add(createEquipmentArea(lowPower, footballMat, dressingKit));
-  // Portal structure is built around the original opening; the walk-out coordinates remain untouched.
-  scene.add(
-    box([.55,4.55,.58],[ROOM_EXIT-.06,2.15,-3.33],metal,!lowPower),
-    box([.55,4.55,.58],[ROOM_EXIT-.06,2.15,3.33],metal,!lowPower),
-    box([.55,.58,7.22],[ROOM_EXIT-.06,4.24,0],metal,!lowPower),
-    box([.14,3.75,.08],[ROOM_EXIT-.38,2.03,-3.02],greenLight),
-    box([.14,3.75,.08],[ROOM_EXIT-.38,2.03,3.02],greenLight),
-    box([.14,.08,6.12],[ROOM_EXIT-.38,3.88,0],greenLight),
-  );
-
   const centre=ROOM_EXIT+TUNNEL_LENGTH/2;
-  scene.add(box([TUNNEL_LENGTH,.25,6.4],[centre,-.1,0],dark),box([TUNNEL_LENGTH,.28,6.4],[centre,3.9,0],dark),box([TUNNEL_LENGTH,4,.25],[centre,1.9,-3.2],concrete),box([TUNNEL_LENGTH,4,.25],[centre,1.9,3.2],concrete));
+  // Keep the tunnel open at the sides so its walls do not obscure the dressing room or pitch.
+  scene.add(box([TUNNEL_LENGTH,.25,TUNNEL_WIDTH],[centre,-.1,0],dark),box([TUNNEL_LENGTH,.28,TUNNEL_WIDTH],[centre,3.9,0],dark));
   const tunnelLights=new THREE.InstancedMesh(new THREE.BoxGeometry(1.8,.08,.32),light,5);
   for(let i=0;i<5;i+=1){dummy.position.set(ROOM_EXIT+(i+.5)*TUNNEL_LENGTH/5,3.72,0);dummy.updateMatrix();tunnelLights.setMatrixAt(i,dummy.matrix);} scene.add(tunnelLights);
-  const bannerTexture=labelTexture("GAFFER",lowPower?512:1024), bannerMat=new THREE.MeshStandardMaterial({map:bannerTexture,emissive:0x062219,emissiveIntensity:.22,roughness:.7});
-  for(const side of [-1,1]) for(const x of [-57.5,-51.2,-46.2]){const banner=box([4.5,1.15,.1],[x,2.05,side*3.055],bannerMat);if(side>0)banner.rotation.y=Math.PI;scene.add(banner);}
-  scene.add(box([.5,4.55,.55],[TUNNEL_EXIT,2.15,-3.3],metal),box([.5,4.55,.55],[TUNNEL_EXIT,2.15,3.3],metal),box([.5,.55,7.15],[TUNNEL_EXIT,4.25,0],metal),box([10.5,.18,6.4],[-39.25,-.04,0],dark));
+  scene.add(box([10.5,.18,TUNNEL_WIDTH],[-39.25,-.04,0],dark));
 
   const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassMat=new THREE.MeshStandardMaterial({map:grassTexture,roughness:.96});const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
   const ball=new THREE.Mesh(new THREE.SphereGeometry(.22,lowPower?12:18,lowPower?8:12),footballMat);ball.position.set(0,.225,0);ball.rotation.set(.16,-.5,.08);ball.castShadow=!lowPower;scene.add(ball);
@@ -398,5 +384,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();tacticsMap.dispose();numberMaps.forEach(value=>value.dispose());bannerTexture.dispose();scoreTexture.dispose();ballTexture.dispose();stadium.textures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();tacticsMap.dispose();numberMaps.forEach(value=>value.dispose());scoreTexture.dispose();ballTexture.dispose();stadium.textures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
