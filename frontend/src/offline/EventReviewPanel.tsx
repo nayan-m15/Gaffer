@@ -145,38 +145,38 @@ export function EventReviewPanel({
   const openReviews = reviews.filter((review) => review.status === "open");
   const history = reviews.filter((review) => review.status === "resolved");
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#090a0b]/80 p-4 backdrop-blur-sm">
-      <section className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#2a2e31] bg-[#111315] p-5 shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="event-review-title">
+      <section className="themed-scrollbar max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border-default bg-popover p-5 text-popover-foreground shadow-2xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-oswald text-xl tracking-wide text-white">
+          <h2 id="event-review-title" className="font-oswald text-xl tracking-wide text-foreground">
             Event review
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-sm text-[#c5ced6]"
+            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Close
           </button>
         </div>
         {error ? (
-          <p role="alert" className="mt-3 text-sm text-[#ff5b5f]">
+          <p role="alert" className="mt-3 text-sm text-danger">
             {error}
           </p>
         ) : null}
         {openReviews.length === 0 ? (
-          <p className="mt-5 text-sm text-[#8e9ba8]">No events need review.</p>
+          <p className="mt-5 text-sm text-muted-foreground">No events need review.</p>
         ) : null}
         <div className="mt-4 space-y-3">
           {openReviews.map((review) => (
             <article
               key={review.id}
-              className="rounded-xl border border-[#ffbe2e]/35 bg-[#0c1218] p-4"
+              className="rounded-xl border border-warning/35 bg-surface-nested p-4"
             >
-              <p className="text-sm font-semibold text-[#ffbe2e]">
+              <p className="text-sm font-semibold text-warning">
                 {review.reason.replaceAll("_", " ")}
               </p>
-              <ul className="mt-2 space-y-1 text-xs text-[#c5ced6]">
+              <ul className="mt-2 space-y-1 text-xs text-secondary-foreground">
                 {review.observations.map((observation) => (
                   <li key={observation.id}>
                     {observation.team}{" "}
@@ -197,19 +197,19 @@ export function EventReviewPanel({
               </ul>
               {queuedDecisions[review.id] &&
               queuedDecisions[review.id].state !== "rejected" ? (
-                <p className="mt-2 text-xs text-[#ffbe2e]">
+                <p className="mt-2 text-xs text-warning">
                   Resolution{" "}
                   {queuedDecisions[review.id].state.replaceAll("_", " ")}.
                 </p>
               ) : null}
               {queuedDecisions[review.id]?.state === "rejected" ? (
-                <p role="alert" className="mt-2 text-xs text-[#ff5b5f]">
+                <p role="alert" className="mt-2 text-xs text-danger">
                   {queuedDecisions[review.id].error ??
                     "The server rejected this decision. Refresh the review."}
                 </p>
               ) : null}
               {team?.role !== "coach" ? (
-                <p className="mt-2 text-xs text-[#c5ced6]">
+                <p className="mt-2 text-xs text-muted-foreground">
                   A coach resolves this review.
                 </p>
               ) : null}
@@ -227,7 +227,7 @@ export function EventReviewPanel({
                     team?.role !== "coach"
                   }
                   onClick={() => void resolve(review.id, "same_event")}
-                  className="rounded-md bg-[#00a878] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  className="rounded-md bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-text-disabled"
                 >
                   Same event
                 </button>
@@ -244,7 +244,7 @@ export function EventReviewPanel({
                     team?.role !== "coach"
                   }
                   onClick={() => void resolve(review.id, "separate_events")}
-                  className="rounded-md border border-white/20 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  className="rounded-md border border-border-default bg-surface-elevated px-3 py-2 text-xs font-bold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-text-disabled"
                 >
                   Separate events
                 </button>
@@ -253,9 +253,9 @@ export function EventReviewPanel({
           ))}
         </div>
         {history.length > 0 ? (
-          <section className="mt-6 border-t border-white/10 pt-4">
-            <h3 className="text-sm font-semibold text-white">Review history</h3>
-            <ul className="mt-2 space-y-1 text-xs text-[#c5ced6]">
+          <section className="mt-6 border-t border-border-subtle pt-4">
+            <h3 className="text-sm font-semibold text-foreground">Review history</h3>
+            <ul className="mt-2 space-y-1 text-xs text-secondary-foreground">
               {history.map((review) => (
                 <li
                   key={review.id}
@@ -287,7 +287,7 @@ export function EventReviewPanel({
                             : "same_event",
                         )
                       }
-                      className="rounded border border-white/20 px-2 py-1 text-white disabled:opacity-50"
+                      className="rounded border border-border-default bg-surface-elevated px-2 py-1 text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-text-disabled"
                     >
                       Reconsider
                     </button>

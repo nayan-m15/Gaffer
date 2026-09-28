@@ -55,6 +55,7 @@ import type {
   CreateInjuryInput,
   InjuryListItem,
 } from "./types";
+import "./injuries-background.css";
 
 type TabValue = "overview" | "history";
 
@@ -73,13 +74,13 @@ function SummaryTile({
   tone?: "default" | "warning" | "good";
 }) {
   return (
-    <AppCard className="p-4">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+    <AppCard className="flex min-h-[100px] min-w-0 flex-col p-3 sm:block sm:min-h-0 sm:p-4">
+      <p className="text-[11px] leading-tight uppercase tracking-wide text-muted-foreground sm:leading-normal">
         {label}
       </p>
       <p
         className={cn(
-          "mt-1 font-display text-2xl font-semibold",
+          "mt-auto pt-2 font-display text-2xl font-semibold sm:mt-1 sm:pt-0",
           tone === "warning" && "text-red-400",
           tone === "good" && "text-emerald-400",
           (!tone || tone === "default") && "text-foreground",
@@ -361,7 +362,10 @@ export default function InjuryRecoveryPage() {
   );
 
   return (
-    <>
+    <div className="injuries-page relative isolate min-h-full">
+      <div className="injuries-page-backdrop" aria-hidden="true" />
+
+      <div className="relative z-10">
       <MultiStepLoader
         loading={isDownloadingReport}
         loadingStates={[
@@ -413,7 +417,7 @@ export default function InjuryRecoveryPage() {
           </AppCard>
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               <SummaryTile
                 label="Currently injured"
                 value={summary.openCount}
@@ -631,6 +635,7 @@ export default function InjuryRecoveryPage() {
           void queryClient.invalidateQueries({ queryKey: ["athletes"] });
         }}
       />
-    </>
+      </div>
+    </div>
   );
 }

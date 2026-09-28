@@ -29,12 +29,12 @@ export function PwaUpdatePrompt() {
   if (!needRefresh) return null;
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-[100] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-xl border border-[#16d99a]/50 bg-[#111315] p-3 text-sm text-white shadow-2xl">
+    <div role="status" className="fixed inset-x-3 bottom-3 z-[100] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-xl border border-primary/45 bg-popover p-3 text-sm text-popover-foreground shadow-2xl">
       <p>A Gaffer update is ready. Apply it on every match device.</p>
       <div className="flex shrink-0 gap-2">
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-[#9ca39f] hover:text-white"
+          className="rounded-md px-2 py-1 text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setNeedRefresh(false)}
         >
           Later
@@ -42,7 +42,7 @@ export function PwaUpdatePrompt() {
         <button
           type="button"
           disabled={updating}
-          className="rounded-md bg-[#16d99a] px-3 py-1 font-semibold text-[#05130f] disabled:opacity-60"
+          className="rounded-md bg-primary px-3 py-1 font-semibold text-primary-foreground hover:bg-primary/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-text-disabled"
           onClick={() => {
             setUpdating(true);
             void updateServiceWorker(true);

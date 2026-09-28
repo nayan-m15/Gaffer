@@ -1,0 +1,27 @@
+/* Theme-aware calendar artwork behind the events pages. Mobile artwork stays
+ * active through tablet sizes; wide screens use the desktop composition. */
+.events-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: url("/eventsBgLightMobile.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.dark .events-page-backdrop {
+  background-image: url("/eventsBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .events-page-backdrop {
+    background-image: url("/eventsBgLight.png");
+  }
+
+  .dark .events-page-backdrop {
+    background-image: url("/eventsBgDark.png");
+  }
+}
