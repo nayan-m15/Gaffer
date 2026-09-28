@@ -8,6 +8,8 @@ import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
   athletes,
+  competitionFixtures,
+  competitionTeams,
   eventLineups,
   events,
   friendlyFixtures,
@@ -49,6 +51,10 @@ export interface FriendlyOpponentLineup {
   teamId: string | null;
   teamName: string | null;
   players: FriendlyOpponentLineupPlayer[];
+  formationId?: string | null;
+  pitchAssignments?: Record<string, string | null> | null;
+  customPositions?: typeof eventLineups.$inferSelect.customPositions;
+  confirmedAt?: Date | null;
 }
 
 /** The neutral result for lookups where no shared lineup can exist. */
@@ -247,6 +253,76 @@ export class FriendlyFixturesService {
       return unavailableFriendlyOpponentLineup();
     }
 
+    if (fixture.status !== 'accepted') {
+      const [opponentTeam] = await this.databaseService.database
+        .select({ name: teams.name })
+        .from(teams)
+        .where(eq(teams.id, opponentTeamId))
+        .limit(1);
+      return {
+        available: false,
+        teamId: opponentTeamId,
+        teamName: opponentTeam?.name ?? null,
+        players: [],
+      };
+    }
+    return this.resolveConfirmedOpponentEvent(opponentTeamId, fixture.id);
+  }
+
+  /**
+   * Generated league/cup fixtures can share an exact lineup only between
+   * their two actual, linked Gaffer teams. Never resolve by display name or
+   * accept a caller-supplied opponent ID as proof of fixture membership.
+   */
+  async resolveCompetitionOpponentLineup(
+    fixtureId: string,
+    ownTeamId: string,
+    expectedOpponentTeamId?: string,
+  ): Promise<FriendlyOpponentLineup> {
+    const [fixture] = await this.databaseService.database
+      .select()
+      .from(competitionFixtures)
+      .where(eq(competitionFixtures.id, fixtureId))
+      .limit(1);
+    if (!fixture?.homeCompetitionTeamId || !fixture.awayCompetitionTeamId) {
+      return unavailableFriendlyOpponentLineup();
+    }
+
+    const participants = await this.databaseService.database
+      .select({ id: competitionTeams.id, teamId: competitionTeams.teamId })
+      .from(competitionTeams)
+      .where(
+        and(
+          eq(competitionTeams.competitionId, fixture.competitionId),
+          inArray(competitionTeams.id, [
+            fixture.homeCompetitionTeamId,
+            fixture.awayCompetitionTeamId,
+          ]),
+        ),
+      );
+    const ownParticipant = participants.find((row) => row.teamId === ownTeamId);
+    if (!ownParticipant) return unavailableFriendlyOpponentLineup();
+    const opponentParticipantId =
+      ownParticipant.id === fixture.homeCompetitionTeamId
+        ? fixture.awayCompetitionTeamId
+        : fixture.homeCompetitionTeamId;
+    const opponentTeamId = participants.find(
+      (row) => row.id === opponentParticipantId,
+    )?.teamId;
+    if (!opponentTeamId || opponentTeamId === ownTeamId ||
+        (expectedOpponentTeamId && opponentTeamId !== expectedOpponentTeamId)) {
+      return unavailableFriendlyOpponentLineup();
+    }
+
+    return this.resolveConfirmedOpponentEvent(opponentTeamId, fixtureId, true);
+  }
+
+  /** One shared projection for pre-kickoff snapshots and post-kickoff squad rows. */
+  private async resolveConfirmedOpponentEvent(
+    opponentTeamId: string,
+    fixtureId: string,
+    competition = false,
+  ): Promise<FriendlyOpponentLineup> {
     const [opponentTeam] = await this.databaseService.database
       .select({ name: teams.name })
       .from(teams)
@@ -260,16 +336,14 @@ export class FriendlyFixturesService {
       players: [],
     };
 
-    if (fixture.status !== 'accepted') {
-      return base;
-    }
-
     const [opponentEvent] = await this.databaseService.database
       .select({ id: events.id })
       .from(events)
       .where(
         and(
-          eq(events.friendlyFixtureId, fixture.id),
+          competition
+            ? eq(events.competitionFixtureId, fixtureId)
+            : eq(events.friendlyFixtureId, fixtureId),
           eq(events.teamId, opponentTeamId),
         ),
       )
@@ -357,6 +431,10 @@ export class FriendlyFixturesService {
     return {
       ...base,
       available: true,
+      formationId: opponentLineup.formationId,
+      pitchAssignments: opponentLineup.pitchAssignments,
+      customPositions: opponentLineup.customPositions,
+      confirmedAt: opponentLineup.confirmedAt,
       players: lineupAthletes.map((athlete) => ({
         ...athlete,
         started: startingIds.has(athlete.id),
