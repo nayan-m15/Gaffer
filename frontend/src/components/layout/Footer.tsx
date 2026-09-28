@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { SportLogo } from "@/components/brand/SportLogo";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
 
 interface FooterLink {
   label: string;
@@ -35,6 +37,14 @@ const LEGAL_FOOTER_LINKS: FooterLink[] = [
   { label: "Privacy Policy", path: "/privacy-policy.html" },
 ];
 
+const TEAM_REQUIRED_FOOTER_PATHS = new Set([
+  "/athletes",
+  "/events",
+  "/live-logger",
+  "/statistics",
+  "/team",
+]);
+
 /**
  * Application footer for authenticated views.
  *
@@ -45,12 +55,15 @@ const LEGAL_FOOTER_LINKS: FooterLink[] = [
  * read-only /player/* routes.
  */
 export function Footer({ variant = "coach", className }: FooterProps) {
+  const { team } = useAuth();
   const year = new Date().getFullYear();
   const returnTo = variant === "player" ? "/player/dashboard" : "/dashboard";
   const links = [
     ...(variant === "player" ? PLAYER_FOOTER_LINKS : COACH_FOOTER_LINKS),
     ...LEGAL_FOOTER_LINKS,
   ];
+  const lockTeamLinks =
+    variant !== "player" && !team && getPendingTeamInviteToken() === null;
 
   return (
     <footer className={cn("mx-auto mt-3 w-full max-w-[1600px] border-t border-border/50 px-3 py-2 text-[10px] text-muted-foreground sm:mt-8 sm:px-10 sm:py-6 sm:text-sm", className)}>
@@ -92,7 +105,10 @@ export function Footer({ variant = "coach", className }: FooterProps) {
 
         <nav aria-label="Footer navigation" className="hidden sm:block">
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            {links.map((link) => (
+            {links.map((link) => {
+              const lockLink =
+                lockTeamLinks && TEAM_REQUIRED_FOOTER_PATHS.has(link.path);
+              return (
               <li key={link.path}>
                 {link.path.endsWith(".html") ? (
                   <a
@@ -101,6 +117,14 @@ export function Footer({ variant = "coach", className }: FooterProps) {
                   >
                     {link.label}
                   </a>
+                ) : lockLink ? (
+                  <span
+                    className="cursor-not-allowed opacity-50 blur-[2px] transition-[filter,opacity] duration-700 motion-reduce:transition-none"
+                    title="Create your team first"
+                    aria-disabled="true"
+                  >
+                    {link.label}
+                  </span>
                 ) : (
                   <Link
                     to={link.path}
@@ -110,7 +134,8 @@ export function Footer({ variant = "coach", className }: FooterProps) {
                   </Link>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </nav>
 

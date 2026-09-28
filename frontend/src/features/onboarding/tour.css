@@ -5,9 +5,10 @@
   z-index: 1000000000;
   display: block;
   overflow: visible;
-  min-width: 280px;
-  max-width: 340px;
-  padding: 1.25rem 1.35rem 1.1rem;
+  width: min(380px, 90vw);
+  min-width: min(380px, 90vw);
+  max-width: min(380px, 90vw);
+  padding: 1.6rem 1.7rem 1.4rem;
   color: var(--popover-foreground);
   background-color: var(--popover);
   border: 1px solid color-mix(in oklab, var(--primary) 38%, var(--border));
@@ -29,8 +30,8 @@
 .gaffer-tour-progress {
   position: relative;
   z-index: 1;
-  margin: 0 3rem 0.35rem 0;
-  font-size: 0.6875rem;
+  margin: 0 4.25rem 0.4rem 0;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -41,9 +42,9 @@
   position: relative;
   z-index: 1;
   display: block;
-  margin: 0 3rem 0 0;
+  margin: 0 4.25rem 0 0;
   font-family: var(--font-display), Georgia, "Times New Roman", serif;
-  font-size: 1.25rem;
+  font-size: 21px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.02em;
@@ -54,20 +55,20 @@
   position: relative;
   z-index: 1;
   display: block;
-  margin: 0.5rem 0 0;
-  font-size: 0.875rem;
+  margin: 0.55rem 0 0;
+  font-size: 16px;
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--muted-foreground);
 }
 
 .gaffer-tour-pitch {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 16px;
+  right: 16px;
   z-index: 1;
-  width: 36px;
-  height: 54px;
+  width: 47px;
+  height: 70px;
   color: var(--muted-foreground);
 }
 
@@ -88,21 +89,21 @@
   gap: 0.4rem 0.65rem;
   margin-top: 0.85rem;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: 12px;
 }
 
 .gaffer-tour-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.7rem;
-  padding: 0.12rem 0.38rem;
+  min-width: 1.85rem;
+  padding: 0.16rem 0.42rem;
   border: 1px solid var(--border);
   border-bottom-width: 2px;
   border-radius: 5px;
   background: var(--muted);
   color: var(--foreground);
-  font-size: 0.625rem;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.2;
@@ -137,11 +138,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
-  padding: 0.35rem 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   cursor: pointer;
-  font-size: 0.8125rem;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -191,7 +192,7 @@
   flex-shrink: 0;
   margin-right: auto;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
   text-decoration: underline;
