@@ -1,12 +1,12 @@
 /**
  * Core state management hook for the Team Management tactical board.
  *
- * Manages formation selection, starting XI assignments, substitutes, and
+ * Manages formation selection, starting-lineup assignments, substitutes, and
  * all drag-and-drop operations while enforcing the hard team rules:
  *
- * - Maximum 11 players on the pitch
- * - Exactly 1 goalkeeper in a complete XI
- * - No player in both starting XI and substitutes simultaneously
+ * - Maximum players on the pitch is defined by the selected formation
+ * - Exactly 1 goalkeeper in a complete lineup
+ * - No player in both the starting lineup and substitutes simultaneously
  * - GK position only accepts goalkeepers
  */
 
@@ -16,8 +16,21 @@ import {
   FORMATIONS,
   DEFAULT_FORMATION_ID,
   autoFillFormation,
+  createCustomPositionsFromFormation,
+  getDefaultCustomPositions,
+  getFormationPlayerCount,
+  getPositionRole,
+  inferCustomPositionRole,
+  isCustomFormationId,
+  remapPlayers,
+  resolveFormation,
 } from "./formations";
-import type { DragItem, PitchAssignments, SavedLineup } from "./types";
+import type {
+  DragItem,
+  FormationPosition,
+  PitchAssignments,
+  SavedLineup,
+} from "./types";
 
 /** Check whether a position string represents a goalkeeper. */
 function isGoalkeeper(position: string | null): boolean {
@@ -25,9 +38,12 @@ function isGoalkeeper(position: string | null): boolean {
 }
 
 /** Build an empty assignments map for a given formation. */
-function emptyAssignments(formationId: string): PitchAssignments {
-  const formation = FORMATIONS[formationId];
-  if (!formation) return {};
+function emptyAssignments(
+  formationId: string,
+  customPositions?: FormationPosition[] | null,
+): PitchAssignments {
+  if (!FORMATIONS[formationId]) return {};
+  const formation = resolveFormation(formationId, customPositions);
   const assignments: PitchAssignments = {};
   for (const pos of formation.positions) {
     assignments[pos.id] = null;
@@ -40,6 +56,8 @@ export function useLineupState(athletes: BackendAthlete[]) {
   const [assignments, setAssignments] = useState<PitchAssignments>(
     () => emptyAssignments(DEFAULT_FORMATION_ID),
   );
+  const [customPositions, setCustomPositions] = useState<FormationPosition[] | null>(null);
+  const [customEditMode, setCustomEditMode] = useState(false);
   const [substituteIds, setSubstituteIds] = useState<string[]>([]);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +75,21 @@ export function useLineupState(athletes: BackendAthlete[]) {
    */
   const loadLineup = useCallback(
     (saved: SavedLineup | null) => {
-      const restoredFormation = saved ? FORMATIONS[saved.formationId] : undefined;
+      const savedFormationExists = Boolean(saved && FORMATIONS[saved.formationId]);
+      const restoredCustomPositions =
+        saved && savedFormationExists && isCustomFormationId(saved.formationId)
+          ? saved.customPositions ??
+            getDefaultCustomPositions(getFormationPlayerCount(saved.formationId))
+          : null;
+      const restoredFormation =
+        saved && savedFormationExists
+          ? resolveFormation(saved.formationId, restoredCustomPositions)
+          : null;
 
       if (!saved || !restoredFormation) {
         setFormationIdState(DEFAULT_FORMATION_ID);
+        setCustomPositions(null);
+        setCustomEditMode(false);
         setAssignments(emptyAssignments(DEFAULT_FORMATION_ID));
         setSubstituteIds(athletes.map((a) => a.id));
         setAutoFillEnabled(false);
@@ -89,7 +118,6 @@ export function useLineupState(athletes: BackendAthlete[]) {
           placed.add(athleteId);
         }
       }
-      // Newly added athletes (not in the saved lineup at all) join the bench.
       for (const athlete of athletes) {
         if (!placed.has(athlete.id)) {
           restoredSubs.push(athlete.id);
@@ -98,6 +126,8 @@ export function useLineupState(athletes: BackendAthlete[]) {
       }
 
       setFormationIdState(saved.formationId);
+      setCustomPositions(restoredCustomPositions);
+      setCustomEditMode(false);
       setAssignments(restoredAssignments);
       setSubstituteIds(restoredSubs);
       setAutoFillEnabled(false);
@@ -108,7 +138,11 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
   /* ── Derived data ──────────────────────────────────────────────────────── */
 
-  const formation = FORMATIONS[formationId];
+  const formation = useMemo(
+    () => resolveFormation(formationId, customPositions),
+    [formationId, customPositions],
+  );
+  const isCustomFormation = isCustomFormationId(formationId);
 
   /** Set of athlete IDs currently on the pitch. */
   const pitchAthleteIds = useMemo(() => {
@@ -122,8 +156,11 @@ export function useLineupState(athletes: BackendAthlete[]) {
   /** Number of players currently on the pitch. */
   const pitchCount = pitchAthleteIds.size;
 
-  /** Whether the starting XI is complete (exactly 11). */
-  const isXiComplete = pitchCount === 11;
+  /** Required starters for the selected match format. */
+  const lineupSize = formation?.playerCount ?? 11;
+
+  /** Whether the starting lineup is complete for the selected format. */
+  const isLineupComplete = pitchCount === lineupSize;
 
   /** Whether exactly one goalkeeper is assigned to the GK position. */
   const hasGoalkeeper = useMemo(() => {
@@ -156,15 +193,19 @@ export function useLineupState(athletes: BackendAthlete[]) {
         .trim()
         .toUpperCase();
 
-      // Player is considered "misplaced" when they are not playing
-      // their exact recorded position.
-      if (athletePosition && athletePosition !== slotPosition) {
+      if (isCustomFormation) {
+        const athleteRole = getPositionRole(athletePosition);
+        if (athleteRole && athleteRole !== pos.role) {
+          ids.push(athleteId);
+        }
+      } else if (athletePosition && athletePosition !== slotPosition) {
+        // Preset formations keep the existing exact-position warning.
         ids.push(athleteId);
       }
     }
 
     return ids;
-  }, [formation, assignments, athletes]);
+  }, [formation, assignments, athletes, isCustomFormation]);
 
   const hasMisplacedPlayers = misplacedAthleteIds.length > 0;
 
@@ -186,11 +227,14 @@ export function useLineupState(athletes: BackendAthlete[]) {
    *
    * Only available players are auto-assigned: injured and suspended athletes
    * stay on the bench (clearly badged) rather than being placed into the
-   * starting XI automatically. Injured athletes also cannot be placed on the
+   * starting lineup automatically. Injured athletes also cannot be placed on the
    * pitch manually.
    */
   const runAutoFill = useCallback(
-    (targetFormationId: string) => {
+    (
+      targetFormationId: string,
+      targetCustomPositions: FormationPosition[] | null = customPositions,
+    ) => {
       const eligibleIds = athletes
         .filter((a) => a.status === "available")
         .map((a) => a.id);
@@ -201,7 +245,12 @@ export function useLineupState(athletes: BackendAthlete[]) {
       const {
         assignments: newAssignments,
         substituteIds: newSubs,
-      } = autoFillFormation(targetFormationId, eligibleIds, getPosition);
+      } = autoFillFormation(
+        targetFormationId,
+        eligibleIds,
+        getPosition,
+        targetCustomPositions,
+      );
 
       setAssignments(newAssignments);
       // Unavailable players (injured/suspended) remain on the bench.
@@ -210,7 +259,7 @@ export function useLineupState(athletes: BackendAthlete[]) {
         .map((a) => a.id);
       setSubstituteIds([...newSubs, ...unavailableIds]);
     },
-    [athletes],
+    [athletes, customPositions],
   );
 
   /* ── Formation change ──────────────────────────────────────────────────── */
@@ -220,25 +269,106 @@ export function useLineupState(athletes: BackendAthlete[]) {
       if (newFormationId === formationId) return;
       if (!FORMATIONS[newFormationId]) return;
 
-      setFormationIdState(newFormationId);
+      const nextPlayerCount = getFormationPlayerCount(newFormationId);
+      const nextCustomPositions = isCustomFormationId(newFormationId)
+        ? customPositions?.length === nextPlayerCount
+          ? customPositions
+          : formation.playerCount === nextPlayerCount
+            ? createCustomPositionsFromFormation(formation)
+            : getDefaultCustomPositions(nextPlayerCount)
+        : null;
 
-      // Auto-fill ON:
-      // Re-run autofill for the newly selected formation.
+      setFormationIdState(newFormationId);
+      if (isCustomFormationId(newFormationId)) {
+        setCustomPositions(nextCustomPositions);
+      }
+      setCustomEditMode(false);
+
       if (autoFillEnabled) {
-        runAutoFill(newFormationId);
+        runAutoFill(newFormationId, nextCustomPositions);
         setError(null);
         return;
       }
 
-      // Auto-fill OFF:
-      // Changing formation starts with an empty pitch.
-      // Nothing is automatically placed.
-      setAssignments(emptyAssignments(newFormationId));
-      setSubstituteIds(athletes.map((a) => a.id));
+      const {
+        assignments: remappedAssignments,
+        overflowToSubs,
+      } = remapPlayers(
+        formationId,
+        newFormationId,
+        assignments,
+        customPositions,
+        nextCustomPositions,
+      );
+      setAssignments(remappedAssignments);
+      setSubstituteIds((current) => [
+        ...new Set([...current, ...overflowToSubs]),
+      ]);
       setError(null);
     },
-    [formationId, athletes, autoFillEnabled, runAutoFill],
+    [
+      formationId,
+      assignments,
+      customPositions,
+      autoFillEnabled,
+      runAutoFill,
+      formation,
+    ],
   );
+
+  const moveCustomPosition = useCallback(
+    (positionId: string, x: number, y: number) => {
+      if (!isCustomFormationId(formationId)) return;
+      const playerCount = getFormationPlayerCount(formationId);
+      const current =
+        customPositions ?? getDefaultCustomPositions(playerCount);
+      const target = current.find((position) => position.id === positionId);
+      if (!target || target.role === "GK") return;
+
+      const snappedX = Math.min(92, Math.max(8, Math.round(x / 2) * 2));
+      const snappedY = Math.min(86, Math.max(8, Math.round(y / 2) * 2));
+      const collides = current.some(
+        (position) =>
+          position.id !== positionId &&
+          Math.hypot(position.x - snappedX, position.y - snappedY) < 8,
+      );
+      if (collides) return;
+
+      const role = inferCustomPositionRole(snappedY);
+      setCustomPositions(
+        current.map((position) =>
+          position.id === positionId
+            ? {
+                ...position,
+                x: snappedX,
+                y: snappedY,
+                role,
+                label: role,
+              }
+            : position,
+        ),
+      );
+      setError(null);
+    },
+    [customPositions, formationId],
+  );
+
+  const resetCustomPositions = useCallback(() => {
+    if (!isCustomFormationId(formationId)) return;
+    setCustomPositions(
+      getDefaultCustomPositions(getFormationPlayerCount(formationId)),
+    );
+    setError(null);
+  }, [formationId]);
+
+  const toggleCustomEditMode = useCallback(() => {
+    if (!isCustomFormationId(formationId)) {
+      setCustomEditMode(false);
+      return;
+    }
+    setCustomEditMode((current) => !current);
+    setError(null);
+  }, [formationId]);
 
   /* ── Drag start / end ──────────────────────────────────────────────────── */
 
@@ -265,9 +395,9 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
       const athlete = athletes.find((a) => a.id === athleteId);
 
-      // Injured athletes are not eligible for a starting-XI position.
+      // Injured athletes are not eligible for a starting-lineup position.
       if (athlete?.status === "injured") {
-        setError("Injured players cannot be placed in the starting XI.");
+        setError("Injured players cannot be placed in the starting lineup.");
         return;
       }
 
@@ -277,10 +407,10 @@ export function useLineupState(athletes: BackendAthlete[]) {
         return;
       }
 
-      // Validate: max 11 (only if the player is genuinely new to the pitch)
+      // Validate the selected format's pitch capacity.
       const targetOccupant = assignments[targetPositionId];
-      if (!targetOccupant && pitchCount >= 11) {
-        setError("Starting XI is full. Remove a player first.");
+      if (!targetOccupant && pitchCount >= lineupSize) {
+        setError("Starting lineup is full. Remove a player first.");
         return;
       }
 
@@ -310,7 +440,14 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
       setError(null);
     },
-    [formation, pitchAthleteIds, assignments, pitchCount, athletes],
+    [
+      formation,
+      pitchAthleteIds,
+      assignments,
+      pitchCount,
+      lineupSize,
+      athletes,
+    ],
   );
 
   /**
@@ -411,11 +548,11 @@ export function useLineupState(athletes: BackendAthlete[]) {
   /* ── Reset & auto-fill ─────────────────────────────────────────────────── */
 
   const resetLineup = useCallback(() => {
-    setAssignments(emptyAssignments(formationId));
+    setAssignments(emptyAssignments(formationId, customPositions));
     setSubstituteIds(athletes.map((a) => a.id));
     setAutoFillEnabled(false);
     setError(null);
-  }, [formationId, athletes]);
+  }, [formationId, customPositions, athletes]);
 
   const toggleAutoFill = useCallback(() => {
     // Turning Auto-fill OFF:
@@ -439,13 +576,19 @@ export function useLineupState(athletes: BackendAthlete[]) {
     // State
     formationId,
     formation,
+    isCustomFormation,
+    customPositions: isCustomFormation ? formation.positions : null,
+    customEditMode,
     assignments,
     substituteIds,
     dragItem,
     error,
     autoFillEnabled,
     pitchCount,
-    isXiComplete,
+    lineupSize,
+    isLineupComplete,
+    // Backwards-compatible alias for existing call sites while they migrate.
+    isXiComplete: isLineupComplete,
     hasGoalkeeper,
     misplacedAthleteIds,
     hasMisplacedPlayers,
@@ -455,10 +598,15 @@ export function useLineupState(athletes: BackendAthlete[]) {
 
     // Derived athlete counts
     totalAthletes: athletes.length,
-    hasEnoughForXi: athletes.length >= 11,
+    hasEnoughPlayers: athletes.length >= lineupSize,
+    // Backwards-compatible alias for existing call sites while they migrate.
+    hasEnoughForXi: athletes.length >= lineupSize,
 
     // Actions
     setFormation,
+    moveCustomPosition,
+    resetCustomPositions,
+    toggleCustomEditMode,
     startDrag,
     endDrag,
     handleDrop,

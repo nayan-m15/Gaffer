@@ -153,8 +153,9 @@ export const startMatchSchema = z
     isHome: z.boolean(),
     startingAthleteIds: z
       .array(z.uuid())
-      .length(11, 'A starting XI must contain exactly 11 athletes.')
-      .refine((ids) => new Set(ids).size === 11, {
+      .min(1, 'A starting lineup must contain at least one athlete.')
+      .max(11, 'A starting lineup cannot contain more than 11 athletes.')
+      .refine((ids) => new Set(ids).size === ids.length, {
         message: 'Starting athletes must be unique.',
       }),
     // Final match-day bench after on-the-day swaps. When omitted, every
@@ -312,7 +313,7 @@ export class StartMatchBodyDto {
   @ApiProperty({
     type: [String],
     format: 'uuid',
-    minItems: 11,
+    minItems: 1,
     maxItems: 11,
   })
   startingAthleteIds!: string[];
