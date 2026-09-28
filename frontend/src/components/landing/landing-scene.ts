@@ -390,15 +390,14 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const { grassTexture, stadium } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
   const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
-  let idleMotion = 0;
-  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion){position.y+=Math.sin(progress*Math.PI*30)*.014;position.x+=Math.sin(idleMotion)*.42;position.z+=Math.cos(idleMotion*.72)*.32;}camera.position.copy(position);
+  const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);
     // Once fully outside, pan across the complete right side, then finish on the left stand.
     const rightSweep=smooth(.58,.73,progress),leftSweep=smooth(.76,.98,progress);
     const yaw=reducedMotion?0:rightSweep*1.12-leftSweep*2.18;
     direction.set(Math.cos(yaw),smooth(.58,.78,progress)*.06,Math.sin(yaw));target.copy(position).addScaledVector(direction,18);camera.lookAt(target);};
   const render=()=>{if(disposed)return;renderer.render(scene,camera);if(!readySent){readySent=true;onReadyChange(true);}};
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
-  const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(difference)<.00008)currentProgress=targetProgress;if(!reducedMotion)idleMotion+=lowPower?.006:.003;updateCamera(currentProgress);render();frame=requestAnimationFrame(animate);};
+  const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;if(Math.abs(difference)<.00008){currentProgress=targetProgress;updateCamera(currentProgress);render();return;}currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(targetProgress-currentProgress)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
