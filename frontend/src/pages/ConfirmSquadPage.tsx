@@ -155,6 +155,23 @@ function startingIdsFromGamePlan(
   return new Set(ids);
 }
 
+/** JSONB object keys may be returned in a different order from the object
+ * sent to the API. Compare tactical snapshots structurally, not by insertion
+ * order, or an unchanged saved lineup will incorrectly look "unshared". */
+function canonicalSnapshot(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalSnapshot).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalSnapshot(object[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 const MAX_BENCH_SIZE = 20;
 
 function benchIdsFromRoster(
@@ -714,9 +731,24 @@ export default function ConfirmSquadPage() {
     (!eventQuery.data?.competitionFixtureId ||
       Boolean(eventQuery.data.fixtureScheduleConfirmedAt)) &&
     friendlyFixtureAccepted;
+  const confirmedLineup = lineupQuery.data ?? null;
+  // When revisiting an already-confirmed fixture, the saved tactical snapshot
+  // is the baseline. Without this fallback the page silently re-generates a
+  // default formation/slot layout and marks the *unchanged* lineup as dirty.
+  // An explicitly selected game plan still takes precedence.
+  const selectedPlan =
+    selectedGamePlanId && gamePlanQuery.data?.id === selectedGamePlanId
+      ? gamePlanQuery.data
+      : null;
   const previewFormationId =
-    gamePlanQuery.data?.formationId ??
+    selectedPlan?.formationId ??
+    selectedPlanSummary?.formationId ??
+    (!selectedGamePlanId ? confirmedLineup?.formationId : null) ??
     getDefaultFormationIdForPlayerCount(startingTarget);
+  const previewCustomPositions =
+    selectedPlan?.customPositions ??
+    (!selectedGamePlanId ? confirmedLineup?.customPositions : null) ??
+    null;
   const previewAssignments = useMemo(() => {
     const athleteById = new Map(
       athletes.map((athlete) => [athlete.id, athlete]),
@@ -725,18 +757,20 @@ export default function ConfirmSquadPage() {
       previewFormationId,
       [...startingIds],
       (id) => athleteById.get(id)?.position ?? null,
-      gamePlanQuery.data?.assignments,
-      gamePlanQuery.data?.customPositions,
+      selectedPlan?.assignments ??
+        (!selectedGamePlanId ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
+      previewCustomPositions,
     );
   }, [
     athletes,
-    gamePlanQuery.data?.assignments,
-    gamePlanQuery.data?.customPositions,
+    selectedPlan?.assignments,
+    selectedGamePlanId,
+    confirmedLineup?.pitchAssignments,
+    previewCustomPositions,
     previewFormationId,
     startingIds,
   ]);
 
-  const confirmedLineup = lineupQuery.data ?? null;
   const lineupReady = Boolean(confirmedLineup);
   const lineupDirty = useMemo(() => {
     if (!confirmedLineup) return false;
@@ -751,17 +785,18 @@ export default function ConfirmSquadPage() {
         currentBench.some((id) => !confirmedLineup.benchAthleteIds.includes(id))) return true;
     if (confirmedLineup.formationId && confirmedLineup.formationId !== previewFormationId) return true;
     if (confirmedLineup.pitchAssignments &&
-        JSON.stringify(confirmedLineup.pitchAssignments) !== JSON.stringify(previewAssignments)) return true;
-    if (confirmedLineup.customPositions &&
-        JSON.stringify(confirmedLineup.customPositions) !== JSON.stringify(gamePlanQuery.data?.customPositions ?? null)) return true;
+        canonicalSnapshot(confirmedLineup.pitchAssignments) !== canonicalSnapshot(previewAssignments)) return true;
+    if (canonicalSnapshot(confirmedLineup.customPositions ?? null) !==
+        canonicalSnapshot(previewCustomPositions)) return true;
     return false;
-  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, gamePlanQuery.data, athletes]);
+  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, selectedPlan, athletes]);
   // Lineups can be confirmed before match day for advance sharing.
   const canConfirmLineup =
     startingCount === startingTarget &&
     selectableAthletes.length >= startingTarget &&
     fixtureDateConfirmed &&
     !confirmLineup.isPending;
+  const canUpdateLineup = canConfirmLineup && (!lineupReady || lineupDirty);
   const canSubmit =
     canConfirmLineup &&
     lineupReady &&
@@ -889,7 +924,7 @@ export default function ConfirmSquadPage() {
   };
 
   const handleConfirmLineup = async () => {
-    if (!eventId || !canConfirmLineup) {
+    if (!eventId || !canUpdateLineup) {
       return;
     }
     setSubmitError(null);
@@ -903,7 +938,7 @@ export default function ConfirmSquadPage() {
         ),
         formationId: previewFormationId,
         pitchAssignments: previewAssignments,
-        customPositions: gamePlanQuery.data?.customPositions ?? null,
+        customPositions: previewCustomPositions,
       });
     } catch (err) {
       setSubmitError(
@@ -1843,7 +1878,7 @@ export default function ConfirmSquadPage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            disabled={!canConfirmLineup || (lineupReady && !lineupDirty)}
+            disabled={!canUpdateLineup}
             onClick={() => void handleConfirmLineup()}
             className={cn(
               "h-14 w-full rounded-xl border text-xs font-bold uppercase tracking-[0.18em] transition-colors sm:text-sm",
