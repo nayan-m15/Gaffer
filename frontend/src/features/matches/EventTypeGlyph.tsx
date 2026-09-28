@@ -8,6 +8,7 @@ import {
 import type { MatchEventType } from "./types";
 import { EVENT_COLOR } from "./event-visuals";
 import { BootIcon, SoccerBallIcon } from "./match-icons";
+import type { ReactNode } from "react";
 
 function CardGlyph({ color }: { color: string }) {
   return (
@@ -21,6 +22,27 @@ function CardGlyph({ color }: { color: string }) {
       }}
     />
   );
+}
+
+function eventIcon(eventType: MatchEventType): ReactNode {
+  switch (eventType) {
+    case "goal":
+      return <SoccerBallIcon className="size-4" />;
+    case "assist":
+      return <BootIcon className="size-[18px]" />;
+    case "key_pass":
+      return <ChevronsRight className="size-4" />;
+    case "substitution":
+      return <ArrowLeftRight className="size-3.5" />;
+    case "penalty":
+      return <Target className="size-3.5" />;
+    case "injury":
+      return <HeartPulse className="size-3.5" />;
+    case "goalkeeper_save":
+      return <Hand className="size-3.5" />;
+    default:
+      return null;
+  }
 }
 
 export function EventTypeGlyph({
@@ -42,30 +64,11 @@ export function EventTypeGlyph({
     );
   }
 
-  if (eventType === "yellow_card") {
-    return <CardGlyph color="#d7ba55" />;
-  }
-  if (eventType === "red_card") {
-    return <CardGlyph color="#e36a6d" />;
-  }
+  if (eventType === "yellow_card") return <CardGlyph color="#d7ba55" />;
+  if (eventType === "red_card") return <CardGlyph color="#e36a6d" />;
 
   const color = EVENT_COLOR[eventType];
-  const icon =
-    eventType === "goal" ? (
-      <SoccerBallIcon className="size-4" />
-    ) : eventType === "assist" ? (
-      <BootIcon className="size-[18px]" />
-    ) : eventType === "key_pass" ? (
-      <ChevronsRight className="size-4" />
-    ) : eventType === "substitution" ? (
-      <ArrowLeftRight className="size-3.5" />
-    ) : eventType === "penalty" ? (
-      <Target className="size-3.5" />
-    ) : eventType === "injury" ? (
-      <HeartPulse className="size-3.5" />
-    ) : eventType === "goalkeeper_save" ? (
-      <Hand className="size-3.5" />
-    ) : null;
+  const icon = eventIcon(eventType);
 
   return (
     <span

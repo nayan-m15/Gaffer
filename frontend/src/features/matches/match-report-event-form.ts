@@ -425,78 +425,8 @@ export function planEditEvent({
     ops.push({ kind: "delete", eventId: linkedAssist.id });
   }
 
-  if (draft.eventType === "goal") {
-    if (hasAssistSelection(draft) && linkedAssist) {
-      ops.push({
-        kind: "update",
-        eventId: linkedAssist.id,
-        input: {
-          minute: draft.minute,
-          athleteId:
-            draft.team === "own" ? draft.assistAthleteId || null : null,
-          opponentPlayerId:
-            draft.team === "opponent"
-              ? draft.assistOpponentPlayerId || null
-              : null,
-          opponentLabel:
-            draft.team === "opponent"
-              ? draft.assistOpponentLabel.trim() || null
-              : null,
-          detail: event.id,
-        },
-      });
-    } else if (hasAssistSelection(draft) && !linkedAssist) {
-      ops.push({
-        kind: "create",
-        input: {
-          clientRequestId: crypto.randomUUID(),
-          team: draft.team,
-          eventType: "assist",
-          minute: draft.minute,
-          detail: event.id,
-          ...assistSubject(draft),
-        },
-      });
-    } else if (!hasAssistSelection(draft) && linkedAssist) {
-      ops.push({ kind: "delete", eventId: linkedAssist.id });
-    }
-  }
-
-  if (
-    draft.eventType === "injury" &&
-    draft.injuryLedToSub &&
-    hasIncomingSelection(draft)
-  ) {
-    const subInput = {
-      eventType: "substitution" as const,
-      minute: draft.minute,
-      athleteId: draft.team === "own" ? draft.athleteId || null : null,
-      opponentPlayerId:
-        draft.team === "opponent" ? draft.opponentPlayerId || null : null,
-      opponentLabel:
-        draft.team === "opponent" ? draft.opponentLabel.trim() || null : null,
-      detail: incomingDetail(draft) ?? null,
-    };
-    if (linkedSub) {
-      ops.push({
-        kind: "update",
-        eventId: linkedSub.id,
-        input: subInput,
-      });
-    } else {
-      ops.push({
-        kind: "create",
-        input: {
-          clientRequestId: crypto.randomUUID(),
-          team: draft.team,
-          eventType: "substitution",
-          minute: draft.minute,
-          ...subjectFields(draft),
-          detail: incomingDetail(draft),
-        },
-      });
-    }
-  }
+  appendLinkedAssistEdits(ops, event, draft, linkedAssist);
+  appendLinkedInjurySubstitution(ops, draft, linkedSub);
 
   const wasSaved =
     event.eventType === "penalty" &&
@@ -529,6 +459,78 @@ export function planEditEvent({
   }
 
   return ops;
+}
+
+function appendLinkedAssistEdits(
+  ops: PlannedOp[],
+  event: MatchLogEvent,
+  draft: EventFormDraft,
+  linkedAssist: MatchLogEvent | null,
+): void {
+  if (draft.eventType !== "goal") return;
+  const selected = hasAssistSelection(draft);
+  if (selected && linkedAssist) {
+    ops.push({
+      kind: "update",
+      eventId: linkedAssist.id,
+      input: {
+        minute: draft.minute,
+        athleteId: draft.team === "own" ? draft.assistAthleteId || null : null,
+        opponentPlayerId: draft.team === "opponent" ? draft.assistOpponentPlayerId || null : null,
+        opponentLabel: draft.team === "opponent" ? draft.assistOpponentLabel.trim() || null : null,
+        detail: event.id,
+      },
+    });
+    return;
+  }
+  if (selected) {
+    ops.push({
+      kind: "create",
+      input: {
+        clientRequestId: crypto.randomUUID(),
+        team: draft.team,
+        eventType: "assist",
+        minute: draft.minute,
+        detail: event.id,
+        ...assistSubject(draft),
+      },
+    });
+  } else if (linkedAssist) {
+    ops.push({ kind: "delete", eventId: linkedAssist.id });
+  }
+}
+
+function appendLinkedInjurySubstitution(
+  ops: PlannedOp[],
+  draft: EventFormDraft,
+  linkedSub: MatchLogEvent | null,
+): void {
+  if (draft.eventType !== "injury" || !draft.injuryLedToSub || !hasIncomingSelection(draft)) {
+    return;
+  }
+  const subInput = {
+    eventType: "substitution" as const,
+    minute: draft.minute,
+    athleteId: draft.team === "own" ? draft.athleteId || null : null,
+    opponentPlayerId: draft.team === "opponent" ? draft.opponentPlayerId || null : null,
+    opponentLabel: draft.team === "opponent" ? draft.opponentLabel.trim() || null : null,
+    detail: incomingDetail(draft) ?? null,
+  };
+  if (linkedSub) {
+    ops.push({ kind: "update", eventId: linkedSub.id, input: subInput });
+    return;
+  }
+  ops.push({
+    kind: "create",
+    input: {
+      clientRequestId: crypto.randomUUID(),
+      team: draft.team,
+      eventType: "substitution",
+      minute: draft.minute,
+      ...subjectFields(draft),
+      detail: incomingDetail(draft),
+    },
+  });
 }
 
 function savedPenaltyKeeper(

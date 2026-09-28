@@ -93,6 +93,52 @@ interface MarkerEntry {
   haloMaterial: THREE.MeshBasicMaterial;
 }
 
+function updateInjuryMarkers(
+  markers: Map<BodyRegion, MarkerEntry>,
+  hotspots: Map<BodyRegion, THREE.Vector3>,
+  activeRegion: BodyRegion | null,
+  idlePulse: number,
+  activePulse: number,
+) {
+  for (const [region, marker] of markers) {
+    const position = hotspots.get(region);
+    if (!position) {
+      marker.dot.visible = false;
+      marker.halo.visible = false;
+      continue;
+    }
+    marker.dot.position.copy(position);
+    marker.halo.position.copy(position);
+    marker.dot.visible = true;
+    marker.halo.visible = true;
+    const active = region === activeRegion;
+    marker.dotMaterial.opacity = active ? 0.9 : 0.45;
+    marker.haloMaterial.opacity = active ? 0.38 : 0.14;
+    marker.dot.scale.setScalar(active ? 1.15 : 0.75);
+    marker.halo.scale.setScalar(active ? activePulse * 1.25 : idlePulse * 0.85);
+  }
+}
+
+function updateCalloutPosition(
+  element: HTMLDivElement | null,
+  position: THREE.Vector3 | null | undefined,
+  projected: THREE.Vector3,
+  camera: THREE.Camera,
+  container: HTMLElement,
+) {
+  if (!position || !element) {
+    if (element) element.style.opacity = "0";
+    return;
+  }
+  projected.copy(position).project(camera);
+  const rect = container.getBoundingClientRect();
+  const screenX = (projected.x * 0.5 + 0.5) * rect.width;
+  const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
+  const flip = screenX > rect.width - 210;
+  element.style.transform = `translate(${flip ? screenX - 8 : screenX + 8}px, ${screenY}px) translate(${flip ? "-100%" : "0"}, -50%)`;
+  element.style.opacity = projected.z < 1 ? "1" : "0";
+}
+
 /** Disposes a texture-bearing material's own textures before the material. */
 function disposeMaterial(material: THREE.Material) {
   for (const value of Object.values(material)) {
@@ -727,50 +773,13 @@ export function BodyModelViewer({
        * region — kept in sync with the injuredRegions prop every frame since
        * there are only ever a handful at once. */
       syncMarkers(injuredNow);
-      for (const [region, marker] of markers) {
-        const position = regionHotspots.get(region);
-        if (!position) {
-          marker.dot.visible = false;
-          marker.halo.visible = false;
-          continue;
-        }
-        marker.dot.position.copy(position);
-        marker.halo.position.copy(position);
-        marker.dot.visible = true;
-        marker.halo.visible = true;
-        if (region === activeRegion) {
-          marker.dotMaterial.opacity = 0.9;
-          marker.haloMaterial.opacity = 0.38;
-          marker.dot.scale.setScalar(1.15);
-          marker.halo.scale.setScalar(activePulse * 1.25);
-        } else {
-          marker.dotMaterial.opacity = 0.45;
-          marker.haloMaterial.opacity = 0.14;
-          marker.dot.scale.setScalar(0.75);
-          marker.halo.scale.setScalar(idlePulse * 0.85);
-        }
-      }
+      updateInjuryMarkers(markers, regionHotspots, activeRegion, idlePulse, activePulse);
 
       /* The HTML callout follows the active region's hotspot. */
       const hotspotPosition = activeRegion
         ? regionHotspots.get(activeRegion)
         : null;
-      const element = calloutRef.current;
-      if (hotspotPosition && element) {
-        projected.copy(hotspotPosition).project(camera);
-        const rect = container!.getBoundingClientRect();
-        const screenX = (projected.x * 0.5 + 0.5) * rect.width;
-        const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
-        // Flip the callout to the other side near the right edge so it
-        // never runs off the canvas.
-        const flip = screenX > rect.width - 210;
-        element.style.transform = `translate(${
-          flip ? screenX - 8 : screenX + 8
-        }px, ${screenY}px) translate(${flip ? "-100%" : "0"}, -50%)`;
-        element.style.opacity = projected.z < 1 ? "1" : "0";
-      } else if (element) {
-        element.style.opacity = "0";
-      }
+      updateCalloutPosition(calloutRef.current, hotspotPosition, projected, camera, container!);
 
       renderer.render(scene, camera);
     }

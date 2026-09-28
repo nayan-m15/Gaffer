@@ -53,7 +53,9 @@ import type {
   BodyRegion,
   CloseInjuryInput,
   CreateInjuryInput,
+  InjuryDetail,
   InjuryListItem,
+  RecoveryReading,
 } from "./types";
 import "./injuries-background.css";
 
@@ -90,6 +92,267 @@ function SummaryTile({
       </p>
     </AppCard>
   );
+}
+
+function InjuryRecoveryRecords({
+  isPending,
+  isError,
+  error,
+  summary,
+  injuries,
+  tab,
+  onSelect,
+  onLog,
+  playerOptions,
+  playerItems,
+  focused,
+  switchPlayer,
+  athleteInjuries,
+  injuredRegions,
+  selectedRegion,
+  injuryCallouts,
+  onRegionSelect,
+  detail,
+  today,
+  recoveryReadings,
+  isDownloadingReport,
+  reportError,
+  onDownloadReport,
+  onCloseInjury,
+}: {
+  isPending: boolean;
+  isError: boolean;
+  error: Error | null;
+  summary: ReturnType<typeof injurySummary>;
+  injuries: InjuryListItem[];
+  tab: TabValue;
+  onSelect: (injury: InjuryListItem) => void;
+  onLog: () => void;
+  playerOptions: { id: string; label: string }[];
+  playerItems: Record<string, string>;
+  focused?: InjuryListItem;
+  switchPlayer: (athleteId: string) => void;
+  athleteInjuries: InjuryListItem[];
+  injuredRegions: BodyRegion[];
+  selectedRegion: BodyRegion | null;
+  injuryCallouts: Partial<Record<BodyRegion, { title: string; subtitle: string }>>;
+  onRegionSelect: (region: BodyRegion) => void;
+  detail?: InjuryDetail;
+  today: string;
+  recoveryReadings?: RecoveryReading[];
+  isDownloadingReport: boolean;
+  reportError?: string;
+  onDownloadReport: () => void;
+  onCloseInjury: () => void;
+}) {
+  if (isPending) {
+    return <div className="flex min-h-[40vh] items-center justify-center" role="status">
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+        Loading injury records&hellip;
+      </span>
+    </div>;
+  }
+  if (isError) {
+    return <AppCard><p role="alert" className="text-sm text-destructive">
+      {error instanceof ApiError ? error.message : "Could not load injury records."}
+    </p></AppCard>;
+  }
+  return <InjuryRecoverySections
+    summary={summary}
+    injuries={injuries}
+    tab={tab}
+    onSelect={onSelect}
+    onLog={onLog}
+    playerOptions={playerOptions}
+    playerItems={playerItems}
+    focused={focused}
+    switchPlayer={switchPlayer}
+    athleteInjuries={athleteInjuries}
+    injuredRegions={injuredRegions}
+    selectedRegion={selectedRegion}
+    injuryCallouts={injuryCallouts}
+    onRegionSelect={onRegionSelect}
+    detail={detail}
+    today={today}
+    recoveryReadings={recoveryReadings}
+    isDownloadingReport={isDownloadingReport}
+    reportError={reportError}
+    onDownloadReport={onDownloadReport}
+    onCloseInjury={onCloseInjury}
+  />;
+}
+
+type InjuryRecoverySectionsProps = Omit<Parameters<typeof InjuryRecoveryRecords>[0], "isPending" | "isError" | "error">;
+
+function InjuryRecoverySections(props: InjuryRecoverySectionsProps) {
+  return <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-10 sm:px-8 lg:px-10">
+    <InjurySummaryTiles summary={props.summary} />
+    {props.tab === "history" ? (
+      <InjuryHistoryTab injuries={props.injuries} onSelect={props.onSelect} />
+    ) : props.injuries.length === 0 ? (
+      <NoInjuriesCard onLog={props.onLog} />
+    ) : (
+      <InjuryRecoveryOverview {...props} />
+    )}
+  </div>;
+}
+
+function InjurySummaryTiles({ summary }: { summary: ReturnType<typeof injurySummary> }) {
+  return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <SummaryTile label="Currently injured" value={summary.openCount} tone={summary.openCount > 0 ? "warning" : "good"} />
+    <SummaryTile label="Due back within a week" value={summary.dueBackWithinAWeek} />
+    <SummaryTile label="Recurrences" value={summary.recurrenceCount} tone={summary.recurrenceCount > 0 ? "warning" : "default"} />
+    <SummaryTile label="Days lost on record" value={summary.daysLostThisSeason} />
+  </div>;
+}
+
+function NoInjuriesCard({ onLog }: { onLog: () => void }) {
+  return <AppCard className="flex flex-col items-center gap-3 py-14 text-center">
+    <span className="flex size-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 text-emerald-400" aria-hidden="true">
+      <ShieldCheck className="size-6" />
+    </span>
+    <div>
+      <p className="font-display text-lg font-semibold text-foreground">No injuries on record</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Injuries logged in the live logger appear here automatically, or add one manually.
+      </p>
+    </div>
+    <Button variant="outline" onClick={onLog}><Plus className="size-4" aria-hidden="true" />Log injury</Button>
+  </AppCard>;
+}
+
+function InjuryRecoveryOverview({
+  playerOptions,
+  playerItems,
+  focused,
+  switchPlayer,
+  athleteInjuries,
+  injuredRegions,
+  selectedRegion,
+  injuryCallouts,
+  onRegionSelect,
+  onSelect,
+  detail,
+  today,
+  recoveryReadings,
+  isDownloadingReport,
+  reportError,
+  onDownloadReport,
+  onCloseInjury,
+}: InjuryRecoverySectionsProps) {
+  return <>
+    {playerOptions.length > 1 && <InjuryPlayerSelect
+      items={playerItems}
+      options={playerOptions}
+      value={focused?.athleteId ?? null}
+      onChange={switchPlayer}
+    />}
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      <AthleteInjuryModelPanel
+        focused={focused}
+        athleteInjuries={athleteInjuries}
+        injuredRegions={injuredRegions}
+        selectedRegion={selectedRegion}
+        injuryCallouts={injuryCallouts}
+        onRegionSelect={onRegionSelect}
+        onSelect={onSelect}
+        isDownloadingReport={isDownloadingReport}
+        reportError={reportError}
+        onDownloadReport={onDownloadReport}
+      />
+      <div className="space-y-5">
+        <FocusedInjuryDetails focused={focused} detail={detail} today={today} onCloseInjury={onCloseInjury} />
+        {recoveryReadings && <MuscleRecoveryStrip readings={recoveryReadings} />}
+      </div>
+    </div>
+  </>;
+}
+
+function InjuryPlayerSelect({
+  items,
+  options,
+  value,
+  onChange,
+}: {
+  items: Record<string, string>;
+  options: { id: string; label: string }[];
+  value: string | null;
+  onChange: (athleteId: string) => void;
+}) {
+  return <div className="flex items-center gap-2">
+    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Player</span>
+    <Select items={items} value={value} onValueChange={(next) => { if (next) onChange(next); }}>
+      <SelectTrigger aria-label="Switch player" className="h-8 w-56 justify-between rounded-lg border-border/70 bg-card/70 px-2.5 text-sm text-foreground">
+        <SelectValue placeholder="Select a player…" />
+      </SelectTrigger>
+      <SelectContent>{options.map((option) => <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>)}</SelectContent>
+    </Select>
+  </div>;
+}
+
+function AthleteInjuryModelPanel({
+  focused,
+  athleteInjuries,
+  injuredRegions,
+  selectedRegion,
+  injuryCallouts,
+  onRegionSelect,
+  onSelect,
+  isDownloadingReport,
+  reportError,
+  onDownloadReport,
+}: Pick<InjuryRecoverySectionsProps, "focused" | "athleteInjuries" | "injuredRegions" | "selectedRegion" | "injuryCallouts" | "onRegionSelect" | "onSelect" | "isDownloadingReport" | "reportError" | "onDownloadReport">) {
+  return <AppCard className="self-start">
+    {focused && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <HeartPulse className="size-4 text-primary" aria-hidden="true" />
+        <p className="text-sm font-semibold text-foreground">{athleteName(focused)}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {athleteInjuries.length > 1 && <p className="text-[11px] text-muted-foreground">{athleteInjuries.length} open injuries</p>}
+        <Button variant="outline" size="sm" onClick={onDownloadReport} disabled={isDownloadingReport} className="gap-1.5">
+          <Download className="size-3.5" aria-hidden="true" />Download report
+        </Button>
+      </div>
+    </div>}
+    {reportError && <p role="alert" className="mb-3 text-xs text-destructive">{reportError}</p>}
+    <BodyModelViewer injuredRegions={injuredRegions} selectedRegion={selectedRegion} injuryCallouts={injuryCallouts} onSelectRegion={onRegionSelect} />
+    {athleteInjuries.length > 1 && <ul className="mt-3 flex flex-wrap gap-1.5">
+      {athleteInjuries.map((injury) => <li key={injury.id}>
+        <button
+          type="button"
+          onClick={() => onSelect(injury)}
+          aria-pressed={injury.id === focused?.id}
+          className={cn(
+            "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+            injury.id === focused?.id
+              ? "border-primary/50 bg-primary/15 text-foreground"
+              : "border-border/60 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+          )}
+        >{injuryTitle(injury)}</button>
+      </li>)}
+    </ul>}
+  </AppCard>;
+}
+
+function FocusedInjuryDetails({
+  focused,
+  detail,
+  today,
+  onCloseInjury,
+}: {
+  focused?: InjuryListItem;
+  detail?: InjuryDetail;
+  today: string;
+  onCloseInjury: () => void;
+}) {
+  if (detail) return <>
+    <InjuryDetailCard injury={detail} today={today} onMarkReturned={onCloseInjury} />
+    <InjuryTimeline entries={detail.timeline} today={today} isOpen={detail.isOpen} />
+  </>;
+  if (!focused) return null;
+  return <InjuryDetailCard injury={focused} today={today} onMarkReturned={onCloseInjury} />;
 }
 
 /**
@@ -393,208 +656,32 @@ export default function InjuryRecoveryPage() {
         />
       </PageHeader>
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-10 sm:px-8 lg:px-10">
-        {injuriesQuery.isPending ? (
-          <div
-            className="flex min-h-[40vh] items-center justify-center"
-            role="status"
-          >
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2
-                className="size-4 animate-spin text-primary"
-                aria-hidden="true"
-              />
-              Loading injury records&hellip;
-            </span>
-          </div>
-        ) : injuriesQuery.isError ? (
-          <AppCard>
-            <p role="alert" className="text-sm text-destructive">
-              {injuriesQuery.error instanceof ApiError
-                ? injuriesQuery.error.message
-                : "Could not load injury records."}
-            </p>
-          </AppCard>
-        ) : (
-          <>
-            <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-              <SummaryTile
-                label="Currently injured"
-                value={summary.openCount}
-                tone={summary.openCount > 0 ? "warning" : "good"}
-              />
-              <SummaryTile
-                label="Due back within a week"
-                value={summary.dueBackWithinAWeek}
-              />
-              <SummaryTile
-                label="Recurrences"
-                value={summary.recurrenceCount}
-                tone={summary.recurrenceCount > 0 ? "warning" : "default"}
-              />
-              <SummaryTile
-                label="Days lost on record"
-                value={summary.daysLostThisSeason}
-              />
-            </div>
-
-            {tab === "history" ? (
-              <InjuryHistoryTab injuries={injuries} onSelect={selectInjury} />
-            ) : injuries.length === 0 ? (
-              <AppCard className="flex flex-col items-center gap-3 py-14 text-center">
-                <span
-                  className="flex size-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
-                  aria-hidden="true"
-                >
-                  <ShieldCheck className="size-6" />
-                </span>
-                <div>
-                  <p className="font-display text-lg font-semibold text-foreground">
-                    No injuries on record
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Injuries logged in the live logger appear here
-                    automatically, or add one manually.
-                  </p>
-                </div>
-                <Button variant="outline" onClick={() => setLogOpen(true)}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  Log injury
-                </Button>
-              </AppCard>
-            ) : (
-              <>
-                {playerOptions.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Player
-                    </span>
-                    <Select
-                      items={playerItems}
-                      value={focused?.athleteId ?? null}
-                      onValueChange={(value) => value && switchPlayer(value)}
-                    >
-                      <SelectTrigger
-                        aria-label="Switch player"
-                        className="h-8 w-56 justify-between rounded-lg border-border/70 bg-card/70 px-2.5 text-sm text-foreground"
-                      >
-                        <SelectValue placeholder="Select a player…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {playerOptions.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-                {/* Left: the model, plus the athlete's other open injuries.
-                    `self-start` stops it stretching to match the taller
-                    right-hand column and leaving dead space below. */}
-                <AppCard className="self-start">
-                  {focused && (
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <HeartPulse
-                          className="size-4 text-primary"
-                          aria-hidden="true"
-                        />
-                        <p className="text-sm font-semibold text-foreground">
-                          {athleteName(focused)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {athleteInjuries.length > 1 && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {athleteInjuries.length} open injuries
-                          </p>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleDownloadReport}
-                          disabled={isDownloadingReport}
-                          className="gap-1.5"
-                        >
-                          <Download className="size-3.5" aria-hidden="true" />
-                          Download report
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {reportError && (
-                    <p role="alert" className="mb-3 text-xs text-destructive">
-                      {reportError}
-                    </p>
-                  )}
-
-                  <BodyModelViewer
-                    injuredRegions={injuredRegions}
-                    selectedRegion={selectedRegion}
-                    injuryCallouts={injuryCallouts}
-                    onSelectRegion={handleRegionSelect}
-                  />
-
-                  {athleteInjuries.length > 1 && (
-                    <ul className="mt-3 flex flex-wrap gap-1.5">
-                      {athleteInjuries.map((injury) => (
-                        <li key={injury.id}>
-                          <button
-                            type="button"
-                            onClick={() => selectInjury(injury)}
-                            aria-pressed={injury.id === focused?.id}
-                            className={cn(
-                              "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-                              injury.id === focused?.id
-                                ? "border-primary/50 bg-primary/15 text-foreground"
-                                : "border-border/60 text-muted-foreground hover:border-primary/30 hover:text-foreground",
-                            )}
-                          >
-                            {injuryTitle(injury)}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </AppCard>
-
-                {/* Right: what it is, and how the recovery is going. */}
-                <div className="space-y-5">
-                  {detail ? (
-                    <>
-                      <InjuryDetailCard
-                        injury={detail}
-                        today={today}
-                        onMarkReturned={() => setCloseOpen(true)}
-                      />
-                      <InjuryTimeline
-                        entries={detail.timeline}
-                        today={today}
-                        isOpen={detail.isOpen}
-                      />
-                    </>
-                  ) : focused ? (
-                    <InjuryDetailCard
-                      injury={focused}
-                      today={today}
-                      onMarkReturned={() => setCloseOpen(true)}
-                    />
-                  ) : null}
-
-                  {recoveryQuery.data && (
-                    <MuscleRecoveryStrip readings={recoveryQuery.data} />
-                  )}
-                </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </div>
+      <InjuryRecoveryRecords
+        isPending={injuriesQuery.isPending}
+        isError={injuriesQuery.isError}
+        error={injuriesQuery.error}
+        summary={summary}
+        injuries={injuries}
+        tab={tab}
+        onSelect={selectInjury}
+        onLog={() => setLogOpen(true)}
+        playerOptions={playerOptions}
+        playerItems={playerItems}
+        focused={focused}
+        switchPlayer={switchPlayer}
+        athleteInjuries={athleteInjuries}
+        injuredRegions={injuredRegions}
+        selectedRegion={selectedRegion}
+        injuryCallouts={injuryCallouts}
+        onRegionSelect={handleRegionSelect}
+        detail={detail}
+        today={today}
+        recoveryReadings={recoveryQuery.data}
+        isDownloadingReport={isDownloadingReport}
+        reportError={reportError}
+        onDownloadReport={handleDownloadReport}
+        onCloseInjury={() => setCloseOpen(true)}
+      />
 
       <LogInjuryDialog
         isOpen={isLogOpen}

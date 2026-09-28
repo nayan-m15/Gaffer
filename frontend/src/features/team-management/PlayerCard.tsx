@@ -116,6 +116,70 @@ interface PlayerCardProps {
   className?: string;
 }
 
+function PlayerCardStatus({
+  publicView,
+  statusLabel,
+  variant,
+}: {
+  publicView: boolean;
+  statusLabel: string;
+  variant: "pitch" | "sub";
+}) {
+  if (publicView) return null;
+  if (variant === "pitch") {
+    return <span className="player-card__status-dot" title={statusLabel} aria-hidden="true" />;
+  }
+  return (
+    <span className="player-card__status">
+      <i className="player-card__status-dot" aria-hidden="true" />
+      {statusLabel}
+    </span>
+  );
+}
+
+function PlayerCardStats({
+  appearances,
+  goals,
+  assists,
+  yellowCards,
+  redCards,
+  minutesPlayed,
+  preferredFoot,
+  publicView,
+}: {
+  appearances: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  minutesPlayed: number;
+  preferredFoot: "left" | "right" | "both";
+  publicView: boolean;
+}) {
+  return (
+    <div className="player-card__stats">
+      <Stat value={appearances} label="Apps" />
+      <Stat value={goals} label="Goals" />
+      <Stat value={assists} label="Assists" />
+      <Stat value={yellowCards} label="Yellows" card="yellow" />
+      <Stat value={redCards} label="Reds" card="red" />
+      {publicView ? <Stat value={minutesPlayed} label="Minutes" /> : <PreferredFootStats preferredFoot={preferredFoot} />}
+    </div>
+  );
+}
+
+function PreferredFootStats({ preferredFoot }: { preferredFoot: "left" | "right" | "both" }) {
+  return (
+    <span className="player-card__stat">
+      <span className="player-card__stat-value player-card__foot">
+        <span className={preferredFoot !== "right" ? "player-card__foot--on" : undefined}>L</span>
+        <span className={preferredFoot !== "left" ? "player-card__foot--on" : undefined}>R</span>
+      </span>
+      <span className="player-card__stat-label">Foot</span>
+    </span>
+  );
+}
+
 export function PlayerCard({
   initials,
   name,
@@ -180,13 +244,7 @@ export function PlayerCard({
       >
         <span className="player-card__pitch-topline">
           <span className="player-card__position">{displayPosition}</span>
-          {!publicView && (
-            <span
-              className="player-card__status-dot"
-              title={statusLabel}
-              aria-hidden="true"
-            />
-          )}
+          <PlayerCardStatus publicView={publicView} statusLabel={statusLabel} variant="pitch" />
         </span>
         <span className="player-card__pitch-number">{displayNumber}</span>
         <span className="player-card__pitch-name">{family || initials}</span>
@@ -219,12 +277,7 @@ export function PlayerCard({
     >
       <div className="player-card__top">
         <span className="player-card__position">{displayPosition}</span>
-        {!publicView && (
-          <span className="player-card__status">
-            <i className="player-card__status-dot" aria-hidden="true" />
-            {statusLabel}
-          </span>
-        )}
+        <PlayerCardStatus publicView={publicView} statusLabel={statusLabel} variant="sub" />
       </div>
 
       <div className="player-card__jersey">
@@ -233,38 +286,16 @@ export function PlayerCard({
         <p className="player-card__number">{displayNumber}</p>
       </div>
 
-      <div className="player-card__stats">
-        <Stat value={appearances} label="Apps" />
-        <Stat value={goals} label="Goals" />
-        <Stat value={assists} label="Assists" />
-        <Stat value={yellowCards} label="Yellows" card="yellow" />
-        <Stat value={redCards} label="Reds" card="red" />
-        {publicView ? (
-          <Stat value={minutesPlayed} label="Minutes" />
-        ) : (
-          <span className="player-card__stat">
-            <span className="player-card__stat-value player-card__foot">
-              <span
-                className={
-                  preferredFoot !== "right"
-                    ? "player-card__foot--on"
-                    : undefined
-                }
-              >
-                L
-              </span>
-              <span
-                className={
-                  preferredFoot !== "left" ? "player-card__foot--on" : undefined
-                }
-              >
-                R
-              </span>
-            </span>
-            <span className="player-card__stat-label">Foot</span>
-          </span>
-        )}
-      </div>
+      <PlayerCardStats
+        appearances={appearances}
+        goals={goals}
+        assists={assists}
+        yellowCards={yellowCards}
+        redCards={redCards}
+        minutesPlayed={minutesPlayed}
+        preferredFoot={preferredFoot}
+        publicView={publicView}
+      />
     </article>
   );
 }
