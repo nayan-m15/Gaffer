@@ -42,7 +42,9 @@ function PlayerShellContent() {
         <div className="flex-1">
           <Outlet />
         </div>
-        <Footer variant="player" />
+        <div className="relative z-20">
+          <Footer variant="player" />
+        </div>
       </main>
     </div>
   );

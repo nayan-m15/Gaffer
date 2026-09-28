@@ -38,6 +38,7 @@ import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDial
 import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
 import { SaveGamePlanDialog } from "@/features/team-tactics/SaveGamePlanDialog";
 import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
+import "./team-background.css";
 
 type TeamSection = "squad" | "tactics";
 
@@ -130,10 +131,13 @@ export default function TeamManagementPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="size-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading squad...</p>
+      <div className="team-page relative isolate min-h-full">
+        <div className="team-page-backdrop" aria-hidden="true" />
+        <div className="relative z-10 flex min-h-[60vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="size-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading squad...</p>
+          </div>
         </div>
       </div>
     );
@@ -143,18 +147,21 @@ export default function TeamManagementPage() {
 
   if (isError) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <ShieldAlert className="size-8 text-destructive" />
-          <h2 className="text-lg font-semibold text-foreground">
-            Failed to load squad
-          </h2>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Something went wrong while fetching your athletes. Please try again.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Retry
-          </Button>
+      <div className="team-page relative isolate min-h-full">
+        <div className="team-page-backdrop" aria-hidden="true" />
+        <div className="relative z-10 flex min-h-[60vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <ShieldAlert className="size-8 text-destructive" />
+            <h2 className="text-lg font-semibold text-foreground">
+              Failed to load squad
+            </h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Something went wrong while fetching your athletes. Please try again.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -164,25 +171,28 @@ export default function TeamManagementPage() {
 
   if (athleteList.length === 0) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-4">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <Users className="size-10 text-muted-foreground/50" />
-          <h2 className="text-lg font-semibold text-foreground">
-            No players available
-          </h2>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Add players to your squad from the Roster page before creating a
-            starting XI.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              window.location.href = "/athletes";
-            }}
-          >
-            Go to Roster
-          </Button>
+      <div className="team-page relative isolate min-h-full">
+        <div className="team-page-backdrop" aria-hidden="true" />
+        <div className="relative z-10 flex min-h-[60vh] items-center justify-center px-4">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Users className="size-10 text-muted-foreground/50" />
+            <h2 className="text-lg font-semibold text-foreground">
+              No players available
+            </h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Add players to your squad from the Roster page before creating a
+              starting XI.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                window.location.href = "/athletes";
+              }}
+            >
+              Go to Roster
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -191,7 +201,9 @@ export default function TeamManagementPage() {
   /* ── Main content ────────────────────────────────────────────────────────── */
 
   return (
-    <>
+    <div className="team-page relative isolate min-h-full">
+      <div className="team-page-backdrop" aria-hidden="true" />
+      <div className="relative z-10">
       <PageHeader
         title="Team Management"
         subtitle="Configure your starting XI, tactical formation, and matchday squad."
@@ -376,7 +388,8 @@ export default function TeamManagementPage() {
         gamePlanName={selectedPlan?.name ?? ""}
         isDeleting={gamePlanEditor.isDeleting}
       />
-    </>
+      </div>
+    </div>
   );
 }
 

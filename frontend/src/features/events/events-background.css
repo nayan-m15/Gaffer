@@ -1,7 +1,7 @@
 /* Theme-aware calendar artwork behind the events pages. Mobile artwork stays
  * active through tablet sizes; wide screens use the desktop composition. */
 .events-page-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
