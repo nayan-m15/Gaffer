@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { RequireTeam } from '@/components/RequireTeam'
 import { RequirePlayer } from '@/components/RequirePlayer'
+import { RedirectIfAuthenticated } from '@/components/RedirectIfAuthenticated'
 import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
 import { AppShell } from '@/layouts/AppShell'
@@ -12,6 +13,7 @@ import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
 import { Loader2 } from 'lucide-react'
 import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
+import { PwaInstallExperience } from '@/components/PwaInstallExperience'
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const SignUpPage = lazy(() => import('@/pages/SignUpPage'))
@@ -54,7 +56,9 @@ function RouteFallback() {
  *
  * `/` is the public marketing landing page, which now includes the How It
  * Works and Features sections as scrollable anchors (`/#how-it-works` and
- * `/#features`). `/login`, `/signup` and `/verify-email` are also public.
+ * `/#features`); signed-in visitors are redirected from it straight to
+ * `/dashboard` (`RedirectIfAuthenticated`). `/login`, `/signup` and
+ * `/verify-email` are also public.
  * The dashboard, athletes, events and team pages require a signed-in coach
  * and live behind `ProtectedRoute`, which redirects to `/login` otherwise.
  * Athletes and Events additionally require the coach to already have a
@@ -115,12 +119,20 @@ function App() {
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
+      <PwaInstallExperience />
       <ClaimResumer />
       <TeamInviteResumer />
       <CompetitionInviteResumer />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={
+            <RedirectIfAuthenticated>
+              <LandingPage />
+            </RedirectIfAuthenticated>
+          }
+        />
         <Route path="/public-dashboard" element={<PublicDashboard />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />

@@ -27,6 +27,7 @@ import {
 import { useEvents, useNow } from "@/features/events/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventType, TeamEvent } from "@/features/events/types";
+import "@/features/events/events-background.css";
 
 type Panel =
   | { kind: "closed" }
@@ -218,7 +219,10 @@ export default function EventsPage() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="events-page relative isolate flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="events-page-backdrop" aria-hidden="true" />
+
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Events"
         mobileInline
@@ -417,6 +421,7 @@ export default function EventsPage() {
         }}
         onEdit={(event) => setPanel({ kind: "edit", eventId: event.id })}
       />
+      </div>
     </div>
   );
 }

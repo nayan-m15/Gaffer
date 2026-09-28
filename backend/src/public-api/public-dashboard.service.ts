@@ -20,7 +20,7 @@ import type {
 } from './public-api.schemas';
 
 function loggedEventCount(
-  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save',
 ) {
   return sql<number>`coalesce((
     select count(*)::int from ${matchEvents}
@@ -248,7 +248,7 @@ export class PublicDashboardService {
       }
     >();
 
-    for (const row of rows) {
+    const addPlayerStatistics = (row: (typeof rows)[number]) => {
       let player = byAthlete.get(row.id);
       if (!player) {
         player = {
@@ -278,7 +278,8 @@ export class PublicDashboardService {
         player.statistics.yellowCards += row.yellowCards;
         player.statistics.redCards += row.redCards;
       }
-    }
+    };
+    rows.forEach(addPlayerStatistics);
 
     return page.map(({ id }) => byAthlete.get(id)!);
   }

@@ -48,12 +48,23 @@ import { AthletesService } from '../athletes/athletes.service';
 import { TeamsService } from '../teams/teams.service';
 
 const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
+const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
 
 // Mirrors the controller's own fallback so expectations track whatever the
 // environment actually resolved FRONTEND_URL to.
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+
+// Mirrors the controller's `expireDontRememberCookie` naming so these
+// expectations hold whether or not the test env resolved BETTER_AUTH_URL.
+const BETTER_AUTH_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+const SECURE_COOKIE_PREFIX = BETTER_AUTH_URL.startsWith('https://')
+  ? '__Secure-'
+  : '';
+const EXPIRED_DONT_REMEMBER = `${SECURE_COOKIE_PREFIX}better-auth.dont_remember=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${
+  SECURE_COOKIE_PREFIX ? '; Secure' : ''
+}`;
 
 // Same shape team-invites issues: base64url of 32 random bytes (43 chars).
 const INVITE_TOKEN = 'A'.repeat(43);
@@ -73,10 +84,21 @@ const signUpResponse = (emailVerified: boolean) => ({
 describe('AuthController', () => {
   let controller: AuthController;
 
-  const res = { setHeader: jest.fn() } as unknown as Response;
+  // Minimal stateful header store so `getHeader` sees what `setHeader` wrote,
+  // mirroring Express's real response semantics
+  // (`expireDontRememberCookie` appends to the cookies `forwardSetCookie`
+  // just set on the response).
+  let responseHeaders: Map<string, string | string[]>;
+  const res = {
+    setHeader: jest.fn((name: string, value: string | string[]) => {
+      responseHeaders.set(name, value);
+    }),
+    getHeader: jest.fn((name: string) => responseHeaders.get(name)),
+  } as unknown as Response;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    responseHeaders = new Map<string, string | string[]>();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -196,6 +218,113 @@ describe('AuthController', () => {
         ),
       ).rejects.toThrow('This invite link is no longer valid.');
       expect(signUpEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('signIn', () => {
+    const sessionCookie =
+      'better-auth.session_token=signed-token; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax';
+    const dontRememberCookie =
+      'better-auth.dont_remember=signed-flag; Path=/; HttpOnly; SameSite=Lax';
+
+    const signInResponse = (cookies: string[]) => {
+      const headers = new Headers();
+      for (const cookie of cookies) {
+        headers.append('set-cookie', cookie);
+      }
+      return {
+        headers,
+        response: { user: { id: 'user-id', email: 'ada@example.com' } },
+      };
+    };
+
+    /** The Set-Cookie state of the mocked response after the call. */
+    const finalSetCookie = (): string | string[] | undefined =>
+      responseHeaders.get('Set-Cookie');
+
+    it('honours rememberMe: true and expires any stale dont_remember flag', async () => {
+      signInEmail.mockResolvedValue(signInResponse([sessionCookie]));
+
+      const result = await controller.signIn(
+        { email: 'ada@example.com', password: 'password123', rememberMe: true },
+        res,
+      );
+
+      expect(signInEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'ada@example.com',
+          password: 'password123',
+          rememberMe: true,
+        },
+        returnHeaders: true,
+      });
+      expect(result).toEqual({
+        user: { id: 'user-id', email: 'ada@example.com' },
+      });
+      // The forwarded persistent cookie stays, and the stale "don't remember"
+      // flag is expired in the same response so it can no longer downgrade
+      // later sessions or block session refresh.
+      expect(finalSetCookie()).toEqual([sessionCookie, EXPIRED_DONT_REMEMBER]);
+    });
+
+    it('leaves the dont_remember cookie untouched when rememberMe is false', async () => {
+      signInEmail.mockResolvedValue(
+        signInResponse([
+          'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+          dontRememberCookie,
+        ]),
+      );
+
+      await controller.signIn(
+        {
+          email: 'ada@example.com',
+          password: 'password123',
+          rememberMe: false,
+        },
+        res,
+      );
+
+      expect(signInEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'ada@example.com',
+          password: 'password123',
+          rememberMe: false,
+        },
+        returnHeaders: true,
+      });
+      // Browser-session semantics: Better Auth's own cookies are forwarded
+      // verbatim and nothing is expired or synthesised.
+      expect(finalSetCookie()).toEqual([
+        'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+        dontRememberCookie,
+      ]);
+    });
+
+    it('treats an omitted rememberMe as false (schema default) without expiring the flag', async () => {
+      signInEmail.mockResolvedValue(
+        signInResponse([
+          'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+          dontRememberCookie,
+        ]),
+      );
+
+      await controller.signIn(
+        { email: 'ada@example.com', password: 'password123' },
+        res,
+      );
+
+      expect(signInEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'ada@example.com',
+          password: 'password123',
+          rememberMe: false,
+        },
+        returnHeaders: true,
+      });
+      expect(finalSetCookie()).toEqual([
+        'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+        dontRememberCookie,
+      ]);
     });
   });
 

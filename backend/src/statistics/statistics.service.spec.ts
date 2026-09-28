@@ -338,6 +338,7 @@ describe('StatisticsService', () => {
       assists: 1,
       yellowCards: 1,
       redCards: 1,
+      saves: 0,
     });
     expect(result.matches).toHaveLength(3);
 
@@ -405,6 +406,7 @@ describe('StatisticsService', () => {
       assists: 0,
       yellowCards: 0,
       redCards: 0,
+      saves: 0,
     });
     expect(result.matches).toEqual([]);
   });

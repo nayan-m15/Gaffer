@@ -22,8 +22,7 @@ import {
   type DraftOpponentPlayer,
 } from "@/features/matches/opponent-squad-draft";
 import {
-  DEFAULT_FORMATION_ID,
-  FORMATIONS,
+  resolveFormation,
 } from "@/features/team-management/formations";
 import { SquadPitchMarkings } from "@/features/team-management/SquadFormationPreview";
 import { usePointerDrag } from "@/features/team-management/usePointerDrag";
@@ -36,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 interface OpponentFormationPitchProps {
   formationId: string;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   assignments: PitchAssignments;
   players: DraftOpponentPlayer[];
   opponentColor: string;
@@ -55,6 +55,7 @@ function parseDragPayload(data: string): DragPayload | null {
 
 export function OpponentFormationPitch({
   formationId,
+  customPositions,
   assignments,
   players,
   opponentColor,
@@ -63,8 +64,7 @@ export function OpponentFormationPitch({
   onDragEnd,
   onAssignmentsChange,
 }: OpponentFormationPitchProps) {
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const formation = resolveFormation(formationId, customPositions);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
   const taken = assignedShirtNumbers(assignments);
   const playerByShirt = new Map(
@@ -330,55 +330,75 @@ function OpponentPitchSlot({
           </span>
         ) : null}
       </div>
-      <PopoverContent align="center" side="top" className="w-44 gap-2 p-2">
-        <PopoverHeader className="px-1">
-          <PopoverTitle className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {assigned ? `${slotLabel} · #${shirt}` : `Place ${slotLabel}`}
-          </PopoverTitle>
-        </PopoverHeader>
-        {unassigned.length === 0 && !assigned ? (
-          <p className="px-1 text-xs text-muted-foreground">
-            Add a shirt number first.
-          </p>
-        ) : (
-          <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-            {unassigned.map((entry) => (
-              <li key={entry.shirtNumber}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
-                    entry.shirtNumber === shirt && "bg-muted",
-                  )}
-                  onClick={() => onAssign(entry.shirtNumber)}
-                >
-                  <span className="font-semibold tabular-nums">
-                    #{entry.shirtNumber}
-                  </span>
-                  {entry.name ? (
-                    <span className="max-w-[6rem] truncate text-muted-foreground">
-                      {entry.name}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {assigned ? (
-          <button
-            type="button"
-            className="rounded-md px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-[0.12em] text-destructive hover:bg-destructive/10"
-            onClick={onClear}
-          >
-            Clear slot
-          </button>
-        ) : null}
-        {playerName && assigned ? (
-          <p className="px-1 text-[11px] text-muted-foreground">{playerName}</p>
-        ) : null}
-      </PopoverContent>
+      <OpponentSlotOptions
+        slotLabel={slotLabel}
+        assigned={assigned}
+        shirt={shirt}
+        playerName={playerName}
+        unassigned={unassigned}
+        onAssign={onAssign}
+        onClear={onClear}
+      />
     </Popover>
+  );
+}
+
+function OpponentSlotOptions({
+  slotLabel,
+  assigned,
+  shirt,
+  playerName,
+  unassigned,
+  onAssign,
+  onClear,
+}: {
+  slotLabel: string;
+  assigned: boolean;
+  shirt: number | null;
+  playerName?: string;
+  unassigned: DraftOpponentPlayer[];
+  onAssign: (shirtNumber: number) => void;
+  onClear: () => void;
+}) {
+  return (
+    <PopoverContent align="center" side="top" className="w-44 gap-2 p-2">
+      <PopoverHeader className="px-1">
+        <PopoverTitle className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {assigned ? `${slotLabel} · #${shirt}` : `Place ${slotLabel}`}
+        </PopoverTitle>
+      </PopoverHeader>
+      {unassigned.length === 0 && !assigned ? (
+        <p className="px-1 text-xs text-muted-foreground">Add a shirt number first.</p>
+      ) : (
+        <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+          {unassigned.map((entry) => (
+            <li key={entry.shirtNumber}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                  entry.shirtNumber === shirt && "bg-muted",
+                )}
+                onClick={() => onAssign(entry.shirtNumber)}
+              >
+                <span className="font-semibold tabular-nums">#{entry.shirtNumber}</span>
+                {entry.name && <span className="max-w-[6rem] truncate text-muted-foreground">{entry.name}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {assigned && (
+        <button
+          type="button"
+          className="rounded-md px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-[0.12em] text-destructive hover:bg-destructive/10"
+          onClick={onClear}
+        >
+          Clear slot
+        </button>
+      )}
+      {playerName && assigned && <p className="px-1 text-[11px] text-muted-foreground">{playerName}</p>}
+    </PopoverContent>
   );
 }
 

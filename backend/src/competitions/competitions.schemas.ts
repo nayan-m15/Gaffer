@@ -22,6 +22,9 @@ export const createCompetitionSchema = z.object({
   season: seasonLabelField,
   format: z.enum(['league', 'knockout', 'league_knockout']).optional(),
   configuredTeamCount: z.number().int().min(2).max(128).optional(),
+  playersPerSide: z
+    .union([z.literal(5), z.literal(7), z.literal(11)])
+    .optional(),
   maxSubstitutes: z.number().int().min(0).max(99).optional(),
   redCardSuspensionMatches: z.number().int().min(0).max(99).optional(),
   accumulatedYellowThreshold: z.number().int().min(1).max(99).optional(),

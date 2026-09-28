@@ -347,10 +347,19 @@ function buildReason(
     parts.push(`Fills in at ${slot.label}`);
   }
 
+  appendPerformanceReason(parts, athlete, slot.role);
+  return parts.join(' · ');
+}
+
+function appendPerformanceReason(
+  parts: string[],
+  athlete: SuggestionAthlete,
+  role: string,
+): void {
   const appearances = athlete.appearances ?? 0;
   const goals = athlete.goals ?? 0;
   const assists = athlete.assists ?? 0;
-  if (slot.role === 'GK' || slot.role === 'DEF') {
+  if (role === 'GK' || role === 'DEF') {
     if (appearances > 0) parts.push(pluralize(appearances, 'appearance'));
     else if (goals > 0) parts.push(pluralize(goals, 'goal'));
     else if (assists > 0) parts.push(pluralize(assists, 'assist'));
@@ -361,8 +370,72 @@ function buildReason(
       parts.push(pluralize(appearances, 'appearance'));
     }
   }
+}
 
-  return parts.join(' · ');
+function applyPreferredAssignments(
+  preferred: Record<string, string>,
+  formation: Formation,
+  athleteById: Map<string, SuggestionAthlete>,
+  excluded: Set<string>,
+  assignments: Record<string, string | null>,
+  substituteIds: string[],
+): string[] {
+  const warnings: string[] = [];
+  for (const [slotLabel, athleteId] of Object.entries(preferred)) {
+    const warning = placePreferredAthlete(
+      slotLabel,
+      athleteId,
+      formation,
+      athleteById,
+      excluded,
+      assignments,
+      substituteIds,
+    );
+    if (warning) warnings.push(warning);
+  }
+  return warnings;
+}
+
+function getPlanEngagedAthleteIds(
+  options: StartingXiSuggestionOptions,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const id of Object.values(options.gamePlanAssignments ?? {})) {
+    if (id) ids.add(id);
+  }
+  (options.gamePlanSubstituteIds ?? []).forEach((id) => ids.add(id));
+  return ids;
+}
+
+function placePreferredAthlete(
+  slotLabel: string,
+  athleteId: string,
+  formation: Formation,
+  athleteById: Map<string, SuggestionAthlete>,
+  excluded: Set<string>,
+  assignments: Record<string, string | null>,
+  substituteIds: string[],
+): string | undefined {
+  const athlete = athleteById.get(athleteId);
+  if (!athlete) return `${athleteId} is not on the current squad.`;
+  if (excluded.has(athleteId) || !isEligible(athlete)) {
+    return `${athlete.firstName} ${athlete.lastName} is not available, so they couldn't be placed at ${slotLabel}.`;
+  }
+  const slot = formation.positions.find(
+    (candidate) =>
+      candidate.label.trim().toUpperCase() === slotLabel.trim().toUpperCase(),
+  );
+  if (!slot) return `${slotLabel} is not a position in this formation.`;
+
+  formation.positions.forEach((candidate) => {
+    if (assignments[candidate.id] === athleteId) assignments[candidate.id] = null;
+  });
+  const subIndex = substituteIds.indexOf(athleteId);
+  if (subIndex >= 0) substituteIds.splice(subIndex, 1);
+  const displaced = assignments[slot.id];
+  assignments[slot.id] = athleteId;
+  if (displaced && displaced !== athleteId) substituteIds.push(displaced);
+  return undefined;
 }
 
 export function suggestStartingXi(
@@ -375,13 +448,7 @@ export function suggestStartingXi(
     options.athletes.map((athlete) => [athlete.id, athlete]),
   );
 
-  const planEngaged = new Set<string>();
-  for (const athleteId of Object.values(options.gamePlanAssignments ?? {})) {
-    if (athleteId) planEngaged.add(athleteId);
-  }
-  for (const athleteId of options.gamePlanSubstituteIds ?? []) {
-    planEngaged.add(athleteId);
-  }
+  const planEngaged = getPlanEngagedAthleteIds(options);
 
   const compare = (a: SuggestionAthlete, b: SuggestionAthlete): number => {
     const byPlan =
@@ -411,42 +478,14 @@ export function suggestStartingXi(
   // Apply preferred-slot overrides: force a named athlete into a named slot
   // label when they are eligible, bumping whoever autofill placed there
   // (unassigned, not dropped) to the substitutes bench.
-  const warnings: string[] = [];
-  const preferred = options.preferredAthleteIdBySlotLabel ?? {};
-  for (const [slotLabel, athleteId] of Object.entries(preferred)) {
-    const athlete = athleteById.get(athleteId);
-    if (!athlete) {
-      warnings.push(`${athleteId} is not on the current squad.`);
-      continue;
-    }
-    if (excluded.has(athleteId) || !isEligible(athlete)) {
-      warnings.push(
-        `${athlete.firstName} ${athlete.lastName} is not available, so they couldn't be placed at ${slotLabel}.`,
-      );
-      continue;
-    }
-    const slot = formation.positions.find(
-      (candidate) =>
-        candidate.label.trim().toUpperCase() === slotLabel.trim().toUpperCase(),
-    );
-    if (!slot) {
-      warnings.push(`${slotLabel} is not a position in this formation.`);
-      continue;
-    }
-
-    // Remove the athlete from wherever autofill placed them.
-    for (const s of formation.positions) {
-      if (assignments[s.id] === athleteId) assignments[s.id] = null;
-    }
-    const subIndex = substituteIds.indexOf(athleteId);
-    if (subIndex >= 0) substituteIds.splice(subIndex, 1);
-
-    const displaced = assignments[slot.id];
-    assignments[slot.id] = athleteId;
-    if (displaced && displaced !== athleteId) {
-      substituteIds.push(displaced);
-    }
-  }
+  const warnings = applyPreferredAssignments(
+    options.preferredAthleteIdBySlotLabel ?? {},
+    formation,
+    athleteById,
+    excluded,
+    assignments,
+    substituteIds,
+  );
 
   const startingIds: string[] = [];
   const reasons: Record<string, string> = {};

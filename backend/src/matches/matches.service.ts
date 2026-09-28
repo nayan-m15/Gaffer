@@ -44,6 +44,11 @@ import type {
   UpdateMatchClockDto,
 } from './matches.schemas';
 
+function isGoalkeeperPosition(position: string | null | undefined) {
+  const normalized = position?.trim().toLowerCase();
+  return normalized === 'gk' || normalized === 'goalkeeper';
+}
+
 /**
  * Live match logging. Every query is scoped to the team returned by
  * `TeamsService.findTeamForUser`; matches on other teams are treated as
@@ -89,8 +94,12 @@ export class MatchesService {
     // confirmed lineup alongside the manually logged opponent squad. The
     // expected opponent team is verified against the match row so a match
     // can never resolve an unrelated team's lineup.
-    const friendlyOpponentLineup =
-      event.friendlyFixtureId && match.opponentTeamId
+    const friendlyOpponentLineup = event.competitionFixtureId
+      ? await this.friendlyFixturesService.resolveCompetitionOpponentLineup(
+          event.competitionFixtureId,
+          team.id,
+        )
+      : event.friendlyFixtureId && match.opponentTeamId
         ? await this.friendlyFixturesService.resolveOpponentLineup(
             event.friendlyFixtureId,
             team.id,
@@ -275,6 +284,13 @@ export class MatchesService {
     const opponentLabel =
       attribution.opponentLabel ?? dto.opponentLabel ?? null;
     const opponentPlayerId = attribution.opponentPlayerId ?? null;
+    await this.validateGoalkeeperSave(
+      match.id,
+      dto.team,
+      dto.eventType,
+      dto.athleteId ?? null,
+      opponentPlayerId,
+    );
     const payload = {
       team: dto.team,
       eventType: dto.eventType,
@@ -403,30 +419,14 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
-    const [previousDecision] = await this.databaseService.database
-      .select()
-      .from(matchEventOperations)
-      .where(eq(matchEventOperations.id, operationId))
-      .limit(1);
-    if (previousDecision) {
-      if (
-        previousDecision.matchId !== matchId ||
-        previousDecision.actorUserId !== userId ||
-        previousDecision.decision.reviewId !== reviewId ||
-        previousDecision.decision.resolution !== dto.resolution
-      ) {
-        throw new BadRequestException('This offline operation ID was reused.');
-      }
-      const [resolvedReview] = await this.databaseService.database
-        .select()
-        .from(matchEventReviews)
-        .where(eq(matchEventReviews.id, reviewId))
-        .limit(1);
-      if (resolvedReview) {
-        await this.refreshProjection(matchId);
-        return resolvedReview;
-      }
-    }
+    const previousResult = await this.getIdempotentReviewResult(
+      userId,
+      matchId,
+      reviewId,
+      operationId,
+      dto,
+    );
+    if (previousResult) return previousResult;
     const [review] = await this.databaseService.database
       .select()
       .from(matchEventReviews)
@@ -439,29 +439,17 @@ export class MatchesService {
       .limit(1);
     if (!review) throw new NotFoundException('Event review not found.');
     if (review.reviewVersion === 2 && review.observationIds.length === 2) {
-      const result = await this.databaseService.database.execute<{
-        canonical_event_id: string;
-      }>(sql`select resolve_match_event_candidate(
-        ${reviewId}::uuid, ${matchId}::uuid, ${userId}::text,
-        ${operationId}::uuid, ${dto.resolution}::text,
-        ${JSON.stringify(causalParentIds)}::jsonb
-      ) as canonical_event_id`);
-      await this.refreshProjection(matchId);
-      await this.syncCompletedCompetitionFixture(
+      return this.resolveCandidateReview(
         team.id,
         match,
-        event.status,
-        true,
+        event,
+        reviewId,
+        matchId,
+        userId,
+        operationId,
+        causalParentIds,
+        dto,
       );
-      const [updatedReview] = await this.databaseService.database
-        .select()
-        .from(matchEventReviews)
-        .where(eq(matchEventReviews.id, reviewId))
-        .limit(1);
-      return {
-        ...updatedReview,
-        canonicalEventId: result.rows[0].canonical_event_id,
-      };
     }
     if (review.status !== 'open') {
       throw new NotFoundException('Open event review not found.');
@@ -470,79 +458,10 @@ export class MatchesService {
       review.canonicalEventId,
     );
 
-    let separatedGoals = false;
-    if (dto.resolution === 'separate_events') {
-      const observations = await this.databaseService.database
-        .select({ observation: matchEventObservations })
-        .from(matchEventObservations)
-        .innerJoin(
-          matchEventMemberships,
-          eq(matchEventMemberships.observationId, matchEventObservations.id),
-        )
-        .where(
-          eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
-        )
-        .orderBy(asc(matchEventObservations.id));
-
-      const additionalGoals = observations
-        .slice(1)
-        .map(({ observation }) => observation)
-        .filter((observation) => observation.eventType === 'goal');
-      separatedGoals = additionalGoals.length > 0;
-      if (event.status === 'completed' && separatedGoals) {
-        const current = await this.buildCompetitionFixtureResult(
-          team.id,
-          match,
-        );
-        if (current) {
-          let projected = current.result;
-          for (const observation of additionalGoals) {
-            projected = this.adjustFixtureScore(
-              projected,
-              match.isHome,
-              observation.team,
-              1,
-            );
-          }
-          await validateFixtureResult(
-            this.databaseService,
-            current.competitionId,
-            { kind: 'live', id: match.id },
-            projected,
-          );
-        }
-      }
-
-      for (const { observation } of observations.slice(1)) {
-        const data = observation.payload as CreateMatchLogEventDto & {
-          period: string;
-          matchElapsedMs: number;
-        };
-        await this.databaseService.database
-          .insert(matchEvents)
-          .values({
-            id: observation.id,
-            matchId,
-            athleteId: observation.athleteId,
-            team: observation.team,
-            opponentLabel: observation.opponentLabel,
-            opponentPlayerId: observation.opponentPlayerId,
-            eventType: observation.eventType,
-            minute: Math.floor(observation.matchElapsedMs / 60_000),
-            detail: typeof data.detail === 'string' ? data.detail : null,
-            loggedByUserId: observation.loggedByUserId,
-            clientRequestId: observation.id,
-            period: observation.period,
-            matchElapsedMs: observation.matchElapsedMs,
-            structuredPayload: observation.payload,
-          })
-          .onConflictDoNothing({ target: matchEvents.id });
-        await this.databaseService.database
-          .update(matchEventMemberships)
-          .set({ canonicalEventId: observation.id })
-          .where(eq(matchEventMemberships.observationId, observation.id));
-      }
-    }
+    const separatedGoals =
+      dto.resolution === 'separate_events'
+        ? await this.separateReviewObservations(team.id, match, event, review, matchId)
+        : false;
     await this.databaseService.database
       .update(matchEvents)
       .set({ lifecycleStatus: 'confirmed', updatedAt: new Date() })
@@ -576,6 +495,160 @@ export class MatchesService {
       separatedGoals,
     );
     return resolved;
+  }
+
+  private async getIdempotentReviewResult(
+    userId: string,
+    matchId: string,
+    reviewId: string,
+    operationId: string,
+    dto: ResolveMatchEventReviewDto,
+  ) {
+    const [previousDecision] = await this.databaseService.database
+      .select()
+      .from(matchEventOperations)
+      .where(eq(matchEventOperations.id, operationId))
+      .limit(1);
+    if (!previousDecision) return undefined;
+    const decisionMatches =
+      previousDecision.matchId === matchId &&
+      previousDecision.actorUserId === userId &&
+      previousDecision.decision.reviewId === reviewId &&
+      previousDecision.decision.resolution === dto.resolution;
+    if (!decisionMatches) {
+      throw new BadRequestException('This offline operation ID was reused.');
+    }
+    const [resolvedReview] = await this.databaseService.database
+      .select()
+      .from(matchEventReviews)
+      .where(eq(matchEventReviews.id, reviewId))
+      .limit(1);
+    if (resolvedReview) await this.refreshProjection(matchId);
+    return resolvedReview;
+  }
+
+  private async resolveCandidateReview(
+    teamId: string,
+    match: typeof matches.$inferSelect,
+    event: typeof events.$inferSelect,
+    reviewId: string,
+    matchId: string,
+    userId: string,
+    operationId: string,
+    causalParentIds: string[],
+    dto: ResolveMatchEventReviewDto,
+  ) {
+    const result = await this.databaseService.database.execute<{
+      canonical_event_id: string;
+    }>(sql`select resolve_match_event_candidate(
+      ${reviewId}::uuid, ${matchId}::uuid, ${userId}::text,
+      ${operationId}::uuid, ${dto.resolution}::text,
+      ${JSON.stringify(causalParentIds)}::jsonb
+    ) as canonical_event_id`);
+    await this.refreshProjection(matchId);
+    await this.syncCompletedCompetitionFixture(
+      teamId,
+      match,
+      event.status,
+      true,
+    );
+    const [updatedReview] = await this.databaseService.database
+      .select()
+      .from(matchEventReviews)
+      .where(eq(matchEventReviews.id, reviewId))
+      .limit(1);
+    return {
+      ...updatedReview,
+      canonicalEventId: result.rows[0].canonical_event_id,
+    };
+  }
+
+  private async separateReviewObservations(
+    teamId: string,
+    match: typeof matches.$inferSelect,
+    event: typeof events.$inferSelect,
+    review: typeof matchEventReviews.$inferSelect,
+    matchId: string,
+  ): Promise<boolean> {
+    const observations = await this.databaseService.database
+      .select({ observation: matchEventObservations })
+      .from(matchEventObservations)
+      .innerJoin(
+        matchEventMemberships,
+        eq(matchEventMemberships.observationId, matchEventObservations.id),
+      )
+      .where(
+        eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
+      )
+      .orderBy(asc(matchEventObservations.id));
+    const laterObservations = observations.slice(1).map(({ observation }) => observation);
+    const additionalGoals = laterObservations.filter(
+      (observation) => observation.eventType === 'goal',
+    );
+    if (event.status === 'completed' && additionalGoals.length > 0) {
+      await this.validateSeparatedGoalScore(teamId, match, additionalGoals);
+    }
+    for (const observation of laterObservations) {
+      await this.createSeparatedObservation(matchId, observation);
+    }
+    return additionalGoals.length > 0;
+  }
+
+  private async validateSeparatedGoalScore(
+    teamId: string,
+    match: typeof matches.$inferSelect,
+    goals: Array<typeof matchEventObservations.$inferSelect>,
+  ): Promise<void> {
+    const current = await this.buildCompetitionFixtureResult(teamId, match);
+    if (!current) return;
+    let projected = current.result;
+    for (const observation of goals) {
+      projected = this.adjustFixtureScore(
+        projected,
+        match.isHome,
+        observation.team,
+        1,
+      );
+    }
+    await validateFixtureResult(
+      this.databaseService,
+      current.competitionId,
+      { kind: 'live', id: match.id },
+      projected,
+    );
+  }
+
+  private async createSeparatedObservation(
+    matchId: string,
+    observation: typeof matchEventObservations.$inferSelect,
+  ): Promise<void> {
+    const data = observation.payload as CreateMatchLogEventDto & {
+      period: string;
+      matchElapsedMs: number;
+    };
+    await this.databaseService.database
+      .insert(matchEvents)
+      .values({
+        id: observation.id,
+        matchId,
+        athleteId: observation.athleteId,
+        team: observation.team,
+        opponentLabel: observation.opponentLabel,
+        opponentPlayerId: observation.opponentPlayerId,
+        eventType: observation.eventType,
+        minute: Math.floor(observation.matchElapsedMs / 60_000),
+        detail: typeof data.detail === 'string' ? data.detail : null,
+        loggedByUserId: observation.loggedByUserId,
+        clientRequestId: observation.id,
+        period: observation.period,
+        matchElapsedMs: observation.matchElapsedMs,
+        structuredPayload: observation.payload,
+      })
+      .onConflictDoNothing({ target: matchEvents.id });
+    await this.databaseService.database
+      .update(matchEventMemberships)
+      .set({ canonicalEventId: observation.id })
+      .where(eq(matchEventMemberships.observationId, observation.id));
   }
 
   async updateEvent(
@@ -625,6 +698,17 @@ export class MatchesService {
       opponentPlayerId: dto.opponentPlayerId,
       opponentLabel: dto.opponentLabel,
     });
+    await this.validateGoalkeeperSave(
+      match.id,
+      logged.team,
+      dto.eventType ?? logged.eventType,
+      dto.athleteId === undefined ? logged.athleteId : dto.athleteId,
+      attribution.opponentPlayerId !== undefined
+        ? attribution.opponentPlayerId
+        : dto.opponentPlayerId === undefined
+          ? logged.opponentPlayerId
+          : dto.opponentPlayerId,
+    );
 
     let goalDelta = 0;
     if (event.status === 'completed' && logged.lifecycleStatus !== 'voided') {
@@ -1397,6 +1481,61 @@ export class MatchesService {
     if (status === 'cancelled') {
       throw new BadRequestException('Cancelled matches cannot be edited.');
     }
+  }
+
+  private async validateGoalkeeperSave(
+    matchId: string,
+    team: 'own' | 'opponent',
+    eventType: string,
+    athleteId: string | null,
+    opponentPlayerId: string | null,
+  ) {
+    if (eventType !== 'goalkeeper_save') return;
+
+    const position =
+      team === 'own'
+        ? await this.ownAthletePosition(matchId, athleteId)
+        : await this.opponentPlayerPosition(matchId, opponentPlayerId);
+
+    if (!isGoalkeeperPosition(position)) {
+      throw new BadRequestException(
+        'Goalkeeper saves can only be logged for a goalkeeper.',
+      );
+    }
+  }
+
+  private async ownAthletePosition(matchId: string, athleteId: string | null) {
+    if (!athleteId) return null;
+    const [athlete] = await this.databaseService.database
+      .select({ position: athletes.position })
+      .from(athletes)
+      .innerJoin(
+        athleteMatchStats,
+        eq(athleteMatchStats.athleteId, athletes.id),
+      )
+      .where(
+        and(eq(athletes.id, athleteId), eq(athleteMatchStats.matchId, matchId)),
+      )
+      .limit(1);
+    return athlete?.position ?? null;
+  }
+
+  private async opponentPlayerPosition(
+    matchId: string,
+    opponentPlayerId: string | null,
+  ) {
+    if (!opponentPlayerId) return null;
+    const [player] = await this.databaseService.database
+      .select({ position: opponentMatchPlayers.position })
+      .from(opponentMatchPlayers)
+      .where(
+        and(
+          eq(opponentMatchPlayers.id, opponentPlayerId),
+          eq(opponentMatchPlayers.matchId, matchId),
+        ),
+      )
+      .limit(1);
+    return player?.position ?? null;
   }
 
   private async validateSubstitution(

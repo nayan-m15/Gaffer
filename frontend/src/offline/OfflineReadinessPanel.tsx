@@ -6,6 +6,7 @@ import {
   requestPersistentStorage,
   type OfflineReadiness,
 } from "./match-store";
+import { fetchMatch, fetchMatchEvents, fetchMatchSquad } from "@/features/matches/api";
 
 const formatBytes = (value: number | null) =>
   value == null ? "Unavailable" : `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -20,6 +21,7 @@ export function OfflineReadinessPanel({
   const [readiness, setReadiness] = useState<OfflineReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const runCheck = useCallback(async () => {
@@ -62,6 +64,26 @@ export function OfflineReadinessPanel({
     }
   };
 
+  const downloadMatchData = async () => {
+    if (!navigator.onLine) {
+      setError("Connect to the internet before downloading match data.");
+      return;
+    }
+    setDownloading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await Promise.all([fetchMatch(matchId), fetchMatchSquad(matchId), fetchMatchEvents(matchId)]);
+      await requestPersistentStorage();
+      setReadiness(await checkOfflineReadiness(matchId));
+      setMessage("Match, squad and event data are saved on this device.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not download match data.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const checks = readiness
     ? [
         ["Match downloaded", readiness.matchCached, "Needs attention"],
@@ -86,27 +108,27 @@ export function OfflineReadinessPanel({
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-2xl border border-[#2a2e31] bg-[#111315] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="offline-readiness-title">
+      <div className="w-full max-w-md rounded-2xl border border-border-default bg-popover p-5 text-popover-foreground shadow-2xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-oswald text-xl tracking-wide text-white">Prepare for offline use</h2>
-          <button type="button" onClick={onClose} className="text-sm text-[#9ca39f]">Close</button>
+          <h2 id="offline-readiness-title" className="font-oswald text-xl tracking-wide text-foreground">Prepare for offline use</h2>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Close</button>
         </div>
-        <p className="mt-2 text-sm text-[#9ca39f]">
-          Run this while online before leaving for the match.
+        <p className="mt-2 text-sm text-muted-foreground">
+          Prepare while online before leaving. “Ready” means this device has the match, current squad and events locally, and its local database passed a write/read check.
         </p>
-        {error ? <p className="mt-3 text-sm text-[#ff7377]">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-[#16d99a]">{message}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
+        {message ? <p role="status" className="mt-3 text-sm text-success">{message}</p> : null}
         <div className="mt-4 space-y-2">
           {readiness ? checks.map(([label, passed, fallback]) => (
-            <div key={label} className="flex items-center justify-between rounded-lg bg-[#0d0f10] px-3 py-2 text-sm">
-              <span className="text-[#c7ccc9]">{label}</span>
-              <span className={passed ? "text-[#16d99a]" : "text-[#d6a447]"}>{passed ? "Ready" : fallback}</span>
+            <div key={label} className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface-nested px-3 py-2 text-sm">
+              <span className="text-secondary-foreground">{label}</span>
+              <span className={passed ? "font-medium text-success" : "font-medium text-warning"}>{passed ? "Ready" : fallback}</span>
             </div>
-          )) : <p className="text-sm text-[#9ca39f]">Checking this device…</p>}
+          )) : <p className="text-sm text-muted-foreground">Checking this device…</p>}
         </div>
         {readiness ? (
-          <div className="mt-3 space-y-1 text-xs text-[#7f8d98]">
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
             <p>
               Storage used: {formatBytes(readiness.usageBytes)} of {formatBytes(readiness.quotaBytes)}
             </p>
@@ -116,11 +138,13 @@ export function OfflineReadinessPanel({
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
-          <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-[#16d99a] px-3 py-2 text-sm font-semibold text-[#05130f]">Check again</button>
-          <button type="button" onClick={() => void downloadExport()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Export unsent events</button>
-          <button type="button" onClick={() => importRef.current?.click()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white">Import unsent events</button>
+          <button type="button" disabled={downloading || !navigator.onLine} onClick={() => void downloadMatchData()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/88 disabled:cursor-not-allowed disabled:opacity-50">{downloading ? "Downloading…" : "Download match data"}</button>
+          <button type="button" onClick={() => void runCheck()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Check again</button>
+          <button type="button" onClick={() => void downloadExport()} className="rounded-lg border border-border-default bg-surface-nested px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Export unsent events</button>
+          <button type="button" onClick={() => importRef.current?.click()} className="rounded-lg border border-border-default bg-surface-nested px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Import unsent events</button>
           <input ref={importRef} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void importExport(event.target.files?.[0])} />
         </div>
+        {!readiness?.persistentStorage ? <p className="mt-3 text-xs text-warning">Browser storage may be cleared automatically. Export unsent events and keep the file safe if this device is low on storage.</p> : null}
       </div>
     </div>
   );

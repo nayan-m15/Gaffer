@@ -69,7 +69,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function loggedEventCount(
-  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save',
 ) {
   return sql<number>`coalesce((
     select count(*)::int
@@ -109,7 +109,7 @@ function appearedInMatch() {
  * subquery per row.
  */
 function countEvents(
-  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card',
+  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save',
   onlyWithMinutes = false,
 ) {
   const minutesClause = onlyWithMinutes
@@ -233,10 +233,12 @@ export class StatisticsService {
         athleteId: athletes.id,
         firstName: athletes.firstName,
         lastName: athletes.lastName,
+        position: athletes.position,
         goals: loggedEventCount('goal'),
         assists: loggedEventCount('assist'),
         yellowCards: loggedEventCount('yellow_card'),
         redCards: loggedEventCount('red_card'),
+        saves: loggedEventCount('goalkeeper_save'),
         appeared: appearedInMatch(),
       })
       .from(athleteMatchStats)
@@ -250,11 +252,13 @@ export class StatisticsService {
       {
         athleteId: string;
         name: string;
+        position: string | null;
         appearances: number;
         goals: number;
         assists: number;
         yellowCards: number;
         redCards: number;
+        saves: number;
       }
     >();
 
@@ -264,11 +268,13 @@ export class StatisticsService {
         entry = {
           athleteId: row.athleteId,
           name: `${row.firstName} ${row.lastName}`,
+          position: row.position,
           appearances: 0,
           goals: 0,
           assists: 0,
           yellowCards: 0,
           redCards: 0,
+          saves: 0,
         };
         playerMap.set(row.athleteId, entry);
       }
@@ -277,6 +283,7 @@ export class StatisticsService {
       entry.assists += row.assists;
       entry.yellowCards += row.yellowCards;
       entry.redCards += row.redCards;
+      entry.saves += row.saves ?? 0;
     }
 
     const players = Array.from(playerMap.values()).sort(
@@ -556,6 +563,7 @@ export class StatisticsService {
         assists: loggedEventCount('assist'),
         yellowCards: loggedEventCount('yellow_card'),
         redCards: loggedEventCount('red_card'),
+        saves: loggedEventCount('goalkeeper_save'),
       })
       .from(athleteMatchStats)
       .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
@@ -574,6 +582,7 @@ export class StatisticsService {
     let assists = 0;
     let yellowCards = 0;
     let redCards = 0;
+    let saves = 0;
 
     const matchesBreakdown = statsRows.map((row) => {
       if (row.appeared) appearances += 1;
@@ -582,6 +591,7 @@ export class StatisticsService {
       assists += row.assists;
       yellowCards += row.yellowCards;
       redCards += row.redCards;
+      saves += row.saves ?? 0;
 
       const gf = row.teamScore;
       const ga = row.opponentScore;
@@ -615,6 +625,7 @@ export class StatisticsService {
       assists,
       yellowCards,
       redCards,
+      saves,
       matches: matchesBreakdown,
     };
   }

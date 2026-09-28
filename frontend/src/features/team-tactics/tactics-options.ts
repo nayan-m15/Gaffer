@@ -120,7 +120,7 @@ export type TacticsTab = (typeof TACTICS_TABS)[number];
 /**
  * Tactical values a brand-new game plan starts from — matches the backend
  * column defaults so a freshly created plan and a locally-initialised one
- * agree. The squad half (formation, starting XI, bench) starts from a blank
+ * agree. The squad half (formation, starting lineup, bench) starts from a blank
  * board instead, via `useLineupState`.
  */
 export const DEFAULT_GAME_PLAN_TACTICS: GamePlanTactics = {

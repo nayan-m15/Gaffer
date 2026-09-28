@@ -271,7 +271,9 @@ export function recoveryReadings(
       group,
       label: RECOVERY_GROUP_LABELS[group],
       percent: score?.percent ?? 100,
-      affectedRegions: score ? [...score.regions].sort() : [],
+      affectedRegions: score
+        ? [...score.regions].sort((left, right) => left.localeCompare(right))
+        : [],
     };
   });
 }

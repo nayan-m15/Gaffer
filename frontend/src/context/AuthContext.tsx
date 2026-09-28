@@ -73,6 +73,7 @@ export interface SignUpInput {
 export interface SignInInput {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface SignUpResult {
@@ -95,7 +96,7 @@ interface AuthContextValue {
   retrySession: () => Promise<void>;
   signUp: (input: SignUpInput) => Promise<SignUpResult>;
   signIn: (input: SignInInput) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (callbackPath?: string) => Promise<void>;
   signOut: (options?: { pendingData?: "retain" | "discard" }) => Promise<void>;
   refreshSession: () => Promise<SessionPayload | null>;
   resendVerificationEmail: (
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
   const activeUserIdRef = useRef<string | null>(null);
   const cachedSessionKey = "gaffer-offline-session";
+  const rememberedSessionKey = "gaffer-remember-session";
 
   const refresh = useCallback(async (): Promise<SessionPayload | null> => {
     try {
@@ -137,7 +139,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setClaimedAthletes(data.claimedAthletes ?? []);
       setSessionError(null);
       setStatus("authenticated");
-      localStorage.setItem(cachedSessionKey, JSON.stringify(data));
+      if (localStorage.getItem(rememberedSessionKey) === "true") {
+        localStorage.setItem(cachedSessionKey, JSON.stringify(data));
+      } else {
+        // Do not let the offline cache outlive a session that the user chose
+        // not to remember. The server cookie remains the source of truth.
+        localStorage.removeItem(cachedSessionKey);
+      }
       return data;
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -147,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear();
         activeUserIdRef.current = null;
         localStorage.removeItem(cachedSessionKey);
+        localStorage.removeItem(rememberedSessionKey);
         setSessionError(null);
         setStatus("unauthenticated");
         return null;
@@ -156,7 +165,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // timeout, 503) from invalid credentials so users can retry without
       // falsely treating active sessions as signed out.
       console.error("Failed to load the current session:", error);
-      const cachedRaw = localStorage.getItem(cachedSessionKey);
+      const cachedRaw =
+        localStorage.getItem(rememberedSessionKey) === "true"
+          ? localStorage.getItem(cachedSessionKey)
+          : null;
       if (cachedRaw) {
         try {
           const cached = JSON.parse(cachedRaw) as SessionPayload;
@@ -188,6 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(
     async (input: SignUpInput): Promise<SignUpResult> => {
+      // Sign-up and verification auto-sign-in have no remember-me choice.
+      localStorage.removeItem(rememberedSessionKey);
+      localStorage.removeItem(cachedSessionKey);
       const data = await apiFetch<{ emailVerificationRequired: boolean }>(
         "/auth/sign-up",
         {
@@ -218,6 +233,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: "POST",
         body: JSON.stringify(input),
       });
+      if (input.rememberMe) {
+        localStorage.setItem(rememberedSessionKey, "true");
+      } else {
+        localStorage.removeItem(rememberedSessionKey);
+        localStorage.removeItem(cachedSessionKey);
+      }
       const session = await refresh();
       if (!session) {
         throw new Error(
@@ -228,10 +249,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (callbackPath = "/dashboard") => {
+    // Google sign-in has no rememberMe option in Better Auth's social flow;
+    // do not retain an offline session cache for it implicitly.
+    localStorage.removeItem(rememberedSessionKey);
+    localStorage.removeItem(cachedSessionKey);
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: `${window.location.origin}/dashboard`,
+      callbackURL: `${window.location.origin}${callbackPath}`,
       errorCallbackURL: `${window.location.origin}/login?error=google`,
     });
   }, []);
@@ -251,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await setOfflineUserScope(null);
     clearPendingClaimToken();
     localStorage.removeItem(cachedSessionKey);
+    localStorage.removeItem(rememberedSessionKey);
     setUser(null);
     setTeam(null);
     setClaimedAthletes([]);

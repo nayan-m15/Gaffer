@@ -8,7 +8,8 @@ export type MatchEventType =
   | "red_card"
   | "substitution"
   | "penalty"
-  | "injury";
+  | "injury"
+  | "goalkeeper_save";
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
 export type MatchClockPeriod =
@@ -68,7 +69,7 @@ export interface MatchRecord {
   competitionName: string | null;
   competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
-  /** Present on GET /matches/:id for accepted Gaffer friendly fixtures. */
+  /** Present on GET /matches/:id for linked Gaffer friendlies and competition fixtures. */
   friendlyOpponentLineup?: FriendlyOpponentLineup;
   projection?: {
     revision: number;
@@ -105,6 +106,10 @@ export interface FriendlyOpponentLineup {
   teamId: string | null;
   teamName: string | null;
   players: MatchSquadAthlete[];
+  formationId?: string | null;
+  pitchAssignments?: Record<string, string | null> | null;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
+  confirmedAt?: string | null;
 }
 
 export interface MatchLogEvent {

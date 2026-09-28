@@ -29,9 +29,9 @@ import {
 } from "@/features/matches/opponent-squad-draft";
 import type { DragItem } from "@/features/team-management/types";
 import {
-  DEFAULT_FORMATION_ID,
-  FORMATION_OPTIONS,
   FORMATIONS,
+  getDefaultFormationIdForPlayerCount,
+  getFormationOptionsForPlayerCount,
 } from "@/features/team-management/formations";
 import { cn } from "@/lib/utils";
 
@@ -59,16 +59,14 @@ export default function OpponentSquadSetupPage() {
   const [players, setPlayers] = useState<DraftOpponentPlayer[]>(
     context.players,
   );
-  const [formationId, setFormationId] = useState(
-    FORMATIONS[context.formationId] ? context.formationId : DEFAULT_FORMATION_ID,
-  );
+  const initialFormationId =
+    FORMATIONS[context.formationId]?.playerCount === context.playerCount
+      ? context.formationId
+      : getDefaultFormationIdForPlayerCount(context.playerCount);
+  const [formationId, setFormationId] = useState(initialFormationId);
+  const [customPositions, setCustomPositions] = useState(context.customPositions ?? null);
   const [assignments, setAssignments] = useState(() =>
-    assignmentsFromPlayers(
-      FORMATIONS[context.formationId]
-        ? context.formationId
-        : DEFAULT_FORMATION_ID,
-      context.players,
-    ),
+    assignmentsFromPlayers(initialFormationId, context.players),
   );
   const [shirtInput, setShirtInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -78,6 +76,9 @@ export default function OpponentSquadSetupPage() {
 
   const oppColor = context.opponentColor;
   const showSquad = visibility !== "none";
+  const formationOptions = getFormationOptionsForPlayerCount(
+    context.playerCount,
+  );
 
   const assignedCount = useMemo(
     () =>
@@ -164,6 +165,7 @@ export default function OpponentSquadSetupPage() {
     const stillPlaced = Object.values(remapped).filter(Boolean).length;
     const movedToBench = previouslyPlaced - stillPlaced;
     setFormationId(nextId);
+    setCustomPositions(null);
     setAssignments(remapped);
     setPlayers((current) =>
       applyAssignmentsToPlayers(current, nextId, remapped),
@@ -469,7 +471,7 @@ export default function OpponentSquadSetupPage() {
               </p>
             ) : (
               <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                {assignedCount} of 11 placed
+                {assignedCount} of {context.playerCount} placed
               </p>
             )}
           </section>
@@ -498,7 +500,7 @@ export default function OpponentSquadSetupPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {FORMATION_OPTIONS.map((option) => (
+                  {formationOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -510,6 +512,7 @@ export default function OpponentSquadSetupPage() {
               <div className="min-w-0">
                 <OpponentFormationPitch
                   formationId={formationId}
+                  customPositions={customPositions}
                   assignments={assignments}
                   players={players}
                   opponentColor={oppColor}

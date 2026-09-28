@@ -11,8 +11,9 @@ import type {
 /** Same values the live logger writes onto `match_events.detail`. */
 const PENALTY_SCORED_DETAIL = "Penalty";
 const PENALTY_MISSED_DETAIL = "Penalty missed";
+const PENALTY_SAVED_BY_GOALKEEPER_DETAIL = "Penalty saved by goalkeeper";
 
-export type PenaltyOutcome = "goal" | "miss" | "";
+export type PenaltyOutcome = "goal" | "miss" | "saved" | "";
 
 export type EventFormDraft = {
   team: MatchEventTeam;
@@ -31,6 +32,18 @@ export type EventFormDraft = {
   incomingOpponentLabel: string;
   injuryLedToSub: boolean;
 };
+
+/**
+ * Who the companion goalkeeper_save is attributed to. `team` is the keeper's
+ * side, the opposite of the shooter's.
+ */
+export type GoalkeeperSaveSubject =
+  | { team: "own"; athleteId: string }
+  | {
+      team: "opponent";
+      opponentPlayerId: string;
+      opponentLabel?: string;
+    };
 
 export type PlannedOp =
   | {
@@ -105,6 +118,12 @@ export function penaltyOutcomeFromEvent(event: {
   if (event.eventType === "penalty" && event.detail === PENALTY_MISSED_DETAIL) {
     return "miss";
   }
+  if (
+    event.eventType === "penalty" &&
+    event.detail === PENALTY_SAVED_BY_GOALKEEPER_DETAIL
+  ) {
+    return "saved";
+  }
   return "";
 }
 
@@ -126,7 +145,8 @@ export function draftFromLoggedEvent(
     looksLikeId(event.detail) ||
     penaltyLike ||
     event.detail === PENALTY_SCORED_DETAIL ||
-    event.detail === PENALTY_MISSED_DETAIL;
+    event.detail === PENALTY_MISSED_DETAIL ||
+    event.detail === PENALTY_SAVED_BY_GOALKEEPER_DETAIL;
 
   return emptyEventDraft({
     team: event.team,
@@ -160,9 +180,13 @@ export function persistedEventType(draft: EventFormDraft): MatchEventType {
 }
 
 function penaltyDetail(draft: EventFormDraft) {
-  return draft.penaltyOutcome === "goal"
-    ? PENALTY_SCORED_DETAIL
-    : PENALTY_MISSED_DETAIL;
+  if (draft.penaltyOutcome === "goal") {
+    return PENALTY_SCORED_DETAIL;
+  }
+  if (draft.penaltyOutcome === "saved") {
+    return PENALTY_SAVED_BY_GOALKEEPER_DETAIL;
+  }
+  return PENALTY_MISSED_DETAIL;
 }
 
 export function linkedSubstitutionForInjury(
@@ -309,15 +333,27 @@ function primaryUpdateInput(draft: EventFormDraft): UpdateMatchLogEventInput {
   };
 }
 
-export function planAddEvent(draft: EventFormDraft): PlannedOp[] {
+export function planAddEvent(
+  draft: EventFormDraft,
+  options?: { opposingKeeper?: GoalkeeperSaveSubject | null },
+): PlannedOp[] {
+  const keeper = savedPenaltyKeeper(draft, options?.opposingKeeper);
   const ops: PlannedOp[] = [
     {
       kind: "create",
       input: primaryCreateInput(draft),
       captureId:
-        draft.eventType === "goal" && hasAssistSelection(draft),
+        (draft.eventType === "goal" && hasAssistSelection(draft)) ||
+        keeper !== null,
     },
   ];
+  if (keeper) {
+    ops.push({
+      kind: "create",
+      detailFromPrimary: true,
+      input: goalkeeperSaveCreateInput(draft.minute, keeper),
+    });
+  }
 
   if (draft.eventType === "goal" && hasAssistSelection(draft)) {
     ops.push({
@@ -359,17 +395,29 @@ export function planEditEvent({
   draft,
   linkedAssist,
   linkedSub,
+  linkedGoalkeeperSaves = [],
+  opposingKeeper = null,
 }: {
   event: MatchLogEvent;
   draft: EventFormDraft;
   linkedAssist: MatchLogEvent | null;
   linkedSub: MatchLogEvent | null;
+  linkedGoalkeeperSaves?: MatchLogEvent[];
+  opposingKeeper?: GoalkeeperSaveSubject | null;
 }): PlannedOp[] {
+  const primaryInput = primaryUpdateInput(draft);
+  if (
+    event.eventType === "goalkeeper_save" &&
+    draft.eventType === "goalkeeper_save" &&
+    looksLikeId(event.detail)
+  ) {
+    primaryInput.detail = event.detail;
+  }
   const ops: PlannedOp[] = [
     {
       kind: "update",
       eventId: event.id,
-      input: primaryUpdateInput(draft),
+      input: primaryInput,
     },
   ];
 
@@ -377,78 +425,148 @@ export function planEditEvent({
     ops.push({ kind: "delete", eventId: linkedAssist.id });
   }
 
-  if (draft.eventType === "goal") {
-    if (hasAssistSelection(draft) && linkedAssist) {
-      ops.push({
-        kind: "update",
-        eventId: linkedAssist.id,
-        input: {
-          minute: draft.minute,
-          athleteId:
-            draft.team === "own" ? draft.assistAthleteId || null : null,
-          opponentPlayerId:
-            draft.team === "opponent"
-              ? draft.assistOpponentPlayerId || null
-              : null,
-          opponentLabel:
-            draft.team === "opponent"
-              ? draft.assistOpponentLabel.trim() || null
-              : null,
-          detail: event.id,
-        },
-      });
-    } else if (hasAssistSelection(draft) && !linkedAssist) {
-      ops.push({
-        kind: "create",
-        input: {
-          clientRequestId: crypto.randomUUID(),
-          team: draft.team,
-          eventType: "assist",
-          minute: draft.minute,
-          detail: event.id,
-          ...assistSubject(draft),
-        },
-      });
-    } else if (!hasAssistSelection(draft) && linkedAssist) {
-      ops.push({ kind: "delete", eventId: linkedAssist.id });
-    }
-  }
+  appendLinkedAssistEdits(ops, event, draft, linkedAssist);
+  appendLinkedInjurySubstitution(ops, draft, linkedSub);
 
-  if (
-    draft.eventType === "injury" &&
-    draft.injuryLedToSub &&
-    hasIncomingSelection(draft)
-  ) {
-    const subInput = {
-      eventType: "substitution" as const,
-      minute: draft.minute,
-      athleteId: draft.team === "own" ? draft.athleteId || null : null,
-      opponentPlayerId:
-        draft.team === "opponent" ? draft.opponentPlayerId || null : null,
-      opponentLabel:
-        draft.team === "opponent" ? draft.opponentLabel.trim() || null : null,
-      detail: incomingDetail(draft) ?? null,
-    };
-    if (linkedSub) {
-      ops.push({
-        kind: "update",
-        eventId: linkedSub.id,
-        input: subInput,
-      });
-    } else {
+  const wasSaved =
+    event.eventType === "penalty" &&
+    event.detail === PENALTY_SAVED_BY_GOALKEEPER_DETAIL;
+  const willBeSaved =
+    draft.eventType === "penalty" && draft.penaltyOutcome === "saved";
+  if (wasSaved && !willBeSaved) {
+    for (const save of linkedGoalkeeperSaves) {
+      ops.push({ kind: "delete", eventId: save.id });
+    }
+  } else if (!wasSaved && willBeSaved) {
+    const keeper = savedPenaltyKeeper(draft, opposingKeeper);
+    if (keeper) {
       ops.push({
         kind: "create",
         input: {
-          clientRequestId: crypto.randomUUID(),
-          team: draft.team,
-          eventType: "substitution",
-          minute: draft.minute,
-          ...subjectFields(draft),
-          detail: incomingDetail(draft),
+          ...goalkeeperSaveCreateInput(draft.minute, keeper),
+          detail: event.id,
         },
+      });
+    }
+  } else if (wasSaved && willBeSaved && event.minute !== draft.minute) {
+    for (const save of linkedGoalkeeperSaves) {
+      ops.push({
+        kind: "update",
+        eventId: save.id,
+        input: { minute: draft.minute },
       });
     }
   }
 
   return ops;
+}
+
+function appendLinkedAssistEdits(
+  ops: PlannedOp[],
+  event: MatchLogEvent,
+  draft: EventFormDraft,
+  linkedAssist: MatchLogEvent | null,
+): void {
+  if (draft.eventType !== "goal") return;
+  const selected = hasAssistSelection(draft);
+  if (selected && linkedAssist) {
+    ops.push({
+      kind: "update",
+      eventId: linkedAssist.id,
+      input: {
+        minute: draft.minute,
+        athleteId: draft.team === "own" ? draft.assistAthleteId || null : null,
+        opponentPlayerId: draft.team === "opponent" ? draft.assistOpponentPlayerId || null : null,
+        opponentLabel: draft.team === "opponent" ? draft.assistOpponentLabel.trim() || null : null,
+        detail: event.id,
+      },
+    });
+    return;
+  }
+  if (selected) {
+    ops.push({
+      kind: "create",
+      input: {
+        clientRequestId: crypto.randomUUID(),
+        team: draft.team,
+        eventType: "assist",
+        minute: draft.minute,
+        detail: event.id,
+        ...assistSubject(draft),
+      },
+    });
+  } else if (linkedAssist) {
+    ops.push({ kind: "delete", eventId: linkedAssist.id });
+  }
+}
+
+function appendLinkedInjurySubstitution(
+  ops: PlannedOp[],
+  draft: EventFormDraft,
+  linkedSub: MatchLogEvent | null,
+): void {
+  if (draft.eventType !== "injury" || !draft.injuryLedToSub || !hasIncomingSelection(draft)) {
+    return;
+  }
+  const subInput = {
+    eventType: "substitution" as const,
+    minute: draft.minute,
+    athleteId: draft.team === "own" ? draft.athleteId || null : null,
+    opponentPlayerId: draft.team === "opponent" ? draft.opponentPlayerId || null : null,
+    opponentLabel: draft.team === "opponent" ? draft.opponentLabel.trim() || null : null,
+    detail: incomingDetail(draft) ?? null,
+  };
+  if (linkedSub) {
+    ops.push({ kind: "update", eventId: linkedSub.id, input: subInput });
+    return;
+  }
+  ops.push({
+    kind: "create",
+    input: {
+      clientRequestId: crypto.randomUUID(),
+      team: draft.team,
+      eventType: "substitution",
+      minute: draft.minute,
+      ...subjectFields(draft),
+      detail: incomingDetail(draft),
+    },
+  });
+}
+
+function savedPenaltyKeeper(
+  draft: EventFormDraft,
+  keeper: GoalkeeperSaveSubject | null | undefined,
+) {
+  if (
+    draft.eventType !== "penalty" ||
+    draft.penaltyOutcome !== "saved" ||
+    !keeper
+  ) {
+    return null;
+  }
+  const expectedTeam = draft.team === "own" ? "opponent" : "own";
+  return keeper.team === expectedTeam ? keeper : null;
+}
+
+function goalkeeperSaveCreateInput(
+  minute: number,
+  keeper: GoalkeeperSaveSubject,
+): CreateMatchLogEventInput {
+  if (keeper.team === "own") {
+    return {
+      clientRequestId: crypto.randomUUID(),
+      team: "own",
+      eventType: "goalkeeper_save",
+      minute,
+      athleteId: keeper.athleteId,
+    };
+  }
+  return {
+    clientRequestId: crypto.randomUUID(),
+    team: "opponent",
+    eventType: "goalkeeper_save",
+    minute,
+    opponentPlayerId: keeper.opponentPlayerId,
+    ...(keeper.opponentLabel ? { opponentLabel: keeper.opponentLabel } : {}),
+  };
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import {
   E2E_PASSWORD,
   emailVerificationUrl,
@@ -8,6 +8,8 @@ import {
   registerVerifiedUser,
   seedCoachWithInvite,
 } from './utils/auth';
+
+const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
 
 /**
  * Assistant team-invite flow, end to end through the real browser:
@@ -26,7 +28,7 @@ import {
  *    same invite URL.
  */
 test.describe('team invite flow', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(process.env.CI ? 180_000 : 120_000);
 
   /** Signs an assistant-to-be up from the invite page, parking on /verify-email. */
   async function signUpFromInvite(
@@ -259,7 +261,7 @@ test.describe('team invite flow', () => {
         await page.getByLabel('Password', { exact: true }).fill(E2E_PASSWORD);
         await page.getByRole('button', { name: 'Sign In & Join' }).click();
 
-        await expect(page).toHaveURL(/\/dashboard$/);
+        await expect(page).toHaveURL(/\/dashboard$/, NETWORK);
         await expect(
           page.getByText(`Welcome back, ${invitedName} · ${coach.teamName}`),
         ).toBeVisible();

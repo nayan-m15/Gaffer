@@ -53,6 +53,20 @@ assert.equal(
   "Penalty missed",
 );
 
+const savedPenaltyOps = planAddEvent(
+  emptyEventDraft({
+    minute: 19,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+);
+assert.equal(savedPenaltyOps[0].kind === "create" && savedPenaltyOps[0].input.eventType, "penalty");
+assert.equal(
+  savedPenaltyOps[0].kind === "create" && savedPenaltyOps[0].input.detail,
+  "Penalty saved by goalkeeper",
+);
+
 const goalDraft = emptyEventDraft({
   minute: 23,
   eventType: "goal",
@@ -232,6 +246,197 @@ const flipToMiss = planEditEvent({
 });
 assert.equal(flipToMiss[0].kind === "update" && flipToMiss[0].input.eventType, "penalty");
 assert.equal(flipToMiss[0].kind === "update" && flipToMiss[0].input.detail, "Penalty missed");
+
+const flipToSaved = planEditEvent({
+  event: scoredPenaltyEvent,
+  draft: emptyEventDraft({
+    minute: 23,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+});
+assert.equal(flipToSaved[0].kind === "update" && flipToSaved[0].input.eventType, "penalty");
+assert.equal(
+  flipToSaved[0].kind === "update" && flipToSaved[0].input.detail,
+  "Penalty saved by goalkeeper",
+);
+
+const keeperId = "12121212-1212-4121-8121-121212121212";
+const saveId = "34343434-3434-4343-8343-343434343434";
+const penaltyId = "56565656-5656-4565-8565-565656565656";
+const opposingKeeper = {
+  team: "opponent",
+  opponentPlayerId: keeperId,
+  opponentLabel: "#1",
+};
+const savedPenalty = {
+  ...goalEvent,
+  id: penaltyId,
+  eventType: "penalty",
+  minute: 40,
+  detail: "Penalty saved by goalkeeper",
+};
+const linkedSave = {
+  ...goalEvent,
+  id: saveId,
+  team: "opponent",
+  athleteId: null,
+  opponentPlayerId: keeperId,
+  opponentLabel: "#1",
+  eventType: "goalkeeper_save",
+  minute: 40,
+  detail: penaltyId,
+};
+
+const savedToMiss = planEditEvent({
+  event: savedPenalty,
+  draft: emptyEventDraft({
+    minute: 40,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "miss",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  linkedGoalkeeperSaves: [linkedSave],
+  opposingKeeper,
+});
+assert.equal(savedToMiss.length, 2);
+assert.equal(savedToMiss[0].kind === "update" && savedToMiss[0].input.detail, "Penalty missed");
+assert.equal(savedToMiss[1].kind === "delete" && savedToMiss[1].eventId, saveId);
+
+const savedToGoal = planEditEvent({
+  event: savedPenalty,
+  draft: emptyEventDraft({
+    minute: 40,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "goal",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  linkedGoalkeeperSaves: [linkedSave],
+});
+assert.equal(savedToGoal[0].kind === "update" && savedToGoal[0].input.eventType, "goal");
+assert.equal(savedToGoal[1].kind === "delete" && savedToGoal[1].eventId, saveId);
+
+const missToSaved = planEditEvent({
+  event: { ...savedPenalty, detail: "Penalty missed" },
+  draft: emptyEventDraft({
+    minute: 41,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  linkedGoalkeeperSaves: [],
+  opposingKeeper,
+});
+assert.equal(missToSaved.length, 2);
+assert.equal(missToSaved[1].kind === "create" && missToSaved[1].input.eventType, "goalkeeper_save");
+assert.equal(missToSaved[1].kind === "create" && missToSaved[1].input.detail, penaltyId);
+assert.equal(missToSaved[1].kind === "create" && missToSaved[1].input.team, "opponent");
+assert.equal(missToSaved[1].kind === "create" && missToSaved[1].input.minute, 41);
+assert.equal(
+  missToSaved[1].kind === "create" && missToSaved[1].input.opponentPlayerId,
+  keeperId,
+);
+
+const missToSavedWithoutKeeper = planEditEvent({
+  event: { ...savedPenalty, detail: "Penalty missed" },
+  draft: emptyEventDraft({
+    minute: 40,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  opposingKeeper: null,
+});
+assert.equal(missToSavedWithoutKeeper.length, 1);
+
+const scoredToSaved = planEditEvent({
+  event: { ...savedPenalty, eventType: "goal", detail: "Penalty" },
+  draft: emptyEventDraft({
+    minute: 40,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  opposingKeeper,
+});
+assert.equal(scoredToSaved[1].kind === "create" && scoredToSaved[1].input.detail, penaltyId);
+
+const savedSameMinuteNewShooter = planEditEvent({
+  event: savedPenalty,
+  draft: emptyEventDraft({
+    minute: 40,
+    eventType: "penalty",
+    athleteId: assister,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  linkedGoalkeeperSaves: [linkedSave],
+  opposingKeeper,
+});
+assert.equal(savedSameMinuteNewShooter.length, 1);
+assert.equal(
+  savedSameMinuteNewShooter[0].kind === "update" &&
+    savedSameMinuteNewShooter[0].input.athleteId,
+  assister,
+);
+
+const savedMinuteChange = planEditEvent({
+  event: savedPenalty,
+  draft: emptyEventDraft({
+    minute: 44,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  linkedAssist: null,
+  linkedSub: null,
+  linkedGoalkeeperSaves: [linkedSave],
+  opposingKeeper,
+});
+assert.equal(savedMinuteChange.length, 2);
+assert.deepEqual(
+  savedMinuteChange[1].kind === "update" && savedMinuteChange[1].input,
+  { minute: 44 },
+);
+
+const addedSaved = planAddEvent(
+  emptyEventDraft({
+    minute: 12,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+  { opposingKeeper },
+);
+assert.equal(addedSaved.length, 2);
+assert.equal(addedSaved[0].kind === "create" && addedSaved[0].captureId, true);
+assert.equal(addedSaved[1].kind === "create" && addedSaved[1].detailFromPrimary, true);
+assert.equal(addedSaved[1].kind === "create" && addedSaved[1].input.eventType, "goalkeeper_save");
+assert.equal("detail" in (addedSaved[1].kind === "create" ? addedSaved[1].input : {}), false);
+
+const addedSavedWithoutKeeper = planAddEvent(
+  emptyEventDraft({
+    minute: 12,
+    eventType: "penalty",
+    athleteId: scorer,
+    penaltyOutcome: "saved",
+  }),
+);
+assert.equal(addedSavedWithoutKeeper.length, 1);
 
 console.log("[match-report-event-form] passed", {
   goalOps: goalOps.length,

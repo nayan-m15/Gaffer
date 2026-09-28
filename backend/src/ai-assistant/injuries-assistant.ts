@@ -203,6 +203,121 @@ function buildSummary(
   return summary;
 }
 
+function resolveInjuryPlayer(
+  state: AssistantConversationState,
+  roster: RosterAthlete[],
+  message: string,
+): AssistantTurnResult | undefined {
+  if (state.collectedFields.athleteId !== undefined) return undefined;
+  const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
+    | string[]
+    | undefined;
+  const candidates = pendingIds
+    ? roster.filter((athlete) => pendingIds.includes(athlete.id))
+    : roster;
+  const matches = matchPlayersInMessage(candidates, message);
+  if (matches.length === 1) {
+    const [athlete] = matches;
+    state.collectedFields.athleteId = athlete.id;
+    state.resolvedPlayerName = `${athlete.firstName} ${athlete.lastName}`;
+    delete state.collectedFields.__pendingPlayerOptionIds;
+    return undefined;
+  }
+  if (matches.length > 1) {
+    state.collectedFields.__pendingPlayerOptionIds = matches.map((a) => a.id);
+    return {
+      reply: `I found ${matches.length} players matching that. Which one do you mean?`,
+      requiresConfirmation: false,
+      playerOptions: matches.map(toPlayerOption),
+    };
+  }
+  return {
+    reply: 'Which player is this injury for?',
+    requiresConfirmation: false,
+  };
+}
+
+function getMissingInjuryReply(
+  state: AssistantConversationState,
+): AssistantTurnResult | undefined {
+  const missing: string[] = HARD_REQUIRED.filter(
+    (key) => state.collectedFields[key] === undefined,
+  );
+  if (missing.length === 0) return undefined;
+  const needsInjuryDetails = (['bodyRegion', 'injuryType', 'severity'] as string[]).some(
+    (key) => missing.includes(key),
+  );
+  return {
+    reply: needsInjuryDetails
+      ? 'What area is injured, which side of the body, and what type of injury is it (e.g. strain, sprain, tear, fracture, contusion)? ' +
+        'If you know a grade, Grade 1 = minor, Grade 2 = moderate, Grade 3 = severe.'
+      : 'When did the injury happen?',
+    requiresConfirmation: false,
+  };
+}
+
+function askOptionalInjuryFields(
+  state: AssistantConversationState,
+): AssistantTurnResult | undefined {
+  if (state.askedOptionalGroup) return undefined;
+  const hasOptional =
+    state.collectedFields.notes !== undefined ||
+    state.collectedFields.estimatedReturnMinDays !== undefined;
+  state.askedOptionalGroup = true;
+  if (hasOptional) return undefined;
+  return {
+    reply:
+      'Do you have an expected return date or estimated recovery time (e.g. "2 weeks"), or any restriction notes? Optional — say "skip" if not yet known.',
+    requiresConfirmation: false,
+  };
+}
+
+function resolveQuestionPlayer(
+  state: AssistantConversationState,
+  candidates: RosterAthlete[],
+  message: string,
+): {
+  resolvedAthleteId?: string;
+  playerWasMatched: boolean;
+  earlyReply?: AssistantTurnResult;
+} {
+  const matches = matchPlayersInMessage(candidates, message);
+  if (matches.length === 1) {
+    delete state.collectedFields.__pendingPlayerOptionIds;
+    return { resolvedAthleteId: matches[0].id, playerWasMatched: true };
+  }
+  if (matches.length > 1) {
+    rememberPendingQuestion(state, message);
+    state.collectedFields.__pendingPlayerOptionIds = matches.map((a) => a.id);
+    return {
+      playerWasMatched: true,
+      earlyReply: {
+        reply: `I found ${matches.length} players matching that. Which one do you mean?`,
+        requiresConfirmation: false,
+        playerOptions: matches.map(toPlayerOption),
+      },
+    };
+  }
+  if (looksLikeTeamWideQuestion(message)) return { playerWasMatched: false };
+  rememberPendingQuestion(state, message);
+  return {
+    playerWasMatched: false,
+    earlyReply: {
+      reply: 'Which player would you like to ask about?',
+      requiresConfirmation: false,
+    },
+  };
+}
+
+function rememberPendingQuestion(
+  state: AssistantConversationState,
+  message: string,
+): void {
+  if (typeof state.collectedFields.__pendingQuestion !== 'string') {
+    state.collectedFields.__pendingQuestion = message;
+  }
+}
+
 @Injectable()
 export class InjuriesAssistant {
   constructor(
@@ -261,34 +376,8 @@ export class InjuriesAssistant {
       teamId,
     )) as RosterAthlete[];
 
-    if (state.collectedFields.athleteId === undefined) {
-      const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
-        string[] | undefined;
-      const candidates = pendingIds
-        ? roster.filter((athlete) => pendingIds.includes(athlete.id))
-        : roster;
-      const matches = matchPlayersInMessage(candidates, message);
-
-      if (matches.length === 1) {
-        state.collectedFields.athleteId = matches[0].id;
-        state.resolvedPlayerName = `${matches[0].firstName} ${matches[0].lastName}`;
-        delete state.collectedFields.__pendingPlayerOptionIds;
-      } else if (matches.length > 1) {
-        state.collectedFields.__pendingPlayerOptionIds = matches.map(
-          (a) => a.id,
-        );
-        return {
-          reply: `I found ${matches.length} players matching that. Which one do you mean?`,
-          requiresConfirmation: false,
-          playerOptions: matches.map(toPlayerOption),
-        };
-      } else {
-        return {
-          reply: 'Which player is this injury for?',
-          requiresConfirmation: false,
-        };
-      }
-    }
+    const playerReply = resolveInjuryPlayer(state, roster, message);
+    if (playerReply) return playerReply;
 
     let extracted: Record<string, unknown> = {};
     try {
@@ -316,41 +405,10 @@ export class InjuriesAssistant {
       extracted,
     );
 
-    const missing = HARD_REQUIRED.filter(
-      (key) => state.collectedFields[key] === undefined,
-    );
-    if (missing.length > 0) {
-      if (
-        missing.includes('bodyRegion') ||
-        missing.includes('injuryType') ||
-        missing.includes('severity')
-      ) {
-        return {
-          reply:
-            'What area is injured, which side of the body, and what type of injury is it (e.g. strain, sprain, tear, fracture, contusion)? ' +
-            'If you know a grade, Grade 1 = minor, Grade 2 = moderate, Grade 3 = severe.',
-          requiresConfirmation: false,
-        };
-      }
-      return {
-        reply: 'When did the injury happen?',
-        requiresConfirmation: false,
-      };
-    }
-
-    if (!state.askedOptionalGroup) {
-      const hasOptional =
-        state.collectedFields.notes !== undefined ||
-        state.collectedFields.estimatedReturnMinDays !== undefined;
-      state.askedOptionalGroup = true;
-      if (!hasOptional) {
-        return {
-          reply:
-            'Do you have an expected return date or estimated recovery time (e.g. "2 weeks"), or any restriction notes? Optional — say "skip" if not yet known.',
-          requiresConfirmation: false,
-        };
-      }
-    }
+    const missingReply = getMissingInjuryReply(state);
+    if (missingReply) return missingReply;
+    const optionalReply = askOptionalInjuryFields(state);
+    if (optionalReply) return optionalReply;
 
     const candidatePayload = { ...state.collectedFields };
     delete candidatePayload.__pendingPlayerOptionIds;
@@ -430,36 +488,10 @@ export class InjuriesAssistant {
     const candidates = pendingIds
       ? roster.filter((athlete) => pendingIds.includes(athlete.id))
       : roster;
-    const matches = matchPlayersInMessage(candidates, message);
-
-    let resolvedAthleteId: string | undefined;
-    if (matches.length === 1) {
-      resolvedAthleteId = matches[0].id;
-      delete state.collectedFields.__pendingPlayerOptionIds;
-    } else if (matches.length > 1) {
-      state.collectedFields.__pendingPlayerOptionIds = matches.map((a) => a.id);
-      if (typeof state.collectedFields.__pendingQuestion !== 'string') {
-        state.collectedFields.__pendingQuestion = message;
-      }
-      return {
-        reply: `I found ${matches.length} players matching that. Which one do you mean?`,
-        requiresConfirmation: false,
-        playerOptions: matches.map(toPlayerOption),
-      };
-    } else if (!looksLikeTeamWideQuestion(message)) {
-      // No name found and the question isn't clearly about the whole squad
-      // (e.g. "which players are unavailable") — asking beats guessing, and
-      // beats handing Gemini an unconstrained data dump and letting it pick
-      // someone on its own. Remember the original question (only the first
-      // time) so the coach's reply can be just the player's name.
-      if (typeof state.collectedFields.__pendingQuestion !== 'string') {
-        state.collectedFields.__pendingQuestion = message;
-      }
-      return {
-        reply: 'Which player would you like to ask about?',
-        requiresConfirmation: false,
-      };
-    }
+    // Without a clear player name, ask for one unless this is a squad-wide
+    // question.
+    const playerResolution = resolveQuestionPlayer(state, candidates, message);
+    if (playerResolution.earlyReply) return playerResolution.earlyReply;
 
     // A resolved name-only reply ("Cole Palmer") isn't itself a question —
     // answer the question that was actually asked before it.
@@ -468,15 +500,17 @@ export class InjuriesAssistant {
         ? state.collectedFields.__pendingQuestion
         : undefined;
     const questionText =
-      matches.length >= 1 && pendingQuestion ? pendingQuestion : message;
+      playerResolution.playerWasMatched && pendingQuestion
+        ? pendingQuestion
+        : message;
 
     state.intent = null;
     delete state.collectedFields.__pendingQuestion;
     delete state.collectedFields.__pendingPlayerOptionIds;
 
-    const injuries = resolvedAthleteId
+    const injuries = playerResolution.resolvedAthleteId
       ? await this.injuriesService.findAll(teamId, {
-          athleteId: resolvedAthleteId,
+          athleteId: playerResolution.resolvedAthleteId,
         })
       : await this.injuriesService.findAll(teamId, { status: 'open' });
 

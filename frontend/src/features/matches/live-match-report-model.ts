@@ -62,6 +62,7 @@ const EVENT_LABEL: Record<MatchEventType, string> = {
   substitution: "Substitution",
   penalty: "Penalty",
   injury: "Injury",
+  goalkeeper_save: "Save",
 };
 
 export const MATCH_PERIOD_LABEL: Record<MatchClockPeriod, string> = {

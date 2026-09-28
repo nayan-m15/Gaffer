@@ -5,7 +5,7 @@ import {
   type APIResponse,
   type Page,
 } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import {
   BACKEND_URL,
   registerVerifiedUser,
@@ -284,10 +284,14 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
     await test.step('the player is now injured on the roster', async () => {
       await sidebarLink(page, 'Roster').click();
       await expect(page).toHaveURL(/\/athletes$/);
-      await expect(page.getByText('Rosa Hamstring').first()).toBeVisible(
-        NETWORK,
-      );
-      await expect(page.getByText('Injured').first()).toBeVisible();
+
+      // The roster renders a desktop table and a mobile list side by side,
+      // toggling which one is visible with CSS rather than unmounting the
+      // other — an unscoped text locator can resolve to the CSS-hidden copy
+      // and never turn visible. Scope to the desktop table row instead.
+      const row = page.getByRole('row', { name: /Rosa Hamstring/ });
+      await expect(row).toBeVisible(NETWORK);
+      await expect(row.getByText('Injured', { exact: true })).toBeVisible();
     });
 
     await test.step('the record survives a reload', async () => {

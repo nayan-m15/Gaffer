@@ -1,7 +1,6 @@
 import { Award, CalendarDays, MapPin, Trophy } from "lucide-react";
 import type { ReactNode } from "react";
 import { AppCard } from "@/components/app/AppCard";
-import { StatCardsGrid } from "./StatCardsGrid";
 import { formatDate } from "./formatting";
 import { reportHighlights, resultLabel, type TeamReportData } from "./team-report-model";
 
@@ -31,11 +30,6 @@ export function TeamPerformanceReport({ data }: { data: TeamReportData }) {
           Generated {context.generatedAt.toLocaleString()}
         </p>
       </AppCard>
-
-      <section aria-labelledby="summary-heading">
-        <ReportHeading id="summary-heading">Team summary</ReportHeading>
-        <StatCardsGrid overview={overview} />
-      </section>
 
       {highlights.length > 0 && (
         <section aria-labelledby="highlights-heading">
@@ -72,24 +66,6 @@ export function TeamPerformanceReport({ data }: { data: TeamReportData }) {
           </table>
         )}
         {overview.trends.length === 0 && <EmptyRow text="No matches in the selected report period." />}
-      </ReportTableSection>
-
-      <ReportTableSection title="Player performance">
-        {overview.players.length > 0 && (
-          <table className="w-full min-w-[620px] text-sm">
-            <thead><tr><Th>Player</Th><Th numeric>Apps</Th><Th numeric>Goals</Th><Th numeric>Assists</Th><Th numeric>Yellow</Th><Th numeric>Red</Th></tr></thead>
-            <tbody>
-              {overview.players.map((player) => (
-                <tr key={player.athleteId} className="border-b border-border/70 last:border-0">
-                  <Td strong>{player.name}</Td><Td numeric>{player.appearances}</Td>
-                  <Td numeric>{player.goals}</Td><Td numeric>{player.assists}</Td>
-                  <Td numeric>{player.yellowCards}</Td><Td numeric>{player.redCards}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {overview.players.length === 0 && <EmptyRow text="No player statistics in the selected report period." />}
       </ReportTableSection>
 
       <footer className="report-document-footer hidden border-t border-border pt-3 text-xs text-muted-foreground">

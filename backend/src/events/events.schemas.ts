@@ -153,12 +153,27 @@ export const startMatchSchema = z
     isHome: z.boolean(),
     startingAthleteIds: z
       .array(z.uuid())
-      .length(11, 'A starting XI must contain exactly 11 athletes.')
-      .refine((ids) => new Set(ids).size === 11, {
+      .min(1, 'A starting lineup must contain at least one athlete.')
+      .max(11, 'A starting lineup cannot contain more than 11 athletes.')
+      .refine((ids) => new Set(ids).size === ids.length, {
         message: 'Starting athletes must be unique.',
       }),
     // Final match-day bench after on-the-day swaps. When omitted, every
     // other non-archived team athlete is treated as bench (legacy confirm-squad).
+    formationId: z.string().min(1).max(100).optional(),
+    pitchAssignments: z.record(z.string(), z.uuid().nullable()).optional(),
+    customPositions: z
+      .array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+          x: z.number().min(0).max(100),
+          y: z.number().min(0).max(100),
+        }),
+      )
+      .nullable()
+      .optional(),
     benchAthleteIds: z
       .array(z.uuid())
       .max(20, 'A match bench cannot exceed 20 athletes.')
@@ -185,63 +200,68 @@ export const startMatchSchema = z
       path: ['benchAthleteIds'],
     },
   )
-  .superRefine((value, ctx) => {
-    const squad = value.opponentSquad ?? [];
-    const numbers = squad.map((player) => player.shirtNumber);
-    if (new Set(numbers).size !== numbers.length) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Opponent shirt numbers must be unique.',
-        path: ['opponentSquad'],
-      });
-    }
+  .superRefine(validateOpponentSquad);
 
-    if (value.opponentSquadVisibility === 'none' && squad.length > 0) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Opponent squad cannot be sent when visibility is none.',
-        path: ['opponentSquad'],
-      });
-    }
+function validateOpponentSquad(
+  value: {
+    opponentSquad?: z.infer<typeof opponentSquadPlayerSchema>[];
+    opponentSquadVisibility: z.infer<typeof opponentSquadVisibilitySchema>;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const squad = value.opponentSquad ?? [];
+  const numbers = squad.map((player) => player.shirtNumber);
+  if (new Set(numbers).size !== numbers.length) {
+    addOpponentSquadIssue(ctx, 'Opponent shirt numbers must be unique.');
+  }
+  if (value.opponentSquadVisibility === 'none' && squad.length > 0) {
+    addOpponentSquadIssue(ctx, 'Opponent squad cannot be sent when visibility is none.');
+  }
+  validateOpponentSquadVisibility(value.opponentSquadVisibility, squad, ctx);
+}
 
-    if (value.opponentSquadVisibility === 'numbers') {
-      if (squad.length === 0) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter at least one opponent shirt number.',
-          path: ['opponentSquad'],
-        });
-      }
-      for (const [index, player] of squad.entries()) {
-        if (player.name) {
-          ctx.addIssue({
-            code: 'custom',
-            message: 'Names are not stored in numbers-only mode.',
-            path: ['opponentSquad', index, 'name'],
-          });
-        }
-      }
+function validateOpponentSquadVisibility(
+  visibility: z.infer<typeof opponentSquadVisibilitySchema>,
+  squad: z.infer<typeof opponentSquadPlayerSchema>[] | undefined,
+  ctx: z.RefinementCtx,
+): void {
+  if (visibility === 'numbers') {
+    if (!squad?.length) {
+      addOpponentSquadIssue(ctx, 'Enter at least one opponent shirt number.');
     }
+    squad?.forEach((player, index) => {
+      if (player.name) {
+        addOpponentSquadIssue(
+          ctx,
+          'Names are not stored in numbers-only mode.',
+          ['opponentSquad', index, 'name'],
+        );
+      }
+    });
+  }
+  if (visibility === 'full') {
+    if (!squad?.length) {
+      addOpponentSquadIssue(ctx, 'Enter at least one opponent player.');
+    }
+    squad?.forEach((player, index) => {
+      if (!player.name) {
+        addOpponentSquadIssue(
+          ctx,
+          'Opponent name is required in full mode.',
+          ['opponentSquad', index, 'name'],
+        );
+      }
+    });
+  }
+}
 
-    if (value.opponentSquadVisibility === 'full') {
-      if (squad.length === 0) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter at least one opponent player.',
-          path: ['opponentSquad'],
-        });
-      }
-      for (const [index, player] of squad.entries()) {
-        if (!player.name) {
-          ctx.addIssue({
-            code: 'custom',
-            message: 'Opponent name is required in full mode.',
-            path: ['opponentSquad', index, 'name'],
-          });
-        }
-      }
-    }
-  });
+function addOpponentSquadIssue(
+  ctx: z.RefinementCtx,
+  message: string,
+  path: (string | number)[] = ['opponentSquad'],
+): void {
+  ctx.addIssue({ code: 'custom', message, path });
+}
 export type StartMatchDto = z.infer<typeof startMatchSchema>;
 
 /**
@@ -257,6 +277,20 @@ export const confirmLineupSchema = z
       .refine((ids) => new Set(ids).size === 11, {
         message: 'Starting athletes must be unique.',
       }),
+    formationId: z.string().min(1).max(100).optional(),
+    pitchAssignments: z.record(z.string(), z.uuid().nullable()).optional(),
+    customPositions: z
+      .array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+          x: z.number().min(0).max(100),
+          y: z.number().min(0).max(100),
+        }),
+      )
+      .nullable()
+      .optional(),
     benchAthleteIds: z
       .array(z.uuid())
       .max(20, 'A match bench cannot exceed 20 athletes.')
@@ -277,7 +311,32 @@ export const confirmLineupSchema = z
       message: 'An athlete cannot be both a starter and on the bench.',
       path: ['benchAthleteIds'],
     },
-  );
+  )
+  .superRefine((value, ctx) => {
+    if (!value.pitchAssignments) return; // Legacy callers remain supported.
+    if (!value.formationId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A formation is required with pitch assignments.',
+      });
+      return;
+    }
+    const assigned = Object.values(value.pitchAssignments).filter(
+      (id): id is string => id !== null,
+    );
+    const starters = new Set(value.startingAthleteIds);
+    if (
+      assigned.length !== starters.size ||
+      new Set(assigned).size !== starters.size ||
+      assigned.some((id) => !starters.has(id))
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Pitch assignments must place every confirmed starter exactly once.',
+      });
+    }
+  });
 export type ConfirmLineupDto = z.infer<typeof confirmLineupSchema>;
 
 /**
@@ -312,7 +371,7 @@ export class StartMatchBodyDto {
   @ApiProperty({
     type: [String],
     format: 'uuid',
-    minItems: 11,
+    minItems: 1,
     maxItems: 11,
   })
   startingAthleteIds!: string[];

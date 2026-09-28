@@ -37,6 +37,7 @@ interface MobileCalendarViewProps {
   hiddenTypes: ReadonlySet<EventType>;
   readOnly?: boolean;
   onToggleType: (type: EventType) => void;
+  onViewChange?: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
   onToday: () => void;
@@ -62,6 +63,7 @@ export function MobileCalendarView({
   hiddenTypes,
   readOnly = false,
   onToggleType,
+  onViewChange,
   onSelectDate,
   onNavigate,
   onToday,
@@ -137,6 +139,25 @@ export function MobileCalendarView({
             )}
           </div>
         </div>
+
+        {onViewChange && (
+          <div role="group" aria-label="Calendar view" className="flex gap-1 rounded-lg bg-muted/30 p-1">
+            {(["month", "week", "agenda"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                onClick={() => onViewChange(option)}
+                className={cn(
+                  "flex-1 rounded-md px-2 py-1 text-xs font-semibold capitalize",
+                  view === option ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                )}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Event Type Filter Chips (Training, Match, Meeting) directly accessible on mobile */}
         <div
