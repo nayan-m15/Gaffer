@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { driver, type DriveStep, type Driver, type PopoverDOM } from "driver.js";
 import { useAuth } from "@/hooks/useAuth";
 import { START_TOUR_STORAGE_KEY, TOUR_FOCUS_DELAY_MS, TOUR_STEP_COUNT } from "./constants";
+import { markOnboardingActive } from "./onboardingFlag";
 
 export interface StartCoachTourOptions {
   teamName: string;
@@ -378,6 +379,7 @@ export function useCoachOnboardingTour() {
   useEffect(() => {
     if (!team) return;
     if (sessionStorage.getItem(START_TOUR_STORAGE_KEY) !== "1") return;
+    if (user?.id) markOnboardingActive(user.id);
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const timeoutId = window.setTimeout(() => {

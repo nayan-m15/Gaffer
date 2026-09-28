@@ -12,7 +12,10 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
+import { RoadToKickoffCard } from "@/features/onboarding/RoadToKickoffCard";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
+import { MatchSquadReminder } from "@/features/reminders/MatchSquadReminder";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { useEvent, useNow } from "@/features/events/hooks";
@@ -836,6 +839,7 @@ function CreateTeamHero({
 export default function DashboardPage() {
   const { user, team, accountKind } = useAuth();
   const navigate = useNavigate();
+  const roadActive = useOnboardingRoadActive(user?.id);
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
@@ -1020,6 +1024,13 @@ export default function DashboardPage() {
 
       {!isFirstTime && (
       <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
+        {team && team.role === "coach" && roadActive && user?.id && (
+          <RoadToKickoffCard
+            userId={user.id}
+            activeAthletesCount={activeAthletesCount}
+          />
+        )}
+
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card
@@ -1060,6 +1071,8 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
+
+        {team && <MatchSquadReminder />}
 
         <EventRemindersBanner events={upcomingEvents} />
 
