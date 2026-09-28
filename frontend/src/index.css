@@ -384,7 +384,7 @@ select:-webkit-autofill {
 }
 
 .landing-scene[data-ready="true"] .landing-scene__canvas {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* The WebGL scene is deliberately dark in both themes. Content placed
@@ -422,7 +422,7 @@ select:-webkit-autofill {
 
 @media (max-width: 767px) {
   .landing-scene[data-ready="true"] .landing-scene__canvas {
-    opacity: 0.78;
+    opacity: 1;
   }
 
 }
