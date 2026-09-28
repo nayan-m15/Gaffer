@@ -115,4 +115,4 @@ The remaining evidence must be captured in Gitea after this workflow is pushed:
 - one failed run with its test output and Playwright artifact;
 - protected-branch settings requiring the checks;
 - this guide, the workflow file, and representative files from `backend/test/`
-  and `e2e/`.
+  and `frontend/e2e/`.

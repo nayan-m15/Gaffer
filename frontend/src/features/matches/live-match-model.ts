@@ -5,10 +5,10 @@ import {
   inferFormationIdFromPositions,
   previewAssignmentsForStarters,
   resolveFormation,
-} from "@/features/team-management/formations";
+} from "../team-management/formations.ts";
 import type { FormationPlayerCount } from "@/features/team-management/types";
 import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
-import { SECOND_YELLOW_DETAIL } from "./event-visuals";
+import { SECOND_YELLOW_DETAIL } from "./event-visuals.ts";
 import type {
   FriendlyOpponentLineup,
   MatchLogEvent,
