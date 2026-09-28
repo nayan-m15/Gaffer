@@ -149,6 +149,25 @@ describe('confirmLineupSchema', () => {
     expect(parsed.benchAthleteIds).toBeUndefined();
   });
 
+  it('accepts an exact tactical snapshot and rejects missing or duplicate pitch assignments', () => {
+    const slots = Object.fromEntries(starterIds.map((id, i) => [`slot-${i}`, id]));
+    const valid = confirmLineupSchema.parse({
+      startingAthleteIds: starterIds,
+      formationId: '4-3-3',
+      pitchAssignments: slots,
+    });
+    expect(valid.pitchAssignments).toEqual(slots);
+    expect(() => confirmLineupSchema.parse({
+      startingAthleteIds: starterIds,
+      formationId: '4-3-3',
+      pitchAssignments: { ...slots, 'slot-0': starterIds[1] },
+    })).toThrow();
+    expect(() => confirmLineupSchema.parse({
+      startingAthleteIds: starterIds,
+      pitchAssignments: slots,
+    })).toThrow();
+  });
+
   it('rejects a starting list that is not exactly 11', () => {
     expect(() =>
       confirmLineupSchema.parse({

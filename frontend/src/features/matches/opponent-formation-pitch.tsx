@@ -22,8 +22,7 @@ import {
   type DraftOpponentPlayer,
 } from "@/features/matches/opponent-squad-draft";
 import {
-  DEFAULT_FORMATION_ID,
-  FORMATIONS,
+  resolveFormation,
 } from "@/features/team-management/formations";
 import { SquadPitchMarkings } from "@/features/team-management/SquadFormationPreview";
 import { usePointerDrag } from "@/features/team-management/usePointerDrag";
@@ -36,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 interface OpponentFormationPitchProps {
   formationId: string;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   assignments: PitchAssignments;
   players: DraftOpponentPlayer[];
   opponentColor: string;
@@ -55,6 +55,7 @@ function parseDragPayload(data: string): DragPayload | null {
 
 export function OpponentFormationPitch({
   formationId,
+  customPositions,
   assignments,
   players,
   opponentColor,
@@ -63,8 +64,7 @@ export function OpponentFormationPitch({
   onDragEnd,
   onAssignmentsChange,
 }: OpponentFormationPitchProps) {
-  const formation =
-    FORMATIONS[formationId] ?? FORMATIONS[DEFAULT_FORMATION_ID];
+  const formation = resolveFormation(formationId, customPositions);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
   const taken = assignedShirtNumbers(assignments);
   const playerByShirt = new Map(
