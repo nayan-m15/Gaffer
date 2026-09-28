@@ -185,6 +185,9 @@ test("all live event workflows remain usable and visible offline", async ({
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "MISSED" }).click();
+  // Goalkeeper-saves added a miss-reason follow-up (target vs keeper save)
+  // between picking "MISSED" and the event actually being logged.
+  await page.getByRole("button", { name: "MISSED TARGET" }).click();
   await expect(page.getByText(/12' Penalty Missed/i)).toBeVisible();
 
   await advanceWallClock();
