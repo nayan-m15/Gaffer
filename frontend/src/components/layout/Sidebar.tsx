@@ -4,6 +4,7 @@ import { SportLogo } from "@/components/brand/SportLogo";
 import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { startCoachTour } from "@/features/onboarding/startTour";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { motion, useReducedMotion } from "motion/react";
@@ -26,6 +27,7 @@ import {
   Trophy,
   PanelLeftClose,
   PanelLeftOpen,
+  Compass,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -61,6 +63,17 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
   { label: "Events", path: "/player/events", icon: Calendar },
   { label: "Leagues & Competitions", path: "/player/competitions", icon: Trophy },
 ];
+
+const TOUR_ID_BY_PATH: Record<string, string> = {
+  "/dashboard": "nav-dashboard",
+  "/athletes": "nav-roster",
+  "/events": "nav-events",
+  "/live-logger": "nav-live-logger",
+  "/injuries": "nav-injuries",
+  "/statistics": "nav-stats",
+  "/competitions": "nav-competitions",
+  "/team": "nav-team",
+};
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SIDEBAR COMPONENT
@@ -140,6 +153,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       <nav className="flex-1 space-y-1.5 px-3 py-5" aria-label="Main navigation">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const tourId = resolvedVariant === "player" ? undefined : TOUR_ID_BY_PATH[item.path];
           const isRelatedMatchReport =
             item.path === "/live-logger" &&
             /^\/matches\/[^/]+\/report\/?$/.test(pathname);
@@ -148,6 +162,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
             return (
               <span
                 key={item.label}
+                data-tour={tourId}
                 className={cn(
                   "flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40",
                   isFirstTime &&
@@ -166,6 +181,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
             <NavLink
               key={item.label}
               to={item.path}
+              data-tour={tourId}
               aria-current={isRelatedMatchReport ? "page" : undefined}
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
@@ -242,6 +258,28 @@ export function Sidebar({ className, variant }: SidebarProps) {
             {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </span>
         </button>
+
+        {resolvedVariant !== "player" && team && (
+          <button
+            type="button"
+            data-tour="show-tour"
+            onClick={() => {
+              setIsMobileOpen(false);
+              startCoachTour({
+                teamName: team.name,
+                firstName: user?.name?.trim().split(/\s+/)[0] || "Coach",
+                replay: true,
+                onGoToRoster: () => navigate("/athletes"),
+              });
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+            aria-label="Show tour again"
+            title="Show tour again"
+          >
+            <Compass className="size-5 shrink-0" aria-hidden="true" />
+            <span className={cn(!expanded && "lg:hidden")}>Show tour again</span>
+          </button>
+        )}
 
         {/* Sign out */}
         <button

@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -854,6 +854,31 @@ export default function DashboardPage() {
   const pendingInviteUrl = pendingInviteToken
     ? `/join-team/${pendingInviteToken}`
     : null;
+  const prevTeamIdRef = useRef<string | null>(team?.id ?? null);
+  const [overlayPhase, setOverlayPhase] = useState<"shown" | "fading" | "hidden">(
+    () => (!team && getPendingTeamInviteToken() === null ? "shown" : "hidden"),
+  );
+
+  useEffect(() => {
+    const prevId = prevTeamIdRef.current;
+    const nextId = team?.id ?? null;
+    prevTeamIdRef.current = nextId;
+
+    if (prevId === null && nextId !== null) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduceMotion) {
+        setOverlayPhase("hidden");
+        return;
+      }
+      setOverlayPhase("fading");
+      const timeoutId = window.setTimeout(() => setOverlayPhase("hidden"), 800);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    if (nextId === null && !hasPendingInvite) {
+      setOverlayPhase("shown");
+    }
+  }, [team, hasPendingInvite]);
 
   const {
     data,
@@ -965,10 +990,14 @@ export default function DashboardPage() {
 
   return (
     <DashboardFrame>
-      {isFirstTime && (
+      {overlayPhase !== "hidden" && (
         <div
           aria-hidden="true"
-          className="absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none"
+          className={cn(
+            "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
+            "transition-[opacity,background-color,backdrop-filter] duration-[800ms] ease-out motion-reduce:transition-none",
+            overlayPhase === "fading" && "bg-transparent opacity-0 backdrop-blur-none",
+          )}
         />
       )}
       <DashboardHeader

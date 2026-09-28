@@ -1,0 +1,262 @@
+.driver-popover.gaffer-tour {
+  all: unset;
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 1000000000;
+  display: block;
+  overflow: visible;
+  min-width: 280px;
+  max-width: 340px;
+  padding: 1.25rem 1.35rem 1.1rem;
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+  border: 1px solid color-mix(in oklab, var(--primary) 38%, var(--border));
+  border-radius: 16px;
+  box-shadow:
+    0 18px 48px -28px rgb(0 0 0 / 0.85),
+    0 0 0 1px color-mix(in oklab, var(--primary) 12%, transparent);
+  font-family: var(--font-sans), "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.driver-popover.gaffer-tour * {
+  box-sizing: border-box;
+}
+
+.driver-popover.gaffer-tour .driver-popover-close-btn {
+  display: none !important;
+}
+
+.gaffer-tour-progress {
+  position: relative;
+  z-index: 1;
+  margin: 0 3rem 0.35rem 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.driver-popover.gaffer-tour .driver-popover-title {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin: 0 3rem 0 0;
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.driver-popover.gaffer-tour .driver-popover-description {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.gaffer-tour-pitch {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  width: 36px;
+  height: 54px;
+  color: var(--muted-foreground);
+}
+
+.gaffer-tour-pitch-dot {
+  fill: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+}
+
+.gaffer-tour-pitch-dot.is-lit {
+  fill: var(--primary);
+}
+
+.gaffer-tour-keys {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  margin-top: 0.85rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.gaffer-tour-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7rem;
+  padding: 0.12rem 0.38rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.driver-popover.gaffer-tour .driver-popover-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.driver-popover.gaffer-tour .driver-popover-progress-text {
+  display: none;
+}
+
+.driver-popover.gaffer-tour .driver-popover-navigation-btns {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.driver-popover.gaffer-tour .driver-popover-footer-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.driver-popover.gaffer-tour .driver-popover-next-btn {
+  border: 1px solid transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.driver-popover.gaffer-tour .driver-popover-next-btn:hover {
+  background: color-mix(in oklab, var(--primary) 88%, var(--foreground));
+}
+
+.driver-popover.gaffer-tour .driver-popover-prev-btn {
+  border: 1px solid var(--border-default);
+  background: var(--surface-nested);
+  color: var(--secondary-foreground);
+}
+
+.driver-popover.gaffer-tour .driver-popover-prev-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.gaffer-tour-secondary {
+  order: -1;
+  margin-right: auto;
+  border: 1px solid var(--border-default) !important;
+  background: var(--surface-nested) !important;
+  color: var(--secondary-foreground) !important;
+}
+
+.gaffer-tour-secondary:hover {
+  border-color: var(--border-strong) !important;
+  background: var(--surface-hover) !important;
+  color: var(--foreground) !important;
+}
+
+.gaffer-tour-skip {
+  all: unset;
+  box-sizing: border-box;
+  display: inline;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.gaffer-tour-skip:hover {
+  color: var(--foreground);
+}
+
+.driver-popover.gaffer-tour .driver-popover-footer-btn:focus-visible,
+.gaffer-tour-skip:focus-visible,
+.gaffer-tour-secondary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.driver-popover.gaffer-tour .driver-popover-btn-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.driver-popover.gaffer-tour .driver-popover-arrow {
+  border: 5px solid var(--popover);
+}
+
+.driver-active-element[data-tour] {
+  border-radius: 12px;
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.gaffer-tour-burst {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.gaffer-tour-burst-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: gaffer-tour-burst 1s ease-out forwards;
+}
+
+@keyframes gaffer-tour-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gaffer-tour-burst,
+  .gaffer-tour-burst-dot {
+    animation: none;
+    display: none;
+  }
+}

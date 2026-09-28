@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
+import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ function AppShellContent() {
       )}
 
       <Sidebar />
+      <CoachOnboarding />
 
       <main
         className={cn(
