@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { motion, useReducedMotion } from "motion/react";
 import { listQueuedEvents } from "@/offline/match-store";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
 import type { LucideIcon } from "lucide-react";
 import {
   Home,
@@ -83,6 +84,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
   const resolvedVariant = variant ?? (accountKind === "player" ? "player" : "coach");
   const navItems = resolvedVariant === "player" ? PLAYER_NAV_ITEMS : COACH_NAV_ITEMS;
+  const isFirstTime = !team && getPendingTeamInviteToken() === null;
 
   const handleSignOut = async () => {
     try {
@@ -146,8 +148,13 @@ export function Sidebar({ className, variant }: SidebarProps) {
             return (
               <span
                 key={item.label}
-                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40"
-                title="Add a team first"
+                className={cn(
+                  "flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/40",
+                  isFirstTime &&
+                    "opacity-50 blur-[2px] transition-[filter,opacity] duration-700 motion-reduce:transition-none",
+                )}
+                title="Create your team first"
+                aria-disabled="true"
               >
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
                 <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
@@ -212,7 +219,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
               {user?.name ?? "Coach"}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {team?.name ?? "Your Team"}
+              {team?.name ?? "No team yet"}
             </p>
           </div>
         </button>

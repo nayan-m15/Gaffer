@@ -20,6 +20,7 @@ import {
   Activity,
   AlertCircle,
   Calendar,
+  Lock,
   Mail,
   Plus,
   RefreshCw,
@@ -201,6 +202,7 @@ function DashboardHeader({
   teamName,
   hasTeam,
   pendingInvite,
+  firstTime,
   onAddTeam,
 }: {
   userName: string | null;
@@ -209,20 +211,26 @@ function DashboardHeader({
   /** A team invitation is still awaiting acceptance — hide Add Team so the
    * user doesn't accidentally bootstrap their own coach team mid-invite. */
   pendingInvite: boolean;
+  firstTime: boolean;
   onAddTeam: () => void;
 }) {
+  const firstName = userName?.trim().split(/\s+/)[0];
   return (
     <PageHeader
       title="Dashboard"
       subtitle={
         <>
-          {userName ? `Welcome back, ${userName}` : "Welcome back"}
+          {firstTime && firstName
+            ? `Welcome, ${firstName}`
+            : userName
+              ? `Welcome back, ${userName}`
+              : "Welcome back"}
           {teamName ? ` \u00b7 ${teamName}` : ""}
         </>
       }
       actions={
         <>
-          {!hasTeam && !pendingInvite && (
+          {!firstTime && !hasTeam && !pendingInvite && (
             <Button variant="outline" size="sm" onClick={onAddTeam}>
               <Plus className="size-4" aria-hidden="true" />
               Add Team
@@ -645,6 +653,136 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ *  FIRST-TIME EXPERIENCE  (no team, no pending invite)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const ROAD_STEPS = [
+  { label: "Create your team", locked: false },
+  { label: "Add your players", locked: true },
+  { label: "Pick your XI", locked: true },
+] as const;
+
+const HERO_ENTER =
+  "animate-fade-in-up [animation-duration:250ms] motion-reduce:animate-none";
+
+function CreateTeamHero({
+  userName,
+  onCreateTeam,
+}: {
+  userName: string | null;
+  onCreateTeam: () => void;
+}) {
+  const firstName = userName?.trim().split(/\s+/)[0];
+  return (
+    <Card
+      aria-labelledby="create-team-heading"
+      className="mx-auto w-full max-w-[560px] px-6 py-8 text-center sm:px-8 sm:py-10"
+    >
+      <p
+        className={cn(
+          "text-xs font-medium tracking-wide text-primary sm:text-sm",
+          HERO_ENTER,
+        )}
+      >
+        {firstName
+          ? `Welcome to the dugout, ${firstName}`
+          : "Welcome to the dugout"}
+      </p>
+      <h2
+        id="create-team-heading"
+        className={cn(
+          "mt-3 font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl",
+          HERO_ENTER,
+          "[animation-delay:80ms]",
+        )}
+      >
+        Your pitch is waiting
+      </h2>
+      <p
+        className={cn(
+          "mx-auto mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground sm:text-base",
+          HERO_ENTER,
+          "animation-delay-150",
+        )}
+      >
+        The stands are full. Create your team and let&apos;s get your season
+        started.
+      </p>
+      <ol
+        aria-label="Road to kick-off"
+        className={cn(
+          "mt-6 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-0",
+          HERO_ENTER,
+          "[animation-delay:220ms]",
+        )}
+      >
+        {ROAD_STEPS.map((step, index) => {
+          const stepNumber = index + 1;
+          const isLast = index === ROAD_STEPS.length - 1;
+          return (
+            <li
+              key={step.label}
+              className="flex items-center gap-3 sm:min-w-0 sm:flex-1 sm:flex-col sm:gap-0"
+              aria-label={
+                step.locked
+                  ? `Step ${stepNumber}, locked: ${step.label}`
+                  : `Step ${stepNumber}: ${step.label}`
+              }
+              aria-current={step.locked ? undefined : "step"}
+            >
+              <div className="flex items-center sm:w-full">
+                <span
+                  className={cn(
+                    "hidden h-px flex-1 sm:block",
+                    index === 0 ? "bg-transparent" : "bg-border",
+                  )}
+                  aria-hidden="true"
+                />
+                <span
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    step.locked
+                      ? "border border-border-subtle bg-muted text-muted-foreground"
+                      : "bg-primary text-primary-foreground",
+                  )}
+                  aria-hidden="true"
+                >
+                  {step.locked ? <Lock className="size-3.5" /> : stepNumber}
+                </span>
+                <span
+                  className={cn(
+                    "hidden h-px flex-1 sm:block",
+                    isLast ? "bg-transparent" : "bg-border",
+                  )}
+                  aria-hidden="true"
+                />
+              </div>
+              <span
+                className={cn(
+                  "text-sm sm:mt-2 sm:px-1 sm:text-center",
+                  step.locked
+                    ? "text-muted-foreground"
+                    : "font-medium text-foreground",
+                )}
+              >
+                {step.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <Button
+        size="lg"
+        className={cn("mt-6 w-full sm:w-auto", HERO_ENTER, "animation-delay-300")}
+        onClick={onCreateTeam}
+      >
+        Create team
+      </Button>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -665,6 +803,7 @@ export default function DashboardPage() {
     ? null
     : getPendingTeamInviteToken();
   const hasPendingInvite = !team && pendingInviteToken !== null;
+  const isFirstTime = !team && !hasPendingInvite;
   const pendingInviteUrl = pendingInviteToken
     ? `/join-team/${pendingInviteToken}`
     : null;
@@ -697,6 +836,7 @@ export default function DashboardPage() {
           teamName={team?.name ?? null}
           hasTeam={!!team}
           pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="flex flex-col items-center justify-center gap-4 p-16">
@@ -732,6 +872,7 @@ export default function DashboardPage() {
           teamName={team?.name ?? null}
           hasTeam={!!team}
           pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
@@ -777,14 +918,31 @@ export default function DashboardPage() {
 
   return (
     <DashboardFrame>
+      {isFirstTime && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none"
+        />
+      )}
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
+        firstTime={isFirstTime}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
+      {isFirstTime && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10">
+          <CreateTeamHero
+            userName={user?.name ?? null}
+            onCreateTeam={() => setAddTeamOpen(true)}
+          />
+        </div>
+      )}
+
+      {!isFirstTime && (
       <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
@@ -889,7 +1047,9 @@ export default function DashboardPage() {
               match={liveMatch ?? null}
               onOpenLogger={() =>
                 navigate(
-                  liveMatch ? `/matches/${liveMatch.id}/live` : "/live-logger",
+                  liveMatch
+                    ? `/matches/${liveMatch.id}/live`
+                    : "/live-logger",
                 )
               }
             />
@@ -902,6 +1062,7 @@ export default function DashboardPage() {
           <RecentStatsCard stats={recentStats ?? []} />
         </BentoGrid>
       </div>
+      )}
       <EventDetailDialog
         open={Boolean(selectedEventId)}
         event={selectedEventQuery.data ?? null}
