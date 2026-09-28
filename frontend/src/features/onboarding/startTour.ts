@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { driver, type DriveStep, type Driver, type PopoverDOM } from "driver.js";
 import { useAuth } from "@/hooks/useAuth";
 import { START_TOUR_STORAGE_KEY, TOUR_FOCUS_DELAY_MS, TOUR_STEP_COUNT } from "./constants";
+import { createCelebrationBurst } from "./celebrationBurst";
 import { markOnboardingActive } from "./onboardingFlag";
 
 export interface StartCoachTourOptions {
@@ -83,14 +84,6 @@ const PITCH_DOTS: Array<{ cx: number; cy: number }> = [
   { cx: 18, cy: 28 },
   { cx: 35, cy: 22 },
   { cx: 52, cy: 28 },
-];
-
-const BURST_COLORS = [
-  "var(--primary)",
-  "var(--chart-2)",
-  "var(--brand-light)",
-  "var(--chart-1)",
-  "var(--primary-foreground)",
 ];
 
 let activeDriver: Driver | null = null;
@@ -180,26 +173,6 @@ function createPitchBadge(litCount: number): SVGSVGElement {
   });
 
   return svg;
-}
-
-function createCelebrationBurst(): HTMLElement {
-  const root = document.createElement("div");
-  root.className = "gaffer-tour-burst";
-  root.setAttribute("aria-hidden", "true");
-
-  for (let index = 0; index < 20; index += 1) {
-    const dot = document.createElement("span");
-    const angle = (Math.PI * 2 * index) / 20 + (index % 3) * 0.18;
-    const distance = 52 + (index % 5) * 12;
-    dot.className = "gaffer-tour-burst-dot";
-    dot.style.setProperty("--dx", `${Math.cos(angle) * distance}px`);
-    dot.style.setProperty("--dy", `${Math.sin(angle) * distance}px`);
-    dot.style.background = BURST_COLORS[index % BURST_COLORS.length];
-    dot.style.animationDelay = `${(index % 6) * 18}ms`;
-    root.append(dot);
-  }
-
-  return root;
 }
 
 function decoratePopover(popover: PopoverDOM, stepNumber: number, data: TourStepData | undefined, tour: Driver) {

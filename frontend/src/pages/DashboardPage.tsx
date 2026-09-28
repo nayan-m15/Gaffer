@@ -12,8 +12,12 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
-import { RoadToKickoffCard } from "@/features/onboarding/RoadToKickoffCard";
+import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import {
+  usePageCelebrated,
+  useUnlockRequirements,
+} from "@/features/onboarding/unlocks";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
 import { MatchSquadReminder } from "@/features/reminders/MatchSquadReminder";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
@@ -23,6 +27,7 @@ import {
   Activity,
   AlertCircle,
   Calendar,
+  Loader2,
   Lock,
   Mail,
   ArrowRight,
@@ -207,6 +212,7 @@ function DashboardHeader({
   hasTeam,
   pendingInvite,
   firstTime,
+  hideAddTeam,
   onAddTeam,
 }: {
   userName: string | null;
@@ -216,6 +222,7 @@ function DashboardHeader({
    * user doesn't accidentally bootstrap their own coach team mid-invite. */
   pendingInvite: boolean;
   firstTime: boolean;
+  hideAddTeam?: boolean;
   onAddTeam: () => void;
 }) {
   const firstName = userName?.trim().split(/\s+/)[0];
@@ -234,7 +241,7 @@ function DashboardHeader({
       }
       actions={
         <>
-          {!firstTime && !hasTeam && !pendingInvite && (
+          {!firstTime && !hasTeam && !pendingInvite && !hideAddTeam && (
             <Button variant="outline" size="sm" onClick={onAddTeam}>
               <Plus className="size-4" aria-hidden="true" />
               Add Team
@@ -832,6 +839,43 @@ function CreateTeamHero({
   );
 }
 
+function DashboardUnlockLayer({
+  userId,
+  firstName,
+  onUnlocked,
+}: {
+  userId: string;
+  firstName: string | undefined;
+  onUnlocked: () => void;
+}) {
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10">
+      {isLoading ? (
+        <Loader2
+          className="size-6 animate-spin text-primary motion-reduce:animate-none"
+          role="status"
+          aria-label="Loading"
+        />
+      ) : (
+        <UnlockGateCard
+          pageKey="dashboard"
+          userId={userId}
+          eyebrow={
+            firstName
+              ? `Welcome to the dugout, ${firstName}`
+              : "Welcome to the dugout"
+          }
+          hasPlayers={hasPlayers}
+          hasGamePlan={hasGamePlan}
+          onUnlocked={onUnlocked}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -839,10 +883,12 @@ function CreateTeamHero({
 export default function DashboardPage() {
   const { user, team, accountKind } = useAuth();
   const navigate = useNavigate();
-  const roadActive = useOnboardingRoadActive(user?.id);
+  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
+  const [unlockFading, setUnlockFading] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
   const now = useNow();
 
@@ -898,13 +944,33 @@ export default function DashboardPage() {
     refetchIntervalInBackground: false,
   });
 
+  const unlockGateApplies = Boolean(
+    team &&
+      team.role === "coach" &&
+      onboardingActive &&
+      user?.id &&
+      !dashboardCelebrated,
+  );
+  const hideMainForUnlock = unlockGateApplies && !unlockFading;
+  const showUnlockOverlay = unlockGateApplies || unlockFading;
+  const firstName = user?.name?.trim().split(/\s+/)[0];
+
+  const handleDashboardUnlocked = () => {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) return;
+    setUnlockFading(true);
+    window.setTimeout(() => setUnlockFading(false), 800);
+  };
+
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
     return <Navigate to="/player/dashboard" replace />;
   }
 
   /* ── Error state ──────────────────────────────────────────────────────── */
-  if (isError) {
+  if (isError && !showUnlockOverlay) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -940,7 +1006,7 @@ export default function DashboardPage() {
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
-  if (isLoading) {
+  if (isLoading && !showUnlockOverlay) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -994,13 +1060,15 @@ export default function DashboardPage() {
 
   return (
     <DashboardFrame>
-      {overlayPhase !== "hidden" && (
+      {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <div
           aria-hidden="true"
           className={cn(
             "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
             "transition-[opacity,background-color,backdrop-filter] duration-[800ms] ease-out motion-reduce:transition-none",
-            overlayPhase === "fading" && "bg-transparent opacity-0 backdrop-blur-none",
+            (unlockFading ||
+              (overlayPhase === "fading" && !unlockGateApplies)) &&
+              "bg-transparent opacity-0 backdrop-blur-none",
           )}
         />
       )}
@@ -1010,6 +1078,7 @@ export default function DashboardPage() {
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         firstTime={isFirstTime}
+        hideAddTeam={hideMainForUnlock}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
@@ -1022,15 +1091,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!isFirstTime && (
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
-        {team && team.role === "coach" && roadActive && user?.id && (
-          <RoadToKickoffCard
-            userId={user.id}
-            activeAthletesCount={activeAthletesCount}
-          />
-        )}
+      {unlockGateApplies && user?.id && (
+        <DashboardUnlockLayer
+          userId={user.id}
+          firstName={firstName}
+          onUnlocked={handleDashboardUnlocked}
+        />
+      )}
 
+      {!isFirstTime && !hideMainForUnlock && (
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card
