@@ -55,6 +55,7 @@ import type {
   CreateInjuryInput,
   InjuryListItem,
 } from "./types";
+import "./injuries-background.css";
 
 type TabValue = "overview" | "history";
 
@@ -361,7 +362,10 @@ export default function InjuryRecoveryPage() {
   );
 
   return (
-    <>
+    <div className="injuries-page relative isolate min-h-full">
+      <div className="injuries-page-backdrop" aria-hidden="true" />
+
+      <div className="relative z-10">
       <MultiStepLoader
         loading={isDownloadingReport}
         loadingStates={[
@@ -631,6 +635,7 @@ export default function InjuryRecoveryPage() {
           void queryClient.invalidateQueries({ queryKey: ["athletes"] });
         }}
       />
-    </>
+      </div>
+    </div>
   );
 }
