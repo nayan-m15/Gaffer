@@ -450,6 +450,48 @@ body {
 .animation-delay-300 { animation-delay: 300ms; }
 .animation-delay-450 { animation-delay: 450ms; }
 
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+
+@keyframes dash-flow {
+  from { background-position: 0 0; }
+  to   { background-position: 10px 0; }
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.35s ease-out both;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+.animate-dash-flow {
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--primary) 0 5px,
+    transparent 5px 10px
+  );
+  background-size: 10px 2px;
+  background-repeat: repeat-x;
+  animation: dash-flow 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-scale,
+  .animate-pulse-ring,
+  .animate-dash-flow {
+    animation: none !important;
+  }
+}
+
 /* ─── Scroll-triggered reveal ───────────────────────────────────────────── *
  * Elements start invisible and translated down; the `.is-visible` class      *
  * (applied by an Intersection Observer) triggers the entrance.               */
