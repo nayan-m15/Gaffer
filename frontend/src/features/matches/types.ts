@@ -69,7 +69,7 @@ export interface MatchRecord {
   competitionName: string | null;
   competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
-  /** Present on GET /matches/:id for accepted Gaffer friendly fixtures. */
+  /** Present on GET /matches/:id for linked Gaffer friendlies and competition fixtures. */
   friendlyOpponentLineup?: FriendlyOpponentLineup;
   projection?: {
     revision: number;

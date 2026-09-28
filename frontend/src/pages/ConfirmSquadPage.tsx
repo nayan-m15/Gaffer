@@ -444,7 +444,7 @@ export default function ConfirmSquadPage() {
   const lineupQuery = useEventLineup(eventId);
   const friendlyLineupQuery = useFriendlyOpponentLineup(
     eventId,
-    Boolean(eventQuery.data?.friendlyFixtureId),
+    Boolean(eventQuery.data?.friendlyFixtureId || eventQuery.data?.competitionFixtureId),
   );
   const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
@@ -808,8 +808,12 @@ export default function ConfirmSquadPage() {
     !(selectedGamePlanId && (gamePlanQuery.isFetching || gamePlanQuery.isError));
 
   const friendlyOpponentLabel =
-    eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent";
-  const sharingWithOpponent = friendlyFixtureLinked && friendlyFixtureAccepted;
+    eventQuery.data?.competitionFixtureId
+      ? (eventQuery.data.fixtureOpponentName?.trim() || "the opponent")
+      : (eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent");
+  const sharingWithOpponent =
+    (friendlyFixtureLinked && friendlyFixtureAccepted) ||
+    Boolean(eventQuery.data?.competitionFixtureId && friendlyLineupQuery.data?.teamId);
   const lineupStatusMessage = (() => {
     if (!fixtureDateConfirmed) {
       return "The fixture must be confirmed before the lineup can be saved.";
@@ -1477,12 +1481,18 @@ export default function ConfirmSquadPage() {
               Edit opponent squad
             </button>
           </div>
-          {eventQuery.data?.friendlyFixtureId && (
+          {(eventQuery.data?.friendlyFixtureId || eventQuery.data?.competitionFixtureId) && (
             <p className="mt-3 text-xs text-muted-foreground">
               {friendlyLineupQuery.data?.available
                 ? `Auto-filled from ${
                     friendlyLineupQuery.data.teamName ?? "the opponent"
                   }'s confirmed lineup — adjust it if needed.`
+                : eventQuery.data.competitionFixtureId && friendlyLineupQuery.data?.teamId
+                  ? `Opponent lineup not available yet — ${
+                      friendlyLineupQuery.data.teamName ?? "the opponent"
+                    } has not confirmed their lineup. You can still enter it manually.`
+                : eventQuery.data.competitionFixtureId
+                  ? "This fixture's opponent has not linked a Gaffer team yet; enter their squad manually."
                 : eventQuery.data.friendlyFixtureStatus === "accepted"
                   ? `Opponent lineup not available yet — ${
                       eventQuery.data.friendlyOpponentTeamName ?? "the opponent"

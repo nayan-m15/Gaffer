@@ -58,9 +58,8 @@ export function useEvent(eventId: string | undefined) {
 }
 
 /**
- * The opposing Gaffer team's confirmed lineup for an accepted friendly
- * fixture on this event. Non-friendly events still answer, with a neutral
- * "not available" shape, so callers only need one code path.
+ * Opposing Gaffer lineup for accepted friendlies or generated league/cup
+ * fixtures. An unlinked opponent returns the neutral unavailable shape.
  */
 export function useFriendlyOpponentLineup(
   eventId: string | undefined,

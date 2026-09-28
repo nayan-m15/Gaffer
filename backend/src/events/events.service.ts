@@ -364,6 +364,12 @@ export class EventsService {
   async getFriendlyOpponentLineup(userId: string, eventId: string) {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
+    if (event.competitionFixtureId && event.competitionId) {
+      return this.friendlyFixturesService.resolveCompetitionOpponentLineup(
+        event.competitionFixtureId,
+        team.id,
+      );
+    }
     if (!event.friendlyFixtureId) {
       return unavailableFriendlyOpponentLineup();
     }
