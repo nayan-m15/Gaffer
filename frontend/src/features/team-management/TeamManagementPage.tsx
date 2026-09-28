@@ -370,7 +370,8 @@ export default function TeamManagementPage() {
       </div>
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4">
+      <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-6 2xl:grid-cols-[minmax(0,860px)_456px]">
+      <div className="flex min-w-0 flex-col gap-4">
         {lineup.isCustomFormation && lineup.customEditMode && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
             Drag the outfield position handles to build your shape. Positions snap
@@ -413,6 +414,7 @@ export default function TeamManagementPage() {
         onDragEnd={lineup.endDrag}
         onDrop={lineup.handleDrop}
       />
+      </div>
 
       {canManageTeam && (
         <GafferAiAssistant
