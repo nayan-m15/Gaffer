@@ -94,8 +94,12 @@ export class MatchesService {
     // confirmed lineup alongside the manually logged opponent squad. The
     // expected opponent team is verified against the match row so a match
     // can never resolve an unrelated team's lineup.
-    const friendlyOpponentLineup =
-      event.friendlyFixtureId && match.opponentTeamId
+    const friendlyOpponentLineup = event.competitionFixtureId
+      ? await this.friendlyFixturesService.resolveCompetitionOpponentLineup(
+          event.competitionFixtureId,
+          team.id,
+        )
+      : event.friendlyFixtureId && match.opponentTeamId
         ? await this.friendlyFixturesService.resolveOpponentLineup(
             event.friendlyFixtureId,
             team.id,

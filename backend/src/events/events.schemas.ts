@@ -160,6 +160,13 @@ export const startMatchSchema = z
       }),
     // Final match-day bench after on-the-day swaps. When omitted, every
     // other non-archived team athlete is treated as bench (legacy confirm-squad).
+    formationId: z.string().min(1).max(100).optional(),
+    pitchAssignments: z.record(z.string(), z.uuid().nullable()).optional(),
+    customPositions: z.array(z.object({
+      id: z.string(), label: z.string(),
+      role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+      x: z.number().min(0).max(100), y: z.number().min(0).max(100),
+    })).nullable().optional(),
     benchAthleteIds: z
       .array(z.uuid())
       .max(20, 'A match bench cannot exceed 20 athletes.')
@@ -263,6 +270,13 @@ export const confirmLineupSchema = z
       .refine((ids) => new Set(ids).size === 11, {
         message: 'Starting athletes must be unique.',
       }),
+    formationId: z.string().min(1).max(100).optional(),
+    pitchAssignments: z.record(z.string(), z.uuid().nullable()).optional(),
+    customPositions: z.array(z.object({
+      id: z.string(), label: z.string(),
+      role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+      x: z.number().min(0).max(100), y: z.number().min(0).max(100),
+    })).nullable().optional(),
     benchAthleteIds: z
       .array(z.uuid())
       .max(20, 'A match bench cannot exceed 20 athletes.')
@@ -283,7 +297,20 @@ export const confirmLineupSchema = z
       message: 'An athlete cannot be both a starter and on the bench.',
       path: ['benchAthleteIds'],
     },
-  );
+  )
+  .superRefine((value, ctx) => {
+    if (!value.pitchAssignments) return; // Legacy callers remain supported.
+    if (!value.formationId) {
+      ctx.addIssue({ code: 'custom', message: 'A formation is required with pitch assignments.' });
+      return;
+    }
+    const assigned = Object.values(value.pitchAssignments).filter((id): id is string => id !== null);
+    const starters = new Set(value.startingAthleteIds);
+    if (assigned.length !== starters.size || new Set(assigned).size !== starters.size ||
+        assigned.some((id) => !starters.has(id))) {
+      ctx.addIssue({ code: 'custom', message: 'Pitch assignments must place every confirmed starter exactly once.' });
+    }
+  });
 export type ConfirmLineupDto = z.infer<typeof confirmLineupSchema>;
 
 /**

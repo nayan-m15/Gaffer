@@ -98,6 +98,9 @@ export class EventsController {
    * team's confirmed lineup once it exists, otherwise a neutral
    * "not available" shape. Non-Gaffer events return the neutral shape.
    */
+  // The original friendly route stays as an alias for existing clients.
+  // Both routes derive the other team from the signed-in team's actual fixture.
+  @Get(':eventId/opponent-lineup')
   @Get(':eventId/friendly-opponent-lineup')
   async friendlyOpponentLineup(
     @CurrentUser() user: AuthenticatedRequest['user'],

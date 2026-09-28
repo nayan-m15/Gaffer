@@ -511,6 +511,10 @@ export const eventLineups = pgTable(
       .$type<string[]>()
       .notNull(),
     benchAthleteIds: jsonb('bench_athlete_ids').$type<string[]>().notNull(),
+    // Immutable-on-confirmation tactical snapshot; never read a mutable game plan for sharing.
+    formationId: text('formation_id'),
+    pitchAssignments: jsonb('pitch_assignments').$type<Record<string, string | null>>(),
+    customPositions: jsonb('custom_positions').$type<GamePlanFormationPosition[] | null>(),
     confirmedByUserId: text('confirmed_by_user_id')
       .notNull()
       .references(() => user.id),

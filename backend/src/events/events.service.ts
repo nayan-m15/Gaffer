@@ -364,6 +364,12 @@ export class EventsService {
   async getFriendlyOpponentLineup(userId: string, eventId: string) {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
+    if (event.competitionFixtureId && event.competitionId) {
+      return this.friendlyFixturesService.resolveCompetitionOpponentLineup(
+        event.competitionFixtureId,
+        team.id,
+      );
+    }
     if (!event.friendlyFixtureId) {
       return unavailableFriendlyOpponentLineup();
     }
@@ -420,6 +426,9 @@ export class EventsService {
         teamId: team.id,
         startingAthleteIds: dto.startingAthleteIds,
         benchAthleteIds: dto.benchAthleteIds ?? [],
+        formationId: dto.formationId ?? null,
+        pitchAssignments: dto.pitchAssignments ?? null,
+        customPositions: dto.customPositions ?? null,
         confirmedByUserId: userId,
         confirmedAt,
       })
@@ -428,6 +437,9 @@ export class EventsService {
         set: {
           startingAthleteIds: dto.startingAthleteIds,
           benchAthleteIds: dto.benchAthleteIds ?? [],
+          formationId: dto.formationId ?? null,
+          pitchAssignments: dto.pitchAssignments ?? null,
+          customPositions: dto.customPositions ?? null,
           confirmedByUserId: userId,
           confirmedAt,
           updatedAt: confirmedAt,
@@ -460,6 +472,9 @@ export class EventsService {
     return {
       startingAthleteIds: lineup.startingAthleteIds,
       benchAthleteIds: lineup.benchAthleteIds,
+      formationId: lineup.formationId,
+      pitchAssignments: lineup.pitchAssignments,
+      customPositions: lineup.customPositions,
       confirmedAt: lineup.confirmedAt,
     };
   }
