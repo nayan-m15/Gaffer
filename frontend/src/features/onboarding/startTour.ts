@@ -5,6 +5,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { START_TOUR_STORAGE_KEY, TOUR_FOCUS_DELAY_MS, TOUR_STEP_COUNT } from "./constants";
 import { createCelebrationBurst } from "./celebrationBurst";
 import { markOnboardingActive } from "./onboardingFlag";
+import { destroyPageTour } from "./startPageTour";
+import { setCoachTourActive } from "./tourLock";
 
 export interface StartCoachTourOptions {
   teamName: string;
@@ -298,12 +300,15 @@ function buildSteps(options: StartCoachTourOptions): DriveStep[] {
 export function destroyCoachTour() {
   const current = activeDriver;
   activeDriver = null;
+  setCoachTourActive(false);
   if (current?.isActive()) current.destroy();
 }
 
 export function startCoachTour(options: StartCoachTourOptions) {
+  destroyPageTour({ persistSeen: false });
   destroyCoachTour();
   sessionStorage.removeItem(START_TOUR_STORAGE_KEY);
+  setCoachTourActive(true);
 
   const reduceMotion = prefersReducedMotion();
   const tour = driver({
@@ -329,6 +334,7 @@ export function startCoachTour(options: StartCoachTourOptions) {
       focusTourPrimaryButton(popover);
     },
     onDestroyed: () => {
+      setCoachTourActive(false);
       if (activeDriver === tour) activeDriver = null;
     },
     onDoneClick: () => {

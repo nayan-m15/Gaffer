@@ -28,6 +28,16 @@ export function readOnboardingActive(userId: string | undefined): boolean {
   }
 }
 
+/** True when the onboarding key exists with any value ("active" or "complete"). */
+export function hasOnboardingFlag(userId: string | undefined): boolean {
+  if (!userId) return false;
+  try {
+    return localStorage.getItem(onboardingFlagKey(userId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** First-time tour after team creation. Never overwrites "complete". */
 export function markOnboardingActive(userId: string): void {
   try {
@@ -52,6 +62,14 @@ export function completeOnboarding(userId: string): void {
 export function useOnboardingRoadActive(userId: string | undefined): boolean {
   const getSnapshot = useCallback(
     () => readOnboardingActive(userId),
+    [userId],
+  );
+  return useSyncExternalStore(subscribeOnboardingFlag, getSnapshot, () => false);
+}
+
+export function useHasOnboardingFlag(userId: string | undefined): boolean {
+  const getSnapshot = useCallback(
+    () => hasOnboardingFlag(userId),
     [userId],
   );
   return useSyncExternalStore(subscribeOnboardingFlag, getSnapshot, () => false);

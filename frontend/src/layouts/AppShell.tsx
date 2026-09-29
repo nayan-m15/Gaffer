@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
 import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
+import { PageTourProvider } from "@/features/onboarding/pageTourContext";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
 import {
@@ -65,6 +66,7 @@ function GatedPageBody({
   celebrating,
   onUnlocked,
   onRevealed,
+  onCelebrationComplete,
 }: {
   pageKey: UnlockPageKey;
   userId: string;
@@ -72,6 +74,7 @@ function GatedPageBody({
   celebrating: boolean;
   onUnlocked: () => void;
   onRevealed: () => void;
+  onCelebrationComplete: () => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
@@ -119,6 +122,7 @@ function GatedPageBody({
             exiting={celebrating}
             onUnlocked={onUnlocked}
             onRevealed={onRevealed}
+            onCelebrationComplete={onCelebrationComplete}
           />
         </div>
       )}
@@ -148,9 +152,11 @@ function AppShellContent() {
   const pageKey = pageKeyFromPath(pathname);
   const celebrated = usePageCelebrated(user?.id, pageKey ?? "events");
   const [celebrating, setCelebrating] = useState(false);
+  const [celebrationActive, setCelebrationActive] = useState(false);
 
   useEffect(() => {
     setCelebrating(false);
+    setCelebrationActive(false);
     cancelGoalUnlockCelebration();
   }, [pageKey]);
 
@@ -176,10 +182,16 @@ function AppShellContent() {
     ).matches;
     if (reduceMotion) return;
     setCelebrating(true);
+    setCelebrationActive(true);
   };
 
   const handleRevealed = () => {
     setCelebrating(false);
+  };
+
+  const handleCelebrationComplete = () => {
+    setCelebrating(false);
+    setCelebrationActive(false);
   };
 
   const showDashboardScene =
@@ -187,6 +199,11 @@ function AppShellContent() {
   const isEventsPage = pathname === "/events" || pathname === "/events/";
 
   return (
+    <PageTourProvider
+      userId={user?.id}
+      showingGate={showingGate}
+      celebrationActive={celebrationActive}
+    >
     <div className="app-shell relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
       <div
         className="no-print pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
@@ -236,6 +253,7 @@ function AppShellContent() {
               celebrating={celebrating}
               onUnlocked={handleUnlocked}
               onRevealed={handleRevealed}
+              onCelebrationComplete={handleCelebrationComplete}
             />
           ) : (
             <Outlet />
@@ -246,5 +264,6 @@ function AppShellContent() {
         </div>
       </main>
     </div>
+    </PageTourProvider>
   );
 }

@@ -411,7 +411,7 @@ export default function AthletesPage() {
             <AppCard className="min-w-0 max-w-full p-3 sm:p-4 md:p-5">
               {/* Toolbar: tabs + search + add athlete */}
               <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="order-2 flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1 lg:order-1">
+                <div className="order-2 flex w-fit max-w-full items-center gap-1 rounded-lg border border-border bg-background p-1 lg:order-1" data-tour="roster-tabs">
                   <TabButton
                     active={!showArchived}
                     onClick={() => switchTab(false)}
@@ -435,6 +435,7 @@ export default function AthletesPage() {
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder="Search players..."
                       aria-label="Search players by name, number, position or status"
+                      data-tour="roster-search"
                       className="h-11 w-full min-w-0 rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50 sm:h-9"
                     />
                   </div>
@@ -444,6 +445,7 @@ export default function AthletesPage() {
                       type="button"
                       onClick={openAddForm}
                       className="hidden shrink-0 gap-1.5 sm:inline-flex"
+                      data-tour="roster-add"
                     >
                       <Plus className="size-4" />
                       Add Athlete
@@ -470,19 +472,21 @@ export default function AthletesPage() {
                 </div>
               ) : (
                 <>
-                  <MobileRoster athletes={filteredAthletes} onSelect={handleSelect} />
+                  <div data-tour="roster-table">
+                    <MobileRoster athletes={filteredAthletes} onSelect={handleSelect} />
 
-                  <div className="hidden min-w-0 md:block">
-                    <RosterTable
-                      athletes={filteredAthletes}
-                      selectedId={selectedId}
-                      showArchived={showArchived}
-                      readOnly={!canManageRoster}
-                      onSelect={handleSelect}
-                      onEdit={openEditForm}
-                      onArchive={openArchiveDialog}
-                      onRestore={handleRestore}
-                    />
+                    <div className="hidden min-w-0 md:block">
+                      <RosterTable
+                        athletes={filteredAthletes}
+                        selectedId={selectedId}
+                        showArchived={showArchived}
+                        readOnly={!canManageRoster}
+                        onSelect={handleSelect}
+                        onEdit={openEditForm}
+                        onArchive={openArchiveDialog}
+                        onRestore={handleRestore}
+                      />
+                    </div>
                   </div>
 
                   {filteredAthletes.length === 0 && (
@@ -532,6 +536,7 @@ export default function AthletesPage() {
             onClick={openAddForm}
             className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-30 rounded-full shadow-lg sm:hidden"
             aria-label="Add athlete"
+            data-tour="roster-add"
           >
             <Plus className="size-5" />
           </Button>
@@ -558,6 +563,7 @@ export default function AthletesPage() {
                   setIsInviteDialogOpen(true);
                 }}
                 className="w-full gap-1.5 sm:w-auto"
+                data-tour="roster-invite"
               >
                 <UserPlus className="size-4" />
                 Invite Assistant

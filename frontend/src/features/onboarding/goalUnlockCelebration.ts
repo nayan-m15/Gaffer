@@ -73,6 +73,7 @@ type Particle = {
 type CelebrationOptions = {
   label: string;
   onReveal: () => void;
+  onComplete?: () => void;
 };
 
 let activeCleanup: (() => void) | null = null;
@@ -82,6 +83,10 @@ export function cancelGoalUnlockCelebration(): void {
   activeCleanup = null;
 }
 
+export function isGoalUnlockCelebrationRunning(): boolean {
+  return activeCleanup !== null;
+}
+
 export function startGoalUnlockCelebration(
   options: CelebrationOptions,
 ): () => void {
@@ -89,6 +94,7 @@ export function startGoalUnlockCelebration(
 
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     options.onReveal();
+    options.onComplete?.();
     return () => {};
   }
 
@@ -153,7 +159,7 @@ export function startGoalUnlockCelebration(
     backdrop.classList.add("is-in");
   });
 
-  const cleanup = () => {
+  function finishCleanup(completed: boolean) {
     if (cleaned) return;
     cleaned = true;
     for (const id of timers) window.clearTimeout(id);
@@ -161,10 +167,15 @@ export function startGoalUnlockCelebration(
     frame = 0;
     particles = [];
     host.remove();
-    if (activeCleanup === cleanup) activeCleanup = null;
-  };
+    if (activeCleanup === cancel) activeCleanup = null;
+    if (completed) options.onComplete?.();
+  }
 
-  activeCleanup = cleanup;
+  function cancel() {
+    finishCleanup(false);
+  }
+
+  activeCleanup = cancel;
 
   const schedule = (fn: () => void, ms: number) => {
     timers.push(window.setTimeout(fn, ms));
@@ -275,7 +286,7 @@ export function startGoalUnlockCelebration(
     }
   }, finishAt);
 
-  schedule(cleanup, Math.max(finishAt, REVEAL_MS + BACKDROP_OUT_MS, IMPACT_MS + STAMP_MS) + 120);
+  schedule(() => finishCleanup(true), Math.max(finishAt, REVEAL_MS + BACKDROP_OUT_MS, IMPACT_MS + STAMP_MS) + 120);
 
   function loop() {
     if (cleaned) return;
@@ -296,7 +307,7 @@ export function startGoalUnlockCelebration(
     frame = requestAnimationFrame(loop);
   }
 
-  return cleanup;
+  return cancel;
 }
 
 function kickBall(ball: HTMLElement, goalWrap: HTMLElement): void {

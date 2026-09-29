@@ -90,7 +90,7 @@ export function GamePlanControls({
         ]}
         duration={180}
       />
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-tour="team-gameplan">
       <GamePlanSelector
         gamePlans={plans}
         selectedId={selectedId}

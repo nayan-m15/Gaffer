@@ -1,4 +1,7 @@
 import { type ReactNode } from "react";
+import { CircleHelp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { usePageTour } from "@/features/onboarding/pageTourContext";
 import { cn } from "@/lib/utils";
 
 export interface PageHeaderProps {
@@ -30,6 +33,9 @@ export function PageHeader({
   className,
   mobileInline = false,
 }: PageHeaderProps) {
+  const { pageTourKey, startPageTour } = usePageTour();
+  const showPageTourHelp = pageTourKey !== null;
+
   return (
     <header
       className={cn(
@@ -53,8 +59,20 @@ export function PageHeader({
           )}
         </div>
 
-        {actions && (
+        {(showPageTourHelp || actions) && (
           <div className={cn("flex flex-wrap items-center gap-3 sm:gap-4", mobileInline && "shrink-0")}>
+            {showPageTourHelp && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={startPageTour}
+                aria-label="Show tips for this page"
+                title="Show tips for this page"
+              >
+                <CircleHelp className="size-4" />
+              </Button>
+            )}
             {actions}
           </div>
         )}

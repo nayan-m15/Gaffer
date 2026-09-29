@@ -232,6 +232,7 @@ export default function EventsPage() {
               role="group"
               aria-label="Calendar view"
               className="flex items-center rounded-md border border-border bg-background p-0.5"
+              data-tour="events-views"
             >
               {(["month", "week", "agenda"] as const).map((option) => (
                 <button
@@ -338,7 +339,7 @@ export default function EventsPage() {
           {/* Calendar + floating sidebar */}
           {events && (
             <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-6">
-              <div className="min-h-0 min-w-0 flex-1">{viewContent}</div>
+              <div className="min-h-0 min-w-0 flex-1" data-tour="events-calendar">{viewContent}</div>
 
               <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
                 {renderSidebar(

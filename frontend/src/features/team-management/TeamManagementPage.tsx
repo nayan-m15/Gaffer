@@ -255,6 +255,7 @@ export default function TeamManagementPage() {
                   disabled={lineup.customEditMode}
                   className="gap-1.5"
                   aria-pressed={lineup.autoFillEnabled}
+                  data-tour="team-formation"
                 >
                   <Wand2 className="size-3.5" />
                   Auto-fill {lineup.autoFillEnabled ? "On" : "Off"}
@@ -274,12 +275,14 @@ export default function TeamManagementPage() {
           </GamePlanControls>
         }
       >
-        <AnimatedTabs
-          items={TEAM_SECTIONS}
-          value={activeSection}
-          onValueChange={setActiveSection}
-          ariaLabel="Team sections"
-        />
+        <div data-tour="team-tabs">
+          <AnimatedTabs
+            items={TEAM_SECTIONS}
+            value={activeSection}
+            onValueChange={setActiveSection}
+            ariaLabel="Team sections"
+          />
+        </div>
       </PageHeader>
 
       <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
@@ -371,7 +374,7 @@ export default function TeamManagementPage() {
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
       <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-6 2xl:grid-cols-[minmax(0,860px)_456px]">
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4" data-tour="team-pitch">
         {lineup.isCustomFormation && lineup.customEditMode && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
             Drag the outfield position handles to build your shape. Positions snap

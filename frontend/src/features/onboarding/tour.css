@@ -80,6 +80,22 @@
   fill: var(--primary);
 }
 
+.gaffer-tour-futbol {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--primary);
+}
+
+.gaffer-tour-futbol svg {
+  width: 100%;
+  height: 100%;
+}
+
 .gaffer-tour-keys {
   position: relative;
   z-index: 1;

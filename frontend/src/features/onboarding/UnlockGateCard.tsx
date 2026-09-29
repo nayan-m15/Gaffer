@@ -202,6 +202,7 @@ export function UnlockGateCard({
   exiting,
   onUnlocked,
   onRevealed,
+  onCelebrationComplete,
 }: {
   pageKey: UnlockPageKey;
   userId: string;
@@ -211,6 +212,7 @@ export function UnlockGateCard({
   exiting?: boolean;
   onUnlocked: () => void;
   onRevealed?: () => void;
+  onCelebrationComplete?: () => void;
 }) {
   const page = PAGE_UNLOCKS[pageKey];
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
@@ -242,6 +244,7 @@ export function UnlockGateCard({
     startGoalUnlockCelebration({
       label: page.label,
       onReveal: () => onRevealed?.(),
+      onComplete: () => onCelebrationComplete?.(),
     });
   };
 
