@@ -1,5 +1,5 @@
-import { teamAbbrev } from "./live-match-model";
-import { chronological } from "./match-report-chart-stats";
+import { teamAbbrev } from "./live-match-model.ts";
+import { chronological } from "./match-report-chart-stats.ts";
 import type { MatchLogEvent, MatchSquadAthlete } from "./types";
 
 export {
@@ -9,7 +9,7 @@ export {
   scoreProgressionPoints,
   teamComparisonRows,
   teamEventSplit,
-} from "./match-report-chart-stats";
+} from "./match-report-chart-stats.ts";
 
 function scorerSurname(
   event: MatchLogEvent,

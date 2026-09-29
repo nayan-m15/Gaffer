@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import {
   E2E_PASSWORD,
   emailVerificationUrl,

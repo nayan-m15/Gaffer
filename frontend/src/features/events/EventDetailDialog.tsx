@@ -38,6 +38,41 @@ interface EventDetailDialogProps {
   canManage?: boolean;
 }
 
+function friendlyFixtureMessage(
+  status: string | null | undefined,
+  requester: boolean | null,
+  opponentName: string,
+  lineupConfirmed: boolean,
+) {
+  if (status === "accepted") {
+    const lineup = lineupConfirmed ? " Your team's lineup is confirmed and visible to them." : "";
+    return `Friendly fixture confirmed with ${opponentName}. The match appears on both teams' calendars.${lineup}`;
+  }
+  if (status === "pending") {
+    if (requester === false) return `${opponentName} has invited your team to a friendly fixture — accept or decline it from the requests banner on your Events page.`;
+    if (requester === true) return `Friendly fixture request sent to ${opponentName} — waiting for them to accept.`;
+    return `A friendly fixture request with ${opponentName} is awaiting a response.`;
+  }
+  if (status === "declined") {
+    const guidance = " Edit the event to pick another opponent, or play a team without a Gaffer account.";
+    if (requester === false) return `You declined this friendly fixture against ${opponentName}.${guidance}`;
+    if (requester === true) return `${opponentName} declined this friendly fixture.${guidance}`;
+    return `This friendly fixture with ${opponentName} was declined.${guidance}`;
+  }
+  if (status === "cancelled") return `This friendly fixture with ${opponentName} has been cancelled.`;
+  return "";
+}
+
+function friendlyFixtureClass(status: string | null | undefined) {
+  switch (status) {
+    case "accepted": return "border-emerald-500/25 bg-emerald-500/10 text-emerald-500";
+    case "pending": return "border-amber-500/25 bg-amber-500/10 text-amber-500";
+    case "declined": return "border-destructive/25 bg-destructive/10 text-destructive";
+    case "cancelled": return "border-border bg-muted/40 text-muted-foreground";
+    default: return "";
+  }
+}
+
 export function EventDetailDialog({
   event, now, open, onOpenChange, onEdit, readOnly = false, rsvpQueryKey, canManage = true,
 }: EventDetailDialogProps) {
@@ -99,6 +134,12 @@ export function EventDetailDialog({
   const friendlyFixtureConfirmed =
     !friendlyFixtureLinked || event?.friendlyFixtureStatus === "accepted";
   const canConfirmSquad = fixtureDateConfirmed && friendlyFixtureConfirmed;
+  const friendlyStatusMessage = friendlyFixtureMessage(
+    event?.friendlyFixtureStatus,
+    viewerIsRequester,
+    friendlyOpponentName,
+    Boolean(event?.lineupConfirmedAt),
+  );
   const reportableMatch = event?.type === "match" && event.status === "completed" && Boolean(event.matchId);
 
   return (
@@ -145,47 +186,9 @@ export function EventDetailDialog({
             )}
             {friendlyFixtureLinked && event.status === "scheduled" && (
               <div
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-sm",
-                  event.friendlyFixtureStatus === "accepted" &&
-                    "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
-                  event.friendlyFixtureStatus === "pending" &&
-                    "border-amber-500/25 bg-amber-500/10 text-amber-500",
-                  event.friendlyFixtureStatus === "declined" &&
-                    "border-destructive/25 bg-destructive/10 text-destructive",
-                  event.friendlyFixtureStatus === "cancelled" &&
-                    "border-border bg-muted/40 text-muted-foreground",
-                )}
+                className={cn("rounded-lg border px-3 py-2 text-sm", friendlyFixtureClass(event.friendlyFixtureStatus))}
               >
-                {event.friendlyFixtureStatus === "accepted" &&
-                  `Friendly fixture confirmed with ${friendlyOpponentName}. The match appears on both teams' calendars.${
-                    event.lineupConfirmedAt
-                      ? " Your team's lineup is confirmed and visible to them."
-                      : ""
-                  }`}
-                {event.friendlyFixtureStatus === "pending" &&
-                  viewerIsRequester === false &&
-                  `${friendlyOpponentName} has invited your team to a friendly fixture — accept or decline it from the requests banner on your Events page.`}
-                {event.friendlyFixtureStatus === "pending" &&
-                  viewerIsRequester === true &&
-                  `Friendly fixture request sent to ${friendlyOpponentName} — waiting for them to accept.`}
-                {/* No requester marker (older response): stay side-neutral
-                    instead of guessing, so a recipient is never told they
-                    sent the request. */}
-                {event.friendlyFixtureStatus === "pending" &&
-                  viewerIsRequester === null &&
-                  `A friendly fixture request with ${friendlyOpponentName} is awaiting a response.`}
-                {event.friendlyFixtureStatus === "declined" &&
-                  viewerIsRequester === false &&
-                  `You declined this friendly fixture against ${friendlyOpponentName}. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
-                {event.friendlyFixtureStatus === "declined" &&
-                  viewerIsRequester === true &&
-                  `${friendlyOpponentName} declined this friendly fixture. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
-                {event.friendlyFixtureStatus === "declined" &&
-                  viewerIsRequester === null &&
-                  `This friendly fixture with ${friendlyOpponentName} was declined. Edit the event to pick another opponent, or play a team without a Gaffer account.`}
-                {event.friendlyFixtureStatus === "cancelled" &&
-                  `This friendly fixture with ${friendlyOpponentName} has been cancelled.`}
+                {friendlyStatusMessage}
               </div>
             )}
             {event.status !== "cancelled" && !readOnly && (

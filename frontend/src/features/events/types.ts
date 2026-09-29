@@ -170,9 +170,15 @@ export interface EventLineup {
   startingAthleteIds: string[];
   benchAthleteIds: string[];
   confirmedAt: string;
+  formationId?: string | null;
+  pitchAssignments?: Record<string, string | null> | null;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
 }
 
 export interface ConfirmLineupInput {
+  formationId?: string;
+  pitchAssignments?: Record<string, string | null>;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
 }

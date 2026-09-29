@@ -250,6 +250,64 @@ describe('Auth (e2e)', () => {
       expect(response.headers['set-cookie']).toBeDefined();
     });
 
+    it('issues a persistent cookie for rememberMe: true and clears any stale dont_remember flag', async () => {
+      const { email } = newIdentity();
+
+      await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({ name: 'Grace Hopper', email, password: PASSWORD })
+        .expect(201);
+      await verifyEmail(email, `${FRONTEND_URL}/login?verified=1`);
+
+      // A first sign-in that declines persistence: the session cookie is a
+      // browser-session cookie and Better Auth plants its `dont_remember`
+      // flag.
+      const unchecked = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email, password: PASSWORD, rememberMe: false })
+        .expect(201);
+      const uncheckedCookies = unchecked.headers[
+        'set-cookie'
+      ] as unknown as string[];
+      const uncheckedSession = uncheckedCookies.find((cookie) =>
+        cookie.includes('session_token='),
+      );
+      expect(uncheckedSession).toBeDefined();
+      expect(uncheckedSession).not.toContain('Max-Age');
+      expect(
+        uncheckedCookies.some((cookie) => cookie.includes('dont_remember=')),
+      ).toBe(true);
+
+      // Signing in WITH "Remember me": the session cookie must be persistent
+      // (Max-Age = the 7-day session lifetime) and the stale flag must be
+      // expired in the same response so it can no longer downgrade later
+      // sessions or block session refresh.
+      const checked = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .send({ email, password: PASSWORD, rememberMe: true })
+        .expect(201);
+      const checkedCookies = checked.headers[
+        'set-cookie'
+      ] as unknown as string[];
+      const checkedSession = checkedCookies.find((cookie) =>
+        cookie.includes('session_token='),
+      );
+      expect(checkedSession).toBeDefined();
+      expect(checkedSession).toContain('Max-Age=604800');
+      const staleDontRemember = checkedCookies.find((cookie) =>
+        cookie.includes('dont_remember='),
+      );
+      expect(staleDontRemember).toBeDefined();
+      expect(staleDontRemember).toContain('Max-Age=0');
+
+      // The persisted cookie stays usable, which is what restores the session
+      // after the browser is closed and reopened.
+      await request(app.getHttpServer())
+        .get('/auth/session')
+        .set('Cookie', checkedSession!.split(';')[0])
+        .expect(200);
+    });
+
     it('rejects an unknown email with the generic credentials message', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/sign-in')

@@ -14,7 +14,7 @@ const production = !!process.env.CI || process.env.UI_TEST_PRODUCTION === 'true'
  * so an existing development server cannot redirect tests to development data.
  */
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './frontend/e2e',
   testIgnore: 'pwa-production.spec.ts',
   // Full-stack flows perform several real database round trips. Shared CI
   // runners can take well over 90 seconds even when every assertion passes.

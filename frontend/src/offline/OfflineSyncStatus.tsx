@@ -8,6 +8,29 @@ import {
   subscribeToOfflineQueueChanges,
 } from "./match-store";
 
+const PENDING_STATES = ["queued", "uploading", "dependency_pending"];
+
+function getSyncLabel(input: {
+  quarantined: number;
+  rejected: number;
+  syncing: boolean;
+  pending: number;
+  accepted: number;
+  online: boolean;
+}) {
+  if (input.quarantined) return `${input.quarantined} access blocked`;
+  if (input.rejected) return `${input.rejected} rejected`;
+  if (input.syncing) return `Syncing ${input.pending}`;
+  if (input.pending) return `${input.pending} waiting`;
+  if (input.accepted) return `${input.accepted} accepted`;
+  return input.online ? "Synced" : "Offline";
+}
+
+function getSyncIndicatorClass(hasIssue: boolean, online: boolean) {
+  if (hasIssue) return "bg-danger";
+  return online ? "bg-success" : "bg-warning";
+}
+
 export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const queryClient = useQueryClient();
   const [online, setOnline] = useState(navigator.onLine);
@@ -27,7 +50,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       const rows = await listQueuedEvents(matchId);
       if (!active) return;
       const pendingRows = rows.filter((row) =>
-        ["queued", "uploading", "dependency_pending"].includes(row.state),
+        PENDING_STATES.includes(row.state),
       );
       setPending(
         pendingRows.length,
@@ -39,7 +62,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
         telemetrySentAt.current = Date.now();
         const telemetryRows = await listQueuedEvents();
         const telemetryPending = telemetryRows.filter((row) =>
-          ["queued", "uploading", "dependency_pending"].includes(row.state),
+          PENDING_STATES.includes(row.state),
         );
         void apiFetch("/sync/telemetry", {
           method: "POST",
@@ -73,7 +96,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
         const remaining = await listQueuedEvents(matchId);
         if (
           !remaining.some((row) =>
-            ["queued", "uploading", "dependency_pending"].includes(row.state),
+            PENDING_STATES.includes(row.state),
           )
         ) {
           const syncedAt = new Date().toISOString();
@@ -101,35 +124,21 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     };
   }, [matchId, queryClient]);
 
-  const label = quarantined
-    ? `${quarantined} access blocked`
-    : rejected
-    ? `${rejected} rejected`
-    : syncing
-      ? `Syncing ${pending}`
-      : pending
-        ? `${pending} waiting`
-        : accepted
-          ? `${accepted} accepted`
-        : online
-          ? "Synced"
-          : "Offline";
+  const label = getSyncLabel({ quarantined, rejected, syncing, pending, accepted, online });
 
   return (
     <span
       role="status"
       title="Offline event synchronisation status"
       aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#111315] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c7ccc9]"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-surface-elevated px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground shadow-sm"
     >
       <span
-        className={`size-1.5 rounded-full ${
-          rejected || quarantined
-            ? "bg-[#e36a6d]"
-            : online
-              ? "bg-[#16d99a]"
-              : "bg-[#d6a447]"
-        }`}
+        className={`size-1.5 rounded-full ${getSyncIndicatorClass(
+          Boolean(rejected || quarantined),
+          online,
+        )}`}
+
       />
       {label}
     </span>

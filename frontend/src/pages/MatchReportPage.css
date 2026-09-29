@@ -1,21 +1,176 @@
 @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
 
 .match-report {
+  --mr-bg: #f4f7f5;
+  --mr-panel: #ffffff;
+  --mr-nested: #e9efec;
+  --mr-active: #dce6e1;
+  --mr-line: #d3ddd8;
+  --mr-line-strong: #9dada5;
+  --mr-green: #087f5b;
+  --mr-amber: #946200;
+  --mr-red: #c7353a;
+  --mr-info: #2f6f9f;
+  --mr-purple: #6d3fbd;
+  --mr-cyan: #087885;
+  --mr-muted: #627069;
+  --mr-secondary: #394740;
+  --mr-white: #17211c;
+  --mr-hover: rgb(23 33 28 / 6%);
+  font-family: "Inter Variable", Inter, system-ui, sans-serif;
+  background: var(--mr-bg);
+  color: var(--mr-white);
+  color-scheme: light;
+}
+
+.dark .match-report {
   --mr-bg: #090a0b;
   --mr-panel: #111315;
   --mr-nested: #0d0f10;
+  --mr-active: #25292c;
   --mr-line: #2a2e31;
   --mr-line-strong: #3e4448;
   --mr-green: #16d99a;
   --mr-amber: #d6a447;
   --mr-red: #e36a6d;
   --mr-info: #72a7d5;
+  --mr-purple: #c084fc;
+  --mr-cyan: #67e8f9;
   --mr-muted: #9ca39f;
   --mr-secondary: #c7ccc9;
   --mr-white: #ecefed;
-  font-family: "Inter Variable", Inter, system-ui, sans-serif;
-  background: var(--mr-bg);
+  --mr-hover: rgb(255 255 255 / 5%);
+  color-scheme: dark;
+}
+
+/* Theme the legacy palette utilities used by the report and its overlays. */
+.match-report :where([class~="text-white"], [class~="text-[#ecefed]"]) {
   color: var(--mr-white);
+}
+
+.match-report :where([class~="text-[#9ca39f]"], [class~="text-[#8e9ba8]"]) {
+  color: var(--mr-muted);
+}
+
+.match-report :where([class~="text-[#c7ccc9]"], [class~="text-[#c5ced6]"]) {
+  color: var(--mr-secondary);
+}
+
+.match-report :where([class~="text-[#16d99a]"], [class~="text-[#00d99a]"]) {
+  color: var(--mr-green);
+}
+
+.match-report :where([class~="text-[#e36a6d]"], [class~="text-[#ff5b5f]"]) {
+  color: var(--mr-red);
+}
+
+.match-report :where([class~="text-[#d6a447]"], [class~="text-[#ffbe2e]"], [class~="text-[#f5c518]"]) {
+  color: var(--mr-amber);
+}
+
+.match-report [class~="text-[#c084fc]"] {
+  color: var(--mr-purple);
+}
+
+.match-report [class~="text-[#67e8f9]"] {
+  color: var(--mr-cyan);
+}
+
+.match-report [class~="text-[#8e9ba8]/40"] {
+  color: color-mix(in srgb, var(--mr-muted) 45%, transparent);
+}
+
+.match-report :where([class~="border-[#2a2e31]"], [class~="border-[#1c2b36]"]) {
+  border-color: var(--mr-line);
+}
+
+.match-report :where([class~="border-[#2a2e31]/60"], [class~="border-[#1c2b36]/60"], [class~="border-[#1c2b36]/70"]) {
+  border-color: color-mix(in srgb, var(--mr-line) 70%, transparent);
+}
+
+.match-report :where([class~="border-[#3e4448]"], [class~="border-[#233747]"]) {
+  border-color: var(--mr-line-strong);
+}
+
+.match-report [class~="border-[#16d99a]/40"] {
+  border-color: color-mix(in srgb, var(--mr-green) 45%, transparent);
+}
+
+.match-report [class~="border-[#16d99a]/70"] {
+  border-color: color-mix(in srgb, var(--mr-green) 75%, transparent);
+}
+
+.match-report [class~="border-[#00d99a]/50"] {
+  border-color: color-mix(in srgb, var(--mr-green) 55%, transparent);
+}
+
+.match-report [class~="border-[#00d99a]"] {
+  border-color: var(--mr-green);
+}
+
+.match-report [class~="bg-[#111315]"] {
+  background-color: var(--mr-panel);
+}
+
+.match-report :where([class~="bg-[#0d0f10]"], [class~="bg-[#0c1218]"]) {
+  background-color: var(--mr-nested);
+}
+
+.match-report [class~="bg-[#101920]"] {
+  background-color: color-mix(in srgb, var(--mr-info) 7%, var(--mr-panel));
+}
+
+.match-report [class~="bg-[#25292c]"] {
+  background-color: var(--mr-active);
+}
+
+.match-report [class~="bg-[#090a0b]"] {
+  background-color: var(--mr-bg);
+}
+
+.match-report :where([class~="bg-white/5"], [class~="bg-white/[0.02]"]) {
+  background-color: var(--mr-hover);
+}
+
+.match-report [class~="bg-[#16d99a]/10"] {
+  background-color: color-mix(in srgb, var(--mr-green) 12%, transparent);
+}
+
+.match-report :where([class~="bg-[#d6a447]/15"], [class~="bg-[#ffbe2e]/15"]) {
+  background-color: color-mix(in srgb, var(--mr-amber) 15%, transparent);
+}
+
+.match-report :where([class~="bg-[#00d99a]"], [class~="bg-[#16d99a]"]) {
+  background-color: var(--mr-green);
+}
+
+.match-report [class~="hover:text-white"]:hover {
+  color: var(--mr-white);
+}
+
+.match-report [class~="hover:text-[#ff5b5f]"]:hover {
+  color: var(--mr-red);
+}
+
+.match-report [class~="hover:bg-white/5"]:hover,
+.match-report [class~="hover:bg-white/[0.02]"]:hover {
+  background-color: var(--mr-hover);
+}
+
+.match-report [class~="hover:bg-[#111315]"]:hover {
+  background-color: var(--mr-panel);
+}
+
+.match-report [class~="hover:bg-[#16d99a]/20"]:hover {
+  background-color: color-mix(in srgb, var(--mr-green) 22%, transparent);
+}
+
+.match-report [class~="hover:bg-[#00d99a]/10"]:hover {
+  background-color: color-mix(in srgb, var(--mr-green) 12%, transparent);
+}
+
+.match-report [class~="hover:bg-[#16d99a]/90"]:hover {
+  background-color: color-mix(in srgb, var(--mr-green) 90%, var(--mr-bg));
 }
 
 .match-report .font-oswald {

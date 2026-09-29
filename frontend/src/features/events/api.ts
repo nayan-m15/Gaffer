@@ -25,10 +25,10 @@ export function fetchEventWeather(id: string) {
   return apiFetch<EventWeather>(`/events/${id}/weather`);
 }
 
-/** The opposing Gaffer team's confirmed lineup for an accepted friendly. */
+/** The opposing Gaffer team's confirmed lineup for a linked fixture. */
 export function fetchFriendlyOpponentLineup(eventId: string) {
   return apiFetch<FriendlyOpponentLineup>(
-    `/events/${eventId}/friendly-opponent-lineup`,
+    `/events/${eventId}/opponent-lineup`,
   );
 }
 

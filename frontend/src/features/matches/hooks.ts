@@ -368,6 +368,63 @@ export function useLogMatchEvent(matchId: string) {
   });
 }
 
+async function optimisticallyUpdateMatchEvent(
+  queryClient: QueryClient,
+  matchId: string,
+  eventId: string,
+  input: UpdateMatchLogEventInput,
+): Promise<UpdateMutateContext> {
+  await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
+  const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(eventsKey(matchId));
+  const previousEvent = previousEvents?.find((event) => event.id === eventId) ?? null;
+  const scoreDelta = previousEvent
+    ? scoreDeltaForTypeChange(previousEvent.eventType, input.eventType)
+    : 0;
+  if (scoreDelta !== 0 && previousEvent) {
+    await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
+  }
+  if (previousEvent) {
+    updateOptimisticEventCache(queryClient, matchId, eventId, input, previousEvent, scoreDelta);
+  }
+  return {
+    previousEvent,
+    scoreTeam: scoreDelta !== 0 && previousEvent ? previousEvent.team : null,
+    scoreDelta,
+  };
+}
+
+function updateOptimisticEventCache(
+  queryClient: QueryClient,
+  matchId: string,
+  eventId: string,
+  input: UpdateMatchLogEventInput,
+  previousEvent: MatchLogEvent,
+  scoreDelta: number,
+): void {
+  const squad = squadFromCache(queryClient, matchId);
+  const optimistic: MatchLogEvent = {
+    ...previousEvent,
+    athleteId: input.athleteId !== undefined ? input.athleteId : previousEvent.athleteId,
+    opponentLabel: input.opponentLabel !== undefined ? input.opponentLabel : previousEvent.opponentLabel,
+    opponentPlayerId: input.opponentPlayerId !== undefined ? input.opponentPlayerId : previousEvent.opponentPlayerId,
+    opponentPlayer: input.opponentPlayerId === null ? null : previousEvent.opponentPlayer,
+    minute: input.minute ?? previousEvent.minute,
+    eventType: input.eventType ?? previousEvent.eventType,
+    detail: input.detail !== undefined ? input.detail : previousEvent.detail,
+    athlete: input.athleteId !== undefined
+      ? resolveAthlete(input.athleteId, squad)
+      : previousEvent.athlete,
+    pending: true,
+    updatedAt: new Date().toISOString(),
+  };
+  queryClient.setQueryData<MatchLogEvent[]>(eventsKey(matchId), (current) =>
+    (current ?? []).map((event) => event.id === eventId ? optimistic : event),
+  );
+  if (scoreDelta !== 0) {
+    applyScoreDelta(queryClient, matchId, previousEvent.team, scoreDelta);
+  }
+}
+
 export function useUpdateMatchEvent(matchId: string) {
   const queryClient = useQueryClient();
 
@@ -380,70 +437,7 @@ export function useUpdateMatchEvent(matchId: string) {
       input: UpdateMatchLogEventInput;
     }) => updateMatchLogEvent(matchId, eventId, input),
     onMutate: async ({ eventId, input }) => {
-      await queryClient.cancelQueries({ queryKey: eventsKey(matchId) });
-
-      const previousEvents = queryClient.getQueryData<MatchLogEvent[]>(
-        eventsKey(matchId),
-      );
-      const previousEvent =
-        previousEvents?.find((event) => event.id === eventId) ?? null;
-      const scoreDelta = previousEvent
-        ? scoreDeltaForTypeChange(previousEvent.eventType, input.eventType)
-        : 0;
-      if (scoreDelta !== 0 && previousEvent) {
-        await queryClient.cancelQueries({ queryKey: matchKey(matchId) });
-      }
-
-      if (previousEvent) {
-        const squad = squadFromCache(queryClient, matchId);
-        const nextAthleteId =
-          input.athleteId !== undefined
-            ? input.athleteId
-            : previousEvent.athleteId;
-        const optimistic: MatchLogEvent = {
-          ...previousEvent,
-          athleteId: nextAthleteId,
-          opponentLabel:
-            input.opponentLabel !== undefined
-              ? input.opponentLabel
-              : previousEvent.opponentLabel,
-          opponentPlayerId:
-            input.opponentPlayerId !== undefined
-              ? input.opponentPlayerId
-              : previousEvent.opponentPlayerId,
-          opponentPlayer:
-            input.opponentPlayerId === null
-              ? null
-              : previousEvent.opponentPlayer,
-          minute: input.minute ?? previousEvent.minute,
-          eventType: input.eventType ?? previousEvent.eventType,
-          detail:
-            input.detail !== undefined ? input.detail : previousEvent.detail,
-          athlete:
-            input.athleteId !== undefined
-              ? resolveAthlete(input.athleteId, squad)
-              : previousEvent.athlete,
-          pending: true,
-          updatedAt: new Date().toISOString(),
-        };
-        queryClient.setQueryData<MatchLogEvent[]>(
-          eventsKey(matchId),
-          (current) =>
-            (current ?? []).map((event) =>
-              event.id === eventId ? optimistic : event,
-            ),
-        );
-        if (scoreDelta !== 0) {
-          applyScoreDelta(queryClient, matchId, previousEvent.team, scoreDelta);
-        }
-      }
-
-      return {
-        previousEvent,
-        scoreTeam:
-          scoreDelta !== 0 && previousEvent ? previousEvent.team : null,
-        scoreDelta,
-      } satisfies UpdateMutateContext;
+      return optimisticallyUpdateMatchEvent(queryClient, matchId, eventId, input);
     },
     onError: (_error, { eventId }, context) => {
       if (!context?.previousEvent) {

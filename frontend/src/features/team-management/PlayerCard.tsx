@@ -1,4 +1,3 @@
-import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS, type AthleteStatusValue } from "@/services/athletes";
 import "./PlayerCard.css";
@@ -18,73 +17,6 @@ function positionGroup(position: string): PositionGroup {
     (Object.keys(POSITION_GROUPS) as PositionGroup[]).find((group) =>
       POSITION_GROUPS[group].includes(code),
     ) ?? "mid"
-  );
-}
-
-function splitName(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return {
-    given: parts.length > 1 ? parts.slice(0, -1).join(" ") : "",
-    family: (parts.at(-1) ?? name).toUpperCase(),
-  };
-}
-
-function Nameset({ text, pathId }: { text: string; pathId: string }) {
-  const size =
-    text.length <= 7 ? 36 : text.length <= 9 ? 33 : text.length <= 12 ? 29 : 25;
-
-  return (
-    <svg
-      className="player-card__nameset"
-      viewBox="0 0 240 60"
-      role="img"
-      aria-label={text}
-    >
-      <defs>
-        <path id={pathId} d="M14 52 Q120 4 226 52" fill="none" />
-      </defs>
-      <text fontSize={size} letterSpacing="1.5">
-        <textPath
-          href={`#${pathId}`}
-          startOffset="50%"
-          textAnchor="middle"
-          textLength="198"
-          lengthAdjust="spacingAndGlyphs"
-        >
-          {text}
-        </textPath>
-      </text>
-    </svg>
-  );
-}
-
-function Stat({
-  value,
-  label,
-  card,
-}: {
-  value: number;
-  label: string;
-  card?: "yellow" | "red";
-}) {
-  return (
-    <span
-      className={cn(
-        "player-card__stat",
-        value === 0 && "player-card__stat--zero",
-      )}
-    >
-      <span className="player-card__stat-value">
-        {card && (
-          <i
-            className={`player-card__booking player-card__booking--${card}`}
-            aria-hidden="true"
-          />
-        )}
-        {value}
-      </span>
-      <span className="player-card__stat-label">{label}</span>
-    </span>
   );
 }
 
@@ -116,19 +48,33 @@ interface PlayerCardProps {
   className?: string;
 }
 
+function PlayerCardStatus({
+  publicView,
+  statusLabel,
+  variant,
+}: {
+  publicView: boolean;
+  statusLabel: string;
+  variant: "pitch" | "sub";
+}) {
+  if (publicView) return null;
+  if (variant === "pitch") {
+    return <span className="player-card__status-dot" title={statusLabel} aria-hidden="true" />;
+  }
+  return (
+    <span className="player-card__status">
+      <i className="player-card__status-dot" aria-hidden="true" />
+      {statusLabel}
+    </span>
+  );
+}
+
 export function PlayerCard({
   initials,
   name,
   position,
   squadNumber,
   status = "available",
-  appearances = 0,
-  goals = 0,
-  assists = 0,
-  yellowCards = 0,
-  redCards = 0,
-  minutesPlayed = 0,
-  preferredFoot = "right",
   variant,
   isDragging = false,
   isDropTarget = false,
@@ -143,7 +89,6 @@ export function PlayerCard({
   onPointerCancel,
   className,
 }: PlayerCardProps) {
-  const pathId = `player-card-arc-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const group = positionGroup(position);
   const resolvedStatus = status ?? "available";
   const displayPosition = position.trim().toUpperCase() || "UN";
@@ -152,7 +97,7 @@ export function PlayerCard({
   const accessibleLabel = `${name} — ${displayPosition}, number ${displayNumber}${
     publicView ? "" : ` · ${statusLabel}`
   }`;
-  const { given, family } = splitName(name);
+  const family = name.trim().split(/\s+/).at(-1) ?? name;
 
   if (variant === "pitch") {
     return (
@@ -180,13 +125,7 @@ export function PlayerCard({
       >
         <span className="player-card__pitch-topline">
           <span className="player-card__position">{displayPosition}</span>
-          {!publicView && (
-            <span
-              className="player-card__status-dot"
-              title={statusLabel}
-              aria-hidden="true"
-            />
-          )}
+          <PlayerCardStatus publicView={publicView} statusLabel={statusLabel} variant="pitch" />
         </span>
         <span className="player-card__pitch-number">{displayNumber}</span>
         <span className="player-card__pitch-name">{family || initials}</span>
@@ -219,51 +158,12 @@ export function PlayerCard({
     >
       <div className="player-card__top">
         <span className="player-card__position">{displayPosition}</span>
-        {!publicView && (
-          <span className="player-card__status">
-            <i className="player-card__status-dot" aria-hidden="true" />
-            {statusLabel}
-          </span>
-        )}
+        <PlayerCardStatus publicView={publicView} statusLabel={statusLabel} variant="sub" />
       </div>
 
       <div className="player-card__jersey">
-        {given && <p className="player-card__given-name">{given}</p>}
-        <Nameset text={family || initials} pathId={pathId} />
-        <p className="player-card__number">{displayNumber}</p>
-      </div>
-
-      <div className="player-card__stats">
-        <Stat value={appearances} label="Apps" />
-        <Stat value={goals} label="Goals" />
-        <Stat value={assists} label="Assists" />
-        <Stat value={yellowCards} label="Yellows" card="yellow" />
-        <Stat value={redCards} label="Reds" card="red" />
-        {publicView ? (
-          <Stat value={minutesPlayed} label="Minutes" />
-        ) : (
-          <span className="player-card__stat">
-            <span className="player-card__stat-value player-card__foot">
-              <span
-                className={
-                  preferredFoot !== "right"
-                    ? "player-card__foot--on"
-                    : undefined
-                }
-              >
-                L
-              </span>
-              <span
-                className={
-                  preferredFoot !== "left" ? "player-card__foot--on" : undefined
-                }
-              >
-                R
-              </span>
-            </span>
-            <span className="player-card__stat-label">Foot</span>
-          </span>
-        )}
+        <span className="player-card__sub-number">{displayNumber}</span>
+        <span className="player-card__sub-name">{name || initials}</span>
       </div>
     </article>
   );

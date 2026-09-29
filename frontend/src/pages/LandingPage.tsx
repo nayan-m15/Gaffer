@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
+  Activity,
   ArrowRight,
   BarChart3,
-  CheckCircle2,
-  Clock,
-  LogIn,
-  RefreshCw,
+  CalendarDays,
+  Check,
+  Globe2,
+  HeartPulse,
+  Radio,
   Shield,
   Sparkles,
+  Trophy,
   Users,
-  UserCheck,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
@@ -22,23 +24,34 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
+import "@/components/landing/landing-product.css";
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SCROLL-REVEAL HOOK
- * ═══════════════════════════════════════════════════════════════════════════ */
+type Screenshot = {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  mobile?: boolean;
+  position?: string;
+};
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  LANDING PAGE COMPONENT
- * ═══════════════════════════════════════════════════════════════════════════ */
+type FeatureSectionProps = {
+  id: string;
+  eyebrow: string;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  bullets: string[];
+  screenshot?: Screenshot;
+  reverse?: boolean;
+  caption?: string;
+};
 
 export default function LandingPage() {
   const [sceneStatus, setSceneStatus] = useState<LandingSceneStatus>("loading");
 
   return (
-    <div
-      className="relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground"
-    >
-      {/* Static artwork is reserved for reduced-motion and WebGL failure states. */}
+    <div className="landing-v2 relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground">
       {sceneStatus === "fallback" && (
         <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
           <img
@@ -49,690 +62,313 @@ export default function LandingPage() {
         </div>
       )}
       <LandingScene onStatusChange={setSceneStatus} />
-
-      {/* Sticky Navbar */}
       <Navbar />
-
-      {/* Desktop section navigation */}
       <ChapterRail />
 
       <main className="relative z-10 flex flex-1 flex-col">
-        {/* ── Top Hero Section ───────────────────────────────────────────── */}
-        <section id="home" className="min-h-[calc(100svh-4rem)] flex flex-col justify-center scroll-mt-16">
+        <section id="home" className="flex min-h-[calc(100svh-4rem)] scroll-mt-16 flex-col justify-center">
           <Hero />
         </section>
 
         <div className="xl:pl-48">
-          {/* ── Section 1: Philosophy & Quick Workflow ──────────────────── */}
-          <PhilosophySection />
+          <WorkflowSection />
 
-          {/* ── Section 2: Squad Roster Management ──────────────────────── */}
-          <RosterSection />
+          <FeatureSection
+            id="roster"
+            eyebrow="Squad & players"
+            icon={<Users className="size-4" />}
+            title="Every player. One reliable record."
+            description="See the squad, availability and season contribution together. Player records stay connected to selection, tactics and the matches that produced the numbers."
+            bullets={[
+              "Search and filter active or archived players.",
+              "Track positions, availability and match statistics.",
+              "Open a complete player profile without losing squad context.",
+            ]}
+            screenshot={{
+              src: "/landing/roster-dashboard.jpg",
+              alt: "Gaffer roster showing active players, availability, season statistics and a selected player profile",
+              width: 1417,
+              height: 677,
+            }}
+          />
 
-          {/* ── Section 3: Tactical Pitch & Starting Lineup ─────────────────── */}
-          <TacticsSection />
+          <FeatureSection
+            id="tactics"
+            eyebrow="Tactical command"
+            icon={<Shield className="size-4" />}
+            title="Turn the squad into a plan."
+            description="Build the starting shape on a real football pitch, keep substitutes visible and carry the selected players into match preparation."
+            bullets={[
+              "Arrange starters visually across the pitch.",
+              "Keep the bench and player availability in view.",
+              "Save game plans for the fixture ahead.",
+            ]}
+            screenshot={{
+              src: "/landing/tactics-board.jpg",
+              alt: "Gaffer tactics board with a populated formation and substitute player cards",
+              width: 1531,
+              height: 932,
+              position: "center",
+            }}
+            reverse
+          />
 
-          {/* ── Section 4: Live Sideline Match Tracking & Sync ──────────── */}
-          <MatchdaySection />
+          <FeatureSection
+            id="schedule"
+            eyebrow="Season planning"
+            icon={<CalendarDays className="size-4" />}
+            title="Make the week point toward kickoff."
+            description="Training, meetings and fixtures live on one football calendar, with an agenda that keeps the next commitment clear."
+            bullets={[
+              "Switch between month and week planning.",
+              "Keep training, matches and meetings distinct.",
+              "Use the schedule as the starting point for match preparation.",
+            ]}
+            screenshot={{
+              src: "/landing/events-calendar.jpg",
+              alt: "Gaffer events calendar showing training sessions, meetings, a league match and the monthly agenda",
+              width: 1418,
+              height: 775,
+            }}
+          />
 
-          {/* ── Section 5: Performance Analytics & League ───────────────── */}
-          <AnalyticsSection />
+          <FeatureSection
+            id="matchday"
+            eyebrow="Matchday"
+            icon={<Radio className="size-4" />}
+            title="Capture the match from the touchline."
+            description="The live logger keeps the clock, score and key events together while the game moves. Once the match ends, that record becomes a clear summary instead of another set of notes to rebuild."
+            bullets={[
+              "Log goals, assists, cards, substitutions, penalties, saves and injuries.",
+              "Prepared match capture can continue through an unreliable connection and synchronize afterward.",
+              "Review the resulting score, match facts and team comparison.",
+            ]}
+            screenshot={{
+              src: "/landing/live-match-mobile.jpg",
+              alt: "Gaffer mobile match summary showing the final score, match facts and team comparison",
+              width: 501,
+              height: 893,
+              mobile: true,
+            }}
+            reverse
+            caption="The post-match summary produced from the recorded event log."
+          />
 
-          {/* ── Section 6: Final Single CTA ─────────────────────────────── */}
+          <FeatureSection
+            id="analytics"
+            eyebrow="Performance"
+            icon={<BarChart3 className="size-4" />}
+            title="See what the season is becoming."
+            description="Move from one result to the wider pattern. Recent form, scoring trends and points progression help coaches understand performance in context."
+            bullets={[
+              "Follow recent form and the latest result.",
+              "Compare goals scored, goals conceded and points per match.",
+              "Track season progression without rebuilding spreadsheets.",
+            ]}
+            screenshot={{
+              src: "/landing/statistics-dashboard.jpg",
+              alt: "Gaffer statistics dashboard showing recent form, form trends and season points progression",
+              width: 1383,
+              height: 642,
+            }}
+          />
+
+          <FeatureSection
+            id="injuries"
+            eyebrow="Injury recovery"
+            icon={<HeartPulse className="size-4" />}
+            title="Know what is recorded before you select."
+            description="The real injury workspace connects player status, body regions and recovery history. It gives coaches a clearer record without pretending to diagnose or guarantee a return date."
+            bullets={[
+              "Inspect recorded injuries on the interactive 3D body viewer.",
+              "Track recovery progress and injury timelines.",
+              "Carry player availability into squad decisions.",
+            ]}
+            screenshot={{
+              src: "/landing/injury-recovery.jpg",
+              alt: "Gaffer injury recovery screen showing the interactive body viewer and a recorded right quad injury",
+              width: 696,
+              height: 886,
+              mobile: true,
+            }}
+            reverse
+          />
+
+          <ConnectedSection />
+
+          <FeatureSection
+            id="public"
+            eyebrow="Public match centre"
+            icon={<Globe2 className="size-4" />}
+            title="Give supporters a view into the club."
+            description="The public dashboard brings squad information, fixtures, results, standings and team statistics together in a surface anyone can explore."
+            bullets={[
+              "Filter by team, season, competition and match status.",
+              "Browse the squad, match centre and league standings.",
+              "Explore a live part of Gaffer without signing in.",
+            ]}
+            screenshot={{
+              src: "/landing/public-dashboard.jpg",
+              alt: "Gaffer public match centre filtered to Demo Coach FC with squad, match and standings navigation",
+              width: 1440,
+              height: 1000,
+            }}
+            caption="A real public Gaffer surface."
+          />
+
           <FinalCtaSection />
         </div>
       </main>
-
-      {/* Global Footer */}
       <Footer />
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 1: PHILOSOPHY & WORKFLOW
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function PhilosophySection() {
-  const PILLARS = [
-    {
-      icon: Users,
-      title: "Grassroots-First",
-      desc: "Built for one coach, one phone, and zero budget. No expensive sensor vests, cameras, or complex setups required.",
-    },
-    {
-      icon: Clock,
-      title: "Practical Sideline Workflow",
-      desc: "A focused live logger keeps the clock, score, cards, and substitutions together during connected matchdays.",
-    },
-    {
-      icon: UserCheck,
-      title: "Coach-Confirmed Intelligence",
-      desc: "Scores, lineup checks, and derived stats are starting suggestions for coach confirmation — never silent black boxes.",
-    },
-  ];
-
-  const STEPS = [
-    { step: "01", label: "Create Team", desc: "Set squad details & division" },
-    { step: "02", label: "Add Roster", desc: "Athletes, numbers & positions" },
-    { step: "03", label: "Set Lineup", desc: "Formation, starting lineup & bench" },
-    { step: "04", label: "Log Sideline", desc: "Live score, cards & match report" },
+function WorkflowSection() {
+  const steps = [
+    ["01", "Roster", "Build the team record"],
+    ["02", "Tactics", "Prepare the plan"],
+    ["03", "Matchday", "Capture what happens"],
+    ["04", "Reports", "Review the result"],
+    ["05", "Analytics", "Understand the season"],
   ];
 
   return (
-    <section
-      id="philosophy"
-      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-16 sm:py-24"
-    >
+    <section id="philosophy" className="landing-chapter scroll-mt-20 py-16 sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="landing-scene-accent inline-flex items-center gap-1.5 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-3.5 py-1 text-xs font-semibold tracking-wide shadow-sm">
-            <Sparkles className="size-3" />
-            Core Philosophy &amp; Workflow
-          </span>
-          <h2 className="landing-scene-copy mt-4 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-            Engineered for the Realities of Amateur Football
+        <div className="landing-copy-panel mx-auto max-w-4xl text-center">
+          <span className="landing-kicker"><Sparkles className="size-3.5" /> The Gaffer workflow</span>
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-5xl">
+            One football record, from the first selection to the next match.
           </h2>
-          <p className="landing-scene-copy-secondary mt-3 text-sm leading-relaxed sm:text-base">
-            Everything in {brand.name} is designed around simplicity, clear records, and practical matchday speed.
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+            Gaffer connects the work coaches already do. The roster informs the plan, matchday creates the report, and the report becomes season insight.
           </p>
         </div>
 
-        {/* 3 Core Pillars */}
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {PILLARS.map((p) => {
-            const Icon = p.icon;
-            return (
-              <div
-                key={p.title}
-                className="hover-lift rounded-2xl border border-border-strong/60 bg-card p-7 shadow-lg transition-all hover:border-brand hover:bg-muted/50"
-              >
-                <div className="flex size-12 items-center justify-center rounded-xl border border-brand/30 bg-brand/10">
-                  <Icon className="size-6 text-brand" />
-                </div>
-                <h3 className="mt-5 text-lg font-semibold text-foreground">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.desc}</p>
-              </div>
-            );
-          })}
-        </div>
+        <ol className="landing-workflow" aria-label="The connected Gaffer workflow">
+          {steps.map(([number, label, detail]) => (
+            <li key={number}>
+              <span className="landing-workflow__number">{number}</span>
+              <strong>{label}</strong>
+              <span>{detail}</span>
+            </li>
+          ))}
+        </ol>
 
-        {/* 4-Step Workflow Banner */}
-        <div className="mt-12 rounded-2xl border border-border-strong/60 bg-card p-6 shadow-sm">
-          <div className="mb-4 text-xs font-mono font-semibold uppercase tracking-wider text-brand">
-            Matchday Workflow in 4 Steps
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((s) => (
-              <div key={s.step} className="flex items-start gap-3 rounded-xl border border-border bg-muted/50 p-3.5">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-xs font-mono font-bold text-brand">
-                  {s.step}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{s.label}</p>
-                  <p className="text-xs text-muted-foreground">{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="landing-ecosystem" aria-label="Connected capabilities">
+          <span><HeartPulse className="size-4" /> Availability</span>
+          <span><Trophy className="size-4" /> Competitions</span>
+          <span><Users className="size-4" /> Player experience</span>
         </div>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 2: SQUAD ROSTER MANAGEMENT
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function RosterSection() {
-  return (
-    <SectionLayout
-      id="roster"
-      badge="Squad Roster"
-      icon={<Users className="size-4 text-brand" />}
-      title="Complete Digital Squad & Athlete Profiles"
-      description="Keep athlete names, dates of birth, squad numbers, positions, availability, and appearance stats organized in one unified hub."
-      bullets={[
-        "Athlete records: squad numbers, primary positions, availability, and archive status.",
-        "Automatic season stats: appearances, goals, assists, minutes, and cards update directly from match logs.",
-        "Quick position filters: instantly sort goalkeepers, defenders, midfielders, and attackers.",
-      ]}
-      visual={<RosterMockup />}
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 3: TACTICAL PITCH & LINEUPS
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function TacticsSection() {
-  return (
-    <SectionLayout
-      id="tactics"
-      badge="Tactical Pitch"
-      icon={<Shield className="size-4 text-brand" />}
-      title="Interactive Formation Pitch & Starting Lineup Builder"
-      description="Set your match tactics visually before walking onto the pitch. Position players, test tactical formations, and manage your substitute bench with confidence."
-      bullets={[
-        "Visual pitch coordinate board: realistic turf markings and draggable starting lineup positions.",
-        "Selection checks: requires the selected format's exact number of unique starters and keeps substitutes separate.",
-        "Formation presets: switch between supported shapes including 4-3-3, 4-4-2, and 3-5-2.",
-        "Substitutes drawer: manage bench rotations and reserve players before kickoff.",
-      ]}
-      visual={<TacticalPitchMockup />}
-      reversed
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 4: LIVE SIDELINE MATCH TRACKING
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function MatchdaySection() {
-  return (
-    <SectionLayout
-      id="matchday"
-      badge="Matchday HUD"
-      icon={<Clock className="size-4 text-brand" />}
-      title="Single-Tap Live Match Logging"
-      description="Record pitchside action without friction. Tap to log goals, assists, yellow/red cards, and substitutions with a live match clock and instant undo support."
-      bullets={[
-        "Single-tap action buttons: rapid event entry tailored for fast-paced grassroots matches.",
-        "Persisted match clock: resume the recorded period and elapsed time after refreshing.",
-        "Timeline feed: real-time chronological event stream with easy mistake correction and undo.",
-        "Instant match report: automated full-time summary generated the moment the final whistle blows.",
-      ]}
-      visual={<LiveMatchMockup />}
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 5: ANALYTICS & STANDINGS
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function AnalyticsSection() {
-  return (
-    <SectionLayout
-      id="analytics"
-      badge="Performance Analytics"
-      icon={<BarChart3 className="size-4 text-brand" />}
-      title="Season Insights & Competition Standings"
-      description="Review match-derived team and player statistics alongside standings maintained by the coach."
-      bullets={[
-        "Competition tables: record and validate played, won, drawn, lost, goals, and points.",
-        "Player metrics: leaderboards for top goalscorers, playmakers, and disciplinary records.",
-        "Match reports: review timelines, scores, player contributions, and corrected events.",
-      ]}
-      visual={<AnalyticsMockup />}
-      reversed
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SECTION 6: FINAL SINGLE CTA
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function FinalCtaSection() {
-  return (
-    <section
-      id="cta"
-      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-20 sm:py-28"
-    >
-      <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-        <span className="landing-scene-accent inline-flex items-center gap-1.5 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider shadow-sm">
-          Ready for Matchday
-        </span>
-
-        <h2 className="landing-scene-copy mt-5 font-display text-3xl font-bold tracking-tight sm:text-5xl">
-          Run your season with confidence.
-        </h2>
-
-        <p className="landing-scene-copy-secondary mx-auto mt-4 max-w-xl text-base sm:text-lg">
-          Join amateur and grassroots football coaches managing rosters, tactical lineups, and live matches with {brand.name}.
-        </p>
-
-        <div className="mt-8 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
-          <a
-            href="/signup"
-            className={cn(
-              buttonVariants({ size: "lg" }),
-              "w-full gap-2 bg-brand text-brand-foreground font-semibold hover:bg-brand-dark shadow-xl shadow-black/25 sm:w-auto",
-            )}
-          >
-            Get Started Free
-            <ArrowRight className="size-4" />
-          </a>
-
-          <a
-            href="/login"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "lg" }),
-              "w-full gap-2 border-border-strong sm:w-auto",
-            )}
-          >
-            <LogIn className="size-4" />
-            Log In to Your Team
-          </a>
-        </div>
-
-        <p className="landing-scene-copy-muted mt-5 text-xs">
-          Free to get started &bull; 100% grassroots focused &bull; Zero credit card required
-        </p>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  SHARED SECTION WRAPPER
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function SectionLayout({
+function FeatureSection({
   id,
-  badge,
+  eyebrow,
   icon,
   title,
   description,
   bullets,
-  visual,
-  reversed = false,
-}: {
-  id: string;
-  badge: string;
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  bullets: string[];
-  visual: React.ReactNode;
-  reversed?: boolean;
-}) {
+  screenshot,
+  reverse = false,
+  caption,
+}: FeatureSectionProps) {
   return (
-    <section
-      id={id}
-      className="scroll-mt-20 border-t border-[var(--landing-scene-border)] py-16 sm:py-24"
-    >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div
-          className={cn(
-            "grid items-center gap-10 lg:grid-cols-12 lg:gap-14",
-            reversed && "lg:[&>*:first-child]:order-2",
-          )}
-        >
-          {/* Text Content */}
-          <div className="lg:col-span-5">
-            <div className="landing-scene-accent mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--landing-scene-border)] bg-black/35 px-3 py-1 text-xs font-semibold shadow-sm [&_svg]:text-current">
-              {icon}
-              <span>{badge}</span>
-            </div>
-            <h2 className="landing-scene-copy font-display text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-              {title}
-            </h2>
-            <p className="landing-scene-copy-secondary mt-4 text-sm leading-relaxed sm:text-base">
-              {description}
-            </p>
-            <ul className="mt-6 space-y-3">
-              {bullets.map((b, idx) => (
-                <li key={idx} className="landing-scene-copy-secondary flex items-start gap-3 text-sm">
-                  <CheckCircle2 className="landing-scene-accent mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+    <section id={id} className="landing-chapter scroll-mt-20 py-16 sm:py-24 lg:py-28">
+      <div
+        className={cn(
+          "mx-auto grid max-w-7xl items-center gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,0.76fr)_minmax(0,1.24fr)] lg:gap-12 lg:px-8",
+          reverse && "lg:grid-cols-[minmax(0,1.24fr)_minmax(0,0.76fr)]",
+        )}
+      >
+        <div className={cn("landing-copy-panel", reverse && "lg:order-2")}>
+          <span className="landing-kicker">{icon}{eyebrow}</span>
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">{title}</h2>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">{description}</p>
+          <ul className="mt-6 space-y-3">
+            {bullets.map((bullet) => (
+              <li key={bullet} className="flex items-start gap-3 text-sm leading-relaxed text-foreground/90">
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand">
+                  <Check className="size-3" />
+                </span>
+                {bullet}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          {/* Visual Mockup Card */}
-          <div className="flex justify-center lg:col-span-7 lg:justify-end">
-            {visual}
-          </div>
+        {screenshot && (
+          <figure className={cn("landing-screenshot-wrap", reverse && "lg:order-1", screenshot.mobile && "landing-screenshot-wrap--mobile")}>
+            <div className="landing-screenshot-chrome" aria-hidden="true">
+              <span /><span /><span /><b>{brand.name} / {eyebrow}</b>
+            </div>
+            <img
+              src={screenshot.src}
+              alt={screenshot.alt}
+              width={screenshot.width}
+              height={screenshot.height}
+              loading="lazy"
+              decoding="async"
+              style={{ objectPosition: screenshot.position ?? "center" }}
+            />
+            {caption && <figcaption>{caption}</figcaption>}
+          </figure>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ConnectedSection() {
+  return (
+    <section id="competitions" className="landing-chapter scroll-mt-20 py-16 sm:py-24">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="landing-copy-panel mx-auto max-w-3xl text-center">
+          <span className="landing-kicker"><Activity className="size-4" /> The wider club</span>
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-5xl">More than one coach-facing screen.</h2>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            The same football record reaches competitions and the players who belong to the team.
+          </p>
+        </div>
+        <div className="mt-8 grid gap-5 md:grid-cols-2">
+          <article className="landing-text-feature">
+            <span className="landing-text-feature__icon"><Trophy className="size-5" /></span>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Competitions</p>
+            <h3 className="mt-3 font-display text-2xl font-bold tracking-tight">Fixtures, results and standings stay connected.</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Organize league or cup participation, generate fixtures, record results and maintain standings across participating teams.</p>
+          </article>
+          <article id="players" className="landing-text-feature scroll-mt-20">
+            <span className="landing-text-feature__icon"><Users className="size-5" /></span>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Player experience</p>
+            <h3 className="mt-3 font-display text-2xl font-bold tracking-tight">Give each player the part that belongs to them.</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Players can see personal statistics, their team, upcoming events and competition information, then respond to events from a simpler player view.</p>
+          </article>
         </div>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  INTERACTIVE VISUAL MOCKUPS
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-function MockupCard({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function FinalCtaSection() {
   return (
-    <div
-      className={cn(
-        "hover-lift w-full max-w-lg rounded-2xl border border-border-strong/70 bg-card p-5 shadow-2xl sm:p-6",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* ─── Mockup: Roster ───────────────────────────────────────────────────── */
-
-function RosterMockup() {
-  const athletes = [
-    { num: 1, name: "David Henderson", pos: "GK", foot: "Right", apps: 12, goals: 0 },
-    { num: 4, name: "Marcus Walker", pos: "CB", foot: "Right", apps: 11, goals: 2 },
-    { num: 8, name: "Lucas Vance", pos: "CM", foot: "Left", apps: 12, goals: 5 },
-    { num: 9, name: "Alexander Cole", pos: "ST", foot: "Right", apps: 10, goals: 9 },
-    { num: 11, name: "Noah Davies", pos: "LW", foot: "Left", apps: 9, goals: 4 },
-  ];
-
-  return (
-    <MockupCard>
-      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Squad Roster</span>
-          <p className="text-[11px] text-muted-foreground">18 Players &bull; Season 2026</p>
-        </div>
-        <span className="rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand">
-          + Add Athlete
-        </span>
-      </div>
-
-      <div className="space-y-2">
-        {athletes.map((a) => (
-          <div
-            key={a.num}
-            className="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs transition-colors hover:bg-muted"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded bg-brand/15 text-[11px] font-bold text-brand">
-                {a.num}
-              </span>
-              <div>
-                <p className="font-semibold text-foreground">{a.name}</p>
-                <p className="text-[10px] text-muted-foreground">{a.foot}-footed &bull; {a.apps} apps</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                {a.pos}
-              </span>
-              <span className="text-[11px] font-bold text-brand">
-                {a.goals} {a.goals === 1 ? "goal" : "goals"}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </MockupCard>
-  );
-}
-
-/* ─── Mockup: Tactical Pitch with Formation Switcher ───────────────────── */
-
-const FORMATIONS: Record<string, Array<{ x: number; y: number; label: string }>> = {
-  "4-3-3": [
-    { x: 50, y: 88, label: "GK" },
-    { x: 18, y: 72, label: "LB" },
-    { x: 38, y: 74, label: "CB" },
-    { x: 62, y: 74, label: "CB" },
-    { x: 82, y: 72, label: "RB" },
-    { x: 30, y: 52, label: "CM" },
-    { x: 50, y: 48, label: "CM" },
-    { x: 70, y: 52, label: "CM" },
-    { x: 22, y: 30, label: "LW" },
-    { x: 50, y: 24, label: "ST" },
-    { x: 78, y: 30, label: "RW" },
-  ],
-  "4-4-2": [
-    { x: 50, y: 88, label: "GK" },
-    { x: 18, y: 72, label: "LB" },
-    { x: 38, y: 74, label: "CB" },
-    { x: 62, y: 74, label: "CB" },
-    { x: 82, y: 72, label: "RB" },
-    { x: 18, y: 50, label: "LM" },
-    { x: 38, y: 52, label: "CM" },
-    { x: 62, y: 52, label: "CM" },
-    { x: 82, y: 50, label: "RM" },
-    { x: 38, y: 26, label: "ST" },
-    { x: 62, y: 26, label: "ST" },
-  ],
-  "3-5-2": [
-    { x: 50, y: 88, label: "GK" },
-    { x: 26, y: 74, label: "CB" },
-    { x: 50, y: 76, label: "CB" },
-    { x: 74, y: 74, label: "CB" },
-    { x: 15, y: 50, label: "LWB" },
-    { x: 35, y: 52, label: "CM" },
-    { x: 50, y: 46, label: "CAM" },
-    { x: 65, y: 52, label: "CM" },
-    { x: 85, y: 50, label: "RWB" },
-    { x: 38, y: 26, label: "ST" },
-    { x: 62, y: 26, label: "ST" },
-  ],
-};
-
-function TacticalPitchMockup() {
-  const [formation, setFormation] = useState<"4-3-3" | "4-4-2" | "3-5-2">("4-3-3");
-  const players = FORMATIONS[formation];
-
-  return (
-    <MockupCard className="max-w-md">
-      <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Tactical Pitch</span>
-          <p className="text-[10px] text-muted-foreground">Format-ready lineup &bull; 1 GK Rule Confirmed</p>
-        </div>
-        <div className="flex gap-1">
-          {(["4-3-3", "4-4-2", "3-5-2"] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFormation(f)}
-              className={cn(
-                "rounded px-2 py-0.5 text-[10px] font-semibold transition-all",
-                formation === f
-                  ? "bg-brand text-brand-foreground shadow-sm shadow-brand/40"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-              )}
-            >
-              {f}
-            </button>
-          ))}
+    <section id="cta" className="landing-chapter scroll-mt-20 px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
+      <div className="landing-final-panel mx-auto max-w-5xl text-center">
+        <span className="landing-kicker"><Sparkles className="size-4" /> Ready for the next match</span>
+        <h2 className="mx-auto mt-5 max-w-3xl font-display text-3xl font-bold tracking-tight sm:text-5xl">
+          The team, matchday and season — connected in one football workspace.
+        </h2>
+        <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          Start with the squad. Build the plan. Capture the game. Use the record to prepare what comes next.
+        </p>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <a href="/signup" className={cn(buttonVariants({ size: "lg" }), "gap-2 font-semibold")}>Get Started <ArrowRight className="size-4" /></a>
+          <a href="/public-dashboard" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2")}>Explore Public Dashboard <Globe2 className="size-4" /></a>
         </div>
       </div>
-
-      {/* Football Pitch Visual */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border shadow-inner">
-        {/* Grass mowing stripes */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "repeating-linear-gradient(to bottom, var(--pitch-grass-light) 0, var(--pitch-grass-light) 10%, var(--pitch-grass-dark) 10%, var(--pitch-grass-dark) 20%)",
-          }}
-        />
-
-        {/* Pitch Lines */}
-        <svg
-          viewBox="0 0 100 100"
-          className="absolute inset-0 size-full"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <rect x="2" y="2" width="96" height="96" fill="none" stroke="white" strokeWidth="0.45" opacity="0.5" />
-          <line x1="2" y1="50" x2="98" y2="50" stroke="white" strokeWidth="0.4" opacity="0.45" />
-          <circle cx="50" cy="50" r="10" fill="none" stroke="white" strokeWidth="0.4" opacity="0.45" />
-          <rect x="25" y="2" width="50" height="16" fill="none" stroke="white" strokeWidth="0.4" opacity="0.45" />
-          <rect x="25" y="82" width="50" height="16" fill="none" stroke="white" strokeWidth="0.4" opacity="0.45" />
-        </svg>
-
-        {/* Player Nodes */}
-        <svg
-          viewBox="0 0 100 100"
-          className="absolute inset-0 size-full"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          {players.map((p) => (
-            <g key={p.label + p.x} className="transition-all duration-300 ease-out">
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="3.5"
-                fill="#10B981"
-                stroke="#06120e"
-                strokeWidth="0.6"
-              />
-              <text
-                x={p.x}
-                y={p.y + 0.4}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="#06120e"
-                fontSize="2.4"
-                fontWeight="bold"
-              >
-                {p.label}
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-
-      {/* Subs Bench */}
-      <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 py-2 text-[11px]">
-        <span className="font-medium text-muted-foreground">Subs Bench (5):</span>
-        <div className="flex gap-1.5 text-foreground">
-          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">12 Evans (GK)</span>
-          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">14 Reed</span>
-          <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">17 King</span>
-        </div>
-      </div>
-    </MockupCard>
-  );
-}
-
-/* ─── Mockup: Live Match Tracking & Saved Status ───────────────────────── */
-
-function LiveMatchMockup() {
-  return (
-    <MockupCard>
-      {/* Live Match Clock Header */}
-      <div className="mb-4 rounded-xl border border-brand/30 bg-muted/50 p-3.5 text-center">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-foreground">St. Jude FC</span>
-          <span className="rounded border border-red-500/50 bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-300 animate-pulse">
-            LIVE 64&apos;
-          </span>
-          <span className="font-semibold text-muted-foreground">Riverside Utd</span>
-        </div>
-        <div className="mt-2 text-2xl font-black tracking-wider text-foreground">
-          2 &mdash; 1
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="mb-4 grid grid-cols-4 gap-2">
-        {[
-          { label: "Goal", color: "bg-brand text-brand-foreground" },
-          { label: "Card", color: "bg-amber-500/20 border border-amber-500/50 text-amber-700 dark:text-amber-300" },
-          { label: "Sub", color: "bg-blue-500/20 border border-blue-500/40 text-blue-600 dark:text-blue-300" },
-          { label: "Undo", color: "bg-muted text-muted-foreground" },
-        ].map((btn) => (
-          <button
-            key={btn.label}
-            className={cn(
-              "rounded-lg py-2 text-center text-xs font-bold transition-transform hover:scale-105 active:scale-95",
-              btn.color,
-            )}
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Timeline Feed */}
-      <div className="space-y-2 text-xs">
-        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-2">
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-brand">58&apos;</span>
-            <span className="text-foreground">Goal &bull; Alexander Cole (#9)</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground">Assist: Vance</span>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-2">
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-amber-600 dark:text-amber-400">41&apos;</span>
-            <span className="text-foreground">Yellow Card &bull; Marcus Walker (#4)</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground">Foul</span>
-        </div>
-      </div>
-
-      {/* Saved Status Badge */}
-      <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-400">
-        <span className="inline-flex items-center gap-1.5 font-medium">
-          <RefreshCw className="size-3 animate-spin" />
-          Match record saved
-        </span>
-        <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">
-          Cached
-        </span>
-      </div>
-    </MockupCard>
-  );
-}
-
-/* ─── Mockup: League Standings & Analytics ─────────────────────────────── */
-
-function AnalyticsMockup() {
-  const standings = [
-    { pos: 1, team: "St. Jude FC", p: 10, w: 8, d: 1, l: 1, gd: "+14", pts: 25 },
-    { pos: 2, team: "Eastside Rangers", p: 10, w: 7, d: 2, l: 1, gd: "+11", pts: 23 },
-    { pos: 3, team: "Riverside United", p: 10, w: 6, d: 1, l: 3, gd: "+6", pts: 19 },
-  ];
-
-  return (
-    <MockupCard>
-      <div className="mb-3 flex items-center justify-between border-b border-border pb-2.5">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground">League Division Standings</span>
-          <p className="text-[10px] text-muted-foreground">Coach-maintained and validated</p>
-        </div>
-        <span className="inline-flex items-center gap-1 rounded bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">
-          <CheckCircle2 className="size-3 text-brand" />
-          Match Report
-        </span>
-      </div>
-
-      <div className="overflow-x-auto text-xs">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b border-border text-[10px] uppercase text-muted-foreground">
-              <th className="pb-1.5">#</th>
-              <th className="pb-1.5">Team</th>
-              <th className="pb-1.5 text-center">P</th>
-              <th className="pb-1.5 text-center">GD</th>
-              <th className="pb-1.5 text-right font-bold text-foreground">PTS</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {standings.map((s) => (
-              <tr key={s.pos} className={cn(s.pos === 1 ? "bg-brand/10 font-semibold" : "text-foreground/80")}>
-                <td className="py-2 text-muted-foreground">{s.pos}</td>
-                <td className="py-2 text-foreground">{s.team}</td>
-                <td className="py-2 text-center text-muted-foreground">{s.p}</td>
-                <td className="py-2 text-center text-muted-foreground">{s.gd}</td>
-                <td className="py-2 text-right font-bold text-brand">{s.pts}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </MockupCard>
+    </section>
   );
 }

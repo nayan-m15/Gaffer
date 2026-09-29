@@ -13,12 +13,14 @@ export interface DraftOpponentPlayer {
   shirtNumber: number;
   name?: string;
   position?: string | null;
+  slotId?: string | null; // Exact confirmed slot, unlike the athlete’s roster position.
 }
 
 export interface OpponentSquadSetupContext {
   visibility: OpponentSquadVisibility;
   players: DraftOpponentPlayer[];
   formationId: string;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   playerCount: FormationPlayerCount;
   opponentColor: string;
   onSave: (next: {
@@ -52,7 +54,18 @@ export function assignmentsFromPlayers(
     return assignments;
   }
   const used = new Set<number>();
+  // Explicit confirmed assignments take priority; do not guess from position labels.
+  for (const player of players) {
+    if (player.slotId && player.slotId in assignments && !used.has(player.shirtNumber)) {
+      assignments[player.slotId] = String(player.shirtNumber);
+      used.add(player.shirtNumber);
+    }
+  }
+  // A shared confirmed snapshot must never put a substitute on the pitch
+  // merely because their registered position matches an empty slot.
+  if (players.some((player) => player.slotId)) return assignments;
   for (const pos of formation.positions) {
+    if (assignments[pos.id]) continue;
     const player = players.find((entry) => {
       if (used.has(entry.shirtNumber)) {
         return false;
@@ -92,6 +105,7 @@ export function applyAssignmentsToPlayers(
   return players.map((player) => ({
     ...player,
     position: positionByShirt.get(player.shirtNumber) ?? null,
+    slotId: Object.entries(assignments).find(([, shirt]) => shirt === String(player.shirtNumber))?.[0] ?? null,
   }));
 }
 

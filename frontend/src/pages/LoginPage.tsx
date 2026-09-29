@@ -15,41 +15,48 @@ import { getPendingTeamInviteToken } from "@/services/team-invites";
  * LoginPage — Pitchside authentication page.
  *
  * Forces the dark theme on mount so the login experience is always consistent
- * regardless of the visitor's previously chosen theme.  The original theme is
+ * regardless of the visitor's previously chosen theme. The original theme is
  * restored on unmount.
- *
- * The form exposes email / password fields, a "Sign in with Google" button
- * (replacing the earlier command-role selector), and a primary "SIGN IN TO
- * DUGOUT" submit action.  No authentication logic is wired up yet — the
- * handlers are clean boundaries ready for a future auth integration.
  */
 export default function LoginPage() {
   /* ── Form state ──────────────────────────────────────────────────────── */
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">(
-    "idle",
-  );
+  const [resendStatus, setResendStatus] = useState<
+    "idle" | "sending" | "sent"
+  >("idle");
   const [notice, setNotice] = useState<string | null>(null);
 
   const { signIn, signInWithGoogle, resendVerificationEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const rawFrom = (location.state as { from?: string | { pathname?: string } } | null)?.from;
-  const from =
+
+  const rawFrom = (
+    location.state as { from?: string | { pathname?: string } } | null
+  )?.from;
+
+  const requestedPath =
     typeof rawFrom === "string"
       ? rawFrom
       : typeof rawFrom === "object" && rawFrom?.pathname
-        ? rawFrom.pathname
-        : "/dashboard";
-  
-  
+        ? `${rawFrom.pathname}${(rawFrom as { search?: string }).search ?? ""}${(rawFrom as { hash?: string }).hash ?? ""}`
+        : "/";
+  // Router state is internal today, but constrain it to a same-origin app path
+  // so future callers cannot turn login into an open redirect.
+  const from =
+    requestedPath.startsWith("/") &&
+    !requestedPath.startsWith("//") &&
+    !requestedPath.includes("\\")
+      ? requestedPath
+      : "/";
+
   const errorParam = searchParams.get("error");
   const verifiedParam = searchParams.get("verified");
 
@@ -59,6 +66,7 @@ export default function LoginPage() {
         "That Google account's email is already registered. Sign in with your password instead, or contact support to link it.",
       );
     }
+
     if (verifiedParam === "1") {
       setNotice("Email verified — you can sign in now.");
     }
@@ -87,7 +95,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await signIn({ email, password });
+      await signIn({ email, password, rememberMe });
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
@@ -109,11 +117,15 @@ export default function LoginPage() {
 
   const handleResendVerification = async () => {
     setResendStatus("sending");
+
     try {
       // When the user is mid-team-invite (their pending token is still in
       // localStorage), the fresh email must route back to the invitation,
       // not the plain login page.
-      await resendVerificationEmail(email, getPendingTeamInviteToken() ?? undefined);
+      await resendVerificationEmail(
+        email,
+        getPendingTeamInviteToken() ?? undefined,
+      );
       setResendStatus("sent");
     } catch (err) {
       console.error("Failed to resend the verification email:", err);
@@ -125,8 +137,9 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setError(null);
     setIsGoogleLoading(true);
+
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(from);
     } catch (err) {
       console.error("Google sign-in failed:", err);
       setIsGoogleLoading(false);
@@ -160,7 +173,7 @@ export default function LoginPage() {
         className="pointer-events-none absolute inset-0 bg-background/15"
       />
 
-      {/* ── Login card ───────────────────────────────────────────────── */}
+      {/* ── Login card ──────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto w-full max-w-sm px-4 py-8 sm:ml-[8%] md:ml-[12%] lg:ml-[15%]">
         <Link
           to="/"
@@ -171,7 +184,7 @@ export default function LoginPage() {
         </Link>
 
         <div className="rounded-xl border border-border bg-card p-8 shadow-lg sm:p-10">
-          {/* ── Brand header ─────────────────────────────────────────── */}
+          {/* ── Brand header ────────────────────────────────────────────── */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
             <SportLogo size={56} className="rounded-lg" />
 
@@ -184,7 +197,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* ── Email / password form ────────────────────────────────── */}
+          {/* ── Email / password form ───────────────────────────────────── */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <FloatingLabelInput
               label="Email address"
@@ -218,6 +231,19 @@ export default function LoginPage() {
               }
             />
 
+            <div className="space-y-1">
+              <label htmlFor="remember-me" className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  id="remember-me"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="size-4 cursor-pointer accent-primary"
+                />
+                <span>Keep me signed in on this device</span>
+              </label>
+            </div>
+
             {notice && !error && (
               <p role="status" className="text-sm text-brand">
                 {notice}
@@ -227,12 +253,15 @@ export default function LoginPage() {
             {error && (
               <div role="alert" className="space-y-2">
                 <p className="text-sm text-destructive">{error}</p>
+
                 {needsVerification && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={resendStatus === "sending" || resendStatus === "sent"}
+                    disabled={
+                      resendStatus === "sending" || resendStatus === "sent"
+                    }
                     onClick={handleResendVerification}
                   >
                     {resendStatus === "sent"
@@ -255,7 +284,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* ── Divider ──────────────────────────────────────────────── */}
+          {/* ── Divider ─────────────────────────────────────────────────── */}
           <div className="my-6 flex items-center gap-3" role="separator">
             <div className="h-px flex-1 bg-border" />
             <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -264,7 +293,7 @@ export default function LoginPage() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          {/* ── Google sign-in ───────────────────────────────────────── */}
+          {/* ── Google sign-in ──────────────────────────────────────────── */}
           <GoogleSignInButton
             onClick={handleGoogleSignIn}
             isLoading={isGoogleLoading}
@@ -272,7 +301,7 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* ── Footer navigation ───────────────────────────────────────── */}
+        {/* ── Footer navigation ─────────────────────────────────────────── */}
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
           <Link

@@ -173,7 +173,9 @@ export class GamePlansService {
           'Custom formation position IDs do not match the selected format.',
         );
       }
-      const goalkeeperSlots = positions.filter((position) => position.role === 'GK');
+      const goalkeeperSlots = positions.filter(
+        (position) => position.role === 'GK',
+      );
       if (goalkeeperSlots.length !== 1) {
         throw new BadRequestException(
           'A custom formation must contain exactly one goalkeeper slot.',
@@ -203,7 +205,9 @@ export class GamePlansService {
         if (position.role === 'GK') return position.label !== 'GK';
         const inferredRole =
           position.y >= 63 ? 'DEF' : position.y >= 34 ? 'MID' : 'FWD';
-        return position.role !== inferredRole || position.label !== inferredRole;
+        return (
+          position.role !== inferredRole || position.label !== inferredRole
+        );
       });
       if (hasInvalidRole) {
         throw new BadRequestException(
@@ -212,7 +216,9 @@ export class GamePlansService {
       }
       const validSlotIds = new Set(ids);
       if (
-        Object.keys(plan.assignments).some((slotId) => !validSlotIds.has(slotId))
+        Object.keys(plan.assignments).some(
+          (slotId) => !validSlotIds.has(slotId),
+        )
       ) {
         throw new BadRequestException(
           'Starting-lineup assignments must use slots from the custom formation.',

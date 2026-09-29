@@ -43,3 +43,4 @@ console.log("[opponent-squad-draft:remap] passed", {
   benchShirts: bench.map((player) => player.shirtNumber),
   emptySlot: emptySlots[0].label,
 });
+

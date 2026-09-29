@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api";
 import { fetchPlayerTeam } from "@/services/player";
 import { toUiAthlete } from "@/services/athletes";
 import type { Athlete } from "@/components/roster/data";
+import "@/features/team-management/team-background.css";
 
 /**
  * PlayerTeamPage — read-only view of the claimed athlete's team roster.
@@ -35,7 +36,9 @@ export default function PlayerTeamPage() {
   const selectedAthlete = athletes.find((a) => a.id === selectedId) ?? null;
 
   return (
-    <>
+    <div className="team-page relative isolate min-h-full">
+      <div className="team-page-backdrop" aria-hidden="true" />
+      <div className="relative z-10">
       <PageHeader
         title="Team"
         subtitle="Your squad roster — read-only view."
@@ -120,7 +123,8 @@ export default function PlayerTeamPage() {
           </>
         )}
       </div>
-    </>
+      </div>
+    </div>
   );
 }
 

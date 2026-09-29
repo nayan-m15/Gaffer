@@ -63,42 +63,47 @@ neonConfig.fetchFunction = resilientFetch;
  */
 export function isDatabaseConnectionError(error: unknown): boolean {
   if (!error) return false;
-  let message = '';
-  let cause = '';
+  return isDatabaseFailureText(getDatabaseErrorText(error));
+}
 
+function getDatabaseErrorText(error: unknown): string {
   if (error instanceof Error) {
-    message = error.message;
-    if ('cause' in error && error.cause) {
-      cause =
-        error.cause instanceof Error
-          ? error.cause.message
-          : typeof error.cause === 'string'
-            ? error.cause
-            : JSON.stringify(error.cause);
-    }
-  } else if (typeof error === 'string') {
-    message = error;
-  } else if (typeof error === 'object') {
-    try {
-      message = JSON.stringify(error);
-    } catch {
-      message = '';
-    }
+    const cause = 'cause' in error ? error.cause : undefined;
+    return `${error.message} ${stringifyErrorCause(cause)}`;
   }
+  if (typeof error === 'string') return error;
+  return stringifyUnknownError(error);
+}
 
-  const str = `${message} ${cause}`.toLowerCase();
+function stringifyErrorCause(cause: unknown): string {
+  if (cause instanceof Error) return cause.message;
+  if (typeof cause === 'string') return cause;
+  return cause ? stringifyUnknownError(cause) : '';
+}
 
-  return (
-    str.includes('connecttimeouterror') ||
-    str.includes('und_err_connect_timeout') ||
-    str.includes('failed to get session') ||
-    str.includes('failed query') ||
-    str.includes('fetch failed') ||
-    str.includes('econnrefused') ||
-    str.includes('econnreset') ||
-    str.includes('etimedout') ||
-    str.includes('neondberror')
-  );
+function stringifyUnknownError(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '';
+  }
+}
+
+function isDatabaseFailureText(text: string): boolean {
+  const indicators = [
+    'connecttimeouterror',
+    'und_err_connect_timeout',
+    'failed to get session',
+    'failed query',
+    'fetch failed',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'neondberror',
+  ];
+  const normalized = text.toLowerCase();
+  return indicators.some((indicator) => normalized.includes(indicator));
 }
 
 export function createDatabaseClient(databaseUrl = process.env.DATABASE_URL) {

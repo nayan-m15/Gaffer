@@ -241,7 +241,7 @@ function AppShellContent() {
             <Outlet />
           )}
         </div>
-        <div className="no-print">
+        <div className="no-print relative z-20">
           <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:py-3" : undefined} />
         </div>
       </main>

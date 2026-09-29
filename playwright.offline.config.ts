@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = "http://127.0.0.1:4173";
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./frontend/e2e",
   testMatch: "offline-event-logging.spec.ts",
   timeout: 90_000,
   expect: { timeout: 15_000 },

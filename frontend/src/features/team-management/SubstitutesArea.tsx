@@ -164,7 +164,7 @@ export function SubstitutesArea({
   }, [onDragEnd]);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Substitutes
         {athletes.length > 0 && (
@@ -177,7 +177,7 @@ export function SubstitutesArea({
       <div
         className={cn(
           "flex gap-2 overflow-x-auto rounded-lg border border-dashed p-3",
-          "min-h-[72px] transition-colors duration-150",
+          "min-h-[72px] transition-colors duration-150 2xl:grid 2xl:grid-cols-3 2xl:content-start 2xl:justify-items-center 2xl:overflow-x-visible 2xl:overflow-y-auto 2xl:substitutes-area__players",
           "border-border/50 bg-muted/30",
           isDragOver && canAcceptDrop && "border-primary bg-primary/5",
           athletes.length === 0 && !isDragOver && "items-center justify-center",

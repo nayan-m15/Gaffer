@@ -52,4 +52,27 @@ test.describe("landing-page tactical background", () => {
     }));
     expect(bufferSize.width * bufferSize.height).toBeLessThanOrEqual(800_000);
   });
+
+  test("updates the existing scene across repeated theme changes", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("sport-coaching-theme", "dark");
+    });
+    await openLandingPage(page);
+
+    const canvas = page.locator(".landing-scene canvas");
+    await expect(canvas).toHaveCount(1, { timeout: SCENE_TIMEOUT });
+    await canvas.evaluate((element) => {
+      element.dataset.sceneInstance = "original";
+    });
+
+    const themeToggle = page.getByRole("button", { name: /Switch to (light|dark) mode/ }).first();
+    for (const expectedTheme of ["light", "dark", "light", "dark"] as const) {
+      await themeToggle.click();
+      await expect(page.locator("html")).toHaveClass(
+        expectedTheme === "dark" ? /dark/ : /^(?!.*dark)/,
+      );
+      await expect(canvas).toHaveAttribute("data-scene-instance", "original");
+      await expect(canvas).toHaveCount(1);
+    }
+  });
 });

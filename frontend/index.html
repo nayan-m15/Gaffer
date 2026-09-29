@@ -7,7 +7,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b1218" />
+    <meta name="theme-color" content="#F5F3F0" />
     <title>Gaffer - The football coaching platform built for the touchline</title>
     <!-- Same stylesheet as React LoadingScreen — keeps Pre-Loader identical. -->
     <link rel="stylesheet" href="/loading-screen.css" />
@@ -23,10 +23,11 @@
         var d = t === "dark" || (!t && matchMedia("(prefers-color-scheme:dark)").matches);
         if (d) {
           document.documentElement.className = "dark";
-          document.documentElement.style.background = "#0B1218";
+          document.documentElement.style.background = "#090A0B";
         } else {
           document.documentElement.style.background = "#F5F3F0";
         }
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", d ? "#090A0B" : "#F5F3F0");
       } catch(e) {
         document.documentElement.style.background = "#F5F3F0";
       }
@@ -70,9 +71,9 @@
         var pre = document.getElementById("preloader");
         if (!pre) return;
         var isDark = document.documentElement.classList.contains("dark");
-        pre.style.setProperty("--background", isDark ? "#0B1218" : "#F5F3F0");
-        pre.style.setProperty("--foreground", isDark ? "#E8ECEF" : "#171717");
-        pre.style.setProperty("--brand", isDark ? "#00D99A" : "#047857");
+        pre.style.setProperty("--background", isDark ? "#090A0B" : "#F5F3F0");
+        pre.style.setProperty("--foreground", isDark ? "#ECEFED" : "#171717");
+        pre.style.setProperty("--brand", isDark ? "#16D99A" : "#047857");
         pre.style.setProperty(
           "--font-display",
           '"Lyon", Georgia, "Times New Roman", serif',

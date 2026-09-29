@@ -98,30 +98,32 @@ export function coerceExtractedValue(
 ): { ok: true; value: unknown } | { ok: false } {
   if (value === null || value === undefined) return { ok: false };
 
-  if (field.type === 'enum') {
-    if (typeof value !== 'string') return { ok: false };
-    const match = field.enumValues?.find(
-      (candidate) => candidate.toLowerCase() === value.toLowerCase(),
-    );
-    return match ? { ok: true, value: match } : { ok: false };
+  switch (field.type) {
+    case 'enum': {
+      if (typeof value !== 'string') return { ok: false };
+      const match = field.enumValues?.find(
+        (candidate) => candidate.toLowerCase() === value.toLowerCase(),
+      );
+      return match ? { ok: true, value: match } : { ok: false };
+    }
+    case 'integer': {
+      const numberValue = typeof value === 'number' ? value : Number(value);
+      return Number.isInteger(numberValue)
+        ? { ok: true, value: numberValue }
+        : { ok: false };
+    }
+    case 'date':
+      return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? { ok: true, value }
+        : { ok: false };
+    case 'string': {
+      if (typeof value !== 'string') return { ok: false };
+      const trimmed = value.trim();
+      return trimmed ? { ok: true, value: trimmed } : { ok: false };
+    }
+    default:
+      return { ok: false };
   }
-
-  if (field.type === 'integer') {
-    const num = typeof value === 'number' ? value : Number(value);
-    return Number.isInteger(num) ? { ok: true, value: num } : { ok: false };
-  }
-
-  if (field.type === 'date') {
-    if (typeof value !== 'string') return { ok: false };
-    return /^\d{4}-\d{2}-\d{2}$/.test(value)
-      ? { ok: true, value }
-      : { ok: false };
-  }
-
-  // string
-  if (typeof value !== 'string') return { ok: false };
-  const trimmed = value.trim();
-  return trimmed ? { ok: true, value: trimmed } : { ok: false };
 }
 
 /** Merges coerced extracted values into `collected`, mutating a shallow copy. */

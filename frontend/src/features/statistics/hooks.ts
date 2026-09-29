@@ -57,7 +57,9 @@ export const athleteComparisonQueryKey = (
   [
     "statistics",
     "compare",
-    [...athleteIds].sort().join(","),
+    [...athleteIds]
+      .sort((left, right) => left.localeCompare(right))
+      .join(","),
     seasonId ?? "all-seasons",
   ] as const;
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { cleanupUser, uniqueTestIdentity } from '../backend/test/utils/test-db';
+import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-db';
 import { emailVerificationUrl, FRONTEND_URL } from './utils/auth';
 
 const PASSWORD = 'password123';

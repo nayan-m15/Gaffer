@@ -522,7 +522,7 @@ function CtaSection() {
               Back to Home
             </a>
           </div>
-          <p className="mt-4 text-xs text-foreground dark:text-white/40">
+          <p className="mt-4 text-xs text-foreground dark:text-white/65">
             Free to get started. No credit card required.
           </p>
         </div>
@@ -627,7 +627,7 @@ function DashboardMockup() {
         <span className="text-xs font-bold uppercase tracking-widest text-white/70">
           Dashboard
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-white/30">
+        <span className="flex items-center gap-1.5 text-[10px] text-white/65">
           <span className="size-1.5 rounded-full bg-brand" />
           Sideline Inactive
         </span>
@@ -642,7 +642,7 @@ function DashboardMockup() {
             </div>
             <div>
               <p className="text-lg font-bold tabular-nums text-white">&mdash;</p>
-              <p className="text-[10px] text-white/40">Active Athletes</p>
+              <p className="text-[10px] text-white/65">Active Athletes</p>
             </div>
           </div>
         </div>
@@ -653,7 +653,7 @@ function DashboardMockup() {
             </div>
             <div>
               <p className="text-lg font-bold tabular-nums text-white">&mdash;</p>
-              <p className="text-[10px] text-white/40">Total Events</p>
+              <p className="text-[10px] text-white/65">Total Events</p>
             </div>
           </div>
         </div>
@@ -661,10 +661,10 @@ function DashboardMockup() {
 
       {/* Upcoming events area */}
       <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/65">
           Upcoming Events
         </p>
-        <div className="flex flex-col items-center py-4 text-white/20">
+        <div className="flex flex-col items-center py-4 text-white/55">
           <Calendar className="size-5" />
           <p className="mt-1.5 text-xs">No upcoming events</p>
         </div>
@@ -727,7 +727,7 @@ function EventsMockup() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-white">League Match</p>
-              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/65">
                 Match
               </p>
             </div>
@@ -735,7 +735,7 @@ function EventsMockup() {
               Upcoming
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/40">
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/65">
             <span className="inline-flex items-center gap-1">
               <CalendarDays className="size-3" />
               Sat, 24 Aug
@@ -752,7 +752,7 @@ function EventsMockup() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-white">Team Training</p>
-              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/65">
                 Training
               </p>
             </div>
@@ -760,7 +760,7 @@ function EventsMockup() {
               Scheduled
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/40">
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/65">
             <span className="inline-flex items-center gap-1">
               <CalendarDays className="size-3" />
               Wed, 21 Aug

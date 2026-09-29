@@ -38,13 +38,13 @@ export function AnimatedTooltip({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }}
             transition={{ duration: reduceMotion ? 0 : 0.16 }}
-            className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-1/2 z-50 w-max max-w-52 -translate-x-1/2 rounded-lg border border-white/10 bg-neutral-950/95 px-3 py-2 text-center shadow-xl backdrop-blur-xl"
+            className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-1/2 z-50 w-max max-w-52 -translate-x-1/2 rounded-lg border border-border-default bg-popover/96 px-3 py-2 text-center text-popover-foreground shadow-xl backdrop-blur-xl"
           >
-            <p className="text-xs font-semibold text-white">{label}</p>
+            <p className="text-xs font-semibold text-popover-foreground">{label}</p>
             {description && (
-              <p className="mt-0.5 text-[10px] text-neutral-300">{description}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{description}</p>
             )}
-            <span className="absolute left-1/2 top-full size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-neutral-950" />
+            <span className="absolute left-1/2 top-full size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-border-default bg-popover" />
           </motion.div>
         )}
       </AnimatePresence>

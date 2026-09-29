@@ -33,6 +33,57 @@ interface DepthCarouselProps {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
+function layoutCarouselCard(
+  card: HTMLDivElement,
+  tint: HTMLSpanElement | null,
+  index: number,
+  position: number,
+  count: number,
+  options: {
+    spread: number;
+    depth: number;
+    tilt: number;
+    visibleCards: number;
+    falloff: number;
+    blur: number;
+    scale: number;
+  },
+): void {
+  let distance = index - position;
+  if (count > 1) {
+    distance = ((distance % count) + count) % count;
+    if (distance > count / 2) distance -= count;
+  }
+  const behind = Math.max(0, distance);
+  const shown = Math.abs(distance) <= options.visibleCards + 0.5;
+  const opacity = shown
+    ? distance < 0
+      ? Math.max(0, 1 + distance)
+      : 1
+    : 0;
+  const brightness = Math.max(0.15, 1 - behind * options.falloff);
+  const blurAmount =
+    options.blur > 0
+      ? Math.min(
+          options.blur,
+          (behind / Math.max(1, options.visibleCards)) * options.blur,
+        )
+      : 0;
+
+  card.style.transform =
+    `translate(-50%, -50%) scale(${options.scale}) ` +
+    `translateX(${(options.spread * distance).toFixed(2)}px) ` +
+    `translateZ(${(-options.depth * distance).toFixed(2)}px) ` +
+    `rotateY(${(options.tilt * clamp(distance, 0, 1)).toFixed(3)}deg)`;
+  card.style.opacity = opacity.toFixed(3);
+  card.style.filter = `brightness(${brightness.toFixed(3)}) blur(${blurAmount.toFixed(2)}px)`;
+  card.style.zIndex = String(Math.round(2000 - distance * 20));
+  card.style.pointerEvents = shown && opacity > 0.05 ? "auto" : "none";
+  if (tint) {
+    tint.style.opacity = clamp(behind * options.falloff * 1.25, 0, 0.86).toFixed(3);
+  }
+}
+
 export function DepthCarousel({
   items,
   cardWidth = 210,
@@ -77,41 +128,15 @@ export function DepthCarousel({
       for (let index = 0; index < count; index += 1) {
         const card = cardRefs.current[index];
         if (!card) continue;
-
-        let distance = index - position;
-        if (count > 1) {
-          distance = ((distance % count) + count) % count;
-          if (distance > count / 2) distance -= count;
-        }
-
-        const behind = Math.max(0, distance);
-        const shown = Math.abs(distance) <= visibleCards + 0.5;
-        const translateX = spread * distance;
-        const translateZ = -depth * distance;
-        const rotateY = tilt * clamp(distance, 0, 1);
-        let opacity = distance < 0 ? Math.max(0, 1 + distance) : 1;
-        if (!shown) opacity = 0;
-
-        const brightness = Math.max(0.15, 1 - behind * falloff);
-        const blurAmount =
-          blur > 0
-            ? Math.min(blur, (behind / Math.max(1, visibleCards)) * blur)
-            : 0;
-
-        card.style.transform =
-          `translate(-50%, -50%) scale(${scaleRef.current}) ` +
-          `translateX(${translateX.toFixed(2)}px) ` +
-          `translateZ(${translateZ.toFixed(2)}px) ` +
-          `rotateY(${rotateY.toFixed(3)}deg)`;
-        card.style.opacity = opacity.toFixed(3);
-        card.style.filter = `brightness(${brightness.toFixed(3)}) blur(${blurAmount.toFixed(2)}px)`;
-        card.style.zIndex = String(Math.round(2000 - distance * 20));
-        card.style.pointerEvents = shown && opacity > 0.05 ? "auto" : "none";
-
-        const tint = tintRefs.current[index];
-        if (tint) {
-          tint.style.opacity = clamp(behind * falloff * 1.25, 0, 0.86).toFixed(3);
-        }
+        layoutCarouselCard(card, tintRefs.current[index], index, position, count, {
+          spread,
+          depth,
+          tilt,
+          visibleCards,
+          falloff,
+          blur,
+          scale: scaleRef.current,
+        });
       }
     },
     [blur, count, depth, falloff, spread, tilt, visibleCards],

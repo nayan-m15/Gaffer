@@ -254,40 +254,16 @@ export default function ClaimPage() {
     return (
       <Shell>
         <PreviewHeader athleteLabel={athleteLabel} teamLabel={teamLabel} />
-
-        <form
-          onSubmit={(e) => void handleConfirmAccept(e)}
-          noValidate
-          className="flex flex-col gap-5"
-        >
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            You&apos;re signed in. Confirm below to claim this profile as
-            yourself.
-          </p>
-
-          <ConsentCheckbox
-            baseId={baseId}
-            checked={consentAccepted}
-            onChange={setConsentAccepted}
-            error={errors.consent}
-            errorId={consentErrorId}
-          />
-
-          {formError && (
-            <p role="alert" className="text-sm text-destructive">
-              {formError}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            size="lg"
-            disabled={isSubmitting}
-            className="w-full font-semibold tracking-wide"
-          >
-            {isSubmitting ? "CLAIMING…" : "CLAIM MY PROFILE"}
-          </Button>
-        </form>
+        <ClaimConfirmForm
+          baseId={baseId}
+          consentAccepted={consentAccepted}
+          onConsentChange={setConsentAccepted}
+          consentError={errors.consent}
+          consentErrorId={consentErrorId}
+          formError={formError}
+          isSubmitting={isSubmitting}
+          onSubmit={handleConfirmAccept}
+        />
       </Shell>
     );
   }
@@ -296,271 +272,58 @@ export default function ClaimPage() {
   return (
     <Shell>
       <PreviewHeader athleteLabel={athleteLabel} teamLabel={teamLabel} />
-
       {viewMode === "sign-up" ? (
-        <form
-          onSubmit={(e) => void handleSignUp(e)}
-          noValidate
-          className="flex flex-col gap-5"
-        >
-          {/* Full name */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-fullName`}
-              label="Full name"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              autoComplete="name"
-              required
-              aria-invalid={!!errors.fullName}
-              aria-describedby={errors.fullName ? fullNameErrorId : undefined}
-            />
-            {errors.fullName && (
-              <p id={fullNameErrorId} className="text-xs text-destructive">
-                {errors.fullName}
-              </p>
-            )}
-          </div>
-
-          {/* Email */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-email`}
-              label="Email address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? emailErrorId : undefined}
-            />
-            {errors.email && (
-              <p id={emailErrorId} className="text-xs text-destructive">
-                {errors.email}
-              </p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-password`}
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? passwordErrorId : undefined}
-              rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              }
-            />
-            {errors.password && (
-              <p id={passwordErrorId} className="text-xs text-destructive">
-                {errors.password}
-              </p>
-            )}
-          </div>
-
-          {/* Confirm password */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-confirmPassword`}
-              label="Confirm password"
-              type={showConfirmPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-              aria-invalid={!!errors.confirmPassword}
-              aria-describedby={
-                errors.confirmPassword ? confirmPasswordErrorId : undefined
-              }
-              rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((p) => !p)}
-                  className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-label={
-                    showConfirmPassword ? "Hide confirm password" : "Show confirm password"
-                  }
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              }
-            />
-            {errors.confirmPassword && (
-              <p
-                id={confirmPasswordErrorId}
-                className="text-xs text-destructive"
-              >
-                {errors.confirmPassword}
-              </p>
-            )}
-          </div>
-
-          {/* Consent checkbox — sign-up branch only */}
-          <ConsentCheckbox
-            baseId={baseId}
-            checked={consentAccepted}
-            onChange={setConsentAccepted}
-            error={errors.consent}
-            errorId={consentErrorId}
-          />
-
-          {formError && (
-            <p role="alert" className="text-sm text-destructive">
-              {formError}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            size="lg"
-            disabled={isSubmitting}
-            className="w-full font-semibold tracking-wide"
-          >
-            {isSubmitting ? "JOINING…" : "CLAIM MY PROFILE"}
-          </Button>
-        </form>
+        <ClaimSignUpForm
+          baseId={baseId}
+          fullName={fullName}
+          onFullNameChange={setFullName}
+          email={email}
+          onEmailChange={setEmail}
+          password={password}
+          onPasswordChange={setPassword}
+          confirmPassword={confirmPassword}
+          onConfirmPasswordChange={setConfirmPassword}
+          showPassword={showPassword}
+          onTogglePassword={() => setShowPassword((current) => !current)}
+          showConfirmPassword={showConfirmPassword}
+          onToggleConfirmPassword={() => setShowConfirmPassword((current) => !current)}
+          errors={errors}
+          fullNameErrorId={fullNameErrorId}
+          emailErrorId={emailErrorId}
+          passwordErrorId={passwordErrorId}
+          confirmPasswordErrorId={confirmPasswordErrorId}
+          consentAccepted={consentAccepted}
+          onConsentChange={setConsentAccepted}
+          consentErrorId={consentErrorId}
+          formError={formError}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSignUp}
+        />
       ) : (
-        <form
-          onSubmit={(e) => void handleSignIn(e)}
-          noValidate
-          className="flex flex-col gap-5"
-        >
-          {/* Email */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-email`}
-              label="Email address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? emailErrorId : undefined}
-            />
-            {errors.email && (
-              <p id={emailErrorId} className="text-xs text-destructive">
-                {errors.email}
-              </p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div className="space-y-1.5">
-            <FloatingLabelInput
-              id={`${baseId}-password`}
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? passwordErrorId : undefined}
-              rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              }
-            />
-            {errors.password && (
-              <p id={passwordErrorId} className="text-xs text-destructive">
-                {errors.password}
-              </p>
-            )}
-          </div>
-
-          {formError && (
-            <p role="alert" className="text-sm text-destructive">
-              {formError}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            size="lg"
-            disabled={isSubmitting}
-            className="w-full font-semibold tracking-wide"
-          >
-            {isSubmitting ? "SIGNING IN…" : "SIGN IN & CLAIM"}
-          </Button>
-        </form>
+        <ClaimSignInForm
+          baseId={baseId}
+          email={email}
+          onEmailChange={setEmail}
+          password={password}
+          onPasswordChange={setPassword}
+          showPassword={showPassword}
+          onTogglePassword={() => setShowPassword((current) => !current)}
+          errors={errors}
+          emailErrorId={emailErrorId}
+          passwordErrorId={passwordErrorId}
+          formError={formError}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSignIn}
+        />
       )}
-
-      {/* ── Toggle between sign-up / sign-in ─────────────────────────── */}
-      <div className="my-6 flex items-center gap-3" role="separator">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-          or
-        </span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      <div className="text-center text-sm text-muted-foreground">
-        {viewMode === "sign-up" ? (
-          <p>
-            Already have an account?{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("sign-in");
-                setErrors({});
-                setFormError(null);
-              }}
-              className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              Sign in
-            </button>
-          </p>
-        ) : (
-          <p>
-            Don&apos;t have an account?{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("sign-up");
-                setErrors({});
-                setFormError(null);
-              }}
-              className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              Sign up
-            </button>
-          </p>
-        )}
-      </div>
+      <ClaimModeSwitch
+        viewMode={viewMode}
+        onChange={(mode) => {
+          setViewMode(mode);
+          setErrors({});
+          setFormError(null);
+        }}
+      />
     </Shell>
   );
 }
@@ -635,6 +398,177 @@ function PreviewHeader({
       <p className="mt-1 text-lg font-bold text-foreground">{athleteLabel}</p>
       <p className="text-sm font-medium text-brand">{teamLabel}</p>
     </div>
+  );
+}
+
+type ClaimInputProps = {
+  id: string;
+  label: string;
+  type: "text" | "email" | "password";
+  value: string;
+  autoComplete: string;
+  error?: string;
+  errorId: string;
+  onChange: (value: string) => void;
+  visible?: boolean;
+  onToggleVisibility?: () => void;
+  hideLabel?: string;
+  showLabel?: string;
+};
+
+function ClaimInput({
+  id, label, type, value, autoComplete, error, errorId, onChange,
+  visible, onToggleVisibility, hideLabel, showLabel,
+}: ClaimInputProps) {
+  const passwordInput = type === "password";
+  return (
+    <div className="space-y-1.5">
+      <FloatingLabelInput
+        id={id}
+        label={label}
+        type={passwordInput ? (visible ? "text" : "password") : type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        autoComplete={autoComplete}
+        required
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
+        rightSlot={onToggleVisibility ? (
+          <button
+            type="button"
+            onClick={onToggleVisibility}
+            className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            aria-label={visible ? hideLabel : showLabel}
+          >
+            {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        ) : undefined}
+      />
+      {error && <p id={errorId} className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function ClaimConfirmForm({
+  baseId,
+  consentAccepted,
+  onConsentChange,
+  consentError,
+  consentErrorId,
+  formError,
+  isSubmitting,
+  onSubmit,
+}: {
+  baseId: string;
+  consentAccepted: boolean;
+  onConsentChange: (value: boolean) => void;
+  consentError?: string;
+  consentErrorId: string;
+  formError: string | null;
+  isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form onSubmit={(event) => void onSubmit(event)} noValidate className="flex flex-col gap-5">
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        You&apos;re signed in. Confirm below to claim this profile as yourself.
+      </p>
+      <ConsentCheckbox baseId={baseId} checked={consentAccepted} onChange={onConsentChange} error={consentError} errorId={consentErrorId} />
+      {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
+      <Button type="submit" size="lg" disabled={isSubmitting} className="w-full font-semibold tracking-wide">
+        {isSubmitting ? "CLAIMING…" : "CLAIM MY PROFILE"}
+      </Button>
+    </form>
+  );
+}
+
+function ClaimSignUpForm({
+  baseId, fullName, onFullNameChange, email, onEmailChange, password, onPasswordChange,
+  confirmPassword, onConfirmPasswordChange, showPassword, onTogglePassword,
+  showConfirmPassword, onToggleConfirmPassword, errors, fullNameErrorId, emailErrorId,
+  passwordErrorId, confirmPasswordErrorId, consentAccepted, onConsentChange,
+  consentErrorId, formError, isSubmitting, onSubmit,
+}: {
+  baseId: string;
+  fullName: string; onFullNameChange: (value: string) => void;
+  email: string; onEmailChange: (value: string) => void;
+  password: string; onPasswordChange: (value: string) => void;
+  confirmPassword: string; onConfirmPasswordChange: (value: string) => void;
+  showPassword: boolean; onTogglePassword: () => void;
+  showConfirmPassword: boolean; onToggleConfirmPassword: () => void;
+  errors: Record<string, string>;
+  fullNameErrorId: string; emailErrorId: string; passwordErrorId: string; confirmPasswordErrorId: string;
+  consentAccepted: boolean; onConsentChange: (value: boolean) => void; consentErrorId: string;
+  formError: string | null; isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form onSubmit={(event) => void onSubmit(event)} noValidate className="flex flex-col gap-5">
+      <ClaimInput id={`${baseId}-fullName`} label="Full name" type="text" value={fullName} onChange={onFullNameChange} autoComplete="name" error={errors.fullName} errorId={fullNameErrorId} />
+      <ClaimInput id={`${baseId}-email`} label="Email address" type="email" value={email} onChange={onEmailChange} autoComplete="email" error={errors.email} errorId={emailErrorId} />
+      <ClaimInput id={`${baseId}-password`} label="Password" type="password" value={password} onChange={onPasswordChange} autoComplete="new-password" error={errors.password} errorId={passwordErrorId} visible={showPassword} onToggleVisibility={onTogglePassword} hideLabel="Hide password" showLabel="Show password" />
+      <ClaimInput id={`${baseId}-confirmPassword`} label="Confirm password" type="password" value={confirmPassword} onChange={onConfirmPasswordChange} autoComplete="new-password" error={errors.confirmPassword} errorId={confirmPasswordErrorId} visible={showConfirmPassword} onToggleVisibility={onToggleConfirmPassword} hideLabel="Hide confirm password" showLabel="Show confirm password" />
+      <ConsentCheckbox baseId={baseId} checked={consentAccepted} onChange={onConsentChange} error={errors.consent} errorId={consentErrorId} />
+      {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
+      <Button type="submit" size="lg" disabled={isSubmitting} className="w-full font-semibold tracking-wide">
+        {isSubmitting ? "JOINING…" : "CLAIM MY PROFILE"}
+      </Button>
+    </form>
+  );
+}
+
+function ClaimSignInForm({
+  baseId, email, onEmailChange, password, onPasswordChange, showPassword,
+  onTogglePassword, errors, emailErrorId, passwordErrorId, formError,
+  isSubmitting, onSubmit,
+}: {
+  baseId: string;
+  email: string; onEmailChange: (value: string) => void;
+  password: string; onPasswordChange: (value: string) => void;
+  showPassword: boolean; onTogglePassword: () => void;
+  errors: Record<string, string>; emailErrorId: string; passwordErrorId: string;
+  formError: string | null; isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form onSubmit={(event) => void onSubmit(event)} noValidate className="flex flex-col gap-5">
+      <ClaimInput id={`${baseId}-email`} label="Email address" type="email" value={email} onChange={onEmailChange} autoComplete="email" error={errors.email} errorId={emailErrorId} />
+      <ClaimInput id={`${baseId}-password`} label="Password" type="password" value={password} onChange={onPasswordChange} autoComplete="current-password" error={errors.password} errorId={passwordErrorId} visible={showPassword} onToggleVisibility={onTogglePassword} hideLabel="Hide password" showLabel="Show password" />
+      {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
+      <Button type="submit" size="lg" disabled={isSubmitting} className="w-full font-semibold tracking-wide">
+        {isSubmitting ? "SIGNING IN…" : "SIGN IN & CLAIM"}
+      </Button>
+    </form>
+  );
+}
+
+function ClaimModeSwitch({
+  viewMode,
+  onChange,
+}: {
+  viewMode: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}) {
+  const signingUp = viewMode === "sign-up";
+  const nextMode = signingUp ? "sign-in" : "sign-up";
+  return (
+    <>
+      <div className="my-6 flex items-center gap-3" role="separator">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">or</span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+      <p className="text-center text-sm text-muted-foreground">
+        {signingUp ? "Already have an account? " : "Don't have an account? "}
+        <button
+          type="button"
+          onClick={() => onChange(nextMode)}
+          className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          {signingUp ? "Sign in" : "Sign up"}
+        </button>
+      </p>
+    </>
   );
 }
 

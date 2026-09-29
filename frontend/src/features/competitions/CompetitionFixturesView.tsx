@@ -82,6 +82,152 @@ function responseLabel(
   return linked ? "Awaiting coach" : "External · awaiting confirmation";
 }
 
+function fixtureStatus(
+  fixture: CompetitionFixture,
+  ready: boolean,
+  scheduleConfirmed: boolean,
+  completed: boolean,
+) {
+  if (completed) return { label: "Final", className: "border-primary/25 bg-primary/10 text-primary" };
+  if (fixture.status === "in_progress") return { label: "In progress", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" };
+  if (fixture.status === "cancelled") return { label: "Cancelled", className: "border-destructive/25 bg-destructive/10 text-destructive" };
+  if (!ready) return { label: "Awaiting teams", className: "border-dashed border-border bg-transparent text-muted-foreground" };
+  if (scheduleConfirmed) return { label: "Confirmed", className: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500" };
+  if (fixture.scheduleProposedByCompetitionTeamId) return { label: "Reschedule proposed", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" };
+  return { label: "Awaiting confirmation", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" };
+}
+
+function fixtureResponseForViewer(
+  participant: Participant | null | undefined,
+  fixture: CompetitionFixture,
+) {
+  if (participant?.id === fixture.homeCompetitionTeamId) return fixture.homeScheduleResponse;
+  if (participant?.id === fixture.awayCompetitionTeamId) return fixture.awayScheduleResponse;
+  return null;
+}
+
+function FixtureSchedulePanel({
+  fixture,
+  homeParticipant,
+  awayParticipant,
+}: {
+  fixture: CompetitionFixture;
+  homeParticipant: Participant | null;
+  awayParticipant: Participant | null;
+}) {
+  const confirmed = Boolean(fixture.scheduleConfirmedAt);
+  return (
+    <div className={`mt-3 rounded-xl border p-3 ${confirmed ? "border-emerald-500/20 bg-emerald-500/[0.04]" : "border-amber-500/20 bg-amber-500/[0.04]"}`}>
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {confirmed ? <ShieldCheck className="size-3.5 text-emerald-500" /> : <Clock3 className="size-3.5 text-amber-500" />}
+        Date agreement · revision {fixture.scheduleRevision}
+      </div>
+      <div className="mt-2 grid gap-1.5 text-xs">
+        <FixtureParticipantResponse participant={homeParticipant} response={fixture.homeScheduleResponse} />
+        <FixtureParticipantResponse participant={awayParticipant} response={fixture.awayScheduleResponse} />
+      </div>
+      {fixture.scheduleProposalNote && (
+        <p className="mt-2 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+          “{fixture.scheduleProposalNote}”
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FixtureParticipantResponse({
+  participant,
+  response,
+}: {
+  participant: Participant | null;
+  response: CompetitionFixtureScheduleResponse;
+}) {
+  if (!participant) return null;
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="truncate text-foreground">{participant.displayName}</span>
+      <span className={responseIsConfirmed(response) ? "text-emerald-500" : "text-muted-foreground"}>
+        {responseLabel(response, Boolean(participant.teamId))}
+      </span>
+    </div>
+  );
+}
+
+function FixtureResponseActions({
+  fixture,
+  participant,
+  response,
+  actionBusy,
+  onAccept,
+  onPropose,
+}: {
+  fixture: CompetitionFixture;
+  participant: Participant;
+  response: CompetitionFixtureScheduleResponse | null;
+  actionBusy: boolean;
+  onAccept: (fixture: CompetitionFixture, participantId?: string) => void;
+  onPropose: (target: ProposalTarget) => void;
+}) {
+  const confirmed = responseIsConfirmed(response ?? "pending");
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {!confirmed && (
+        <Button size="sm" disabled={actionBusy} onClick={() => onAccept(fixture)}>
+          <CheckCircle2 className="size-3.5" />Accept date
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        className={confirmed ? "sm:col-span-2" : ""}
+        disabled={actionBusy}
+        onClick={() => onPropose({ fixture, participantName: participant.displayName, external: false })}
+      >
+        <RefreshCcw className="size-3.5" />Request reschedule
+      </Button>
+    </div>
+  );
+}
+
+function ExternalScheduleActions({
+  fixture,
+  participants,
+  actionBusy,
+  onAccept,
+  onPropose,
+}: {
+  fixture: CompetitionFixture;
+  participants: { participant: Participant; response: CompetitionFixtureScheduleResponse }[];
+  actionBusy: boolean;
+  onAccept: (fixture: CompetitionFixture, participantId?: string) => void;
+  onPropose: (target: ProposalTarget) => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
+      {participants.map(({ participant, response }) => (
+        <div key={participant.id} className="rounded-lg border border-dashed border-border p-2.5">
+          <p className="truncate text-xs font-medium">{participant.displayName} · external team</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {!responseIsConfirmed(response) && (
+              <Button size="sm" variant="outline" disabled={actionBusy} onClick={() => onAccept(fixture, participant.id)}>
+                Mark confirmed externally
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={actionBusy}
+              onClick={() => onPropose({ fixture, participantId: participant.id, participantName: participant.displayName, external: true })}
+            >
+              Record external reschedule
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TeamRow({
   name,
   score,
@@ -274,26 +420,8 @@ function FixtureCard({
   const currentParticipant = [homeParticipant, awayParticipant].find(
     (participant) => participant?.teamId === viewerTeamId,
   );
-  const currentResponse =
-    currentParticipant?.id === fixture.homeCompetitionTeamId
-      ? fixture.homeScheduleResponse
-      : currentParticipant?.id === fixture.awayCompetitionTeamId
-        ? fixture.awayScheduleResponse
-        : null;
-
-  const matchStatus = completed
-    ? { label: "Final", className: "border-primary/25 bg-primary/10 text-primary" }
-    : fixture.status === "in_progress"
-      ? { label: "In progress", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" }
-      : fixture.status === "cancelled"
-        ? { label: "Cancelled", className: "border-destructive/25 bg-destructive/10 text-destructive" }
-        : !ready
-          ? { label: "Awaiting teams", className: "border-dashed border-border bg-transparent text-muted-foreground" }
-          : scheduleConfirmed
-            ? { label: "Confirmed", className: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500" }
-            : fixture.scheduleProposedByCompetitionTeamId
-              ? { label: "Reschedule proposed", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" }
-              : { label: "Awaiting confirmation", className: "border-amber-500/25 bg-amber-500/10 text-amber-500" };
+  const currentResponse = fixtureResponseForViewer(currentParticipant, fixture);
+  const matchStatus = fixtureStatus(fixture, ready, scheduleConfirmed, completed);
 
   const homeWinner =
     completed &&
@@ -337,85 +465,14 @@ function FixtureCard({
         <TeamRow name={away} score={fixture.awayScore} winner={awayWinner} />
       </div>
 
-      {scheduleVisible && (
-        <div className={`mt-3 rounded-xl border p-3 ${scheduleConfirmed ? "border-emerald-500/20 bg-emerald-500/[0.04]" : "border-amber-500/20 bg-amber-500/[0.04]"}`}>
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {scheduleConfirmed ? <ShieldCheck className="size-3.5 text-emerald-500" /> : <Clock3 className="size-3.5 text-amber-500" />}
-            Date agreement · revision {fixture.scheduleRevision}
-          </div>
-          <div className="mt-2 grid gap-1.5 text-xs">
-            {homeParticipant && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-foreground">{homeParticipant.displayName}</span>
-                <span className={responseIsConfirmed(fixture.homeScheduleResponse) ? "text-emerald-500" : "text-muted-foreground"}>
-                  {responseLabel(fixture.homeScheduleResponse, Boolean(homeParticipant.teamId))}
-                </span>
-              </div>
-            )}
-            {awayParticipant && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-foreground">{awayParticipant.displayName}</span>
-                <span className={responseIsConfirmed(fixture.awayScheduleResponse) ? "text-emerald-500" : "text-muted-foreground"}>
-                  {responseLabel(fixture.awayScheduleResponse, Boolean(awayParticipant.teamId))}
-                </span>
-              </div>
-            )}
-          </div>
-          {fixture.scheduleProposalNote && (
-            <p className="mt-2 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-              “{fixture.scheduleProposalNote}”
-            </p>
-          )}
-        </div>
-      )}
+      {scheduleVisible && <FixtureSchedulePanel fixture={fixture} homeParticipant={homeParticipant} awayParticipant={awayParticipant} />}
 
       {scheduleVisible && canRespond && currentParticipant && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {!responseIsConfirmed(currentResponse ?? "pending") && (
-            <Button size="sm" disabled={actionBusy} onClick={() => onAccept(fixture)}>
-              <CheckCircle2 className="size-3.5" />Accept date
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className={!responseIsConfirmed(currentResponse ?? "pending") ? "" : "sm:col-span-2"}
-            disabled={actionBusy}
-            onClick={() => onPropose({ fixture, participantName: currentParticipant.displayName, external: false })}
-          >
-            <RefreshCcw className="size-3.5" />Request reschedule
-          </Button>
-        </div>
+        <FixtureResponseActions fixture={fixture} participant={currentParticipant} response={currentResponse} actionBusy={actionBusy} onAccept={onAccept} onPropose={onPropose} />
       )}
 
       {scheduleVisible && isAdmin && externalParticipants.length > 0 && (
-        <div className="mt-3 space-y-2 border-t border-border/70 pt-3">
-          {externalParticipants.map(({ participant, response }) => (
-            <div key={participant.id} className="rounded-lg border border-dashed border-border p-2.5">
-              <p className="truncate text-xs font-medium">{participant.displayName} · external team</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {!responseIsConfirmed(response) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={actionBusy}
-                    onClick={() => onAccept(fixture, participant.id)}
-                  >
-                    Mark confirmed externally
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={actionBusy}
-                  onClick={() => onPropose({ fixture, participantId: participant.id, participantName: participant.displayName, external: true })}
-                >
-                  Record external reschedule
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <ExternalScheduleActions fixture={fixture} participants={externalParticipants} actionBusy={actionBusy} onAccept={onAccept} onPropose={onPropose} />
       )}
 
       {canRecord && (

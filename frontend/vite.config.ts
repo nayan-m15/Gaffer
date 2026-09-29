@@ -40,8 +40,8 @@ export default defineConfig({
             options: {
               cacheName: 'images-cache',
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+                maxEntries: 30,
+                maxAgeSeconds: 14 * 24 * 60 * 60, // 14 days
               },
             },
           },
@@ -51,8 +51,8 @@ export default defineConfig({
             options: {
               cacheName: 'models-and-wasm-cache',
               expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+                maxEntries: 5,
+                maxAgeSeconds: 14 * 24 * 60 * 60, // 14 days
               },
             },
           },

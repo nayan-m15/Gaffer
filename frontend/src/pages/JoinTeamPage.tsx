@@ -22,6 +22,30 @@ type ViewMode = "sign-up" | "sign-in";
 const INVALID_LINK_MESSAGE =
   "This invite link is no longer valid — ask your coach to send a new one.";
 
+function persistTeamInviteFailure(
+  token: string,
+  error: unknown,
+  handlers: {
+    setEmailMismatch: (value: boolean) => void;
+    setFormError: (value: string) => void;
+  },
+) {
+  const kind = classifyInviteAcceptError(error);
+  if (kind === "email-mismatch") {
+    storePendingTeamInviteToken(token);
+    handlers.setEmailMismatch(true);
+  } else {
+    handlers.setEmailMismatch(false);
+    if (kind === "definitive") clearPendingTeamInviteToken();
+    else storePendingTeamInviteToken(token);
+  }
+  handlers.setFormError(
+    error instanceof ApiError
+      ? error.message
+      : "Something went wrong accepting the invite. Please try again.",
+  );
+}
+
 /**
  * JoinTeamPage — public route at /join-team/:token.
  *
@@ -140,30 +164,7 @@ export default function JoinTeamPage() {
       await refreshSession();
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : "Something went wrong accepting the invite. Please try again.";
-      const kind = classifyInviteAcceptError(err);
-
-      if (kind === "email-mismatch") {
-        // Signed in as a different account than the invited email. Keep the
-        // invitation fully recoverable — persist the token and guide the
-        // user to sign out and sign in with the invited email. The invite
-        // URL itself also stays right here in the address bar.
-        storePendingTeamInviteToken(token);
-        setEmailMismatch(true);
-      } else {
-        setEmailMismatch(false);
-        if (kind === "definitive") {
-          clearPendingTeamInviteToken();
-        } else {
-          // Transient failure: keep the invitation context so the user (or
-          // the resumer, on a later sign-in) can retry without losing it.
-          storePendingTeamInviteToken(token);
-        }
-      }
-      setFormError(message);
+      persistTeamInviteFailure(token, err, { setEmailMismatch, setFormError });
     }
   };
 

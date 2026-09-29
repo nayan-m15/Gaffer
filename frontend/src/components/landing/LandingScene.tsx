@@ -107,7 +107,7 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
           onClick={togglePaused}
           aria-label={paused ? "Resume background" : "Pause background"}
           aria-pressed={paused}
-          className="fixed bottom-5 right-5 z-40 hidden size-10 items-center justify-center rounded-full border border-[var(--landing-scene-border)] bg-black/55 text-[var(--landing-scene-foreground)] shadow-lg backdrop-blur-md transition-colors hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-scene-accent)] md:flex"
+          className="fixed bottom-5 left-5 z-40 hidden size-10 items-center justify-center rounded-full border border-[var(--landing-scene-border)] bg-black/55 text-[var(--landing-scene-foreground)] shadow-lg backdrop-blur-md transition-colors hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--landing-scene-accent)] md:flex"
         >
           {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
         </button>

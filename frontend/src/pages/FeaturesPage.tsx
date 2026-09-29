@@ -709,7 +709,7 @@ function RosterMockup() {
               </span>
               <div>
                 <p className="font-semibold text-white">{p.name}</p>
-                <p className="text-[10px] text-white/40">{p.foot}-footed &bull; {p.apps} apps</p>
+                <p className="text-[10px] text-white/65">{p.foot}-footed &bull; {p.apps} apps</p>
               </div>
             </div>
             <div className="flex items-center gap-2.5">
@@ -770,16 +770,16 @@ function EventsMockup() {
             <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/80 uppercase tracking-wide">
               Training Session
             </span>
-            <span className="text-[10px] text-white/40">Weekly Tactical</span>
+            <span className="text-[10px] text-white/65">Weekly Tactical</span>
           </div>
           <h4 className="mt-1.5 text-sm font-semibold text-white">Set Pieces &amp; Defensive Shape</h4>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/50">
             <span className="inline-flex items-center gap-1">
-              <CalendarDays className="size-3 text-white/40" />
+              <CalendarDays className="size-3 text-white/65" />
               Tue, Aug 28 &bull; 18:30
             </span>
             <span className="inline-flex items-center gap-1">
-              <MapPin className="size-3 text-white/40" />
+              <MapPin className="size-3 text-white/65" />
               Training Pitch B
             </span>
           </div>
@@ -911,7 +911,7 @@ function DashboardMockup() {
           </div>
           <div>
             <span className="text-xs font-bold text-white">St. Jude FC &bull; Senior XI</span>
-            <p className="text-[10px] text-white/40">Division 2 Amateur League</p>
+            <p className="text-[10px] text-white/65">Division 2 Amateur League</p>
           </div>
         </div>
         <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
@@ -924,15 +924,15 @@ function DashboardMockup() {
       <div className="grid grid-cols-3 gap-2.5 mb-3.5">
         <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-center">
           <p className="text-base font-bold text-white">18</p>
-          <p className="text-[10px] text-white/40">Athletes</p>
+          <p className="text-[10px] text-white/65">Athletes</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-center">
           <p className="text-base font-bold text-brand">75%</p>
-          <p className="text-[10px] text-white/40">Win Rate</p>
+          <p className="text-[10px] text-white/65">Win Rate</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-center">
           <p className="text-base font-bold text-white">+14</p>
-          <p className="text-[10px] text-white/40">Goal Diff</p>
+          <p className="text-[10px] text-white/65">Goal Diff</p>
         </div>
       </div>
 
@@ -994,14 +994,14 @@ function LiveMatchMockup() {
             <span className="font-mono font-bold text-brand">58&apos;</span>
             <span className="text-white">Goal &bull; Alexander Cole (#9)</span>
           </div>
-          <span className="text-[10px] text-white/40">Assist: Vance</span>
+          <span className="text-[10px] text-white/65">Assist: Vance</span>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] p-2">
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-amber-400">41&apos;</span>
             <span className="text-white">Yellow Card &bull; Marcus Walker (#4)</span>
           </div>
-          <span className="text-[10px] text-white/40">Foul</span>
+          <span className="text-[10px] text-white/65">Foul</span>
         </div>
       </div>
     </MockupFrame>
@@ -1030,7 +1030,7 @@ function ReliableRecordsMockup() {
             </div>
             <div>
               <p className="text-xs font-semibold text-white">Persisted Clock</p>
-              <p className="text-[10px] text-white/40">Server-backed match record &bull; Saved clock</p>
+              <p className="text-[10px] text-white/65">Server-backed match record &bull; Saved clock</p>
             </div>
           </div>
           <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
@@ -1046,7 +1046,7 @@ function ReliableRecordsMockup() {
             </div>
             <div>
               <p className="text-xs font-semibold text-white">Correctable Timeline</p>
-              <p className="text-[10px] text-white/40">Edit mistakes while preserving the match record</p>
+              <p className="text-[10px] text-white/65">Edit mistakes while preserving the match record</p>
             </div>
           </div>
           <span className="rounded bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">
@@ -1083,7 +1083,7 @@ function AnalyticsMockup() {
       <div className="overflow-x-auto text-xs">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-white/10 text-[10px] uppercase text-white/40">
+            <tr className="border-b border-white/15 text-[10px] uppercase text-white/65">
               <th className="pb-1.5">#</th>
               <th className="pb-1.5">Team</th>
               <th className="pb-1.5 text-center">P</th>

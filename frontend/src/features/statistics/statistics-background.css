@@ -1,0 +1,33 @@
+/* Theme-aware analytics artwork behind the statistics page. Mobile artwork
+ * remains the default through tablet sizes; wide screens use the desktop crop. */
+.statistics-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: url("/statsBgLightMobile.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.dark .statistics-page-backdrop {
+  background-image: url("/statsBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .statistics-page-backdrop {
+    background-image: url("/statsBGLight.png");
+  }
+
+  .dark .statistics-page-backdrop {
+    background-image: url("/statsBGDark.png");
+  }
+}
+
+@media print {
+  .statistics-page-backdrop {
+    display: none;
+  }
+}

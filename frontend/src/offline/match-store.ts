@@ -993,7 +993,7 @@ export async function checkOfflineReadiness(
       probeId,
     ]);
   }
-  const [match, squad, events, registration, persisted, estimate] =
+  const [match, squad, events, registration, persisted, estimate, shellCached] =
     await Promise.all([
       readCachedResponse(`match:${matchId}`),
       readCachedResponse(`squad:${matchId}`),
@@ -1001,12 +1001,20 @@ export async function checkOfflineReadiness(
       navigator.serviceWorker?.getRegistration(),
       navigator.storage?.persisted?.() ?? Promise.resolve(false),
       navigator.storage?.estimate?.() ?? Promise.resolve({}),
+      (async () => {
+        if (!("caches" in window)) return false;
+        const names = await caches.keys();
+        const appCaches = await Promise.all(names.map((name) => caches.open(name)));
+        return (await Promise.all(appCaches.map(async (cache) =>
+          Boolean(await cache.match(new URL("/index.html", window.location.origin).href)),
+        ))).some(Boolean);
+      })(),
     ]);
   return {
     matchCached: match !== null,
     squadCached: squad !== null,
     eventsCached: events !== null,
-    appShellCached: Boolean(registration?.active),
+    appShellCached: Boolean(registration?.active && shellCached),
     localDatabaseWritable,
     persistentStorage: persisted,
     usageBytes: estimate.usage ?? null,

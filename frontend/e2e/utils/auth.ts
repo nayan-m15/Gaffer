@@ -4,7 +4,7 @@ import type { APIRequestContext, APIResponse, Page } from '@playwright/test';
 // loading logic) the backend itself uses, so tokens minted here are signed
 // with the exact BETTER_AUTH_SECRET of whichever backend the tests run
 // against, and the URLs below match its trusted origins.
-import '../../backend/src/database/environment';
+import '../../../backend/src/database/environment';
 
 /** Where the frontend dev server serves the app (mirrors the backend's default). */
 export const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
@@ -46,7 +46,7 @@ async function signEmailVerificationToken(email: string): Promise<string> {
   // Playwright compiles these specs to CommonJS, so a static import would
   // resolve to a require() of an ESM module.
   const { signJWT } = (await import(
-    '../../backend/node_modules/better-auth/dist/crypto/index.mjs'
+    '../../../backend/node_modules/better-auth/dist/crypto/index.mjs'
   )) as BetterAuthCrypto;
 
   return signJWT(

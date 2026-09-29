@@ -1,0 +1,27 @@
+/* Theme-aware artwork behind league and competition pages. Mobile artwork
+ * remains active through tablet sizes; wide screens use the desktop image. */
+.competitions-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: url("/leaguesBgLightMobile.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.dark .competitions-page-backdrop {
+  background-image: url("/leaguesBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .competitions-page-backdrop {
+    background-image: url("/leaguesBgLight.png");
+  }
+
+  .dark .competitions-page-backdrop {
+    background-image: url("/leaguesBgDark.png");
+  }
+}

@@ -88,7 +88,7 @@ Three layers of automated tests exist, run from the repo root unless noted:
 | --- | --- | --- |
 | `npm test` | Backend unit tests (`backend/src/**/*.spec.ts`), services/controllers with dependencies mocked. | Nothing extra. |
 | `npm run test:e2e` / `npm run test:integration` | Backend integration tests (`backend/test/**/*.e2e-spec.ts`) — boot the real NestJS app and hit its HTTP endpoints with [Supertest](https://github.com/ladjs/supertest). | A migrated, isolated `TEST_DATABASE_URL` that differs from `DATABASE_URL`. |
-| `npm run test:e2e:ui` | Full-stack browser e2e (`e2e/**/*.spec.ts`) via [Playwright](https://playwright.dev) — drives a real Chromium browser against the real Vite dev server and Nest API. | A reachable `DATABASE_URL`; auto-starts both dev servers if they aren't already running (`npm run dev`). |
+| `npm run test:e2e:ui` | Full-stack browser e2e (`frontend/e2e/**/*.spec.ts`) via [Playwright](https://playwright.dev) — drives a real Chromium browser against the real Vite dev server and Nest API. | A reachable `DATABASE_URL`; auto-starts both dev servers if they aren't already running (`npm run dev`). |
 
 
 ## Structure
@@ -96,9 +96,9 @@ Three layers of automated tests exist, run from the repo root unless noted:
 ```text
 SportCoachingTool/
 ├── frontend/
+│   └── e2e/
 ├── backend/
 ├── docs/
-├── e2e/
 ├── .env.example
 ├── .gitignore
 ├── package.json
