@@ -14,6 +14,12 @@ const ROOM_EXIT = -61;
 const TUNNEL_LENGTH = 16.5; // 25% shorter than the former 22-unit tunnel.
 const TUNNEL_WIDTH = 12.8;
 const TUNNEL_EXIT = ROOM_EXIT + TUNNEL_LENGTH;
+const DARK_BACKGROUND = 0x07100d;
+const DARK_SKY_TOP = 0x07131c;
+const DARK_SKY_BOTTOM = 0x354c40;
+const LIGHT_BACKGROUND = 0xc7dff0;
+const LIGHT_SKY_TOP = 0x91b9d3;
+const LIGHT_SKY_BOTTOM = 0xd6e5ed;
 
 function context(canvas: HTMLCanvasElement) {
   const value = canvas.getContext("2d");
@@ -67,21 +73,6 @@ function pitchTexture(lowPower: boolean) {
   return texture;
 }
 
-function labelTexture(text: string, width = 1024, height = 160) {
-  const canvas = document.createElement("canvas");
-  canvas.width = width; canvas.height = height;
-  const ctx = context(canvas);
-  const gradient = ctx.createLinearGradient(0, 0, width, 0);
-  gradient.addColorStop(0, "#04150f"); gradient.addColorStop(.5, "#0b3324"); gradient.addColorStop(1, "#04150f");
-  ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = "#2ed58b"; ctx.lineWidth = 7; ctx.strokeRect(8, 8, width - 16, height - 16);
-  ctx.fillStyle = "#effff7"; ctx.font = `900 ${height * .48}px Inter,Arial,sans-serif`;
-  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, width / 2, height / 2 + 2);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.encoding = THREE.sRGBEncoding; texture.name = text;
-  return texture;
-}
-
 function footballTexture() {
   const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 128;
   const ctx = context(canvas); ctx.fillStyle = "#edf0eb"; ctx.fillRect(0, 0, 256, 128);
@@ -110,37 +101,81 @@ function canvasTexture(width: number, height: number, draw: (ctx: CanvasRenderin
 function dressingFloorTexture(lowPower: boolean) {
   const size = lowPower ? 512 : 1024;
   const texture = canvasTexture(size, size, ctx => {
-    ctx.fillStyle = "#4b4f4d"; ctx.fillRect(0, 0, size, size);
-    for (let y = 0; y < 4; y += 1) for (let x = 0; x < 4; x += 1) {
-      const tone = 69 + ((x * 13 + y * 7) % 4) * 3;
-      ctx.fillStyle = `rgb(${tone},${tone + 3},${tone + 1})`;
-      ctx.fillRect(x * size / 4 + 3, y * size / 4 + 3, size / 4 - 6, size / 4 - 6);
+    const base = ctx.createLinearGradient(0, 0, size, size);
+    base.addColorStop(0, "#8f918b");
+    base.addColorStop(.52, "#a09d95");
+    base.addColorStop(1, "#858a85");
+    ctx.fillStyle = base; ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < (lowPower ? 650 : 1700); i += 1) {
+      const x = (Math.sin(i * 73.91) * .5 + .5) * size;
+      const y = (Math.sin(i * 39.17 + 2.4) * .5 + .5) * size;
+      ctx.fillStyle = i % 3 ? "rgba(245,239,226,.035)" : "rgba(22,28,25,.03)";
+      ctx.fillRect(x, y, i % 9 === 0 ? 12 : 2, i % 9 === 0 ? 1 : 2);
     }
-    ctx.strokeStyle = "rgba(18,22,21,.6)"; ctx.lineWidth = 4;
-    for (let i = 0; i <= 4; i += 1) {
+    ctx.strokeStyle = "rgba(35,42,39,.2)"; ctx.lineWidth = Math.max(2, size / 300);
+    for (let i = 1; i < 4; i += 1) {
       ctx.beginPath(); ctx.moveTo(i * size / 4, 0); ctx.lineTo(i * size / 4, size); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * size / 4); ctx.lineTo(size, i * size / 4); ctx.stroke();
     }
   });
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2.25, 2.25);
+  texture.repeat.set(2.15, 2.15);
+  texture.name = "Gaffer dressing room resin floor";
   return texture;
 }
 
-function tacticsTexture() {
-  return canvasTexture(640, 380, ctx => {
-    ctx.fillStyle = "#173d2e"; ctx.fillRect(0, 0, 640, 380);
-    ctx.strokeStyle = "rgba(231,242,235,.78)"; ctx.lineWidth = 5;
-    ctx.strokeRect(38, 32, 564, 316);
-    ctx.beginPath(); ctx.moveTo(320, 32); ctx.lineTo(320, 348); ctx.stroke();
-    ctx.beginPath(); ctx.arc(320, 190, 57, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeRect(38, 105, 94, 170); ctx.strokeRect(508, 105, 94, 170);
-    ctx.strokeRect(38, 145, 38, 90); ctx.strokeRect(564, 145, 38, 90);
-    const dots = [[145,100],[180,190],[145,280],[260,135],[260,245],[495,100],[460,190],[495,280],[380,135],[380,245]];
-    dots.forEach(([x,y], i) => { ctx.fillStyle = i < 5 ? "#e7eee9" : "#35c889"; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill(); });
-    ctx.strokeStyle = "#e1b55d"; ctx.lineWidth = 7; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(175, 190); ctx.quadraticCurveTo(270, 75, 375, 132); ctx.stroke();
+function tunnelFloorTexture(lowPower: boolean) {
+  const size = lowPower ? 512 : 1024;
+  const texture = canvasTexture(size, size, ctx => {
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, "#202725");
+    gradient.addColorStop(.5, "#303735");
+    gradient.addColorStop(1, "#1b2220");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    // Deterministic mottling and fine scuffs keep the surface from reading as
+    // a flat glossy slab without requiring another downloaded texture.
+    for (let i = 0; i < (lowPower ? 900 : 2200); i += 1) {
+      const x = (Math.sin(i * 91.37) * .5 + .5) * size;
+      const y = (Math.sin(i * 47.83 + 1.7) * .5 + .5) * size;
+      const alpha = .018 + (i % 5) * .006;
+      ctx.fillStyle = i % 3 ? `rgba(206,220,214,${alpha})` : `rgba(3,9,7,${alpha})`;
+      ctx.fillRect(x, y, i % 7 === 0 ? 16 : 3, i % 7 === 0 ? 1 : 2);
+    }
+    ctx.strokeStyle = "rgba(7,14,12,.42)";
+    ctx.lineWidth = Math.max(2, size / 260);
+    for (let i = 1; i < 4; i += 1) {
+      ctx.beginPath(); ctx.moveTo(i * size / 4, 0); ctx.lineTo(i * size / 4, size); ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(216,240,229,.035)";
+    for (let i = 0; i < 9; i += 1) {
+      const y = size * (.1 + i * .1);
+      ctx.beginPath(); ctx.moveTo(size * .08, y); ctx.lineTo(size * .92, y + (i % 2 ? 3 : -3)); ctx.stroke();
+    }
   });
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3.2, 2);
+  texture.name = "Gaffer tunnel floor";
+  return texture;
+}
+
+function tunnelSignTexture(title: string, strapline: string) {
+  const texture = canvasTexture(1024, 192, ctx => {
+    const gradient = ctx.createLinearGradient(0, 0, 1024, 0);
+    gradient.addColorStop(0, "#07110e");
+    gradient.addColorStop(.5, "#10241d");
+    gradient.addColorStop(1, "#07110e");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1024, 192);
+    ctx.fillStyle = "#00d99a"; ctx.fillRect(0, 0, 1024, 9); ctx.fillRect(0, 183, 1024, 9);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#f3fff9"; ctx.font = "900 78px Inter,Arial,sans-serif";
+    ctx.fillText(title, 512, 77);
+    ctx.fillStyle = "#75e8c2"; ctx.font = "700 25px Inter,Arial,sans-serif";
+    ctx.fillText(strapline, 512, 142);
+  });
+  texture.name = `${title} tunnel fascia`;
+  return texture;
 }
 
 function crestTexture() {
@@ -175,25 +210,51 @@ function box(size: [number, number, number], position: [number, number, number],
 interface DressingRoomKit {
   metal: THREE.Material; wood: THREE.Material; woodDark: THREE.Material; cushion: THREE.Material;
   warmLight: THREE.Material; greenLight: THREE.Material; green: THREE.Material; white: THREE.Material;
-  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material;
+  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material; shirt: THREE.Material;
+  shirtGeometry: THREE.BufferGeometry;
 }
 
-//based on the original locker layout, but with a few tweaks to make it more compact and less expensive to render.
-
 const LOCKER_CONFIG = { count: 7, startX: -77.8, endX: -63.1, width: 1.82, depth: 1.12, height: 3.62 };
+export const DRESSING_ROOM_SHIRT_NUMBERS = [1, 4, 5, 8, 10, 11, 9, 2, 3, 6, 7, 14, 17, 21] as const;
+
+function shirtGeometry() {
+  const outline = new THREE.Shape();
+  outline.moveTo(-.39, -.6);
+  outline.lineTo(-.39, .18);
+  outline.lineTo(-.63, .05);
+  outline.lineTo(-.79, .37);
+  outline.lineTo(-.49, .61);
+  outline.lineTo(-.18, .7);
+  outline.quadraticCurveTo(0, .5, .18, .7);
+  outline.lineTo(.49, .61);
+  outline.lineTo(.79, .37);
+  outline.lineTo(.63, .05);
+  outline.lineTo(.39, .18);
+  outline.lineTo(.39, -.6);
+  outline.closePath();
+  const geometry = new THREE.ShapeGeometry(outline, 2);
+  geometry.name = "Proportioned Gaffer shirt";
+  return geometry;
+}
 
 function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
   const group = new THREE.Group();
-  const jersey = new THREE.MeshStandardMaterial({ color: 0x171d1b, roughness: .92 });
-  const body = box([.76, 1.14, .065], [0, -.21, 0], jersey);
-  const leftSleeve = box([.3, .5, .06], [-.48, .04, 0], jersey); leftSleeve.rotation.z = -.32;
-  const rightSleeve = box([.3, .5, .06], [.48, .04, 0], jersey); rightSleeve.rotation.z = .32;
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(.14, .025, 6, 16, Math.PI), kit.green); collar.position.set(0, .38, .042); collar.rotation.z = Math.PI;
+  const body = new THREE.Mesh(kit.shirtGeometry, kit.shirt);
+  body.position.z = .012; body.castShadow = true;
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(.145, .024, 6, 16, Math.PI), kit.green);
+  collar.position.set(0, .585, .035); collar.rotation.z = Math.PI;
   const numberMat = new THREE.MeshBasicMaterial({ map: numberMap, transparent: true, depthWrite: false });
-  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.43, .54), numberMat); digits.position.set(0, -.18, .04);
-  const rail = box([.76, .035, .035], [0, .72, 0], kit.metal);
-  const hook = new THREE.Mesh(new THREE.TorusGeometry(.075, .014, 5, 12, Math.PI * 1.4), kit.metal); hook.position.y = .79; hook.rotation.z = -.7;
-  group.add(body, leftSleeve, rightSleeve, collar, digits, rail, hook);
+  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.42, .53), numberMat); digits.position.set(0, -.12, .04);
+  const cuffLeft = box([.29, .045, .024], [-.625, .24, .04], kit.green); cuffLeft.rotation.z = .68;
+  const cuffRight = box([.29, .045, .024], [.625, .24, .04], kit.green); cuffRight.rotation.z = -.68;
+  const hanger = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-.43, .55, -.005), new THREE.Vector3(0, .77, -.005), new THREE.Vector3(.43, .55, -.005),
+    ]),
+    new THREE.LineBasicMaterial({ color: 0xbac2be }),
+  );
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(.07, .012, 5, 12, Math.PI * 1.45), kit.metal); hook.position.y = .83; hook.rotation.z = -.75;
+  group.add(body, collar, digits, cuffLeft, cuffRight, hanger, hook);
   return group;
 }
 
@@ -201,22 +262,29 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
   const group = new THREE.Group();
   const count = lowPower ? 6 : LOCKER_CONFIG.count;
   const spacing = (LOCKER_CONFIG.endX - LOCKER_CONFIG.startX) / (count - 1);
-  const z = side * 8.2, frontZ = side * 7.58;
-  group.add(box([16.9, .24, 1.62], [-70.3, 4.02, side * 8.15], kit.metal, !lowPower));
+  const z = side * 8.18, frontZ = side * 7.54;
+  group.add(
+    box([16.9, .22, 1.68], [-70.3, 4.02, side * 8.15], kit.metal, !lowPower),
+    box([16.75, .08, .12], [-70.3, 3.89, side * 7.35], kit.greenLight),
+  );
   for (let i = 0; i < count; i += 1) {
     const x = LOCKER_CONFIG.startX + i * spacing;
     group.add(
-      box([LOCKER_CONFIG.width, 2.42, .12], [x, 2.56, side * 8.67], kit.wood),
+      box([LOCKER_CONFIG.width, 2.45, .12], [x, 2.55, side * 8.68], kit.wood),
+      box([LOCKER_CONFIG.width - .18, 1.58, .045], [x, 2.55, side * 8.6], kit.woodDark),
       box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x - LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
       box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x + LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
       box([LOCKER_CONFIG.width, .58, LOCKER_CONFIG.depth], [x, 3.72, z], kit.woodDark),
-      box([LOCKER_CONFIG.width - .16, .055, .08], [x, 3.42, frontZ], kit.warmLight),
-      box([LOCKER_CONFIG.width - .14, .16, 1.18], [x, 1.12, side * 7.96], kit.cushion),
-      box([LOCKER_CONFIG.width - .12, .1, 1.15], [x, .94, side * 7.98], kit.woodDark),
+      box([LOCKER_CONFIG.width - .2, .055, .08], [x, 3.4, frontZ], kit.warmLight),
+      box([LOCKER_CONFIG.width - .16, .18, 1.2], [x, 1.08, side * 7.92], kit.cushion),
+      box([LOCKER_CONFIG.width - .12, .12, 1.18], [x, .91, side * 7.96], kit.woodDark),
+      box([LOCKER_CONFIG.width - .22, .055, .055], [x, 3.08, frontZ], kit.metal),
     );
     const shirt = createShirt(kit, numberMaps[i]);
-    shirt.position.set(x, 2.56, side * 7.55); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
-    const cubbyFloor = box([LOCKER_CONFIG.width - .13, .08, .98], [x, .2, side * 8.08], kit.woodDark); group.add(cubbyFloor);
+    shirt.position.set(x, 2.5, side * 7.47); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
+    const cubbyFloor = box([LOCKER_CONFIG.width - .13, .08, .98], [x, .2, side * 8.08], kit.woodDark);
+    const cubbyBack = box([LOCKER_CONFIG.width - .15, .62, .05], [x, .5, side * 8.58], kit.metal);
+    group.add(cubbyFloor, cubbyBack);
     if ((i + (side > 0 ? 1 : 0)) % 3 === 0) {
       const boot = box([.47, .16, .18], [x - .17, .36, side * 7.72], kit.boot); boot.rotation.y = side * .18; group.add(boot);
       const boot2 = boot.clone(); boot2.position.x += .36; boot2.rotation.y *= -1; group.add(boot2);
@@ -228,13 +296,23 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
   return group;
 }
 
-function createTacticalBoard(texture: THREE.Texture, kit: DressingRoomKit) {
+function createCentralIsland(kit: DressingRoomKit) {
   const group = new THREE.Group();
-  group.add(box([.16, 2.08, 3.72], [0, 0, 0], kit.metal));
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(3.42, 1.78), new THREE.MeshStandardMaterial({ map: texture, roughness: .75 }));
-  board.position.x = -.085; board.rotation.y = -Math.PI / 2; group.add(board);
-  group.add(box([.12, .06, 3.25], [-.14, 1.25, 0], kit.warmLight));
-  group.position.set(-61.28, 2.66, -5.55);
+  group.name = "Split central team-talk island";
+  for (const side of [-1, 1]) {
+    group.add(
+      box([3.45, .44, 1.04], [-65.9, .29, side * 1.34], kit.woodDark, true),
+      box([3.3, .18, .95], [-65.9, .61, side * 1.34], kit.cushion, true),
+      box([3.05, .05, .055], [-65.9, .46, side * 1.835], kit.greenLight),
+      box([.14, .56, .92], [-67.48, .3, side * 1.34], kit.metal),
+      box([.14, .56, .92], [-64.32, .3, side * 1.34], kit.metal),
+    );
+  }
+  const foldedTowel = box([.68, .08, .38], [-65.35, .75, -1.34], kit.towel);
+  foldedTowel.rotation.y = -.08;
+  const tacticsBoard = box([.76, .035, .5], [-66.45, .73, 1.34], kit.white);
+  tacticsBoard.rotation.y = .14;
+  group.add(foldedTowel, tacticsBoard);
   return group;
 }
 
@@ -282,53 +360,171 @@ function footballGoal(end: number, frame: THREE.Material, net: THREE.Material) {
   return group;
 }
 
+function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
+  const tunnel = new THREE.Group();
+  tunnel.name = "Gaffer player tunnel";
+  const centre = ROOM_EXIT + TUNNEL_LENGTH / 2;
+  const bayCount = 6;
+  const entranceHalfWidth = 5.15;
+  const exitHalfWidth = 6.02;
+  const halfWidthChange = exitHalfWidth - entranceHalfWidth;
+  const runLength = Math.hypot(TUNNEL_LENGTH, halfWidthChange);
+  const wallAngle = Math.atan2(halfWidthChange, TUNNEL_LENGTH);
+
+  const floorMap = tunnelFloorTexture(lowPower);
+  const entranceSignMap = tunnelSignTexture("GAFFER", "PREPARE. PERFORM. IMPROVE.");
+  const exitSignMap = tunnelSignTexture("GAFFER", "OWN THE TOUCHLINE");
+  const floorMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x59615e,
+    map: floorMap,
+    roughness: .57,
+    metalness: .06,
+    clearcoat: .18,
+    clearcoatRoughness: .72,
+  });
+  const graphite = new THREE.MeshStandardMaterial({ color: 0x080e0c, roughness: .84, metalness: .1 });
+  const structuralMetal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
+  const tunnelLight = new THREE.MeshStandardMaterial({ color: 0xeafff7, emissive: 0xbfffe8, emissiveIntensity: 1.42, roughness: .38 });
+  const brandLight = new THREE.MeshStandardMaterial({ color: 0x00d99a, emissive: 0x00a875, emissiveIntensity: 1.25, roughness: .4 });
+  const hiddenEndCap = new THREE.MeshBasicMaterial({ visible: false });
+  const openEndedBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material, cast = false) => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(...size),
+      [hiddenEndCap, hiddenEndCap, material, material, material, material],
+    );
+    mesh.position.set(...position);
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    return mesh;
+  };
+
+  // The slab spans the same two anchor planes as the former tunnel. The dark
+  // resin finish picks up the bright stadium portal without becoming a mirror.
+  tunnel.add(box([TUNNEL_LENGTH, .2, TUNNEL_WIDTH], [centre, -.07, 0], floorMaterial));
+  tunnel.add(box([TUNNEL_LENGTH, .23, 9.05], [centre, 4.11, 0], graphite, !lowPower));
+
+  for (const side of [-1, 1]) {
+    const rotationY = -side * wallAngle;
+    // Canted shoulder panels create the reference-inspired, framed silhouette:
+    // they retain the tunnel form while the lower sightline stays fully open.
+    const shoulder = openEndedBox([runLength, 2.12, .25], [centre, 3.27, side * 5.1], graphite, !lowPower);
+    shoulder.rotation.set(-side * .65, rotationY, 0);
+    tunnel.add(shoulder);
+
+    const guideLight = box([runLength - .75, .075, .13], [centre + .05, 3.6, side * 4.43], tunnelLight);
+    guideLight.rotation.y = -side * Math.atan2(.3, TUNNEL_LENGTH);
+    tunnel.add(guideLight);
+  }
+
+  // The upper rib system keeps the architectural rhythm without placing
+  // opaque wall blocks in the dressing-room sightline.
+  const ribShoulders = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, 2.18, .31), structuralMetal, (bayCount + 1) * 2);
+  const ribCeiling = new THREE.InstancedMesh(new THREE.BoxGeometry(.22, .22, 8.9), structuralMetal, bayCount + 1);
+  const dummy = new THREE.Object3D();
+  for (let rib = 0; rib <= bayCount; rib += 1) {
+    const x = ROOM_EXIT + rib * TUNNEL_LENGTH / bayCount;
+    for (const side of [-1, 1]) {
+      const index = rib * 2 + (side > 0 ? 1 : 0);
+      dummy.position.set(x, 3.28, side * 5.1);
+      dummy.rotation.set(-side * .65, 0, 0); dummy.updateMatrix(); ribShoulders.setMatrixAt(index, dummy.matrix);
+    }
+    dummy.position.set(x, 3.98, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ribCeiling.setMatrixAt(rib, dummy.matrix);
+  }
+  ribShoulders.instanceMatrix.needsUpdate = true;
+  ribCeiling.instanceMatrix.needsUpdate = true;
+  tunnel.add(ribShoulders, ribCeiling);
+
+  // Three quiet ceiling channels and the high side guides pull the eye toward
+  // daylight rather than making the space feel like a sci-fi corridor.
+  for (const z of [-2.72, 0, 2.72]) tunnel.add(box([TUNNEL_LENGTH - .8, .065, .18], [centre, 3.965, z], tunnelLight));
+
+  const addPortal = (x: number, halfWidth: number, texture: THREE.Texture, includeUprights: boolean) => {
+    tunnel.add(box([.38, .5, halfWidth * 2], [x, 3.88, 0], structuralMetal, !lowPower));
+    if (includeUprights) {
+      tunnel.add(
+        box([.38, 3.92, .5], [x, 1.96, -halfWidth + .12], structuralMetal, !lowPower),
+        box([.38, 3.92, .5], [x, 1.96, halfWidth - .12], structuralMetal, !lowPower),
+        box([.4, 3.34, .075], [x - .02, 1.78, -halfWidth + .39], brandLight),
+        box([.4, 3.34, .075], [x - .02, 1.78, halfWidth - .39], brandLight),
+      );
+    }
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(halfWidth * 1.5, .48),
+      new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }),
+    );
+    sign.position.set(x - .196, 3.84, 0);
+    sign.rotation.y = -Math.PI / 2;
+    tunnel.add(sign);
+  };
+  addPortal(ROOM_EXIT, entranceHalfWidth, entranceSignMap, false);
+  addPortal(TUNNEL_EXIT, exitHalfWidth, exitSignMap, true);
+
+  // The apron begins exactly at the old tunnel exit; this narrow threshold
+  // masks z-fighting while leaving the existing pitch-side connection intact.
+  tunnel.add(box([.34, .075, TUNNEL_WIDTH], [TUNNEL_EXIT, .055, 0], structuralMetal));
+  scene.add(tunnel);
+  return { floorMap, entranceSignMap, exitSignMap };
+}
+
 function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
-  const concrete = new THREE.MeshStandardMaterial({ color: 0x4b504e, roughness: .94 }), dark = new THREE.MeshStandardMaterial({ color: 0x181e1c, roughness: .92 });
-  const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x818582, map: floorTexture, roughness: .69, metalness: .04, clearcoat: .08, clearcoatRoughness: .82 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x202725, roughness: .62, metalness: .34 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x754b30, roughness: .74 }), woodDark = new THREE.MeshStandardMaterial({ color: 0x3d2a20, roughness: .82 }), green = new THREE.MeshStandardMaterial({ color: 0x08754d, roughness: .8 });
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x262c29, roughness: .94 }), dark = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92 });
+  const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x777872, map: floorTexture, roughness: .62, metalness: .025, clearcoat: .14, clearcoatRoughness: .78 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x111815, roughness: .58, metalness: .42 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x412c21, roughness: .7 }), woodDark = new THREE.MeshStandardMaterial({ color: 0x211713, roughness: .8 }), green = new THREE.MeshStandardMaterial({ color: 0x00d99a, roughness: .72 });
   const white = new THREE.MeshStandardMaterial({ color: 0xe8ece8, roughness: .83 });
-  const light = new THREE.MeshStandardMaterial({ color: 0xfff1cd, emissive: 0xffd18a, emissiveIntensity: 1.15, roughness: .48 });
-  const greenLight = new THREE.MeshStandardMaterial({ color: 0x159563, emissive: 0x08754d, emissiveIntensity: 1.15, roughness: .5 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff3d8, emissive: 0xffd99c, emissiveIntensity: 1.22, roughness: .46 });
+  const greenLight = new THREE.MeshStandardMaterial({ color: 0x00d99a, emissive: 0x00b77d, emissiveIntensity: 1.22, roughness: .48 });
   const cushion = new THREE.MeshStandardMaterial({ color: 0x151a19, roughness: .88 });
   const boot = new THREE.MeshStandardMaterial({ color: 0x111615, roughness: .72 });
   const towel = new THREE.MeshStandardMaterial({ color: 0xbfc5c1, roughness: .96 });
   const bottleMat = new THREE.MeshStandardMaterial({color:0x4fb9a8,roughness:.35,transparent:true,opacity:.82});
-  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat };
+  const shirt = new THREE.MeshStandardMaterial({ color: 0x151b19, roughness: .86, side: THREE.DoubleSide });
+  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat, shirt, shirtGeometry: shirtGeometry() };
   const dummy = new THREE.Object3D();
 
   scene.add(
     box([18,.3,18],[-70,-.15,0],floor),
     box([18,.35,18],[-70,4.35,0],dark),
     box([.35,4.5,18],[-79,2.1,0],concrete),
+    box([.18,4.3,3.7],[-61.02,2.08,-7.13],dark),
+    box([.18,4.3,3.7],[-61.02,2.08,7.13],dark),
+    box([.2,.16,17.6],[-78.78,.13,0],metal),
   );
-  // Large matte ceiling panels, seams and paired linear lights create strong lines into the tunnel.
+  // A coffered acoustic ceiling and broad warm panels give the room a believable
+  // club-facility finish while guiding the existing camera toward the tunnel.
   for (let i = 0; i < 6; i += 1) scene.add(box([2.72, .08, 16.9], [-77.45 + i * 2.98, 4.12, 0], i % 2 ? metal : dark));
-  for (const side of [-1, 1]) scene.add(box([16.1, .055, .13], [-70.2, 4.04, side * 4.72], light));
-  const spotRims = new THREE.InstancedMesh(new THREE.CylinderGeometry(.13, .13, .035, 12), metal, 6);
-  for (let i = 0; i < 6; i += 1) { dummy.position.set(-77 + i * 2.7, 4.04, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); spotRims.setMatrixAt(i, dummy.matrix); } scene.add(spotRims);
+  for (const x of [-76.2, -71.2, -66.2]) for (const z of [-3.35, 3.35]) {
+    scene.add(
+      box([2.55, .045, 1.12], [x, 4.035, z], light),
+      box([2.8, .055, 1.36], [x, 4.075, z], metal),
+    );
+  }
+  for (const side of [-1, 1]) scene.add(box([16.1, .045, .1], [-70.2, 4.025, side * 5.78], greenLight));
+  const ventSlats = new THREE.InstancedMesh(new THREE.BoxGeometry(.7, .035, .055), metal, 12);
+  for (let i = 0; i < 12; i += 1) {
+    dummy.position.set(i < 6 ? -74.1 : -66.9, 4.025, (i % 6 - 2.5) * .16);
+    dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ventSlats.setMatrixAt(i, dummy.matrix);
+  }
+  ventSlats.instanceMatrix.needsUpdate = true; scene.add(ventSlats);
 
-  const shirtNumbers = [21,23,26,6,7,8,14], numberMaps = shirtNumbers.map(numberTexture);
-  scene.add(createLockerRow(-1, lowPower, dressingKit, numberMaps), createLockerRow(1, lowPower, dressingKit, numberMaps));
+  if (new Set(DRESSING_ROOM_SHIRT_NUMBERS).size !== DRESSING_ROOM_SHIRT_NUMBERS.length) throw new Error("Dressing-room shirt numbers must be unique");
+  const numberMaps = DRESSING_ROOM_SHIRT_NUMBERS.map(numberTexture);
+  scene.add(
+    createLockerRow(-1, lowPower, dressingKit, numberMaps.slice(0, LOCKER_CONFIG.count)),
+    createLockerRow(1, lowPower, dressingKit, numberMaps.slice(LOCKER_CONFIG.count)),
+    createCentralIsland(dressingKit),
+  );
   const bottles = new THREE.InstancedMesh(new THREE.CylinderGeometry(.075,.085,.32,8),bottleMat,lowPower?6:10);
   for(let i=0;i<bottles.count;i+=1){const side=i%2?-1:1;dummy.position.set(-76+Math.floor(i/2)*2.6,.39,side*7.72);dummy.rotation.set(0,0,0);dummy.updateMatrix();bottles.setMatrixAt(i,dummy.matrix);} scene.add(bottles);
 
-  const crestMap = crestTexture(), crest = new THREE.Mesh(new THREE.CircleGeometry(2.35, 48), new THREE.MeshStandardMaterial({ map: crestMap, transparent: true, roughness: .72, depthWrite: false }));
-  crest.rotation.x = -Math.PI / 2; crest.position.set(-69.7, .012, 0); scene.add(crest);
-  const tacticsMap = tacticsTexture(); scene.add(createTacticalBoard(tacticsMap, dressingKit));
-  const scoreTexture=labelTexture("0 - 0",512,224), scoreMat=new THREE.MeshBasicMaterial({map:scoreTexture});
-  const scoreboardFrame=box([.18,1.65,3.6],[-61.2,2.68,5.55],metal);
-  const scoreboard=new THREE.Mesh(new THREE.PlaneGeometry(3.3,1.38),scoreMat);scoreboard.position.set(-61.305,2.68,5.55);scoreboard.rotation.y=-Math.PI/2;scene.add(scoreboardFrame,scoreboard);
+  const crestMap = crestTexture(), crest = new THREE.Mesh(new THREE.CircleGeometry(1.28, 40), new THREE.MeshStandardMaterial({ map: crestMap, transparent: true, roughness: .78, depthWrite: false }));
+  crest.rotation.x = -Math.PI / 2; crest.position.set(-63.25, .012, 0); scene.add(crest);
   const ballTexture=footballTexture(), footballMat = new THREE.MeshStandardMaterial({map:ballTexture,roughness:.72});
   scene.add(createEquipmentArea(lowPower, footballMat, dressingKit));
-  const centre=ROOM_EXIT+TUNNEL_LENGTH/2;
-  // Keep the tunnel open at the sides so its walls do not obscure the dressing room or pitch.
-  scene.add(box([TUNNEL_LENGTH,.25,TUNNEL_WIDTH],[centre,-.1,0],dark),box([TUNNEL_LENGTH,.28,TUNNEL_WIDTH],[centre,3.9,0],dark));
-  const tunnelLights=new THREE.InstancedMesh(new THREE.BoxGeometry(1.8,.08,.32),light,5);
-  for(let i=0;i<5;i+=1){dummy.position.set(ROOM_EXIT+(i+.5)*TUNNEL_LENGTH/5,3.72,0);dummy.updateMatrix();tunnelLights.setMatrixAt(i,dummy.matrix);} scene.add(tunnelLights);
+  const tunnelAssets = buildPremiumTunnel(scene, lowPower);
   scene.add(box([10.5,.18,TUNNEL_WIDTH],[-39.25,-.04,0],dark));
 
-  return { floorTexture, crestMap, tacticsMap, numberMaps, scoreTexture, ballTexture, footballMat, metal, green, dark, dummy, light, cushion };
+  return { floorTexture, crestMap, numberMaps, ballTexture, footballMat, metal, green, dark, dummy, light, cushion, tunnelAssets };
 }
 
 function buildPitchAndStadium(
@@ -347,15 +543,18 @@ function buildPitchAndStadium(
   const goalMat=new THREE.MeshStandardMaterial({color:0xe8efeb,roughness:.62,metalness:.18});
   const netMat=new THREE.LineBasicMaterial({color:0xdce8e2,transparent:true,opacity:.48});
   scene.add(footballGoal(-1,goalMat,netMat),footballGoal(1,goalMat,netMat));
-  const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(0x07131c)},bottomColor:{value:new THREE.Color(0x354c40)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);gl_FragColor=vec4(mix(bottomColor,topColor,pow(h,.7)),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(210,lowPower?16:24,lowPower?10:16),skyMat));
+  const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(DARK_SKY_TOP)},bottomColor:{value:new THREE.Color(DARK_SKY_BOTTOM)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);gl_FragColor=vec4(mix(bottomColor,topColor,pow(h,.7)),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(210,lowPower?16:24,lowPower?10:16),skyMat));
   scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.58));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1536,lowPower?512:1536);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
+  const daylightSun=new THREE.DirectionalLight(0xfff1d6,.85);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=!lowPower;daylightSun.shadow.mapSize.set(lowPower?512:1536,lowPower?512:1536);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;daylightSun.visible=false;scene.add(daylightSun,daylightSun.target);
   const roomLight=new THREE.PointLight(0xffdfaa,.34,22,2);roomLight.position.set(-70,3.45,0);
   const lockerLightLeft=new THREE.PointLight(0xffc978,.38,10,2);lockerLightLeft.position.set(-70.8,2.7,-5.7);
   const lockerLightRight=new THREE.PointLight(0xffc978,.38,10,2);lockerLightRight.position.set(-70.8,2.7,5.7);
   const portalLight=new THREE.PointLight(0x38bb82,.32,9,2);portalLight.position.set(ROOM_EXIT-.65,2.35,0);
+  const tunnelFill=new THREE.PointLight(0xc7f6e4,lowPower?.2:.3,13,2);tunnelFill.position.set(ROOM_EXIT+TUNNEL_LENGTH*.52,3.15,0);
   const exitLight=new THREE.PointLight(0xcaf2df,.78,22,2);exitLight.position.set(TUNNEL_EXIT+1.5,3.6,0);scene.add(roomLight,lockerLightLeft,lockerLightRight,portalLight,exitLight);
+  scene.add(tunnelFill);
 
-  return { grassTexture, stadium };
+  return { grassTexture, stadium, skyMat, daylightSun };
 }
 export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
@@ -379,15 +578,17 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   );
   const softwareRenderer = /swiftshader|llvmpipe|software/i.test(rendererName);
   lowPower ||= softwareRenderer;
-  renderer.outputEncoding = THREE.sRGBEncoding; renderer.setClearColor(0x07100d); renderer.shadowMap.enabled = !lowPower; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.setClearColor(DARK_BACKGROUND); renderer.shadowMap.enabled = !lowPower; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.02; renderer.domElement.className = "landing-scene__canvas"; renderer.domElement.setAttribute("aria-hidden", "true"); renderer.domElement.tabIndex = -1; container.appendChild(renderer.domElement);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x07100d); scene.fog = new THREE.Fog(0x0b1512, 24, lowPower ? 145 : 190);
+  const scene = new THREE.Scene(),sceneBackground=new THREE.Color(DARK_BACKGROUND);scene.background=sceneBackground;scene.fog = new THREE.Fog(0x0b1512, 24, lowPower ? 145 : 190);
   const camera = new THREE.PerspectiveCamera(lowPower ? 67 : 58, initialWidth / initialHeight, .08, 240);
   const cameraPath = new THREE.CatmullRomCurve3([-73, -67, -61, -55.5, -50, TUNNEL_EXIT, -38, -29, -15, 0].map(x => new THREE.Vector3(x, 1.72, 0)), false, "centripetal");
 
   const roomAssets = buildDressingRoomAndTunnel(scene, lowPower);
-  const { floorTexture, crestMap, tacticsMap, numberMaps, scoreTexture, ballTexture } = roomAssets;
-  const { grassTexture, stadium } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
+  const { floorTexture, crestMap, numberMaps, ballTexture, tunnelAssets } = roomAssets;
+  const { grassTexture, stadium, skyMat, daylightSun } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
+  const applyEnvironmentTheme=()=>{const lightMode=!document.documentElement.classList.contains("dark");const background=lightMode?LIGHT_BACKGROUND:DARK_BACKGROUND;sceneBackground.setHex(background);renderer.setClearColor(background);skyMat.uniforms.topColor.value.setHex(lightMode?LIGHT_SKY_TOP:DARK_SKY_TOP);skyMat.uniforms.bottomColor.value.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);daylightSun.visible=lightMode;};
+  applyEnvironmentTheme();
   const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
   const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.014;camera.position.copy(position);
@@ -401,5 +602,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();tacticsMap.dispose();numberMaps.forEach(value=>value.dispose());scoreTexture.dispose();ballTexture.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
