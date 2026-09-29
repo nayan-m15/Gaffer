@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
 import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
 import {
   usePageCelebrated,
   useUnlockRequirements,
@@ -22,8 +23,6 @@ const StadiumScene = lazy(() =>
     default: module.StadiumScene,
   })),
 );
-
-const UNLOCK_FADE_MS = 450;
 
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -63,22 +62,23 @@ function GatedPageBody({
   pageKey,
   userId,
   showingGate,
-  fading,
+  celebrating,
   onUnlocked,
+  onRevealed,
 }: {
   pageKey: UnlockPageKey;
   userId: string;
   showingGate: boolean;
-  fading: boolean;
+  celebrating: boolean;
   onUnlocked: () => void;
+  onRevealed: () => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
   const showSpinner = showingGate && isLoading;
   const showCard = showingGate && !isLoading;
   const showOutlet = !showingGate || unlocked;
-  const outletInert = showingGate && unlocked && !fading;
-  const outletRevealing = showingGate && unlocked && fading;
+  const outletInert = showingGate && unlocked && celebrating;
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
@@ -88,8 +88,6 @@ function GatedPageBody({
             showCard && "absolute inset-0 overflow-hidden",
             outletInert &&
               "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
-            outletRevealing &&
-              "opacity-100 transition-opacity duration-[450ms] ease-out motion-reduce:transition-none",
           )}
           aria-hidden={outletInert || undefined}
           inert={outletInert || undefined}
@@ -110,7 +108,7 @@ function GatedPageBody({
         <div
           className={cn(
             "relative z-10 flex min-h-full flex-1 items-center justify-center px-6 py-8",
-            fading && "pointer-events-none",
+            celebrating && "pointer-events-none",
           )}
         >
           <UnlockGateCard
@@ -118,8 +116,9 @@ function GatedPageBody({
             userId={userId}
             hasPlayers={hasPlayers}
             hasGamePlan={hasGamePlan}
-            exiting={fading}
+            exiting={celebrating}
             onUnlocked={onUnlocked}
+            onRevealed={onRevealed}
           />
         </div>
       )}
@@ -148,22 +147,16 @@ function AppShellContent() {
   const onboardingActive = useOnboardingRoadActive(user?.id);
   const pageKey = pageKeyFromPath(pathname);
   const celebrated = usePageCelebrated(user?.id, pageKey ?? "events");
-  const [fading, setFading] = useState(false);
-  const fadeTimeoutRef = useRef<number | null>(null);
+  const [celebrating, setCelebrating] = useState(false);
 
   useEffect(() => {
-    setFading(false);
-    if (fadeTimeoutRef.current != null) {
-      window.clearTimeout(fadeTimeoutRef.current);
-      fadeTimeoutRef.current = null;
-    }
+    setCelebrating(false);
+    cancelGoalUnlockCelebration();
   }, [pageKey]);
 
   useEffect(
     () => () => {
-      if (fadeTimeoutRef.current != null) {
-        window.clearTimeout(fadeTimeoutRef.current);
-      }
+      cancelGoalUnlockCelebration();
     },
     [],
   );
@@ -175,18 +168,18 @@ function AppShellContent() {
       team.role === "coach" &&
       onboardingActive,
   );
-  const showingGate = Boolean(gateEligible && pageKey && user?.id && (!celebrated || fading));
+  const showingGate = Boolean(gateEligible && pageKey && user?.id && (!celebrated || celebrating));
 
   const handleUnlocked = () => {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (reduceMotion) return;
-    setFading(true);
-    fadeTimeoutRef.current = window.setTimeout(() => {
-      fadeTimeoutRef.current = null;
-      setFading(false);
-    }, UNLOCK_FADE_MS);
+    setCelebrating(true);
+  };
+
+  const handleRevealed = () => {
+    setCelebrating(false);
   };
 
   const showDashboardScene =
@@ -240,8 +233,9 @@ function AppShellContent() {
               pageKey={pageKey}
               userId={user.id}
               showingGate={showingGate}
-              fading={fading}
+              celebrating={celebrating}
               onUnlocked={handleUnlocked}
+              onRevealed={handleRevealed}
             />
           ) : (
             <Outlet />

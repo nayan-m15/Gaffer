@@ -5,7 +5,7 @@ import { GiShirt, GiSoccerField, GiSoccerKick } from "react-icons/gi";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AppCard as Card } from "@/components/app/AppCard";
 import { cn } from "@/lib/utils";
-import { fireUnlockButtonConfetti } from "./unlockButtonConfetti";
+import { startGoalUnlockCelebration } from "./goalUnlockCelebration";
 import "./tour.css";
 import "./unlock-gate.css";
 import {
@@ -52,23 +52,29 @@ function connectorTo(destination: StepState): "active" | "muted" | "done" {
   return "muted";
 }
 
-function UnlockRoad({
+export function UnlockRoad({
   hasPlayers,
   hasGamePlan,
   needsGamePlan,
+  teamCreated = true,
 }: {
   hasPlayers: boolean;
   hasGamePlan: boolean;
   needsGamePlan: boolean;
+  teamCreated?: boolean;
 }) {
   const steps = needsGamePlan ? ROAD_STEPS : ROAD_STEPS.slice(0, 2);
-  const stepStates: StepState[] = needsGamePlan
-    ? [
-        "done",
-        hasPlayers ? "done" : "current",
-        hasPlayers ? (hasGamePlan ? "done" : "current") : "locked",
-      ]
-    : ["done", hasPlayers ? "done" : "current"];
+  const stepStates: StepState[] = !teamCreated
+    ? needsGamePlan
+      ? ["current", "locked", "locked"]
+      : ["current", "locked"]
+    : needsGamePlan
+      ? [
+          "done",
+          hasPlayers ? "done" : "current",
+          hasPlayers ? (hasGamePlan ? "done" : "current") : "locked",
+        ]
+      : ["done", hasPlayers ? "done" : "current"];
 
   return (
     <ol
@@ -195,6 +201,7 @@ export function UnlockGateCard({
   hasGamePlan,
   exiting,
   onUnlocked,
+  onRevealed,
 }: {
   pageKey: UnlockPageKey;
   userId: string;
@@ -203,6 +210,7 @@ export function UnlockGateCard({
   hasGamePlan: boolean;
   exiting?: boolean;
   onUnlocked: () => void;
+  onRevealed?: () => void;
 }) {
   const page = PAGE_UNLOCKS[pageKey];
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
@@ -224,12 +232,17 @@ export function UnlockGateCard({
   const primaryUnlockedLabel =
     pageKey === "dashboard" ? "Enter the dugout" : `Open ${page.label}`;
 
-  const handleUnlockedClick = (
-    event: { currentTarget: HTMLElement },
-  ) => {
-    fireUnlockButtonConfetti(event.currentTarget);
+  const handleUnlockedClick = () => {
     markPageCelebrated(userId, pageKey);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onUnlocked();
+      return;
+    }
     onUnlocked();
+    startGoalUnlockCelebration({
+      label: page.label,
+      onReveal: () => onRevealed?.(),
+    });
   };
 
   return (

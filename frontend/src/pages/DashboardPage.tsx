@@ -12,8 +12,9 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
-import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
+import { UnlockGateCard, UnlockRoad } from "@/features/onboarding/UnlockGateCard";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
 import {
   usePageCelebrated,
   useUnlockRequirements,
@@ -29,7 +30,6 @@ import {
   AlertCircle,
   Calendar,
   Loader2,
-  Lock,
   Mail,
   ArrowRight,
   Plus,
@@ -668,24 +668,8 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
  *  FIRST-TIME EXPERIENCE  (no team, no pending invite)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const ROAD_STEPS = [
-  { label: "Create your team", locked: false },
-  { label: "Add your players", locked: true },
-  { label: "Pick your XI", locked: true },
-] as const;
-
 const HERO_ENTER =
   "animate-fade-in-up [animation-duration:280ms] motion-reduce:animate-none";
-
-function roadLineClass(variant: "none" | "active" | "muted") {
-  if (variant === "none") {
-    return "hidden h-[2px] flex-1 bg-transparent sm:block";
-  }
-  if (variant === "active") {
-    return "hidden h-[2px] flex-1 animate-dash-flow motion-reduce:animate-none sm:block";
-  }
-  return "hidden h-[2px] flex-1 bg-border sm:block";
-}
 
 function CreateTeamHero({
   userName,
@@ -698,7 +682,7 @@ function CreateTeamHero({
   return (
     <div
       className={cn(
-        "relative mx-auto w-full max-w-[600px]",
+        "relative mx-auto w-full max-w-[600px] overflow-visible",
         "animate-fade-in-scale motion-reduce:animate-none",
       )}
     >
@@ -708,7 +692,7 @@ function CreateTeamHero({
       />
       <Card
         aria-labelledby="create-team-heading"
-        className="relative z-10 rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
+        className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
       >
         <p
           className={cn(
@@ -741,76 +725,12 @@ function CreateTeamHero({
           The stands are full. Create your team and let&apos;s get your season
           started.
         </p>
-        <ol
-          aria-label="Road to kick-off"
-          className={cn(
-            "mt-8 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-0",
-            HERO_ENTER,
-            "[animation-delay:540ms]",
-          )}
-        >
-          {ROAD_STEPS.map((step, index) => {
-            const stepNumber = index + 1;
-            const isLast = index === ROAD_STEPS.length - 1;
-            const leftLine =
-              index === 0 ? "none" : index === 1 ? "active" : "muted";
-            const rightLine = isLast
-              ? "none"
-              : index === 0
-                ? "active"
-                : "muted";
-            return (
-              <li
-                key={step.label}
-                className="flex items-center gap-3 sm:min-w-0 sm:flex-1 sm:flex-col sm:gap-0"
-                aria-label={
-                  step.locked
-                    ? `Step ${stepNumber}, locked: ${step.label}`
-                    : `Step ${stepNumber}: ${step.label}`
-                }
-                aria-current={step.locked ? undefined : "step"}
-              >
-                <div className="flex items-center sm:w-full">
-                  <span
-                    className={roadLineClass(leftLine)}
-                    aria-hidden="true"
-                  />
-                  <span
-                    className={cn(
-                      "relative flex size-[42px] shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-                      step.locked
-                        ? "border border-border-subtle bg-muted text-muted-foreground"
-                        : "bg-primary text-primary-foreground",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {!step.locked && (
-                      <span
-                        className="pointer-events-none absolute inset-0 rounded-full border-2 border-primary animate-pulse-ring motion-reduce:animate-none"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {step.locked ? <Lock className="size-4" /> : stepNumber}
-                  </span>
-                  <span
-                    className={roadLineClass(rightLine)}
-                    aria-hidden="true"
-                  />
-                </div>
-                <span
-                  className={cn(
-                    "text-sm sm:mt-2 sm:px-1 sm:text-center",
-                    step.locked
-                      ? "text-muted-foreground"
-                      : "font-medium text-foreground",
-                  )}
-                >
-                  {step.label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <UnlockRoad
+          hasPlayers={false}
+          hasGamePlan={false}
+          needsGamePlan
+          teamCreated={false}
+        />
         <Button
           size="lg"
           className={cn(
@@ -845,12 +765,14 @@ function DashboardUnlockLayer({
   firstName,
   fading,
   onUnlocked,
+  onRevealed,
   onRequirements,
 }: {
   userId: string;
   firstName: string | undefined;
   fading: boolean;
   onUnlocked: () => void;
+  onRevealed: () => void;
   onRequirements: (unlocked: boolean) => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
@@ -887,6 +809,7 @@ function DashboardUnlockLayer({
           hasGamePlan={hasGamePlan}
           exiting={fading}
           onUnlocked={onUnlocked}
+          onRevealed={onRevealed}
         />
       )}
     </div>
@@ -905,7 +828,8 @@ export default function DashboardPage() {
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
-  const [unlockFading, setUnlockFading] = useState(false);
+  const [unlockCelebrating, setUnlockCelebrating] = useState(false);
+  const [unlockOverlayFading, setUnlockOverlayFading] = useState(false);
   const [dashUnlocked, setDashUnlocked] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
   const now = useNow();
@@ -969,21 +893,47 @@ export default function DashboardPage() {
       user?.id &&
       !dashboardCelebrated,
   );
-  const hideMainForUnlock = unlockGateApplies && !dashUnlocked;
-  const showUnlockOverlay = unlockGateApplies || unlockFading;
+  const hideMainForUnlock = (unlockGateApplies || unlockCelebrating) && !dashUnlocked;
+  const showUnlockOverlay =
+    unlockGateApplies || unlockCelebrating || unlockOverlayFading;
   const concealDashboardMain =
-    (unlockGateApplies || unlockFading) && dashUnlocked && !unlockFading;
-  const revealDashboardMain = unlockFading && dashUnlocked;
+    (unlockGateApplies || unlockCelebrating) &&
+    dashUnlocked &&
+    !unlockOverlayFading;
+  const revealDashboardMain = unlockOverlayFading && dashUnlocked;
   const firstName = user?.name?.trim().split(/\s+/)[0];
+
+  const overlayFadeTimeoutRef = useRef<number | null>(null);
 
   const handleDashboardUnlocked = () => {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (reduceMotion) return;
-    setUnlockFading(true);
-    window.setTimeout(() => setUnlockFading(false), 450);
+    setUnlockCelebrating(true);
   };
+
+  const handleDashboardRevealed = () => {
+    setUnlockCelebrating(false);
+    setUnlockOverlayFading(true);
+    if (overlayFadeTimeoutRef.current != null) {
+      window.clearTimeout(overlayFadeTimeoutRef.current);
+    }
+    overlayFadeTimeoutRef.current = window.setTimeout(() => {
+      overlayFadeTimeoutRef.current = null;
+      setUnlockOverlayFading(false);
+    }, 400);
+  };
+
+  useEffect(
+    () => () => {
+      cancelGoalUnlockCelebration();
+      if (overlayFadeTimeoutRef.current != null) {
+        window.clearTimeout(overlayFadeTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
@@ -1087,9 +1037,9 @@ export default function DashboardPage() {
           className={cn(
             "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
             "transition-[opacity,background-color,backdrop-filter] ease-out motion-reduce:transition-none",
-            unlockFading ? "duration-[450ms]" : "duration-[800ms]",
-            (unlockFading ||
-              (overlayPhase === "fading" && !unlockGateApplies)) &&
+            unlockOverlayFading ? "duration-[400ms]" : "duration-[800ms]",
+            (unlockOverlayFading ||
+              (overlayPhase === "fading" && !unlockGateApplies && !unlockCelebrating)) &&
               "bg-transparent opacity-0 backdrop-blur-none",
           )}
         />
@@ -1100,7 +1050,7 @@ export default function DashboardPage() {
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         firstTime={isFirstTime}
-        hideAddTeam={unlockGateApplies && !unlockFading}
+        hideAddTeam={(unlockGateApplies || unlockCelebrating) && !unlockOverlayFading}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
@@ -1113,12 +1063,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {(unlockGateApplies || unlockFading) && user?.id && (
+      {(unlockGateApplies || unlockCelebrating) && user?.id && (
         <DashboardUnlockLayer
           userId={user.id}
           firstName={firstName}
-          fading={unlockFading}
+          fading={unlockCelebrating}
           onUnlocked={handleDashboardUnlocked}
+          onRevealed={handleDashboardRevealed}
           onRequirements={setDashUnlocked}
         />
       )}
@@ -1130,7 +1081,7 @@ export default function DashboardPage() {
           concealDashboardMain &&
             "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
           revealDashboardMain &&
-            "opacity-100 transition-opacity duration-[450ms] ease-out motion-reduce:transition-none",
+            "opacity-100 transition-opacity duration-[400ms] ease-out motion-reduce:transition-none",
         )}
         aria-hidden={concealDashboardMain || undefined}
         inert={concealDashboardMain || undefined}

@@ -3,25 +3,7 @@
 }
 
 .unlock-gate-exit {
-  animation: unlock-gate-exit 450ms ease-out forwards;
-}
-
-.unlock-confetti-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483000;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.unlock-confetti-piece {
-  position: fixed;
-  top: var(--oy);
-  left: var(--ox);
-  display: block;
-  border-radius: 1px;
-  animation: unlock-confetti-fly 1.2s ease-out forwards;
-  animation-delay: var(--delay);
+  animation: unlock-gate-exit 250ms ease-out forwards;
 }
 
 .unlock-gate-lock-in {
@@ -81,28 +63,230 @@
   }
 }
 
-@keyframes unlock-confetti-fly {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1);
+.goal-unlock-host {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+.goal-unlock-visual {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.goal-unlock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.goal-unlock-backdrop.is-in {
+  opacity: 1;
+}
+
+.goal-unlock-backdrop.is-out {
+  opacity: 0;
+  transition: opacity 380ms ease-out;
+}
+
+.goal-unlock-goal {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  width: min(420px, 80vw);
+  transform: translateX(-50%);
+  opacity: 0;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.45));
+}
+
+.goal-unlock-goal.is-in {
+  animation: goal-unlock-goal-in 280ms ease-out forwards;
+}
+
+.goal-unlock-goal.is-out {
+  animation: goal-unlock-goal-out 380ms ease-out forwards;
+}
+
+.goal-unlock-goal svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.goal-unlock-net {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+.goal-unlock-net.is-bulging {
+  animation: goal-unlock-net-bulge 700ms cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+
+.goal-unlock-ball {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  opacity: 0;
+}
+
+.goal-unlock-ball.is-kicking {
+  opacity: 1;
+}
+
+.goal-unlock-ball.is-gone {
+  opacity: 0;
+}
+
+.goal-unlock-ball svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.goal-unlock-flash {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--primary) 55%, white);
+  opacity: 0;
+}
+
+.goal-unlock-flash.is-on {
+  animation: goal-unlock-flash 600ms ease-out both;
+}
+
+.goal-unlock-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(2.4);
+}
+
+.goal-unlock-stamp.is-on {
+  animation: goal-unlock-stamp 1400ms cubic-bezier(0.22, 1.45, 0.36, 1) both;
+}
+
+.goal-unlock-stamp-goal {
+  margin: 0;
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-size: clamp(2.75rem, 8vw, 72px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.goal-unlock-stamp-sub {
+  margin: 0.7rem 0 0;
+  font-size: clamp(0.7rem, 1.6vw, 0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.goal-unlock-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes goal-unlock-goal-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
   }
-  35% {
+  to {
     opacity: 1;
-    transform: translate(-50%, -50%) translate(var(--dx), var(--peak))
-      rotate(calc(var(--rot) * 0.45)) scale(1);
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes goal-unlock-goal-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+
+@keyframes goal-unlock-net-bulge {
+  0% {
+    transform: scale(1, 1);
+  }
+  22% {
+    transform: scale(1.08, 1.22);
+  }
+  48% {
+    transform: scale(0.97, 0.9);
+  }
+  72% {
+    transform: scale(1.03, 1.08);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes goal-unlock-flash {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) translate(var(--dx), var(--fall))
-      rotate(var(--rot)) scale(0.7);
+  }
+}
+
+@keyframes goal-unlock-stamp {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(2.4);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  36% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  62% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .unlock-gate-glow,
   .unlock-gate-exit,
-  .unlock-confetti-layer,
-  .unlock-confetti-piece {
+  .goal-unlock-host {
     animation: none;
   }
 
