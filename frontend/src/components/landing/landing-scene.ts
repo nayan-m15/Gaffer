@@ -95,20 +95,26 @@ function canvasTexture(width: number, height: number, draw: (ctx: CanvasRenderin
 function dressingFloorTexture(lowPower: boolean) {
   const size = lowPower ? 512 : 1024;
   const texture = canvasTexture(size, size, ctx => {
-    ctx.fillStyle = "#4b4f4d"; ctx.fillRect(0, 0, size, size);
-    for (let y = 0; y < 4; y += 1) for (let x = 0; x < 4; x += 1) {
-      const tone = 69 + ((x * 13 + y * 7) % 4) * 3;
-      ctx.fillStyle = `rgb(${tone},${tone + 3},${tone + 1})`;
-      ctx.fillRect(x * size / 4 + 3, y * size / 4 + 3, size / 4 - 6, size / 4 - 6);
+    const base = ctx.createLinearGradient(0, 0, size, size);
+    base.addColorStop(0, "#8f918b");
+    base.addColorStop(.52, "#a09d95");
+    base.addColorStop(1, "#858a85");
+    ctx.fillStyle = base; ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < (lowPower ? 650 : 1700); i += 1) {
+      const x = (Math.sin(i * 73.91) * .5 + .5) * size;
+      const y = (Math.sin(i * 39.17 + 2.4) * .5 + .5) * size;
+      ctx.fillStyle = i % 3 ? "rgba(245,239,226,.035)" : "rgba(22,28,25,.03)";
+      ctx.fillRect(x, y, i % 9 === 0 ? 12 : 2, i % 9 === 0 ? 1 : 2);
     }
-    ctx.strokeStyle = "rgba(18,22,21,.6)"; ctx.lineWidth = 4;
-    for (let i = 0; i <= 4; i += 1) {
+    ctx.strokeStyle = "rgba(35,42,39,.2)"; ctx.lineWidth = Math.max(2, size / 300);
+    for (let i = 1; i < 4; i += 1) {
       ctx.beginPath(); ctx.moveTo(i * size / 4, 0); ctx.lineTo(i * size / 4, size); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * size / 4); ctx.lineTo(size, i * size / 4); ctx.stroke();
     }
   });
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2.25, 2.25);
+  texture.repeat.set(2.15, 2.15);
+  texture.name = "Gaffer dressing room resin floor";
   return texture;
 }
 
@@ -198,25 +204,51 @@ function box(size: [number, number, number], position: [number, number, number],
 interface DressingRoomKit {
   metal: THREE.Material; wood: THREE.Material; woodDark: THREE.Material; cushion: THREE.Material;
   warmLight: THREE.Material; greenLight: THREE.Material; green: THREE.Material; white: THREE.Material;
-  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material;
+  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material; shirt: THREE.Material;
+  shirtGeometry: THREE.BufferGeometry;
 }
 
-//based on the original locker layout, but with a few tweaks to make it more compact and less expensive to render.
-
 const LOCKER_CONFIG = { count: 7, startX: -77.8, endX: -63.1, width: 1.82, depth: 1.12, height: 3.62 };
+export const DRESSING_ROOM_SHIRT_NUMBERS = [1, 4, 5, 8, 10, 11, 9, 2, 3, 6, 7, 14, 17, 21] as const;
+
+function shirtGeometry() {
+  const outline = new THREE.Shape();
+  outline.moveTo(-.39, -.6);
+  outline.lineTo(-.39, .18);
+  outline.lineTo(-.63, .05);
+  outline.lineTo(-.79, .37);
+  outline.lineTo(-.49, .61);
+  outline.lineTo(-.18, .7);
+  outline.quadraticCurveTo(0, .5, .18, .7);
+  outline.lineTo(.49, .61);
+  outline.lineTo(.79, .37);
+  outline.lineTo(.63, .05);
+  outline.lineTo(.39, .18);
+  outline.lineTo(.39, -.6);
+  outline.closePath();
+  const geometry = new THREE.ShapeGeometry(outline, 2);
+  geometry.name = "Proportioned Gaffer shirt";
+  return geometry;
+}
 
 function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
   const group = new THREE.Group();
-  const jersey = new THREE.MeshStandardMaterial({ color: 0x171d1b, roughness: .92 });
-  const body = box([.76, 1.14, .065], [0, -.21, 0], jersey);
-  const leftSleeve = box([.3, .5, .06], [-.48, .04, 0], jersey); leftSleeve.rotation.z = -.32;
-  const rightSleeve = box([.3, .5, .06], [.48, .04, 0], jersey); rightSleeve.rotation.z = .32;
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(.14, .025, 6, 16, Math.PI), kit.green); collar.position.set(0, .38, .042); collar.rotation.z = Math.PI;
+  const body = new THREE.Mesh(kit.shirtGeometry, kit.shirt);
+  body.position.z = .012; body.castShadow = true;
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(.145, .024, 6, 16, Math.PI), kit.green);
+  collar.position.set(0, .585, .035); collar.rotation.z = Math.PI;
   const numberMat = new THREE.MeshBasicMaterial({ map: numberMap, transparent: true, depthWrite: false });
-  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.43, .54), numberMat); digits.position.set(0, -.18, .04);
-  const rail = box([.76, .035, .035], [0, .72, 0], kit.metal);
-  const hook = new THREE.Mesh(new THREE.TorusGeometry(.075, .014, 5, 12, Math.PI * 1.4), kit.metal); hook.position.y = .79; hook.rotation.z = -.7;
-  group.add(body, leftSleeve, rightSleeve, collar, digits, rail, hook);
+  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.42, .53), numberMat); digits.position.set(0, -.12, .04);
+  const cuffLeft = box([.29, .045, .024], [-.625, .24, .04], kit.green); cuffLeft.rotation.z = .68;
+  const cuffRight = box([.29, .045, .024], [.625, .24, .04], kit.green); cuffRight.rotation.z = -.68;
+  const hanger = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-.43, .55, -.005), new THREE.Vector3(0, .77, -.005), new THREE.Vector3(.43, .55, -.005),
+    ]),
+    new THREE.LineBasicMaterial({ color: 0xbac2be }),
+  );
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(.07, .012, 5, 12, Math.PI * 1.45), kit.metal); hook.position.y = .83; hook.rotation.z = -.75;
+  group.add(body, collar, digits, cuffLeft, cuffRight, hanger, hook);
   return group;
 }
 
@@ -224,22 +256,29 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
   const group = new THREE.Group();
   const count = lowPower ? 6 : LOCKER_CONFIG.count;
   const spacing = (LOCKER_CONFIG.endX - LOCKER_CONFIG.startX) / (count - 1);
-  const z = side * 8.2, frontZ = side * 7.58;
-  group.add(box([16.9, .24, 1.62], [-70.3, 4.02, side * 8.15], kit.metal, !lowPower));
+  const z = side * 8.18, frontZ = side * 7.54;
+  group.add(
+    box([16.9, .22, 1.68], [-70.3, 4.02, side * 8.15], kit.metal, !lowPower),
+    box([16.75, .08, .12], [-70.3, 3.89, side * 7.35], kit.greenLight),
+  );
   for (let i = 0; i < count; i += 1) {
     const x = LOCKER_CONFIG.startX + i * spacing;
     group.add(
-      box([LOCKER_CONFIG.width, 2.42, .12], [x, 2.56, side * 8.67], kit.wood),
+      box([LOCKER_CONFIG.width, 2.45, .12], [x, 2.55, side * 8.68], kit.wood),
+      box([LOCKER_CONFIG.width - .18, 1.58, .045], [x, 2.55, side * 8.6], kit.woodDark),
       box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x - LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
       box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x + LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
       box([LOCKER_CONFIG.width, .58, LOCKER_CONFIG.depth], [x, 3.72, z], kit.woodDark),
-      box([LOCKER_CONFIG.width - .16, .055, .08], [x, 3.42, frontZ], kit.warmLight),
-      box([LOCKER_CONFIG.width - .14, .16, 1.18], [x, 1.12, side * 7.96], kit.cushion),
-      box([LOCKER_CONFIG.width - .12, .1, 1.15], [x, .94, side * 7.98], kit.woodDark),
+      box([LOCKER_CONFIG.width - .2, .055, .08], [x, 3.4, frontZ], kit.warmLight),
+      box([LOCKER_CONFIG.width - .16, .18, 1.2], [x, 1.08, side * 7.92], kit.cushion),
+      box([LOCKER_CONFIG.width - .12, .12, 1.18], [x, .91, side * 7.96], kit.woodDark),
+      box([LOCKER_CONFIG.width - .22, .055, .055], [x, 3.08, frontZ], kit.metal),
     );
     const shirt = createShirt(kit, numberMaps[i]);
-    shirt.position.set(x, 2.56, side * 7.55); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
-    const cubbyFloor = box([LOCKER_CONFIG.width - .13, .08, .98], [x, .2, side * 8.08], kit.woodDark); group.add(cubbyFloor);
+    shirt.position.set(x, 2.5, side * 7.47); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
+    const cubbyFloor = box([LOCKER_CONFIG.width - .13, .08, .98], [x, .2, side * 8.08], kit.woodDark);
+    const cubbyBack = box([LOCKER_CONFIG.width - .15, .62, .05], [x, .5, side * 8.58], kit.metal);
+    group.add(cubbyFloor, cubbyBack);
     if ((i + (side > 0 ? 1 : 0)) % 3 === 0) {
       const boot = box([.47, .16, .18], [x - .17, .36, side * 7.72], kit.boot); boot.rotation.y = side * .18; group.add(boot);
       const boot2 = boot.clone(); boot2.position.x += .36; boot2.rotation.y *= -1; group.add(boot2);
@@ -248,6 +287,26 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
     }
   }
   const benchLight = box([15.7, .055, .1], [-70.45, .78, side * 7.5], kit.warmLight); group.add(benchLight);
+  return group;
+}
+
+function createCentralIsland(kit: DressingRoomKit) {
+  const group = new THREE.Group();
+  group.name = "Split central team-talk island";
+  for (const side of [-1, 1]) {
+    group.add(
+      box([3.45, .44, 1.04], [-65.9, .29, side * 1.34], kit.woodDark, true),
+      box([3.3, .18, .95], [-65.9, .61, side * 1.34], kit.cushion, true),
+      box([3.05, .05, .055], [-65.9, .46, side * 1.835], kit.greenLight),
+      box([.14, .56, .92], [-67.48, .3, side * 1.34], kit.metal),
+      box([.14, .56, .92], [-64.32, .3, side * 1.34], kit.metal),
+    );
+  }
+  const foldedTowel = box([.68, .08, .38], [-65.35, .75, -1.34], kit.towel);
+  foldedTowel.rotation.y = -.08;
+  const tacticsBoard = box([.76, .035, .5], [-66.45, .73, 1.34], kit.white);
+  tacticsBoard.rotation.y = .14;
+  group.add(foldedTowel, tacticsBoard);
   return group;
 }
 
@@ -402,38 +461,58 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
 }
 
 function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
-  const concrete = new THREE.MeshStandardMaterial({ color: 0x4b504e, roughness: .94 }), dark = new THREE.MeshStandardMaterial({ color: 0x181e1c, roughness: .92 });
-  const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x818582, map: floorTexture, roughness: .69, metalness: .04, clearcoat: .08, clearcoatRoughness: .82 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x202725, roughness: .62, metalness: .34 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x754b30, roughness: .74 }), woodDark = new THREE.MeshStandardMaterial({ color: 0x3d2a20, roughness: .82 }), green = new THREE.MeshStandardMaterial({ color: 0x08754d, roughness: .8 });
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x262c29, roughness: .94 }), dark = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92 });
+  const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x777872, map: floorTexture, roughness: .62, metalness: .025, clearcoat: .14, clearcoatRoughness: .78 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x111815, roughness: .58, metalness: .42 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x412c21, roughness: .7 }), woodDark = new THREE.MeshStandardMaterial({ color: 0x211713, roughness: .8 }), green = new THREE.MeshStandardMaterial({ color: 0x00d99a, roughness: .72 });
   const white = new THREE.MeshStandardMaterial({ color: 0xe8ece8, roughness: .83 });
-  const light = new THREE.MeshStandardMaterial({ color: 0xfff1cd, emissive: 0xffd18a, emissiveIntensity: 1.15, roughness: .48 });
-  const greenLight = new THREE.MeshStandardMaterial({ color: 0x159563, emissive: 0x08754d, emissiveIntensity: 1.15, roughness: .5 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff3d8, emissive: 0xffd99c, emissiveIntensity: 1.22, roughness: .46 });
+  const greenLight = new THREE.MeshStandardMaterial({ color: 0x00d99a, emissive: 0x00b77d, emissiveIntensity: 1.22, roughness: .48 });
   const cushion = new THREE.MeshStandardMaterial({ color: 0x151a19, roughness: .88 });
   const boot = new THREE.MeshStandardMaterial({ color: 0x111615, roughness: .72 });
   const towel = new THREE.MeshStandardMaterial({ color: 0xbfc5c1, roughness: .96 });
   const bottleMat = new THREE.MeshStandardMaterial({color:0x4fb9a8,roughness:.35,transparent:true,opacity:.82});
-  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat };
+  const shirt = new THREE.MeshStandardMaterial({ color: 0x151b19, roughness: .86, side: THREE.DoubleSide });
+  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat, shirt, shirtGeometry: shirtGeometry() };
   const dummy = new THREE.Object3D();
 
   scene.add(
     box([18,.3,18],[-70,-.15,0],floor),
     box([18,.35,18],[-70,4.35,0],dark),
     box([.35,4.5,18],[-79,2.1,0],concrete),
+    box([.18,4.3,3.7],[-61.02,2.08,-7.13],dark),
+    box([.18,4.3,3.7],[-61.02,2.08,7.13],dark),
+    box([.2,.16,17.6],[-78.78,.13,0],metal),
   );
-  // Large matte ceiling panels, seams and paired linear lights create strong lines into the tunnel.
+  // A coffered acoustic ceiling and broad warm panels give the room a believable
+  // club-facility finish while guiding the existing camera toward the tunnel.
   for (let i = 0; i < 6; i += 1) scene.add(box([2.72, .08, 16.9], [-77.45 + i * 2.98, 4.12, 0], i % 2 ? metal : dark));
-  for (const side of [-1, 1]) scene.add(box([16.1, .055, .13], [-70.2, 4.04, side * 4.72], light));
-  const spotRims = new THREE.InstancedMesh(new THREE.CylinderGeometry(.13, .13, .035, 12), metal, 6);
-  for (let i = 0; i < 6; i += 1) { dummy.position.set(-77 + i * 2.7, 4.04, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); spotRims.setMatrixAt(i, dummy.matrix); } scene.add(spotRims);
+  for (const x of [-76.2, -71.2, -66.2]) for (const z of [-3.35, 3.35]) {
+    scene.add(
+      box([2.55, .045, 1.12], [x, 4.035, z], light),
+      box([2.8, .055, 1.36], [x, 4.075, z], metal),
+    );
+  }
+  for (const side of [-1, 1]) scene.add(box([16.1, .045, .1], [-70.2, 4.025, side * 5.78], greenLight));
+  const ventSlats = new THREE.InstancedMesh(new THREE.BoxGeometry(.7, .035, .055), metal, 12);
+  for (let i = 0; i < 12; i += 1) {
+    dummy.position.set(i < 6 ? -74.1 : -66.9, 4.025, (i % 6 - 2.5) * .16);
+    dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ventSlats.setMatrixAt(i, dummy.matrix);
+  }
+  ventSlats.instanceMatrix.needsUpdate = true; scene.add(ventSlats);
 
-  const shirtNumbers = [21,23,26,6,7,8,14], numberMaps = shirtNumbers.map(numberTexture);
-  scene.add(createLockerRow(-1, lowPower, dressingKit, numberMaps), createLockerRow(1, lowPower, dressingKit, numberMaps));
+  if (new Set(DRESSING_ROOM_SHIRT_NUMBERS).size !== DRESSING_ROOM_SHIRT_NUMBERS.length) throw new Error("Dressing-room shirt numbers must be unique");
+  const numberMaps = DRESSING_ROOM_SHIRT_NUMBERS.map(numberTexture);
+  scene.add(
+    createLockerRow(-1, lowPower, dressingKit, numberMaps.slice(0, LOCKER_CONFIG.count)),
+    createLockerRow(1, lowPower, dressingKit, numberMaps.slice(LOCKER_CONFIG.count)),
+    createCentralIsland(dressingKit),
+  );
   const bottles = new THREE.InstancedMesh(new THREE.CylinderGeometry(.075,.085,.32,8),bottleMat,lowPower?6:10);
   for(let i=0;i<bottles.count;i+=1){const side=i%2?-1:1;dummy.position.set(-76+Math.floor(i/2)*2.6,.39,side*7.72);dummy.rotation.set(0,0,0);dummy.updateMatrix();bottles.setMatrixAt(i,dummy.matrix);} scene.add(bottles);
 
-  const crestMap = crestTexture(), crest = new THREE.Mesh(new THREE.CircleGeometry(2.35, 48), new THREE.MeshStandardMaterial({ map: crestMap, transparent: true, roughness: .72, depthWrite: false }));
-  crest.rotation.x = -Math.PI / 2; crest.position.set(-69.7, .012, 0); scene.add(crest);
+  const crestMap = crestTexture(), crest = new THREE.Mesh(new THREE.CircleGeometry(1.28, 40), new THREE.MeshStandardMaterial({ map: crestMap, transparent: true, roughness: .78, depthWrite: false }));
+  crest.rotation.x = -Math.PI / 2; crest.position.set(-63.25, .012, 0); scene.add(crest);
   const ballTexture=footballTexture(), footballMat = new THREE.MeshStandardMaterial({map:ballTexture,roughness:.72});
   scene.add(createEquipmentArea(lowPower, footballMat, dressingKit));
   const tunnelAssets = buildPremiumTunnel(scene, lowPower);
@@ -514,5 +593,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.LineSegments))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){renderer.toneMappingExposure=document.documentElement.classList.contains("dark")?.94:1.04;render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
