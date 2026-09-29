@@ -16,6 +16,7 @@ import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt'
 import { PwaInstallExperience } from '@/components/PwaInstallExperience'
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'))
 const SignUpPage = lazy(() => import('@/pages/SignUpPage'))
 const ClaimPage = lazy(() => import('@/pages/ClaimPage'))
 const JoinCompetitionPage = lazy(() => import('@/pages/JoinCompetitionPage'))
@@ -135,6 +136,7 @@ function App() {
         />
         <Route path="/public-dashboard" element={<PublicDashboard />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/oauth/callback" element={<AuthCallbackPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
         <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />

@@ -262,8 +262,7 @@ export class CompetitionsAssistant {
     state: AssistantConversationState,
     message: string,
   ): Promise<
-    | { extracted: Record<string, unknown> }
-    | { errorReply: AssistantTurnResult }
+    { extracted: Record<string, unknown> } | { errorReply: AssistantTurnResult }
   > {
     try {
       const prompt = buildExtractionPrompt({

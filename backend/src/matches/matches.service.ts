@@ -460,7 +460,13 @@ export class MatchesService {
 
     const separatedGoals =
       dto.resolution === 'separate_events'
-        ? await this.separateReviewObservations(team.id, match, event, review, matchId)
+        ? await this.separateReviewObservations(
+            team.id,
+            match,
+            event,
+            review,
+            matchId,
+          )
         : false;
     await this.databaseService.database
       .update(matchEvents)
@@ -581,7 +587,9 @@ export class MatchesService {
         eq(matchEventMemberships.canonicalEventId, review.canonicalEventId),
       )
       .orderBy(asc(matchEventObservations.id));
-    const laterObservations = observations.slice(1).map(({ observation }) => observation);
+    const laterObservations = observations
+      .slice(1)
+      .map(({ observation }) => observation);
     const additionalGoals = laterObservations.filter(
       (observation) => observation.eventType === 'goal',
     );

@@ -254,9 +254,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // do not retain an offline session cache for it implicitly.
     localStorage.removeItem(rememberedSessionKey);
     localStorage.removeItem(cachedSessionKey);
+    // OAuth returns to a dedicated page so the app can finish hydrating the
+    // session before mounting protected routes.
+    const safeCallbackPath =
+      callbackPath.startsWith("/") &&
+      !callbackPath.startsWith("//") &&
+      !callbackPath.includes("\\")
+        ? callbackPath
+        : "/dashboard";
+    sessionStorage.setItem("gaffer-google-callback-path", safeCallbackPath);
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: `${window.location.origin}${callbackPath}`,
+      callbackURL: `${window.location.origin}/oauth/callback`,
       errorCallbackURL: `${window.location.origin}/login?error=google`,
     });
   }, []);

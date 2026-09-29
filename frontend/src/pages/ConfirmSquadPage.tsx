@@ -18,7 +18,6 @@ import {
   getDefaultFormationIdForPlayerCount,
   getFormationPlayerCount,
   getPositionRole,
-  isCustomFormationId,
   previewAssignmentsForStarters,
   resolveFormation,
 } from "@/features/team-management/formations";
@@ -1318,15 +1317,6 @@ export default function ConfirmSquadPage() {
   const competitionPlayerCount = eventQuery.data?.competitionId
     ? (competitionQuery.data?.playersPerSide ?? null)
     : null;
-  const compatibleGamePlans = useMemo(() => {
-    if (competitionPlayerCount) {
-      return gamePlans.filter(
-        (plan) =>
-          getFormationPlayerCount(plan.formationId) === competitionPlayerCount,
-      );
-    }
-    return eventQuery.data?.competitionId ? [] : gamePlans;
-  }, [competitionPlayerCount, eventQuery.data?.competitionId, gamePlans]);
   const selectedPlanSummary = useMemo(
     () =>
       selectedGamePlanId

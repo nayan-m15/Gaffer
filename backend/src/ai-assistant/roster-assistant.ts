@@ -197,8 +197,7 @@ function resolveUpdatePlayer(
 ): AssistantTurnResult | undefined {
   if (state.collectedFields.athleteId !== undefined) return undefined;
   const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
-    | string[]
-    | undefined;
+    string[] | undefined;
   const candidates = pendingIds
     ? roster.filter((athlete) => pendingIds.includes(athlete.id))
     : roster;
@@ -210,7 +209,9 @@ function resolveUpdatePlayer(
     return undefined;
   }
   if (matches.length > 1) {
-    state.collectedFields.__pendingPlayerOptionIds = matches.map((athlete) => athlete.id);
+    state.collectedFields.__pendingPlayerOptionIds = matches.map(
+      (athlete) => athlete.id,
+    );
     return {
       reply: `I found ${matches.length} players matching that. Which one do you mean?`,
       requiresConfirmation: false,
