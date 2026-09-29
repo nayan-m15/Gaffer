@@ -865,7 +865,7 @@ function DashboardUnlockLayer({
       className={cn(
         "absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10",
         fading &&
-          "pointer-events-none opacity-0 transition-opacity duration-[400ms] ease-out motion-reduce:transition-none",
+          "pointer-events-none",
       )}
     >
       {isLoading ? (
@@ -885,6 +885,7 @@ function DashboardUnlockLayer({
           }
           hasPlayers={hasPlayers}
           hasGamePlan={hasGamePlan}
+          exiting={fading}
           onUnlocked={onUnlocked}
         />
       )}
@@ -970,7 +971,9 @@ export default function DashboardPage() {
   );
   const hideMainForUnlock = unlockGateApplies && !dashUnlocked;
   const showUnlockOverlay = unlockGateApplies || unlockFading;
-  const inertDashboardMain = unlockGateApplies && dashUnlocked && !unlockFading;
+  const concealDashboardMain =
+    (unlockGateApplies || unlockFading) && dashUnlocked && !unlockFading;
+  const revealDashboardMain = unlockFading && dashUnlocked;
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
   const handleDashboardUnlocked = () => {
@@ -979,7 +982,7 @@ export default function DashboardPage() {
     ).matches;
     if (reduceMotion) return;
     setUnlockFading(true);
-    window.setTimeout(() => setUnlockFading(false), 400);
+    window.setTimeout(() => setUnlockFading(false), 450);
   };
 
   // Route player accounts to their own dashboard.
@@ -1084,7 +1087,7 @@ export default function DashboardPage() {
           className={cn(
             "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
             "transition-[opacity,background-color,backdrop-filter] ease-out motion-reduce:transition-none",
-            unlockFading ? "duration-[400ms]" : "duration-[800ms]",
+            unlockFading ? "duration-[450ms]" : "duration-[800ms]",
             (unlockFading ||
               (overlayPhase === "fading" && !unlockGateApplies)) &&
               "bg-transparent opacity-0 backdrop-blur-none",
@@ -1124,10 +1127,13 @@ export default function DashboardPage() {
       <div
         className={cn(
           "mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10",
-          inertDashboardMain && "invisible pointer-events-none",
+          concealDashboardMain &&
+            "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
+          revealDashboardMain &&
+            "opacity-100 transition-opacity duration-[450ms] ease-out motion-reduce:transition-none",
         )}
-        aria-hidden={inertDashboardMain || undefined}
-        inert={inertDashboardMain || undefined}
+        aria-hidden={concealDashboardMain || undefined}
+        inert={concealDashboardMain || undefined}
       >
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (

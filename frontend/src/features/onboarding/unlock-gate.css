@@ -1,9 +1,27 @@
-.unlock-gate-burst {
-  z-index: 40;
-}
-
 .unlock-gate-glow {
   animation: unlock-gate-glow 800ms ease-out 1;
+}
+
+.unlock-gate-exit {
+  animation: unlock-gate-exit 450ms ease-out forwards;
+}
+
+.unlock-confetti-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.unlock-confetti-piece {
+  position: fixed;
+  top: var(--oy);
+  left: var(--ox);
+  display: block;
+  border-radius: 1px;
+  animation: unlock-confetti-fly 1.2s ease-out forwards;
+  animation-delay: var(--delay);
 }
 
 .unlock-gate-lock-in {
@@ -52,9 +70,39 @@
   }
 }
 
+@keyframes unlock-gate-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes unlock-confetti-fly {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(var(--dx), var(--peak))
+      rotate(calc(var(--rot) * 0.45)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--dx), var(--fall))
+      rotate(var(--rot)) scale(0.7);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .unlock-gate-burst,
-  .unlock-gate-glow {
+  .unlock-gate-glow,
+  .unlock-gate-exit,
+  .unlock-confetti-layer,
+  .unlock-confetti-piece {
     animation: none;
   }
 

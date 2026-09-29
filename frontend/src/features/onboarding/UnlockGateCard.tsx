@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Lock, LockOpen } from "lucide-react";
+import { ArrowRight, Check, Lock } from "lucide-react";
+import { GiShirt, GiSoccerField, GiSoccerKick } from "react-icons/gi";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AppCard as Card } from "@/components/app/AppCard";
 import { cn } from "@/lib/utils";
-import { createCelebrationBurst } from "./celebrationBurst";
+import { fireUnlockButtonConfetti } from "./unlockButtonConfetti";
 import "./tour.css";
 import "./unlock-gate.css";
 import {
@@ -19,9 +20,9 @@ const HERO_ENTER =
   "animate-fade-in-up [animation-duration:280ms] motion-reduce:animate-none";
 
 const ROAD_STEPS = [
-  { label: "Create your team" },
-  { label: "Add your players" },
-  { label: "Pick your XI" },
+  { label: "Create your team", Icon: GiShirt },
+  { label: "Add your players", Icon: GiSoccerKick },
+  { label: "Pick your XI", Icon: GiSoccerField },
 ] as const;
 
 type StepState = "done" | "current" | "locked";
@@ -85,6 +86,7 @@ function UnlockRoad({
         const isLast = index === steps.length - 1;
         const leftLine = index === 0 ? "none" : connectorTo(stepStates[index]);
         const rightLine = isLast ? "none" : connectorTo(stepStates[index + 1]);
+        const StepIcon = step.Icon;
         return (
           <li
             key={step.label}
@@ -96,10 +98,11 @@ function UnlockRoad({
               <span className={roadLineClass(leftLine)} aria-hidden="true" />
               <span
                 className={cn(
-                  "relative flex size-[42px] shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-                  state === "locked"
-                    ? "border border-border-subtle bg-muted text-muted-foreground"
-                    : "bg-primary text-primary-foreground",
+                  "relative flex size-[42px] shrink-0 items-center justify-center rounded-full",
+                  state === "done" && "bg-primary",
+                  state === "current" && "border-2 border-primary bg-transparent",
+                  state === "locked" &&
+                    "border border-border-subtle bg-transparent",
                 )}
                 aria-hidden="true"
               >
@@ -109,12 +112,23 @@ function UnlockRoad({
                     aria-hidden="true"
                   />
                 )}
-                {state === "done" ? (
-                  <Check className="size-4" />
-                ) : state === "locked" ? (
-                  <Lock className="size-4" />
-                ) : (
-                  stepNumber
+                <StepIcon
+                  className={cn(
+                    "size-5",
+                    state === "done" && "text-primary-foreground",
+                    state === "current" && "text-primary",
+                    state === "locked" && "text-muted-foreground/45",
+                  )}
+                />
+                {state === "done" && (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-background text-primary shadow-sm">
+                    <Check className="size-2.5" strokeWidth={3} />
+                  </span>
+                )}
+                {state === "locked" && (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full border border-border-subtle bg-background text-muted-foreground">
+                    <Lock className="size-2.5" />
+                  </span>
                 )}
               </span>
               <span className={roadLineClass(rightLine)} aria-hidden="true" />
@@ -136,37 +150,14 @@ function UnlockRoad({
   );
 }
 
-function UnlockMomentMark() {
-  const [opened, setOpened] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setOpened(true);
-      return;
-    }
-    const timeoutId = window.setTimeout(() => setOpened(true), 40);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
+function UnlockMomentMark({ needsGamePlan }: { needsGamePlan: boolean }) {
+  const Icon = needsGamePlan ? GiSoccerField : GiSoccerKick;
   return (
     <span
       className="relative mx-auto mb-3 flex size-8 items-center justify-center text-primary"
       aria-hidden="true"
     >
-      <Lock
-        className={cn(
-          "absolute size-6",
-          opened && "unlock-gate-lock-out motion-reduce:animate-none",
-        )}
-      />
-      <LockOpen
-        className={cn(
-          "absolute size-6",
-          opened
-            ? "unlock-gate-lock-in motion-reduce:animate-none"
-            : "opacity-0",
-        )}
-      />
+      <Icon className="size-6 unlock-gate-lock-in motion-reduce:animate-none" />
     </span>
   );
 }
@@ -202,6 +193,7 @@ export function UnlockGateCard({
   eyebrow: eyebrowOverride,
   hasPlayers,
   hasGamePlan,
+  exiting,
   onUnlocked,
 }: {
   pageKey: UnlockPageKey;
@@ -209,28 +201,11 @@ export function UnlockGateCard({
   eyebrow?: string;
   hasPlayers: boolean;
   hasGamePlan: boolean;
+  exiting?: boolean;
   onUnlocked: () => void;
 }) {
   const page = PAGE_UNLOCKS[pageKey];
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
-  const burstHostRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!unlocked) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-    const host = burstHostRef.current;
-    if (!host) return;
-    const burst = createCelebrationBurst();
-    burst.classList.add("unlock-gate-burst");
-    host.append(burst);
-    const timeoutId = window.setTimeout(() => burst.remove(), 1100);
-    return () => {
-      window.clearTimeout(timeoutId);
-      burst.remove();
-    };
-  }, [unlocked]);
 
   const eyebrow = unlocked
     ? "Unlocked"
@@ -249,7 +224,10 @@ export function UnlockGateCard({
   const primaryUnlockedLabel =
     pageKey === "dashboard" ? "Enter the dugout" : `Open ${page.label}`;
 
-  const handleUnlockedClick = () => {
+  const handleUnlockedClick = (
+    event: { currentTarget: HTMLElement },
+  ) => {
+    fireUnlockButtonConfetti(event.currentTarget);
     markPageCelebrated(userId, pageKey);
     onUnlocked();
   };
@@ -257,11 +235,11 @@ export function UnlockGateCard({
   return (
     <div
       key={unlocked ? "unlocked" : "locked"}
-      ref={burstHostRef}
       className={cn(
         "relative mx-auto w-full max-w-[600px] overflow-visible",
-        "animate-fade-in-scale motion-reduce:animate-none",
-        unlocked && "unlock-gate-glow motion-reduce:animate-none",
+        !exiting && "animate-fade-in-scale motion-reduce:animate-none",
+        unlocked && !exiting && "unlock-gate-glow motion-reduce:animate-none",
+        exiting && "unlock-gate-exit motion-reduce:animate-none",
       )}
     >
       <div
@@ -272,7 +250,7 @@ export function UnlockGateCard({
         aria-labelledby="unlock-gate-heading"
         className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
       >
-        {unlocked && <UnlockMomentMark />}
+        {unlocked && <UnlockMomentMark needsGamePlan={page.needsGamePlan} />}
         <p
           className={cn(
             "text-lg font-medium uppercase tracking-[0.2em] text-primary",

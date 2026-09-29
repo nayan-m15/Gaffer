@@ -23,7 +23,7 @@ const StadiumScene = lazy(() =>
   })),
 );
 
-const UNLOCK_FADE_MS = 250;
+const UNLOCK_FADE_MS = 450;
 
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -78,14 +78,18 @@ function GatedPageBody({
   const showCard = showingGate && !isLoading;
   const showOutlet = !showingGate || unlocked;
   const outletInert = showingGate && unlocked && !fading;
+  const outletRevealing = showingGate && unlocked && fading;
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col">
       {showOutlet && (
         <div
           className={cn(
-            showCard && "absolute inset-0 overflow-y-auto",
-            outletInert && "invisible pointer-events-none",
+            showCard && "absolute inset-0 overflow-hidden",
+            outletInert &&
+              "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
+            outletRevealing &&
+              "opacity-100 transition-opacity duration-[450ms] ease-out motion-reduce:transition-none",
           )}
           aria-hidden={outletInert || undefined}
           inert={outletInert || undefined}
@@ -106,8 +110,7 @@ function GatedPageBody({
         <div
           className={cn(
             "relative z-10 flex min-h-full flex-1 items-center justify-center px-6 py-8",
-            fading &&
-              "pointer-events-none opacity-0 transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+            fading && "pointer-events-none",
           )}
         >
           <UnlockGateCard
@@ -115,6 +118,7 @@ function GatedPageBody({
             userId={userId}
             hasPlayers={hasPlayers}
             hasGamePlan={hasGamePlan}
+            exiting={fading}
             onUnlocked={onUnlocked}
           />
         </div>
