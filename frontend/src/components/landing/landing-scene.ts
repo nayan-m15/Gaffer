@@ -346,7 +346,6 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   const halfWidthChange = exitHalfWidth - entranceHalfWidth;
   const runLength = Math.hypot(TUNNEL_LENGTH, halfWidthChange);
   const wallAngle = Math.atan2(halfWidthChange, TUNNEL_LENGTH);
-  const widthAt = (x: number) => entranceHalfWidth + (x - ROOM_EXIT) / TUNNEL_LENGTH * halfWidthChange;
 
   const floorMap = tunnelFloorTexture(lowPower);
   const entranceSignMap = tunnelSignTexture("GAFFER", "PREPARE. PERFORM. IMPROVE.");
@@ -360,11 +359,20 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
     clearcoatRoughness: .72,
   });
   const graphite = new THREE.MeshStandardMaterial({ color: 0x080e0c, roughness: .84, metalness: .1 });
-  const wallPanel = new THREE.MeshStandardMaterial({ color: 0x111816, roughness: .9, metalness: .06 });
-  const wallInset = new THREE.MeshStandardMaterial({ color: 0x070c0a, roughness: .76, metalness: .18 });
   const structuralMetal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
   const tunnelLight = new THREE.MeshStandardMaterial({ color: 0xeafff7, emissive: 0xbfffe8, emissiveIntensity: 1.42, roughness: .38 });
   const brandLight = new THREE.MeshStandardMaterial({ color: 0x00d99a, emissive: 0x00a875, emissiveIntensity: 1.25, roughness: .4 });
+  const hiddenEndCap = new THREE.MeshBasicMaterial({ visible: false });
+  const openEndedBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material, cast = false) => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(...size),
+      [hiddenEndCap, hiddenEndCap, material, material, material, material],
+    );
+    mesh.position.set(...position);
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    return mesh;
+  };
 
   // The slab spans the same two anchor planes as the former tunnel. The dark
   // resin finish picks up the bright stadium portal without becoming a mirror.
@@ -373,72 +381,49 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
 
   for (const side of [-1, 1]) {
     const rotationY = -side * wallAngle;
-    const wall = box([runLength, 2.58, .28], [centre, 1.29, side * (entranceHalfWidth + exitHalfWidth) / 2], wallPanel, !lowPower);
-    wall.rotation.y = rotationY;
-    tunnel.add(wall);
-
     // Canted shoulder panels create the reference-inspired, framed silhouette:
-    // substantial at player height and pulled inward toward the ceiling.
-    const shoulder = box([runLength, 2.12, .25], [centre, 3.27, side * 5.1], graphite, !lowPower);
+    // they retain the tunnel form while the lower sightline stays fully open.
+    const shoulder = openEndedBox([runLength, 2.12, .25], [centre, 3.27, side * 5.1], graphite, !lowPower);
     shoulder.rotation.set(-side * .65, rotationY, 0);
     tunnel.add(shoulder);
-
-    const lowerBrandLine = box([runLength - .45, .085, .075], [centre, 2.42, side * ((entranceHalfWidth + exitHalfWidth) / 2 - .38)], brandLight);
-    lowerBrandLine.rotation.y = rotationY;
-    tunnel.add(lowerBrandLine);
 
     const guideLight = box([runLength - .75, .075, .13], [centre + .05, 3.6, side * 4.43], tunnelLight);
     guideLight.rotation.y = -side * Math.atan2(.3, TUNNEL_LENGTH);
     tunnel.add(guideLight);
   }
 
-  // Recessed wall bays and a single instanced rib system provide convincing
-  // construction detail for a small draw-call cost.
-  const panelGeometry = new THREE.BoxGeometry(TUNNEL_LENGTH / bayCount - .38, 1.65, .075);
-  const panels = new THREE.InstancedMesh(panelGeometry, wallInset, bayCount * 2);
-  const ribColumns = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, 2.7, .34), structuralMetal, (bayCount + 1) * 2);
+  // The upper rib system keeps the architectural rhythm without placing
+  // opaque wall blocks in the dressing-room sightline.
   const ribShoulders = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, 2.18, .31), structuralMetal, (bayCount + 1) * 2);
   const ribCeiling = new THREE.InstancedMesh(new THREE.BoxGeometry(.22, .22, 8.9), structuralMetal, bayCount + 1);
   const dummy = new THREE.Object3D();
-  for (let bay = 0; bay < bayCount; bay += 1) {
-    const x = ROOM_EXIT + (bay + .5) * TUNNEL_LENGTH / bayCount;
-    const halfWidth = widthAt(x);
-    for (const side of [-1, 1]) {
-      dummy.position.set(x, 1.48, side * (halfWidth - .27));
-      dummy.rotation.set(0, -side * wallAngle, 0);
-      dummy.updateMatrix(); panels.setMatrixAt(bay * 2 + (side > 0 ? 1 : 0), dummy.matrix);
-    }
-  }
   for (let rib = 0; rib <= bayCount; rib += 1) {
     const x = ROOM_EXIT + rib * TUNNEL_LENGTH / bayCount;
-    const halfWidth = widthAt(x);
     for (const side of [-1, 1]) {
       const index = rib * 2 + (side > 0 ? 1 : 0);
-      dummy.position.set(x, 1.35, side * (halfWidth - .34));
-      dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ribColumns.setMatrixAt(index, dummy.matrix);
       dummy.position.set(x, 3.28, side * 5.1);
       dummy.rotation.set(-side * .65, 0, 0); dummy.updateMatrix(); ribShoulders.setMatrixAt(index, dummy.matrix);
     }
     dummy.position.set(x, 3.98, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ribCeiling.setMatrixAt(rib, dummy.matrix);
   }
-  panels.instanceMatrix.needsUpdate = true;
-  ribColumns.instanceMatrix.needsUpdate = true;
   ribShoulders.instanceMatrix.needsUpdate = true;
   ribCeiling.instanceMatrix.needsUpdate = true;
-  tunnel.add(panels, ribColumns, ribShoulders, ribCeiling);
+  tunnel.add(ribShoulders, ribCeiling);
 
   // Three quiet ceiling channels and the high side guides pull the eye toward
   // daylight rather than making the space feel like a sci-fi corridor.
   for (const z of [-2.72, 0, 2.72]) tunnel.add(box([TUNNEL_LENGTH - .8, .065, .18], [centre, 3.965, z], tunnelLight));
 
-  const addPortal = (x: number, halfWidth: number, texture: THREE.Texture) => {
-    tunnel.add(
-      box([.38, 3.92, .5], [x, 1.96, -halfWidth + .12], structuralMetal, !lowPower),
-      box([.38, 3.92, .5], [x, 1.96, halfWidth - .12], structuralMetal, !lowPower),
-      box([.38, .5, halfWidth * 2], [x, 3.88, 0], structuralMetal, !lowPower),
-      box([.4, 3.34, .075], [x - .02, 1.78, -halfWidth + .39], brandLight),
-      box([.4, 3.34, .075], [x - .02, 1.78, halfWidth - .39], brandLight),
-    );
+  const addPortal = (x: number, halfWidth: number, texture: THREE.Texture, includeUprights: boolean) => {
+    tunnel.add(box([.38, .5, halfWidth * 2], [x, 3.88, 0], structuralMetal, !lowPower));
+    if (includeUprights) {
+      tunnel.add(
+        box([.38, 3.92, .5], [x, 1.96, -halfWidth + .12], structuralMetal, !lowPower),
+        box([.38, 3.92, .5], [x, 1.96, halfWidth - .12], structuralMetal, !lowPower),
+        box([.4, 3.34, .075], [x - .02, 1.78, -halfWidth + .39], brandLight),
+        box([.4, 3.34, .075], [x - .02, 1.78, halfWidth - .39], brandLight),
+      );
+    }
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(halfWidth * 1.5, .48),
       new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }),
@@ -447,8 +432,8 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
     sign.rotation.y = -Math.PI / 2;
     tunnel.add(sign);
   };
-  addPortal(ROOM_EXIT, entranceHalfWidth, entranceSignMap);
-  addPortal(TUNNEL_EXIT, exitHalfWidth, exitSignMap);
+  addPortal(ROOM_EXIT, entranceHalfWidth, entranceSignMap, false);
+  addPortal(TUNNEL_EXIT, exitHalfWidth, exitSignMap, true);
 
   // The apron begins exactly at the old tunnel exit; this narrow threshold
   // masks z-fighting while leaving the existing pitch-side connection intact.

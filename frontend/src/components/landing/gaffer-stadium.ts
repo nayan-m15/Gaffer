@@ -94,10 +94,20 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   }
   stand.add(block([spec.length + 2, 1.25, 4.3], [0, backHeight - .5, totalDepth + 1.1], concrete));
   stand.add(block([spec.length + 4, .45, totalDepth + 4], [0, -.25, (totalDepth + 4) / 2], darkConcrete));
+  const rearPanelWidth = spec.length / spec.columns - 1;
+  const playerOpeningHalfWidth = 7.2;
   for (let i = 0; i < spec.columns; i++) {
     const x = -spec.length / 2 + (i + .5) * spec.length / spec.columns;
-    stand.add(block([.55, backHeight, .75], [x, backHeight / 2, totalDepth + 1], concrete));
-    if (!lowPower || i % 2 === 0) stand.add(block([spec.length / spec.columns - 1, 2.3, .13], [x, backHeight * .7, totalDepth + .48], glass));
+    const columnCrossesPlayerOpening = spec.side === "west" && Math.abs(x) < playerOpeningHalfWidth;
+    const panelCrossesPlayerOpening = spec.side === "west" &&
+      x - rearPanelWidth / 2 < playerOpeningHalfWidth &&
+      x + rearPanelWidth / 2 > -playerOpeningHalfWidth;
+    if (!columnCrossesPlayerOpening) {
+      stand.add(block([.55, backHeight, .75], [x, backHeight / 2, totalDepth + 1], concrete));
+    }
+    if ((!lowPower || i % 2 === 0) && !panelCrossesPlayerOpening) {
+      stand.add(block([rearPanelWidth, 2.3, .13], [x, backHeight * .7, totalDepth + .48], glass));
+    }
   }
 
   for (let tierIndex = 0; tierIndex < spec.tiers.length; tierIndex++) {
@@ -118,8 +128,9 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
       for (let section = 0; section < sections; section++) {
         const x0 = -spec.length / 2 + section * (sectionWidth + aisleWidth);
         let spans: Array<[number, number]> = [[x0, x0 + sectionWidth]];
-        if (spec.side === "west" && tierIndex === 0) {
-          const cuts: Array<[number, number]> = row < 4 ? [[-6.5, 6.5], [7.2, 20.5]] : [[-6.5, 6.5]];
+        if (spec.side === "west") {
+          const cuts: Array<[number, number]> = [[-playerOpeningHalfWidth, playerOpeningHalfWidth]];
+          if (tierIndex === 0 && row < 4) cuts.push([7.2, 20.5]);
           for (const [cutStart, cutEnd] of cuts) spans = spans.flatMap(([start, end]) => {
             if (cutEnd <= start || cutStart >= end) return [[start, end]];
             return [[start, Math.min(end, cutStart)], [Math.max(start, cutEnd), end]].filter(([a, b]) => b - a > .2) as Array<[number, number]>;
