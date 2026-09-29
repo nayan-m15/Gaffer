@@ -94,10 +94,20 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   }
   stand.add(block([spec.length + 2, 1.25, 4.3], [0, backHeight - .5, totalDepth + 1.1], concrete));
   stand.add(block([spec.length + 4, .45, totalDepth + 4], [0, -.25, (totalDepth + 4) / 2], darkConcrete));
+  const rearPanelWidth = spec.length / spec.columns - 1;
+  const playerOpeningHalfWidth = 7.2;
   for (let i = 0; i < spec.columns; i++) {
     const x = -spec.length / 2 + (i + .5) * spec.length / spec.columns;
-    stand.add(block([.55, backHeight, .75], [x, backHeight / 2, totalDepth + 1], concrete));
-    if (!lowPower || i % 2 === 0) stand.add(block([spec.length / spec.columns - 1, 2.3, .13], [x, backHeight * .7, totalDepth + .48], glass));
+    const columnCrossesPlayerOpening = spec.side === "west" && Math.abs(x) < playerOpeningHalfWidth;
+    const panelCrossesPlayerOpening = spec.side === "west" &&
+      x - rearPanelWidth / 2 < playerOpeningHalfWidth &&
+      x + rearPanelWidth / 2 > -playerOpeningHalfWidth;
+    if (!columnCrossesPlayerOpening) {
+      stand.add(block([.55, backHeight, .75], [x, backHeight / 2, totalDepth + 1], concrete));
+    }
+    if ((!lowPower || i % 2 === 0) && !panelCrossesPlayerOpening) {
+      stand.add(block([rearPanelWidth, 2.3, .13], [x, backHeight * .7, totalDepth + .48], glass));
+    }
   }
 
   for (let tierIndex = 0; tierIndex < spec.tiers.length; tierIndex++) {
@@ -118,8 +128,9 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
       for (let section = 0; section < sections; section++) {
         const x0 = -spec.length / 2 + section * (sectionWidth + aisleWidth);
         let spans: Array<[number, number]> = [[x0, x0 + sectionWidth]];
-        if (spec.side === "west" && tierIndex === 0) {
-          const cuts: Array<[number, number]> = row < 4 ? [[-6.5, 6.5], [7.2, 20.5]] : [[-6.5, 6.5]];
+        if (spec.side === "west") {
+          const cuts: Array<[number, number]> = [[-playerOpeningHalfWidth, playerOpeningHalfWidth]];
+          if (tierIndex === 0 && row < 4) cuts.push([7.2, 20.5]);
           for (const [cutStart, cutEnd] of cuts) spans = spans.flatMap(([start, end]) => {
             if (cutEnd <= start || cutStart >= end) return [[start, end]];
             return [[start, Math.min(end, cutStart)], [Math.max(start, cutEnd), end]].filter(([a, b]) => b - a > .2) as Array<[number, number]>;
@@ -229,7 +240,8 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const rear = new THREE.Vector3(x, rearY - .35, roofBack);
     const centre = new THREE.Vector3(x, (frontY + rearY) / 2 - 1.4, (roofFront + roofBack) / 2);
     upperChords.push([front, centre], [centre, rear]); lowerChords.push([front, rear]);
-    if (i % 2 === 0) {
+    const columnCrossesPlayerWalkout = spec.side === "west" && Math.abs(x) < playerOpeningHalfWidth;
+    if (i % 2 === 0 && !columnCrossesPlayerWalkout) {
       columns.push([new THREE.Vector3(x, 0, totalDepth + 2), new THREE.Vector3(x, rearY - .6, roofBack - 1)]);
       lowerChords.push([new THREE.Vector3(x, rearY - .6, roofBack - 1), centre]);
     }
@@ -261,15 +273,30 @@ function makeMaterials() {
   };
 }
 
-type AdvertisingBoardSegment = { axis: "x" | "z"; fixed: number; start: number; end: number };
+type AdvertisingBoardSide = "west" | "east" | "north" | "south";
+type AdvertisingBoardSegment = {
+  axis: "x" | "z";
+  fixed: number;
+  start: number;
+  end: number;
+  side: AdvertisingBoardSide;
+  content: "gaffer" | "plain";
+};
 
-function createAdvertisingBoards(material: THREE.Material, aisle: THREE.Material) {
+type AdvertisingBoardRun = Omit<AdvertisingBoardSegment, "start" | "end" | "content"> & {
+  start: number;
+  end: number;
+  openings?: Array<[number, number]>;
+};
+
+function createAdvertisingBoards(textMaterial: THREE.Material, aisle: THREE.Material) {
   const group = new THREE.Group();
   group.name = "Pitch advertising perimeter";
   const segments: AdvertisingBoardSegment[] = [];
-  const segmentGap = .14, targetLength = 6.1;
+  const segmentGap = .16, targetLength = 5.9;
+  const boardHeight = .86, boardThickness = .18;
 
-  const addRun = (axis: "x" | "z", fixed: number, start: number, end: number, openings: Array<[number, number]> = []) => {
+  const addRun = ({ axis, fixed, start, end, openings = [], side }: AdvertisingBoardRun) => {
     let spans: Array<[number, number]> = [[start, end]];
     for (const [openingStart, openingEnd] of openings) {
       spans = spans.flatMap(([spanStart, spanEnd]) => {
@@ -287,31 +314,80 @@ function createAdvertisingBoards(material: THREE.Material, aisle: THREE.Material
           fixed,
           start: spanStart + i * length + segmentGap / 2,
           end: spanStart + (i + 1) * length - segmentGap / 2,
+          side,
+          content: i % 2 === 0 ? "gaffer" : "plain",
         });
       }
     }
   };
 
-  // The west touchline has separate openings for the tunnel and home dugout.
-  addRun("z", -35.7, -49.4, 49.4, [[-4.4, 4.4], [6.5, 20.5]]);
-  addRun("z", 35.7, -49.4, 49.4);
-  // Goal-line boards sit behind the net depth and leave each goal mouth open.
-  addRun("x", -55.3, -31.2, 31.2, [[-4.8, 4.8]]);
-  addRun("x", 55.3, -31.2, 31.2, [[-4.8, 4.8]]);
+  const runs: AdvertisingBoardRun[] = [
+    // The tunnel is 12.8 units wide at pitch level. The wider cutout keeps its
+    // full mouth and floor clear; the second west-side gap preserves the dugout.
+    { side: "west", axis: "z", fixed: -35.7, start: -49.4, end: 49.4, openings: [[-6.8, 6.8], [6.8, 20.5]] },
+    { side: "east", axis: "z", fixed: 35.7, start: -49.4, end: 49.4 },
+    // End-line boards finish before the corner flags and stay behind the net
+    // depth, with a generous opening around each goal structure.
+    { side: "north", axis: "x", fixed: -55.3, start: -31.2, end: 31.2, openings: [[-4.9, 4.9]] },
+    { side: "south", axis: "x", fixed: 55.3, start: -31.2, end: 31.2, openings: [[-4.9, 4.9]] },
+  ];
+  runs.forEach(addRun);
 
-  const boards = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, segments.length);
+  const textSegments = segments.filter(segment => segment.content === "gaffer");
+  const plainSegments = segments.filter(segment => segment.content === "plain");
+  const boardGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const textBoardMaterial = new THREE.MeshStandardMaterial({ color: 0x101816, roughness: .74, metalness: .08 });
+  const plainBoardMaterial = new THREE.MeshStandardMaterial({ color: 0x073d30, roughness: .76, metalness: .06 });
+  const accentMaterial = new THREE.MeshStandardMaterial({ color: BRAND, emissive: 0x004d37, emissiveIntensity: .12, roughness: .68 });
+  const textBoards = new THREE.InstancedMesh(boardGeometry, textBoardMaterial, textSegments.length);
+  const plainBoards = new THREE.InstancedMesh(boardGeometry, plainBoardMaterial, plainSegments.length);
+  const accents = new THREE.InstancedMesh(boardGeometry, accentMaterial, segments.length);
   const dummy = new THREE.Object3D();
-  segments.forEach((segment, index) => {
+
+  const setBoardMatrix = (mesh: THREE.InstancedMesh, index: number, segment: AdvertisingBoardSegment, height: number, y: number) => {
     const length = segment.end - segment.start;
     const centre = (segment.start + segment.end) / 2;
-    dummy.position.set(segment.axis === "x" ? centre : segment.fixed, .52, segment.axis === "z" ? centre : segment.fixed);
-    dummy.scale.set(segment.axis === "x" ? length : .24, .92, segment.axis === "z" ? length : .24);
+    dummy.position.set(segment.axis === "x" ? centre : segment.fixed, y, segment.axis === "z" ? centre : segment.fixed);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(segment.axis === "x" ? length : boardThickness, height, segment.axis === "z" ? length : boardThickness);
     dummy.updateMatrix();
-    boards.setMatrixAt(index, dummy.matrix);
+    mesh.setMatrixAt(index, dummy.matrix);
+  };
+  textSegments.forEach((segment, index) => setBoardMatrix(textBoards, index, segment, boardHeight, boardHeight / 2));
+  plainSegments.forEach((segment, index) => setBoardMatrix(plainBoards, index, segment, boardHeight, boardHeight / 2));
+  segments.forEach((segment, index) => setBoardMatrix(accents, index, segment, .055, boardHeight - .0275));
+  textBoards.instanceMatrix.needsUpdate = true;
+  plainBoards.instanceMatrix.needsUpdate = true;
+  accents.instanceMatrix.needsUpdate = true;
+  textBoards.receiveShadow = plainBoards.receiveShadow = true;
+
+  // Put the GAFFER artwork on both faces so it reads correctly while the
+  // camera approaches from the tunnel and after it crosses onto the pitch.
+  const faceGeometry = new THREE.PlaneGeometry(1, 1);
+  const textFaces = new THREE.InstancedMesh(faceGeometry, textMaterial, textSegments.length * 2);
+  let faceIndex = 0;
+  const faceOffset = boardThickness / 2 + .006;
+  textSegments.forEach(segment => {
+    const length = segment.end - segment.start;
+    const centre = (segment.start + segment.end) / 2;
+    const faces = segment.axis === "x"
+      ? [{ offset: faceOffset, rotation: 0 }, { offset: -faceOffset, rotation: Math.PI }]
+      : [{ offset: faceOffset, rotation: Math.PI / 2 }, { offset: -faceOffset, rotation: -Math.PI / 2 }];
+    faces.forEach(face => {
+      dummy.position.set(
+        segment.axis === "x" ? centre : segment.fixed + face.offset,
+        boardHeight / 2,
+        segment.axis === "z" ? centre : segment.fixed + face.offset,
+      );
+      dummy.rotation.set(0, face.rotation, 0);
+      dummy.scale.set(length, boardHeight, 1);
+      dummy.updateMatrix();
+      textFaces.setMatrixAt(faceIndex++, dummy.matrix);
+    });
   });
-  boards.instanceMatrix.needsUpdate = true;
-  boards.receiveShadow = true;
-  group.add(boards, block([2.6, .12, 15], [-36.9, .07, 14], aisle));
+  textFaces.instanceMatrix.needsUpdate = true;
+
+  group.add(textBoards, plainBoards, accents, textFaces, block([2.6, .12, 15], [-36.9, .07, 14], aisle));
   return group;
 }
 
@@ -351,8 +427,8 @@ export function createGafferStadium(lowPower: boolean) {
   group.add(board);
 
   // Low, restrained LED boards follow the pitch perimeter and preserve access gaps.
-  const adMap = signTexture("GAFFER  •  COACH SMARTER"); textures.push(adMap);
-  const adMaterial = new THREE.MeshStandardMaterial({ map: adMap, emissive: 0x073a2a, emissiveIntensity: .22, roughness: .7 });
+  const adMap = signTexture("GAFFER"); textures.push(adMap);
+  const adMaterial = new THREE.MeshStandardMaterial({ map: adMap, emissive: 0x073a2a, emissiveIntensity: .16, roughness: .72 });
   group.add(createAdvertisingBoards(adMaterial, materials.aisle));
   return { group, textures };
 }
