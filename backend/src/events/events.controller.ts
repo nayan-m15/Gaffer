@@ -100,8 +100,7 @@ export class EventsController {
    */
   // The original friendly route stays as an alias for existing clients.
   // Both routes derive the other team from the signed-in team's actual fixture.
-  @Get(':eventId/opponent-lineup')
-  @Get(':eventId/friendly-opponent-lineup')
+  @Get([':eventId/opponent-lineup', ':eventId/friendly-opponent-lineup'])
   async friendlyOpponentLineup(
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Param('eventId', ParseUUIDPipe) eventId: string,

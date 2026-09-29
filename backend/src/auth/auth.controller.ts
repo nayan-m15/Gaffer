@@ -75,7 +75,6 @@ function forwardSetCookie(res: Response, headers: Headers): void {
  * `__Secure-` when the auth baseURL is https.
  */
 function expireDontRememberCookie(res: Response): void {
-  const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
   // Keep in sync with auth.ts advanced.defaultCookieAttributes.secure.
   const secure = process.env.NODE_ENV === 'production';
   const name = `${secure ? '__Secure-' : ''}better-auth.dont_remember`;

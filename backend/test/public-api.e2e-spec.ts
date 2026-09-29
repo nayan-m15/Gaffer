@@ -72,7 +72,7 @@ describe('Public API (e2e)', () => {
       expect(body.data.length).toBeGreaterThan(0);
       for (const formation of body.data) {
         expect(Object.keys(formation).sort()).toEqual(
-          ['description', 'id', 'name', 'shape'].sort(),
+          ['description', 'id', 'name', 'playerCount', 'shape'].sort(),
         );
       }
     });

@@ -210,8 +210,7 @@ function resolveInjuryPlayer(
 ): AssistantTurnResult | undefined {
   if (state.collectedFields.athleteId !== undefined) return undefined;
   const pendingIds = state.collectedFields.__pendingPlayerOptionIds as
-    | string[]
-    | undefined;
+    string[] | undefined;
   const candidates = pendingIds
     ? roster.filter((athlete) => pendingIds.includes(athlete.id))
     : roster;
@@ -244,9 +243,9 @@ function getMissingInjuryReply(
     (key) => state.collectedFields[key] === undefined,
   );
   if (missing.length === 0) return undefined;
-  const needsInjuryDetails = (['bodyRegion', 'injuryType', 'severity'] as string[]).some(
-    (key) => missing.includes(key),
-  );
+  const needsInjuryDetails = (
+    ['bodyRegion', 'injuryType', 'severity'] as string[]
+  ).some((key) => missing.includes(key));
   return {
     reply: needsInjuryDetails
       ? 'What area is injured, which side of the body, and what type of injury is it (e.g. strain, sprain, tear, fracture, contusion)? ' +

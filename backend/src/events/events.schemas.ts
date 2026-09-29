@@ -215,7 +215,10 @@ function validateOpponentSquad(
     addOpponentSquadIssue(ctx, 'Opponent shirt numbers must be unique.');
   }
   if (value.opponentSquadVisibility === 'none' && squad.length > 0) {
-    addOpponentSquadIssue(ctx, 'Opponent squad cannot be sent when visibility is none.');
+    addOpponentSquadIssue(
+      ctx,
+      'Opponent squad cannot be sent when visibility is none.',
+    );
   }
   validateOpponentSquadVisibility(value.opponentSquadVisibility, squad, ctx);
 }
@@ -245,11 +248,11 @@ function validateOpponentSquadVisibility(
     }
     squad?.forEach((player, index) => {
       if (!player.name) {
-        addOpponentSquadIssue(
-          ctx,
-          'Opponent name is required in full mode.',
-          ['opponentSquad', index, 'name'],
-        );
+        addOpponentSquadIssue(ctx, 'Opponent name is required in full mode.', [
+          'opponentSquad',
+          index,
+          'name',
+        ]);
       }
     });
   }

@@ -75,6 +75,7 @@ function createCompetitionFormInput(values: {
   season: string;
   format: CompetitionFormat;
   configuredTeamCount: number;
+  playersPerSide: CompetitionPlayersPerSide;
   maxSubstitutes: number;
   redCardSuspensionMatches: number;
   accumulatedYellowThreshold: number;
@@ -94,6 +95,7 @@ function createCompetitionFormInput(values: {
     season: values.season.trim(),
     format: values.format,
     configuredTeamCount: values.configuredTeamCount,
+    playersPerSide: values.playersPerSide,
     maxSubstitutes: values.maxSubstitutes,
     redCardSuspensionMatches: values.redCardSuspensionMatches,
     accumulatedYellowThreshold: values.accumulatedYellowThreshold,

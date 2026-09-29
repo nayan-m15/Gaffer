@@ -317,10 +317,11 @@ export class SyncController {
     let receipt: typeof syncUploadReceipts.$inferSelect | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       if (item.kind === 'observation') {
-        canonicalEventId = await this.matchesService.canonicalEventIdForObservation(
-          item.matchId,
-          item.payload.clientRequestId,
-        );
+        canonicalEventId =
+          await this.matchesService.canonicalEventIdForObservation(
+            item.matchId,
+            item.payload.clientRequestId,
+          );
       }
       try {
         [receipt] = await this.databaseService.database
@@ -364,9 +365,10 @@ export class SyncController {
     error: HttpException,
     startedAt: number,
   ) {
-    const safeErrorCode = error instanceof ForbiddenException
-      ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
-      : 'INVALID_OR_UNAUTHORISED';
+    const safeErrorCode =
+      error instanceof ForbiddenException
+        ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
+        : 'INVALID_OR_UNAUTHORISED';
     const fallback = { id, outcome: 'rejected', safeErrorCode };
     try {
       const [committed] = await this.databaseService.database
@@ -375,7 +377,10 @@ export class SyncController {
         .where(eq(syncUploadReceipts.id, id))
         .limit(1);
       if (committed) {
-        if (committed.payloadHash !== payloadHash || committed.submittedByUserId !== userId) {
+        if (
+          committed.payloadHash !== payloadHash ||
+          committed.submittedByUserId !== userId
+        ) {
           return { id, outcome: 'rejected', safeErrorCode: 'ID_REUSED' };
         }
         if (committed.outcome !== 'dependency_pending') return committed;

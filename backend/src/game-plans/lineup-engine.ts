@@ -428,7 +428,8 @@ function placePreferredAthlete(
   if (!slot) return `${slotLabel} is not a position in this formation.`;
 
   formation.positions.forEach((candidate) => {
-    if (assignments[candidate.id] === athleteId) assignments[candidate.id] = null;
+    if (assignments[candidate.id] === athleteId)
+      assignments[candidate.id] = null;
   });
   const subIndex = substituteIds.indexOf(athleteId);
   if (subIndex >= 0) substituteIds.splice(subIndex, 1);
