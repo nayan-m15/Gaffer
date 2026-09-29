@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 
 function getDestination(accountKind: "coach" | "player" | "new", requested: string) {
@@ -54,7 +54,9 @@ export default function AuthCallbackPage() {
       </div>
       <div className="flex gap-3">
         <Button onClick={() => void retrySession()}>Retry</Button>
-        <Button asChild variant="outline"><Link to="/login">Back to sign in</Link></Button>
+        <Link to="/login" className={buttonVariants({ variant: "outline" })}>
+          Back to sign in
+        </Link>
       </div>
     </main>
   );
