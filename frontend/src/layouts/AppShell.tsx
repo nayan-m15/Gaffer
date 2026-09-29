@@ -78,7 +78,7 @@ function GatedPageBody({
   const showSpinner = showingGate && isLoading;
   const showCard = showingGate && !isLoading;
   const showOutlet = !showingGate || unlocked;
-  const outletInert = showingGate && unlocked && celebrating;
+  const outletInert = showingGate && unlocked;
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col">

@@ -1,15 +1,33 @@
 import "./unlock-gate.css";
 
-const REVEAL_MS = 1250;
+const REVEAL_MS = 2300;
 const BALL_DELAY_MS = 280;
 const BALL_MS = 620;
 const IMPACT_MS = BALL_DELAY_MS + BALL_MS;
 const SECOND_WAVE_MS = IMPACT_MS + 280;
 const BACKDROP_OUT_MS = 380;
-const STAMP_MS = 1400;
-const CONFETTI_LIFE_MS = 2500;
-const CONFETTI_FADE_MS = 400;
+const STAMP_MS = 1600;
+const CONFETTI_LIFE_MS = 3000;
+const CONFETTI_FADE_MS = 600;
 const MAX_PIECES = 550;
+const BALL_SIZE_PX = 20;
+
+const FA_FUTBOL_PATH =
+  "M504 256c0 136.967-111.033 248-248 248S8 392.967 8 256 119.033 8 256 8s248 111.033 248 248zm-48 0l-.003-.282-26.064 22.741-62.679-58.5 16.454-84.355 34.303 3.072c-24.889-34.216-60.004-60.089-100.709-73.141l13.651 31.939L256 139l-74.953-41.525 13.651-31.939c-40.631 13.028-75.78 38.87-100.709 73.141l34.565-3.073 16.192 84.355-62.678 58.5-26.064-22.741-.003.282c0 43.015 13.497 83.952 38.472 117.991l7.704-33.897 85.138 10.447 36.301 77.826-29.902 17.786c40.202 13.122 84.29 13.148 124.572 0l-29.902-17.786 36.301-77.826 85.138-10.447 7.704 33.897C442.503 339.952 456 299.015 456 256zm-248.102 69.571l-29.894-91.312L256 177.732l77.996 56.527-29.622 91.312h-96.476z";
+
+const BALL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" aria-hidden="true"><circle cx="256" cy="256" r="248" fill="#fff"/><path fill="#1a1a1a" d="${FA_FUTBOL_PATH}"/></svg>`;
+
+const BALL_IMAGE_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BALL_SVG)}`;
+
+let ballImage: HTMLImageElement | null = null;
+
+function getBallImage(): HTMLImageElement {
+  if (!ballImage) {
+    ballImage = new Image();
+    ballImage.src = BALL_IMAGE_SRC;
+  }
+  return ballImage;
+}
 
 const FALLBACK_COLORS = [
   "#22c55e",
@@ -31,14 +49,6 @@ const GOAL_SVG = `
   <rect x="42" y="26" width="16" height="206" rx="4" fill="#fff"/>
   <rect x="362" y="26" width="16" height="206" rx="4" fill="#fff"/>
   <rect x="42" y="18" width="336" height="16" rx="4" fill="#fff"/>
-</svg>
-`;
-
-const BALL_SVG = `
-<svg viewBox="0 0 64 64" aria-hidden="true">
-  <circle cx="32" cy="32" r="30" fill="#f4f4f4" stroke="#1a1a1a" stroke-width="2"/>
-  <path d="M32 18 L42 26 L38 38 L26 38 L22 26 Z" fill="#1a1a1a"/>
-  <path d="M32 18 L42 26 L52 18 M42 26 L38 38 L50 46 M38 38 L26 38 L32 54 M26 38 L22 26 L12 36 M22 26 L32 18 L20 10" fill="none" stroke="#1a1a1a" stroke-width="1.6"/>
 </svg>
 `;
 
@@ -110,6 +120,7 @@ export function startGoalUnlockCelebration(
   const ball = document.createElement("div");
   ball.className = "goal-unlock-ball";
   ball.innerHTML = BALL_SVG;
+  getBallImage();
 
   const flash = document.createElement("div");
   flash.className = "goal-unlock-flash";
@@ -400,7 +411,18 @@ function drawParticles(
     ctx.rotate(p.rot);
     ctx.globalAlpha = fade;
     if (p.isBall) {
-      drawFootball(ctx, Math.max(p.w, p.h) * 0.55);
+      const img = getBallImage();
+      if (!img.complete || img.naturalWidth === 0) {
+        ctx.restore();
+        continue;
+      }
+      ctx.drawImage(
+        img,
+        -BALL_SIZE_PX / 2,
+        -BALL_SIZE_PX / 2,
+        BALL_SIZE_PX,
+        BALL_SIZE_PX,
+      );
     } else {
       const flutter = 0.28 + 0.72 * (0.5 + 0.5 * Math.cos(p.flutter));
       ctx.fillStyle = p.color;
@@ -408,27 +430,6 @@ function drawParticles(
     }
     ctx.restore();
   }
-}
-
-function drawFootball(ctx: CanvasRenderingContext2D, r: number): void {
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#f4f4f4";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(20,20,20,0.7)";
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-  ctx.beginPath();
-  for (let i = 0; i < 5; i += 1) {
-    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
-    const px = Math.cos(a) * r * 0.4;
-    const py = Math.sin(a) * r * 0.4;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fill();
 }
 
 function escapeHtml(value: string): string {

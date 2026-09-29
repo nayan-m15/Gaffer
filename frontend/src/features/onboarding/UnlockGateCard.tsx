@@ -261,7 +261,7 @@ export function UnlockGateCard({
       />
       <Card
         aria-labelledby="unlock-gate-heading"
-        className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
+        className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/95 px-8 py-10 text-center backdrop-blur-md sm:px-10 sm:py-12"
       >
         {unlocked && <UnlockMomentMark needsGamePlan={page.needsGamePlan} />}
         <p
