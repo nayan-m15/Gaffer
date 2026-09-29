@@ -240,7 +240,8 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const rear = new THREE.Vector3(x, rearY - .35, roofBack);
     const centre = new THREE.Vector3(x, (frontY + rearY) / 2 - 1.4, (roofFront + roofBack) / 2);
     upperChords.push([front, centre], [centre, rear]); lowerChords.push([front, rear]);
-    if (i % 2 === 0) {
+    const columnCrossesPlayerWalkout = spec.side === "west" && Math.abs(x) < playerOpeningHalfWidth;
+    if (i % 2 === 0 && !columnCrossesPlayerWalkout) {
       columns.push([new THREE.Vector3(x, 0, totalDepth + 2), new THREE.Vector3(x, rearY - .6, roofBack - 1)]);
       lowerChords.push([new THREE.Vector3(x, rearY - .6, roofBack - 1), centre]);
     }
