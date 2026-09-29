@@ -17,6 +17,7 @@ import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import {
   usePageCelebrated,
   useUnlockRequirements,
+  pageRequirementsMet,
 } from "@/features/onboarding/unlocks";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
 import { MatchSquadReminder } from "@/features/reminders/MatchSquadReminder";
@@ -842,16 +843,31 @@ function CreateTeamHero({
 function DashboardUnlockLayer({
   userId,
   firstName,
+  fading,
   onUnlocked,
+  onRequirements,
 }: {
   userId: string;
   firstName: string | undefined;
+  fading: boolean;
   onUnlocked: () => void;
+  onRequirements: (unlocked: boolean) => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+  const unlocked = pageRequirementsMet("dashboard", hasPlayers, hasGamePlan);
+
+  useEffect(() => {
+    onRequirements(!isLoading && unlocked);
+  }, [isLoading, unlocked, onRequirements]);
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10">
+    <div
+      className={cn(
+        "absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10",
+        fading &&
+          "pointer-events-none opacity-0 transition-opacity duration-[400ms] ease-out motion-reduce:transition-none",
+      )}
+    >
       {isLoading ? (
         <Loader2
           className="size-6 animate-spin text-primary motion-reduce:animate-none"
@@ -889,6 +905,7 @@ export default function DashboardPage() {
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const [unlockFading, setUnlockFading] = useState(false);
+  const [dashUnlocked, setDashUnlocked] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
   const now = useNow();
 
@@ -951,8 +968,9 @@ export default function DashboardPage() {
       user?.id &&
       !dashboardCelebrated,
   );
-  const hideMainForUnlock = unlockGateApplies && !unlockFading;
+  const hideMainForUnlock = unlockGateApplies && !dashUnlocked;
   const showUnlockOverlay = unlockGateApplies || unlockFading;
+  const inertDashboardMain = unlockGateApplies && dashUnlocked && !unlockFading;
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
   const handleDashboardUnlocked = () => {
@@ -961,7 +979,7 @@ export default function DashboardPage() {
     ).matches;
     if (reduceMotion) return;
     setUnlockFading(true);
-    window.setTimeout(() => setUnlockFading(false), 800);
+    window.setTimeout(() => setUnlockFading(false), 400);
   };
 
   // Route player accounts to their own dashboard.
@@ -1065,7 +1083,8 @@ export default function DashboardPage() {
           aria-hidden="true"
           className={cn(
             "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
-            "transition-[opacity,background-color,backdrop-filter] duration-[800ms] ease-out motion-reduce:transition-none",
+            "transition-[opacity,background-color,backdrop-filter] ease-out motion-reduce:transition-none",
+            unlockFading ? "duration-[400ms]" : "duration-[800ms]",
             (unlockFading ||
               (overlayPhase === "fading" && !unlockGateApplies)) &&
               "bg-transparent opacity-0 backdrop-blur-none",
@@ -1078,7 +1097,7 @@ export default function DashboardPage() {
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         firstTime={isFirstTime}
-        hideAddTeam={hideMainForUnlock}
+        hideAddTeam={unlockGateApplies && !unlockFading}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
@@ -1091,16 +1110,25 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {unlockGateApplies && user?.id && (
+      {(unlockGateApplies || unlockFading) && user?.id && (
         <DashboardUnlockLayer
           userId={user.id}
           firstName={firstName}
+          fading={unlockFading}
           onUnlocked={handleDashboardUnlocked}
+          onRequirements={setDashUnlocked}
         />
       )}
 
       {!isFirstTime && !hideMainForUnlock && (
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
+      <div
+        className={cn(
+          "mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10",
+          inertDashboardMain && "invisible pointer-events-none",
+        )}
+        aria-hidden={inertDashboardMain || undefined}
+        inert={inertDashboardMain || undefined}
+      >
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card

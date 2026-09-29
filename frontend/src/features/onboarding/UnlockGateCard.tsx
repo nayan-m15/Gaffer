@@ -1,11 +1,12 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Lock } from "lucide-react";
+import { ArrowRight, Check, Lock, LockOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AppCard as Card } from "@/components/app/AppCard";
 import { cn } from "@/lib/utils";
 import { createCelebrationBurst } from "./celebrationBurst";
 import "./tour.css";
+import "./unlock-gate.css";
 import {
   PAGE_UNLOCKS,
   markPageCelebrated,
@@ -53,29 +54,35 @@ function connectorTo(destination: StepState): "active" | "muted" | "done" {
 function UnlockRoad({
   hasPlayers,
   hasGamePlan,
+  needsGamePlan,
 }: {
   hasPlayers: boolean;
   hasGamePlan: boolean;
+  needsGamePlan: boolean;
 }) {
-  const stepStates: StepState[] = [
-    "done",
-    hasPlayers ? "done" : "current",
-    hasPlayers ? (hasGamePlan ? "done" : "current") : "locked",
-  ];
+  const steps = needsGamePlan ? ROAD_STEPS : ROAD_STEPS.slice(0, 2);
+  const stepStates: StepState[] = needsGamePlan
+    ? [
+        "done",
+        hasPlayers ? "done" : "current",
+        hasPlayers ? (hasGamePlan ? "done" : "current") : "locked",
+      ]
+    : ["done", hasPlayers ? "done" : "current"];
 
   return (
     <ol
       aria-label="Road to kick-off"
       className={cn(
         "mt-8 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-0",
+        steps.length === 2 && "sm:mx-auto sm:max-w-[22rem]",
         HERO_ENTER,
         "[animation-delay:540ms]",
       )}
     >
-      {ROAD_STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const stepNumber = index + 1;
         const state = stepStates[index];
-        const isLast = index === ROAD_STEPS.length - 1;
+        const isLast = index === steps.length - 1;
         const leftLine = index === 0 ? "none" : connectorTo(stepStates[index]);
         const rightLine = isLast ? "none" : connectorTo(stepStates[index + 1]);
         return (
@@ -129,6 +136,41 @@ function UnlockRoad({
   );
 }
 
+function UnlockMomentMark() {
+  const [opened, setOpened] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setOpened(true);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setOpened(true), 40);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  return (
+    <span
+      className="relative mx-auto mb-3 flex size-8 items-center justify-center text-primary"
+      aria-hidden="true"
+    >
+      <Lock
+        className={cn(
+          "absolute size-6",
+          opened && "unlock-gate-lock-out motion-reduce:animate-none",
+        )}
+      />
+      <LockOpen
+        className={cn(
+          "absolute size-6",
+          opened
+            ? "unlock-gate-lock-in motion-reduce:animate-none"
+            : "opacity-0",
+        )}
+      />
+    </span>
+  );
+}
+
 function ChecklistItem({
   label,
   done,
@@ -172,19 +214,17 @@ export function UnlockGateCard({
   const page = PAGE_UNLOCKS[pageKey];
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
   const burstHostRef = useRef<HTMLDivElement>(null);
-  const burstPlayedRef = useRef(false);
 
   useEffect(() => {
-    if (!unlocked || burstPlayedRef.current) return;
+    if (!unlocked) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      burstPlayedRef.current = true;
       return;
     }
     const host = burstHostRef.current;
     if (!host) return;
-    burstPlayedRef.current = true;
     const burst = createCelebrationBurst();
-    host.prepend(burst);
+    burst.classList.add("unlock-gate-burst");
+    host.append(burst);
     const timeoutId = window.setTimeout(() => burst.remove(), 1100);
     return () => {
       window.clearTimeout(timeoutId);
@@ -216,10 +256,12 @@ export function UnlockGateCard({
 
   return (
     <div
+      key={unlocked ? "unlocked" : "locked"}
       ref={burstHostRef}
       className={cn(
-        "relative mx-auto w-full max-w-[600px]",
+        "relative mx-auto w-full max-w-[600px] overflow-visible",
         "animate-fade-in-scale motion-reduce:animate-none",
+        unlocked && "unlock-gate-glow motion-reduce:animate-none",
       )}
     >
       <div
@@ -230,6 +272,7 @@ export function UnlockGateCard({
         aria-labelledby="unlock-gate-heading"
         className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
       >
+        {unlocked && <UnlockMomentMark />}
         <p
           className={cn(
             "text-lg font-medium uppercase tracking-[0.2em] text-primary",
@@ -260,7 +303,11 @@ export function UnlockGateCard({
         </p>
 
         {!unlocked && (
-          <UnlockRoad hasPlayers={hasPlayers} hasGamePlan={hasGamePlan} />
+          <UnlockRoad
+            hasPlayers={hasPlayers}
+            hasGamePlan={hasGamePlan}
+            needsGamePlan={page.needsGamePlan}
+          />
         )}
 
         <div
@@ -365,7 +412,7 @@ export function UnlockGateCard({
               "[animation-delay:800ms]",
             )}
           >
-            Roster, Team, and Leagues are open now.
+            Roster and Leagues are open now.
           </p>
         )}
       </Card>

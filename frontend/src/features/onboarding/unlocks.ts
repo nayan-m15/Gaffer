@@ -8,7 +8,8 @@ export type UnlockPageKey =
   | "events"
   | "injuries"
   | "live-logger"
-  | "statistics";
+  | "statistics"
+  | "team";
 
 export interface UnlockPageConfig {
   key: UnlockPageKey;
@@ -60,6 +61,14 @@ export const PAGE_UNLOCKS: Record<UnlockPageKey, UnlockPageConfig> = {
     description:
       "Season totals and player breakdowns, built from what you log in matches.",
   },
+  team: {
+    key: "team",
+    label: "Team",
+    needsPlayers: true,
+    needsGamePlan: false,
+    description:
+      "Pick your lineup, formation, and tactics from the players in your roster.",
+  },
 };
 
 export const UNLOCK_PAGE_KEYS = [
@@ -68,6 +77,7 @@ export const UNLOCK_PAGE_KEYS = [
   "injuries",
   "live-logger",
   "statistics",
+  "team",
 ] as const satisfies readonly UnlockPageKey[];
 
 const UNLOCK_FLAG_EVENT = "gaffer:unlock-flag";
@@ -158,6 +168,6 @@ export function useUnlockRequirements(): {
   return {
     hasPlayers: (athletesQuery.data?.length ?? 0) > 0,
     hasGamePlan: (gamePlansQuery.data?.length ?? 0) > 0,
-    isLoading: athletesQuery.isPending || gamePlansQuery.isPending,
+    isLoading: athletesQuery.isLoading || gamePlansQuery.isLoading,
   };
 }

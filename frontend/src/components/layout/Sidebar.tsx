@@ -90,6 +90,7 @@ const PATH_TO_UNLOCK_KEY: Partial<Record<string, UnlockPageKey>> = {
   "/injuries": "injuries",
   "/live-logger": "live-logger",
   "/statistics": "statistics",
+  "/team": "team",
 };
 
 type NavUnlockStatus =
@@ -124,12 +125,14 @@ function UnlockNavControllerActive({
   const injuriesCelebrated = usePageCelebrated(user?.id, "injuries");
   const liveLoggerCelebrated = usePageCelebrated(user?.id, "live-logger");
   const statisticsCelebrated = usePageCelebrated(user?.id, "statistics");
+  const teamCelebrated = usePageCelebrated(user?.id, "team");
   const celebratedByKey: Record<UnlockPageKey, boolean> = {
     dashboard: dashboardCelebrated,
     events: eventsCelebrated,
     injuries: injuriesCelebrated,
     "live-logger": liveLoggerCelebrated,
     statistics: statisticsCelebrated,
+    team: teamCelebrated,
   };
 
   const getStatus = (key: UnlockPageKey): NavUnlockStatus => {

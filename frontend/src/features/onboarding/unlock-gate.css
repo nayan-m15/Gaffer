@@ -1,0 +1,71 @@
+.unlock-gate-burst {
+  z-index: 40;
+}
+
+.unlock-gate-glow {
+  animation: unlock-gate-glow 800ms ease-out 1;
+}
+
+.unlock-gate-lock-in {
+  animation: unlock-gate-lock-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.unlock-gate-lock-out {
+  animation: unlock-gate-lock-out 180ms ease-in both;
+}
+
+@keyframes unlock-gate-glow {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  40% {
+    box-shadow: 0 0 48px 12px color-mix(in oklab, var(--primary) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes unlock-gate-lock-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(-15deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.2) rotate(8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes unlock-gate-lock-out {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6) rotate(10deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unlock-gate-burst,
+  .unlock-gate-glow {
+    animation: none;
+  }
+
+  .unlock-gate-lock-out {
+    animation: none;
+    opacity: 0;
+  }
+
+  .unlock-gate-lock-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -9,6 +9,7 @@ import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import {
   usePageCelebrated,
   useUnlockRequirements,
+  pageRequirementsMet,
   type UnlockPageKey,
 } from "@/features/onboarding/unlocks";
 import { SportLogo } from "@/components/brand/SportLogo";
@@ -22,7 +23,7 @@ const StadiumScene = lazy(() =>
   })),
 );
 
-const UNLOCK_FADE_MS = 600;
+const UNLOCK_FADE_MS = 250;
 
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -52,49 +53,72 @@ function pageKeyFromPath(pathname: string): UnlockPageKey | null {
   if (path === "/statistics" || path.startsWith("/statistics/")) {
     return "statistics";
   }
+  if (path === "/team" || path.startsWith("/team/")) {
+    return "team";
+  }
   return null;
 }
 
-function PageUnlockGate({
+function GatedPageBody({
   pageKey,
   userId,
+  showingGate,
   fading,
   onUnlocked,
 }: {
   pageKey: UnlockPageKey;
   userId: string;
+  showingGate: boolean;
   fading: boolean;
   onUnlocked: () => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-full flex-1 items-center justify-center py-16">
-        <Loader2
-          className="size-6 animate-spin text-primary motion-reduce:animate-none"
-          role="status"
-          aria-label="Loading"
-        />
-      </div>
-    );
-  }
+  const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
+  const showSpinner = showingGate && isLoading;
+  const showCard = showingGate && !isLoading;
+  const showOutlet = !showingGate || unlocked;
+  const outletInert = showingGate && unlocked && !fading;
 
   return (
-    <div
-      className={cn(
-        "flex min-h-full flex-1 items-center justify-center px-6 py-8",
-        fading &&
-          "pointer-events-none opacity-0 transition-opacity duration-[600ms] ease-out motion-reduce:transition-none",
+    <div className="relative flex min-h-full flex-1 flex-col">
+      {showOutlet && (
+        <div
+          className={cn(
+            showCard && "absolute inset-0 overflow-y-auto",
+            outletInert && "invisible pointer-events-none",
+          )}
+          aria-hidden={outletInert || undefined}
+          inert={outletInert || undefined}
+        >
+          <Outlet />
+        </div>
       )}
-    >
-      <UnlockGateCard
-        pageKey={pageKey}
-        userId={userId}
-        hasPlayers={hasPlayers}
-        hasGamePlan={hasGamePlan}
-        onUnlocked={onUnlocked}
-      />
+      {showSpinner && (
+        <div className="flex min-h-full flex-1 items-center justify-center py-16">
+          <Loader2
+            className="size-6 animate-spin text-primary motion-reduce:animate-none"
+            role="status"
+            aria-label="Loading"
+          />
+        </div>
+      )}
+      {showCard && (
+        <div
+          className={cn(
+            "relative z-10 flex min-h-full flex-1 items-center justify-center px-6 py-8",
+            fading &&
+              "pointer-events-none opacity-0 transition-opacity duration-[250ms] ease-out motion-reduce:transition-none",
+          )}
+        >
+          <UnlockGateCard
+            pageKey={pageKey}
+            userId={userId}
+            hasPlayers={hasPlayers}
+            hasGamePlan={hasGamePlan}
+            onUnlocked={onUnlocked}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -204,13 +228,14 @@ function AppShellContent() {
           className={cn(
             "app-shell-content flex-1",
             isEventsPage && "min-h-0",
-            showingGate && "flex min-h-0 flex-col overflow-y-auto",
+            showingGate && "relative flex min-h-0 flex-col overflow-y-auto",
           )}
         >
-          {showingGate && pageKey && user?.id ? (
-            <PageUnlockGate
+          {gateEligible && pageKey && user?.id ? (
+            <GatedPageBody
               pageKey={pageKey}
               userId={user.id}
+              showingGate={showingGate}
               fading={fading}
               onUnlocked={handleUnlocked}
             />
