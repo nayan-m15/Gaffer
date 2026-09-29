@@ -5,6 +5,7 @@ import { FaFutbol } from "react-icons/fa";
 import { START_TOUR_STORAGE_KEY } from "./constants";
 import {
   PAGE_TOURS,
+  PAGE_TOUR_ASSISTANT_TEXT,
   PAGE_TOUR_LABELS,
   PAGE_TOUR_PRIMARY_TARGET,
   type PageTourKey,
@@ -98,27 +99,49 @@ function decoratePagePopover(
   popover.footer.append(skip);
 }
 
+function pushResolvedStep(
+  resolved: DriveStep[],
+  def: { attr: string; title: string; description: string },
+) {
+  const target = resolveTourTarget(def.attr);
+  if (!target) return;
+
+  const step: DriveStep = {
+    popover: {
+      title: def.title,
+      description: def.description,
+      showButtons: ["next", "previous"],
+      nextBtnText: "Next",
+      prevBtnText: "Back",
+      doneBtnText: "Done",
+    },
+  };
+  if (target !== "fallback") step.element = target;
+  resolved.push(step);
+}
+
 function buildPageSteps(pageKey: PageTourKey): DriveStep[] {
   const pageLabel = PAGE_TOUR_LABELS[pageKey];
   const resolved: DriveStep[] = [];
 
   for (const def of PAGE_TOURS[pageKey]) {
-    const target = resolveTourTarget(def.attr);
-    if (!target) continue;
-
-    const step: DriveStep = {
-      popover: {
-        title: def.title,
-        description: def.description,
-        showButtons: ["next", "previous"],
-        nextBtnText: "Next",
-        prevBtnText: "Back",
-        doneBtnText: "Done",
-      },
-    };
-    if (target !== "fallback") step.element = target;
-    resolved.push(step);
+    pushResolvedStep(resolved, def);
   }
+
+  const assistantTarget = resolveTourTarget("ai-assistant");
+  if (assistantTarget && assistantTarget !== "fallback") {
+    pushResolvedStep(resolved, {
+      attr: "ai-assistant",
+      title: "Your assistant",
+      description: PAGE_TOUR_ASSISTANT_TEXT[pageKey],
+    });
+  }
+
+  pushResolvedStep(resolved, {
+    attr: "page-help",
+    title: "Need a refresher?",
+    description: "Press ? any time to see these tips again.",
+  });
 
   const stepTotal = resolved.length;
   resolved.forEach((step, index) => {

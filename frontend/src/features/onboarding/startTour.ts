@@ -262,12 +262,13 @@ function buildSteps(options: StartCoachTourOptions): DriveStep[] {
     return stepConfig;
   });
 
-  const replayTarget = findVisibleTourTarget("show-tour");
-  const replayButton: DriveStep = {
-    ...(replayTarget ? { element: replayTarget } : {}),
+  const accountTarget = findVisibleTourTarget("account-section");
+  const accountStep: DriveStep = {
+    ...(accountTarget ? { element: accountTarget } : {}),
     popover: {
-      title: "Show tour again",
-      description: "You can replay this tour any time from here.",
+      title: "Your account",
+      description:
+        "Click your name to edit your details: name, phone number, sex, and date of birth. You can also switch between light and dark mode, replay this tour, or sign out here.",
       showButtons: ["next", "previous"],
       nextBtnText: "Next",
       prevBtnText: "Back",
@@ -294,7 +295,7 @@ function buildSteps(options: StartCoachTourOptions): DriveStep[] {
     } satisfies TourStepData,
   };
 
-  return [welcome, ...navSteps, replayButton, finale];
+  return [welcome, ...navSteps, accountStep, finale];
 }
 
 export function destroyCoachTour() {

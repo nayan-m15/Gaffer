@@ -440,6 +440,7 @@ export function GafferAiAssistant({
         aria-label={isOpen ? "Close Gaffer AI" : "Ask Gaffer AI"}
         title="Ask Gaffer AI"
         onClick={() => setIsOpen((current) => !current)}
+        data-tour="ai-assistant"
         className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
       >
         <Sparkles className="size-6" />

@@ -341,7 +341,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
       </UnlockNavController>
 
       {/* Footer */}
-      <div className="border-t border-sidebar-border/70 px-4 py-4">
+      <div className="border-t border-sidebar-border/70 px-4 py-4" data-tour="account-section">
         {/* Profile — clickable to open the profile editor (coach only) */}
         {resolvedVariant !== "player" && (
         <button

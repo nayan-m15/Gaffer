@@ -47,7 +47,7 @@ export const PAGE_TOURS: Record<PageTourKey, readonly PageTourStepDef[]> = {
       attr: "roster-invite",
       title: "Bring in help",
       description:
-        "Invite an assistant coach. They can view the roster, events, and statistics, but cannot make changes.",
+        "Invite an assistant coach to help out. Assistants can see your roster, events, and stats.",
     },
   ],
   events: [
@@ -99,6 +99,13 @@ export const PAGE_TOURS: Record<PageTourKey, readonly PageTourStepDef[]> = {
         "Save this lineup as a game plan. You can keep several and use one on match day.",
     },
   ],
+};
+
+export const PAGE_TOUR_ASSISTANT_TEXT: Record<PageTourKey, string> = {
+  roster:
+    "Ask the Gaffer assistant to help manage your roster, like adding players by describing them.",
+  events: "Ask the Gaffer assistant for help with this page.",
+  team: "Ask the Gaffer assistant to suggest a lineup, pick a formation, or compare players from your squad.",
 };
 
 export function pageTourKeyFromPath(pathname: string): PageTourKey | null {

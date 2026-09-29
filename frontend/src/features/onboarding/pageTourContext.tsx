@@ -1,14 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { START_TOUR_STORAGE_KEY } from "./constants";
-import { pageTourKeyFromPath, type PageTourKey } from "./pageTourDefinitions";
+import { pageTourKeyFromPath } from "./pageTourDefinitions";
 import { useHasOnboardingFlag } from "./onboardingFlag";
 import { isPageTourSeen } from "./pageTourStorage";
 import { isGoalUnlockCelebrationRunning } from "./goalUnlockCelebration";
@@ -18,23 +11,10 @@ import {
   startPageTour as drivePageTour,
 } from "./startPageTour";
 import { isCoachTourActive } from "./tourLock";
+import { PageTourContext } from "./usePageTour";
 
 const PAGE_TOUR_RETRY_MS = 250;
 const PAGE_TOUR_MAX_ATTEMPTS = 24;
-
-export interface PageTourContextValue {
-  pageTourKey: PageTourKey | null;
-  startPageTour: () => void;
-}
-
-const PageTourContext = createContext<PageTourContextValue>({
-  pageTourKey: null,
-  startPageTour: () => {},
-});
-
-export function usePageTour(): PageTourContextValue {
-  return useContext(PageTourContext);
-}
 
 function pageTourIsBlocked(
   showingGate: boolean,
