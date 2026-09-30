@@ -1,0 +1,11 @@
+export const REVEAL_MS = 2300;
+export const BALL_DELAY_MS = 280;
+export const BALL_MS = 620;
+export const IMPACT_MS = BALL_DELAY_MS + BALL_MS;
+export const SECOND_WAVE_MS = IMPACT_MS + 280;
+export const BACKDROP_OUT_MS = 380;
+export const STAMP_MS = 1600;
+export const CONFETTI_LIFE_MS = 3000;
+export const CONFETTI_FADE_MS = 600;
+export const MAX_PIECES = 550;
+export const BALL_SIZE_PX = 20;

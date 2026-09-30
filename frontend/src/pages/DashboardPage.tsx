@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -156,8 +156,46 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
  *  SHARED UI PRIMITIVES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function DashboardFrame({ children }: { children: ReactNode }) {
-  return <div className="relative min-h-full">{children}</div>;
+function DashboardFrame({
+  children,
+  stretchToParent = false,
+}: {
+  children: ReactNode;
+  stretchToParent?: boolean;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [columnMinHeight, setColumnMinHeight] = useState<number>();
+
+  useLayoutEffect(() => {
+    if (!stretchToParent) {
+      setColumnMinHeight(undefined);
+      return;
+    }
+
+    const column = rootRef.current?.parentElement;
+    if (!column) return;
+
+    const sync = () => {
+      const next = column.clientHeight;
+      if (next > 0) setColumnMinHeight(next);
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [stretchToParent]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative min-h-full"
+      style={
+        columnMinHeight != null ? { minHeight: columnMinHeight } : undefined
+      }
+    >
+      {children}
+    </div>
+  );
 }
 
 function SectionTitle({
@@ -1031,7 +1069,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardFrame>
+    <DashboardFrame stretchToParent={showUnlockOverlay}>
       {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <div
           aria-hidden="true"

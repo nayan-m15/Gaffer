@@ -1,21 +1,20 @@
 import "./unlock-gate.css";
-
-const REVEAL_MS = 2300;
-const BALL_DELAY_MS = 280;
-const BALL_MS = 620;
-const IMPACT_MS = BALL_DELAY_MS + BALL_MS;
-const SECOND_WAVE_MS = IMPACT_MS + 280;
-const BACKDROP_OUT_MS = 380;
-const STAMP_MS = 1600;
-const CONFETTI_LIFE_MS = 3000;
-const CONFETTI_FADE_MS = 600;
-const MAX_PIECES = 550;
-const BALL_SIZE_PX = 20;
-
-const FA_FUTBOL_PATH =
-  "M504 256c0 136.967-111.033 248-248 248S8 392.967 8 256 119.033 8 256 8s248 111.033 248 248zm-48 0l-.003-.282-26.064 22.741-62.679-58.5 16.454-84.355 34.303 3.072c-24.889-34.216-60.004-60.089-100.709-73.141l13.651 31.939L256 139l-74.953-41.525 13.651-31.939c-40.631 13.028-75.78 38.87-100.709 73.141l34.565-3.073 16.192 84.355-62.678 58.5-26.064-22.741-.003.282c0 43.015 13.497 83.952 38.472 117.991l7.704-33.897 85.138 10.447 36.301 77.826-29.902 17.786c40.202 13.122 84.29 13.148 124.572 0l-29.902-17.786 36.301-77.826 85.138-10.447 7.704 33.897C442.503 339.952 456 299.015 456 256zm-248.102 69.571l-29.894-91.312L256 177.732l77.996 56.527-29.622 91.312h-96.476z";
-
-const BALL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" aria-hidden="true"><circle cx="256" cy="256" r="248" fill="#fff"/><path fill="#1a1a1a" d="${FA_FUTBOL_PATH}"/></svg>`;
+import { createUnlockScene } from "./celebrations/createScene";
+import { BALL_SVG } from "./celebrations/futbolMark";
+import { STAMP_HEADLINES } from "./celebrations/headlines";
+import {
+  BACKDROP_OUT_MS,
+  BALL_DELAY_MS,
+  BALL_SIZE_PX,
+  CONFETTI_FADE_MS,
+  CONFETTI_LIFE_MS,
+  IMPACT_MS,
+  MAX_PIECES,
+  REVEAL_MS,
+  SECOND_WAVE_MS,
+  STAMP_MS,
+} from "./celebrations/timings";
+import type { UnlockPageKey } from "./unlocks";
 
 const BALL_IMAGE_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BALL_SVG)}`;
 
@@ -38,20 +37,6 @@ const FALLBACK_COLORS = [
   "#ffffff",
 ];
 
-const GOAL_SVG = `
-<svg viewBox="0 0 420 260" fill="none" aria-hidden="true">
-  <g class="goal-unlock-net">
-    <path d="M70 46 L350 46 L332 214 L88 214 Z" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.32)" stroke-width="1.2"/>
-    <path d="M70 46 L48 28 M350 46 L372 28 M88 214 L48 228 M332 214 L372 228" stroke="rgba(255,255,255,0.28)" stroke-width="1.1"/>
-    <path d="M98 46 L110 214 M126 46 L132 214 M154 46 L154 214 M182 46 L176 214 M210 46 L210 214 M238 46 L244 214 M266 46 L266 214 M294 46 L288 214 M322 46 L310 214" stroke="rgba(255,255,255,0.22)" stroke-width="0.9"/>
-    <path d="M66 74 L354 74 M64 102 L356 102 M68 130 L352 130 M76 158 L344 158 M82 186 L338 186" stroke="rgba(255,255,255,0.2)" stroke-width="0.9"/>
-  </g>
-  <rect x="42" y="26" width="16" height="206" rx="4" fill="#fff"/>
-  <rect x="362" y="26" width="16" height="206" rx="4" fill="#fff"/>
-  <rect x="42" y="18" width="336" height="16" rx="4" fill="#fff"/>
-</svg>
-`;
-
 type Particle = {
   x: number;
   y: number;
@@ -71,6 +56,7 @@ type Particle = {
 };
 
 type CelebrationOptions = {
+  pageKey: UnlockPageKey;
   label: string;
   onReveal: () => void;
   onComplete?: () => void;
@@ -118,14 +104,9 @@ export function startGoalUnlockCelebration(
 
   const backdrop = document.createElement("div");
   backdrop.className = "goal-unlock-backdrop";
+  visual.append(backdrop);
 
-  const goalWrap = document.createElement("div");
-  goalWrap.className = "goal-unlock-goal";
-  goalWrap.innerHTML = GOAL_SVG;
-
-  const ball = document.createElement("div");
-  ball.className = "goal-unlock-ball";
-  ball.innerHTML = BALL_SVG;
+  const scene = createUnlockScene(options.pageKey, visual);
   getBallImage();
 
   const flash = document.createElement("div");
@@ -133,12 +114,12 @@ export function startGoalUnlockCelebration(
 
   const stamp = document.createElement("div");
   stamp.className = "goal-unlock-stamp";
-  stamp.innerHTML = `<p class="goal-unlock-stamp-goal">GOAL!</p><p class="goal-unlock-stamp-sub">${escapeHtml(options.label.toUpperCase())} UNLOCKED</p>`;
+  stamp.innerHTML = `<p class="goal-unlock-stamp-goal">${escapeHtml(STAMP_HEADLINES[options.pageKey])}</p><p class="goal-unlock-stamp-sub">${escapeHtml(options.label.toUpperCase())} UNLOCKED</p>`;
 
   canvas = document.createElement("canvas");
   canvas.className = "goal-unlock-canvas";
 
-  visual.append(backdrop, goalWrap, ball, flash, stamp, canvas);
+  visual.append(flash, stamp, canvas);
 
   const live = document.createElement("div");
   live.className = "sr-only";
@@ -166,6 +147,7 @@ export function startGoalUnlockCelebration(
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     particles = [];
+    scene.teardown();
     host.remove();
     if (activeCleanup === cancel) activeCleanup = null;
     if (completed) options.onComplete?.();
@@ -188,23 +170,21 @@ export function startGoalUnlockCelebration(
   };
 
   schedule(() => {
-    goalWrap.classList.add("is-in");
+    scene.root.classList.add("is-in");
   }, 160);
 
   schedule(() => {
-    kickBall(ball, goalWrap);
+    scene.play();
   }, BALL_DELAY_MS);
 
   schedule(() => {
-    ball.classList.add("is-gone");
-    const net = goalWrap.querySelector(".goal-unlock-net");
-    net?.classList.add("is-bulging");
+    scene.impact();
     flash.classList.add("is-on");
     stamp.classList.add("is-on");
     sizeCanvas(canvas!);
     ctx = canvas!.getContext("2d");
     if (!ctx) return;
-    const origin = goalOrigin(goalWrap);
+    const origin = scene.getImpactOrigin();
     spawnBurst(particles, colors, origin.x, origin.y, 170, -Math.PI * 0.92, -Math.PI * 0.08, 7, 17);
     spawnBurst(
       particles,
@@ -272,8 +252,8 @@ export function startGoalUnlockCelebration(
   schedule(() => {
     backdrop.classList.remove("is-in");
     backdrop.classList.add("is-out");
-    goalWrap.classList.remove("is-in");
-    goalWrap.classList.add("is-out");
+    scene.root.classList.remove("is-in");
+    scene.root.classList.add("is-out");
     reveal();
   }, REVEAL_MS);
 
@@ -308,42 +288,6 @@ export function startGoalUnlockCelebration(
   }
 
   return cancel;
-}
-
-function kickBall(ball: HTMLElement, goalWrap: HTMLElement): void {
-  const startX = window.innerWidth / 2;
-  const startY = window.innerHeight - 28;
-  const rect = goalWrap.getBoundingClientRect();
-  const endX = rect.left + rect.width / 2;
-  const endY = rect.top + rect.height * 0.4;
-  const midX = (startX + endX) / 2 + 56;
-  const midY = Math.min(startY, endY) - 90;
-
-  const tf = (x: number, y: number, rot: number, scale: number) =>
-    `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
-
-  ball.style.transform = tf(startX, startY, 0, 1);
-  ball.classList.add("is-kicking");
-  ball.animate(
-    [
-      { transform: tf(startX, startY, 0, 1) },
-      { transform: tf(midX, midY, 380, 0.74) },
-      { transform: tf(endX, endY, 720, 0.5) },
-    ],
-    {
-      duration: BALL_MS,
-      easing: "cubic-bezier(0.18, 0.7, 0.28, 1)",
-      fill: "forwards",
-    },
-  );
-}
-
-function goalOrigin(goalWrap: HTMLElement): { x: number; y: number } {
-  const rect = goalWrap.getBoundingClientRect();
-  return {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height * 0.42,
-  };
 }
 
 function sizeCanvas(canvas: HTMLCanvasElement): void {

@@ -242,6 +242,7 @@ export function UnlockGateCard({
     }
     onUnlocked();
     startGoalUnlockCelebration({
+      pageKey,
       label: page.label,
       onReveal: () => onRevealed?.(),
       onComplete: () => onCelebrationComplete?.(),
