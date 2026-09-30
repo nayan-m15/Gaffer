@@ -6,6 +6,7 @@ import {
   eventTypeLabel,
   formatLocalDate,
   isScheduleInThePast,
+  isRsvpOpen,
   parseLocalDate,
   splitScheduledAt,
   startOfLocalDay,
@@ -117,3 +118,13 @@ assert.equal(eventStatusLabel("cancelled"), "Cancelled");
 assert.equal(eventStatusLabel("completed"), "Completed");
 
 console.log("[event-utils:node-test] passed");
+
+/* ─── RSVP deadline: absolute instant, not calendar day ──────────────── */
+const rsvpNow = new Date("2026-09-29T17:00:00.000Z");
+assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "2026-09-29T17:00:01.000Z" }, rsvpNow), true);
+assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "2026-09-29T17:00:00.000Z" }, rsvpNow), false);
+assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "2026-09-28T23:59:00.000Z" }, rsvpNow), false);
+assert.equal(isRsvpOpen({ status: "cancelled", scheduledAt: "2099-01-01T00:00:00.000Z" }, rsvpNow), false);
+assert.equal(isRsvpOpen({ status: "completed", scheduledAt: "2099-01-01T00:00:00.000Z" }, rsvpNow), false);
+assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "invalid" }, rsvpNow), false);
+assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "2099-01-01T00:00:00.000Z" }, rsvpNow), true);

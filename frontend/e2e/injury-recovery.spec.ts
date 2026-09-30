@@ -127,22 +127,20 @@ test('a logged injury produces a record, a 3D model and an unavailable player', 
         dialog.getByText(/Choose a region, kind and severity/),
       ).toBeVisible();
 
-      // The player field's popup aligns its item under the pointer when it
-      // opens (Base UI Select's `alignItemWithTrigger`), which the
-      // component's own guard against accidental activation can read as a
-      // click that never genuinely landed on the option — clicking it is
-      // racy as a result. Keyboard selection isn't subject to that guard and
-      // is how the same listbox is driven by real keyboard/AT users, so it's
-      // both more reliable here and a closer match to actual usage.
-      await dialog.getByLabel('Player').click();
-      await expect(
-        page.getByRole('option', { name: '#7 Rosa Hamstring', exact: true }),
-      ).toBeVisible(NETWORK);
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('Enter');
-      await expect(dialog.getByLabel('Player')).toContainText(
-        'Rosa Hamstring',
-      );
+      // The select popup is portalled outside the dialog, so select the
+      // seeded athlete through the page-level option rather than relying on
+      // keyboard focus moving into the popup after the trigger opens.
+      const playerSelect = dialog.getByLabel('Player');
+      await playerSelect.click();
+
+      const rosaOption = page.getByRole('option', {
+        name: '#7 Rosa Hamstring',
+        exact: true,
+      });
+      await expect(rosaOption).toBeVisible(NETWORK);
+      await rosaOption.click();
+
+      await expect(playerSelect).toContainText('Rosa Hamstring');
       await dialog
         .getByRole('button', { name: 'Right hamstring', exact: true })
         .click();

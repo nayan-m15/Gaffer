@@ -87,7 +87,7 @@ export function AgendaView({
             No events this month
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Add a training session, match, or meeting to fill the calendar.
+            {readOnly ? "Your team has no events scheduled this month." : "Add a training session, match, or meeting to fill the calendar."}
           </p>
           {!readOnly && (
             <Button

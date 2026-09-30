@@ -198,13 +198,16 @@ export function EventDetailDialog({
         )}
 
         {/* Player RSVP — replaces the coach breakdown entirely */}
-        {readOnly && event && playerEvent && rsvpQueryKey && event.status === "scheduled" && (
+        {readOnly && event && playerEvent && rsvpQueryKey && (
           <div className="rounded-lg border border-border bg-background p-4">
             <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Your RSVP
             </h3>
             <RsvpWidget
+              key={event.id}
               eventId={event.id}
+              scheduledAt={event.scheduledAt}
+              eventStatus={event.status}
               currentStatus={playerEvent.rsvpStatus}
               currentNote={playerEvent.rsvpNote}
               queryKey={rsvpQueryKey}

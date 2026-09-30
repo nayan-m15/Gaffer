@@ -13,6 +13,8 @@ import { EventFormDialog } from "@/features/events/EventFormDialog";
 import { FixtureRequestsBanner } from "@/features/events/FixtureRequestsBanner";
 import { MobileCalendarView } from "@/features/events/MobileCalendarView";
 import { MonthCalendar } from "@/features/events/MonthCalendar";
+import { getCalendarCompetitionOptions, type MatchCompetitionFilter } from "@/features/events/match-competition-filter";
+import { useMyCompetitions } from "@/features/competitions/hooks";
 import { WeekView } from "@/features/events/WeekView";
 import {
   WEEK_STARTS_ON,
@@ -50,19 +52,25 @@ export default function EventsPage() {
   // events are coach actions (also enforced by the backend mutations).
   const canManageEvents = team?.role === "coach";
   const { data: events, isLoading, isError, error, refetch } = useEvents();
+  const { data: competitions = [] } = useMyCompetitions();
   const now = useNow();
 
   const [view, setView] = useState<CalendarView>("month");
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [hiddenTypes, setHiddenTypes] = useState<Set<EventType>>(() => new Set());
+  const [matchFilter, setMatchFilter] = useState<MatchCompetitionFilter>("all");
   const [panel, setPanel] = useState<Panel>({ kind: "closed" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   /* ── Derived data ─────────────────────────────────────────────────────── */
+  const competitionOptions = useMemo(
+    () => getCalendarCompetitionOptions(events ?? [], competitions),
+    [events, competitions],
+  );
   const visibleEvents = useMemo(
-    () => filterEventTypes(events ?? [], hiddenTypes),
-    [events, hiddenTypes],
+    () => filterEventTypes(events ?? [], hiddenTypes, matchFilter, competitions),
+    [events, hiddenTypes, matchFilter, competitions],
   );
   const eventsByDay = useMemo(() => groupEventsByDay(visibleEvents), [visibleEvents]);
   const eventDays = useMemo(() => new Set(eventsByDay.keys()), [eventsByDay]);
@@ -194,6 +202,7 @@ export default function EventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
+          readOnly={!canManageEvents}
         />
       )}
       {view === "week" && (
@@ -308,6 +317,9 @@ export default function EventsPage() {
             hiddenTypes={hiddenTypes}
             readOnly={!canManageEvents}
             onToggleType={handleToggleType}
+            matchFilter={matchFilter}
+            competitionOptions={competitionOptions}
+            onMatchFilterChange={setMatchFilter}
             onSelectDate={handleDayClick}
             onNavigate={navigate}
             onToday={goToToday}
@@ -327,6 +339,9 @@ export default function EventsPage() {
             hiddenTypes={hiddenTypes}
             readOnly={!canManageEvents}
             onToggleType={handleToggleType}
+            matchFilter={matchFilter}
+            competitionOptions={competitionOptions}
+            onMatchFilterChange={setMatchFilter}
             onViewChange={setView}
             onPrevious={() => navigate(-1)}
             onNext={() => navigate(1)}
