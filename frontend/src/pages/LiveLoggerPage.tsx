@@ -115,7 +115,7 @@ export default function LiveLoggerPage() {
         )}
 
         {!isLoading && !isError && matches.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
+          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center" data-tour="livelogger-matches">
             <Radio className="mx-auto size-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium text-foreground">
               {allMatches.length === 0 ? "No matches yet" : "No matches found"}
@@ -129,7 +129,7 @@ export default function LiveLoggerPage() {
         )}
 
         {!isLoading && !isError && matches.length > 0 && (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-3" data-tour="livelogger-matches">
             {matches.map((event) => (
               <li key={event.id}>
                 <MatchRow
@@ -257,7 +257,7 @@ function MatchRowBadge({
   if (completed) return <StatusBadge status="completed" />;
   if (locked) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground" data-tour="livelogger-locked">
         <Lock className="size-3" />Unlocks {unlockLabel}
       </span>
     );

@@ -302,6 +302,7 @@ function LiveMatchPanel({
         )}
         aria-label="Live match status"
         aria-live="polite"
+        data-tour="dashboard-live"
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
@@ -397,7 +398,7 @@ function SummaryStat({
 
 function SeasonSummaryCard({ summary }: { summary: SeasonSummaryData | null }) {
   return (
-    <Card aria-label="Season summary">
+    <Card aria-label="Season summary" data-tour="dashboard-season">
       <SectionTitle icon={<Trophy className="size-4 text-muted-foreground" />}>
         Season Summary
       </SectionTitle>
@@ -486,7 +487,7 @@ function RecentFormCard({
     recentResults[0];
 
   return (
-    <Card aria-label="Recent form">
+    <Card aria-label="Recent form" data-tour="dashboard-season">
       <SectionTitle
         icon={<TrendingUp className="size-4 text-muted-foreground" />}
       >
@@ -595,7 +596,7 @@ function UpcomingEventsCard({
   onOpenEvent: (eventId: string) => void;
 }) {
   return (
-    <Card aria-label="Upcoming events" className="min-h-[11rem]">
+    <Card aria-label="Upcoming events" className="min-h-[11rem]" data-tour="dashboard-upcoming">
       <SectionTitle
         icon={<Calendar className="size-4 text-muted-foreground" />}
       >
@@ -1132,7 +1133,7 @@ export default function DashboardPage() {
         <EventRemindersBanner events={upcomingEvents} />
 
         {team && (
-          <section aria-labelledby="quick-actions-heading">
+          <section aria-labelledby="quick-actions-heading" data-tour="dashboard-quick">
             <SectionTitle
               icon={<Activity className="size-4 text-muted-foreground" />}
             >

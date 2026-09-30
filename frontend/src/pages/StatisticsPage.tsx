@@ -276,7 +276,7 @@ export default function StatisticsPage() {
         )}
 
         {overview && overview.matchesPlayed === 0 && (
-          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
+          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center" data-tour="stats-overview">
             <BarChart3 className="mx-auto size-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium text-foreground">
               No matches recorded yet
@@ -302,7 +302,9 @@ export default function StatisticsPage() {
         {overview && overview.matchesPlayed > 0 && (
           <>
             {/* Headline stat cards */}
-            <StatCardsGrid overview={overview} />
+            <div data-tour="stats-overview">
+              <StatCardsGrid overview={overview} />
+            </div>
 
             {/* Recent results */}
             <RecentFormSection
@@ -332,7 +334,7 @@ export default function StatisticsPage() {
               ref={playerSectionRef}
               className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6"
             >
-              <AppCard className="p-4 md:p-6 lg:col-span-2">
+              <AppCard className="p-4 md:p-6 lg:col-span-2" data-tour="stats-players">
                 <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-foreground">
                   Player Statistics
                 </h2>

@@ -60,7 +60,6 @@ export function PageTourProvider({
     if (!userId || !pageTourKey) return;
     if (!hasOnboarding) return;
     if (isPageTourSeen(userId, pageTourKey)) return;
-    if (pageTourIsBlocked(showingGate, celebrationActive)) return;
 
     let cancelled = false;
     let attempts = 0;

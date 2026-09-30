@@ -25,7 +25,7 @@ export function StatisticsFilters({
   if (seasons.length === 0 && competitions.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" data-tour="stats-filters">
       {seasons.length > 0 && (
         <select
           value={seasonId ?? ""}

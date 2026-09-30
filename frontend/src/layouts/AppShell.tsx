@@ -151,6 +151,7 @@ function AppShellContent() {
   const onboardingActive = useOnboardingRoadActive(user?.id);
   const pageKey = pageKeyFromPath(pathname);
   const celebrated = usePageCelebrated(user?.id, pageKey ?? "events");
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
   const [celebrating, setCelebrating] = useState(false);
   const [celebrationActive, setCelebrationActive] = useState(false);
 
@@ -175,6 +176,16 @@ function AppShellContent() {
       onboardingActive,
   );
   const showingGate = Boolean(gateEligible && pageKey && user?.id && (!celebrated || celebrating));
+  const isDashboardPage =
+    pathname === "/dashboard" || pathname === "/dashboard/";
+  const dashboardTourBlocked = Boolean(
+    isDashboardPage &&
+      user?.id &&
+      team &&
+      team.role === "coach" &&
+      onboardingActive &&
+      !dashboardCelebrated,
+  );
 
   const handleUnlocked = () => {
     const reduceMotion = window.matchMedia(
@@ -201,7 +212,7 @@ function AppShellContent() {
   return (
     <PageTourProvider
       userId={user?.id}
-      showingGate={showingGate}
+      showingGate={showingGate || dashboardTourBlocked}
       celebrationActive={celebrationActive}
     >
     <div className="app-shell relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
