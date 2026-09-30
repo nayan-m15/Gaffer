@@ -203,6 +203,9 @@ export const playerClaimInvites = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
     usedByUserId: text('used_by_user_id').references(() => user.id),
+    proposedName: text('proposed_name'),
+    proposedTeamId: uuid('proposed_team_id').references(() => teams.id),
+    requestedByUserId: text('requested_by_user_id').references(() => user.id),
     ...timestamps,
   },
   (table) => [
@@ -697,6 +700,7 @@ export const competitionTeams = pgTable(
       onDelete: 'set null',
     }),
     displayName: text('display_name').notNull(),
+    originalDisplayName: text('original_display_name'),
     ...timestamps,
   },
   (table) => [
@@ -722,6 +726,7 @@ export const competitionTeams = pgTable(
 
 export const competitionInviteStatus = pgEnum('competition_invite_status', [
   'pending',
+  'verification',
   'used',
   'revoked',
 ]);
@@ -745,13 +750,24 @@ export const competitionInvites = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
     usedByUserId: text('used_by_user_id').references(() => user.id),
+    proposedName: text('proposed_name'),
+    proposedTeamId: uuid('proposed_team_id').references(() => teams.id),
+    requestedByUserId: text('requested_by_user_id').references(() => user.id),
     ...timestamps,
   },
   (table) => [
     index('competition_invites_competition_id_index').on(table.competitionId),
     uniqueIndex('competition_invites_pending_slot_unique')
       .on(table.competitionTeamId)
-      .where(sql`${table.status} = 'pending'`),
+      .where(sql`${table.status} in ('pending', 'verification')`),
+    uniqueIndex('competition_invites_verification_team_unique')
+      .on(table.competitionId, table.proposedTeamId)
+      .where(
+        sql`${table.status} = 'verification' and ${table.proposedTeamId} is not null`,
+      ),
+    uniqueIndex('competition_invites_verification_user_unique')
+      .on(table.competitionId, table.requestedByUserId)
+      .where(sql`${table.status} = 'verification'`),
   ],
 );
 

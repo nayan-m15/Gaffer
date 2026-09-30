@@ -39,6 +39,16 @@ export const deleteCompetition = (id: string) =>
 export const addParticipant = (id: string, displayName: string) =>
   apiFetch<Participant>(`/competitions/${id}/teams`, { method: "POST", body: JSON.stringify({ displayName }) });
 
+export const renameParticipant = (id: string, participantId: string, displayName: string) =>
+  apiFetch<Participant>(`/competitions/${id}/teams/${participantId}`, {
+    method: "PATCH", body: JSON.stringify({ displayName }),
+  });
+
+export const resolveTeamVerification = (inviteId: string, approve: boolean) =>
+  apiFetch<{ approved?: boolean; rejected?: boolean }>(`/competition-invites/verification/${inviteId}/resolve`, {
+    method: "POST", body: JSON.stringify({ approve }),
+  });
+
 export const removeParticipant = (id: string, participantId: string) =>
   apiFetch<{ success: boolean }>(`/competitions/${id}/teams/${participantId}`, { method: "DELETE" });
 
