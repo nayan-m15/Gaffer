@@ -7,6 +7,40 @@ const participants = [
 ];
 
 describe('calculateCompetitionStandings', () => {
+  it('keeps existing legacy standings after the team name is corrected or updated', () => {
+    const rows = calculateCompetitionStandings(
+      'competition-1',
+      [
+        {
+          id: 'linked',
+          teamId: 'registered',
+          displayName: 'Registered Club',
+          originalDisplayName: 'Admin Typo',
+        },
+      ],
+      [],
+      'registered',
+      [
+        {
+          id: 'baseline-1',
+          teamName: 'Admin Typo',
+          played: 4,
+          won: 3,
+          drawn: 0,
+          lost: 1,
+          goalsFor: 8,
+          goalsAgainst: 3,
+          points: 9,
+        },
+      ],
+    );
+    expect(rows[0]).toMatchObject({
+      teamName: 'Registered Club',
+      played: 4,
+      points: 9,
+    });
+  });
+
   it('shows a new competition alphabetically with visible 1..N positions', () => {
     const rows = calculateCompetitionStandings(
       'competition-1',

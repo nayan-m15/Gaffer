@@ -24,6 +24,7 @@ interface MonthCalendarProps {
   onSelectDate: (date: Date) => void;
   /** Clicking the empty area of a day opens the create dialog for that date. */
   onCreateEvent: (date: Date) => void;
+  readOnly?: boolean;
 }
 
 const weekdayLabels = getWeekdayLabels();
@@ -40,6 +41,7 @@ export function MonthCalendar({
   now,
   onSelectDate,
   onCreateEvent,
+  readOnly = false,
 }: MonthCalendarProps) {
   const grid = useMemo(() => getMonthGrid(month), [month]);
   const weeks = useMemo(
@@ -108,7 +110,7 @@ export function MonthCalendar({
           aria-hidden="true"
         >
           <CalendarDays className="mx-auto size-6 opacity-60" />
-          <p className="mt-2">No events this month — click a day to add one.</p>
+          <p className="mt-2">{readOnly ? "No events this month." : "No events this month — click a day to add one."}</p>
         </div>
       )}
     </div>

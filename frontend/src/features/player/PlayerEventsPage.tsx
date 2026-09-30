@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { isSameMonth, startOfWeek } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AgendaView } from "@/features/events/AgendaView";
@@ -11,6 +12,7 @@ import { DayEventsDialog } from "@/features/events/DayEventsDialog";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { MobileCalendarView } from "@/features/events/MobileCalendarView";
 import { MonthCalendar } from "@/features/events/MonthCalendar";
+import { getCalendarCompetitionOptions, type MatchCompetitionFilter } from "@/features/events/match-competition-filter";
 import { WeekView } from "@/features/events/WeekView";
 import {
   WEEK_STARTS_ON,
@@ -25,7 +27,7 @@ import {
 import { useNow } from "@/features/events/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { fetchPlayerEvents } from "@/services/player";
+import { fetchPlayerEvents, fetchPlayerStandings } from "@/services/player";
 import type { EventType, TeamEvent } from "@/features/events/types";
 import "@/features/events/events-background.css";
 
@@ -63,16 +65,27 @@ export default function PlayerEventsPage() {
     enabled: Boolean(athleteId),
   });
 
+  const { data: competitions = [] } = useQuery({
+    queryKey: ["player", "standings", athleteId],
+    queryFn: () => fetchPlayerStandings(athleteId),
+    enabled: Boolean(athleteId),
+  });
+
   const [view, setView] = useState<CalendarView>("month");
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [hiddenTypes, setHiddenTypes] = useState<Set<EventType>>(() => new Set());
+  const [matchFilter, setMatchFilter] = useState<MatchCompetitionFilter>("all");
   const [panel, setPanel] = useState<Panel>({ kind: "closed" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const competitionOptions = useMemo(
+    () => getCalendarCompetitionOptions(events ?? [], competitions),
+    [events, competitions],
+  );
   const visibleEvents = useMemo(
-    () => filterEventTypes(events ?? [], hiddenTypes),
-    [events, hiddenTypes],
+    () => filterEventTypes(events ?? [], hiddenTypes, matchFilter, competitions),
+    [events, hiddenTypes, matchFilter, competitions],
   );
   const eventsByDay = useMemo(() => groupEventsByDay(visibleEvents), [visibleEvents]);
   const eventDays = useMemo(() => new Set(eventsByDay.keys()), [eventsByDay]);
@@ -180,6 +193,7 @@ export default function PlayerEventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
+          readOnly
         />
       )}
       {view === "week" && (
@@ -205,16 +219,44 @@ export default function PlayerEventsPage() {
   );
 
   return (
-    <div className="events-page relative isolate min-h-full">
+    <div className="events-page relative isolate flex h-full min-h-0 flex-col overflow-hidden">
       <div className="events-page-backdrop" aria-hidden="true" />
 
-      <div className="relative z-10">
-      <PageHeader
-        title="Events"
-        subtitle="Your team's schedule and your RSVP responses."
-      />
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <PageHeader
+          title="Events"
+          mobileInline
+          actions={
+            <div className="flex items-center gap-1.5 sm:hidden">
+              <div
+                role="group"
+                aria-label="Calendar view"
+                className="flex items-center rounded-md border border-border bg-background p-0.5"
+              >
+                {(["month", "week", "agenda"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setView(option)}
+                    aria-pressed={view === option}
+                    className={cn(
+                      "rounded-[min(var(--radius-md),10px)] px-1.5 py-1 text-[10px] font-medium capitalize transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      view === option
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          }
+          className="shrink-0 pt-5 pb-4 pl-4 pr-4 lg:px-8 lg:pt-2 lg:pb-1"
+        />
 
-      <div className="flex flex-col gap-3 p-3 pb-4 sm:gap-4 sm:p-5 lg:p-6 lg:pb-6">
+        <div className="mx-auto flex w-full max-w-[1800px] min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 sm:gap-4 sm:px-5 lg:px-8">
         {isLoading && !events && (
           <div className="rounded-xl border border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
             Loading events…
@@ -247,6 +289,9 @@ export default function PlayerEventsPage() {
             hiddenTypes={hiddenTypes}
             readOnly
             onToggleType={handleToggleType}
+            matchFilter={matchFilter}
+            competitionOptions={competitionOptions}
+            onMatchFilterChange={setMatchFilter}
             onSelectDate={handleDayClick}
             onNavigate={navigate}
             onToday={goToToday}
@@ -256,13 +301,16 @@ export default function PlayerEventsPage() {
           />
         )}
 
-        <div className="hidden sm:flex sm:flex-col sm:gap-5">
+        <div className="hidden min-h-0 min-w-0 sm:flex sm:flex-1 sm:flex-col sm:gap-3">
           <CalendarToolbar
             view={view}
             label={label}
             hiddenTypes={hiddenTypes}
             readOnly
             onToggleType={handleToggleType}
+            matchFilter={matchFilter}
+            competitionOptions={competitionOptions}
+            onMatchFilterChange={setMatchFilter}
             onViewChange={setView}
             onPrevious={() => navigate(-1)}
             onNext={() => navigate(1)}
@@ -272,8 +320,8 @@ export default function PlayerEventsPage() {
           />
 
           {events && (
-            <div className="flex items-stretch gap-6">
-              <div className="min-w-0 flex-1">{viewContent}</div>
+            <div className="flex min-h-0 min-w-0 flex-1 items-stretch gap-6">
+              <div className="min-h-0 min-w-0 flex-1">{viewContent}</div>
               <aside className="hidden w-80 shrink-0 xl:flex xl:flex-col">
                 {renderSidebar(
                   false,

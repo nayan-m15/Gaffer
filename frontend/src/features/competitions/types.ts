@@ -150,4 +150,7 @@ export interface CompetitionInvite {
   email: string;
   createdAt: string;
   expiresAt: string;
+  status: "pending" | "verification";
+  proposedName?: string | null;
+  requestedByUserId?: string | null;
 }

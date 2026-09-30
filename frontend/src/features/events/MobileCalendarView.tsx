@@ -25,6 +25,8 @@ import {
 } from "./calendar-utils";
 import { displayEventStatus, eventTypeLabel, EVENT_TYPE_OPTIONS } from "./event-utils";
 import { getEventTypeStyle } from "./event-style";
+import { MatchCompetitionSelect } from "./MatchCompetitionSelect";
+import type { MatchCompetitionFilter } from "./match-competition-filter";
 import type { EventType, TeamEvent } from "./types";
 
 interface MobileCalendarViewProps {
@@ -37,6 +39,9 @@ interface MobileCalendarViewProps {
   hiddenTypes: ReadonlySet<EventType>;
   readOnly?: boolean;
   onToggleType: (type: EventType) => void;
+  matchFilter: MatchCompetitionFilter;
+  competitionOptions: readonly { value: string; label: string }[];
+  onMatchFilterChange: (value: MatchCompetitionFilter) => void;
   onViewChange?: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
@@ -63,6 +68,9 @@ export function MobileCalendarView({
   hiddenTypes,
   readOnly = false,
   onToggleType,
+  matchFilter,
+  competitionOptions,
+  onMatchFilterChange,
   onViewChange,
   onSelectDate,
   onNavigate,
@@ -196,6 +204,14 @@ export function MobileCalendarView({
             );
           })}
         </div>
+        {!hiddenTypes.has("match") && (
+          <MatchCompetitionSelect
+            value={matchFilter}
+            options={competitionOptions}
+            onChange={onMatchFilterChange}
+            className="w-full [&>select]:max-w-none [&>select]:flex-1"
+          />
+        )}
 
       </div>
 

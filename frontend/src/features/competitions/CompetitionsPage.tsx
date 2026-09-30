@@ -9,7 +9,7 @@ import { StandingsDisplay } from "@/components/standings/StandingsDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useCompetition, useCompetitionFixtures, useCompetitionInvites, useCompetitionSearch, useMyCompetitions, useCompetitionMutation } from "./hooks";
-import { addParticipant, deleteCompetition, deleteCompetitionResult, generateCompetitionFixtures, inviteCoach, removeParticipant, revokeInvite } from "./api";
+import { addParticipant, deleteCompetition, deleteCompetitionResult, generateCompetitionFixtures, inviteCoach, removeParticipant, renameParticipant, resolveTeamVerification, revokeInvite } from "./api";
 import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type ActionDialogConfig } from "./CompetitionDialogs";
 import { CompetitionResultDialog } from "./CompetitionResultDialog";
 import { CompetitionFixturesView } from "./CompetitionFixturesView";
@@ -309,6 +309,8 @@ function ParticipantRow({
   onInvite,
   onRevoke,
   onRemove,
+  onRename,
+  onResolve,
 }: {
   participant: Participant;
   invite?: CompetitionInvite;
@@ -319,6 +321,8 @@ function ParticipantRow({
   onInvite: () => void;
   onRevoke: () => void;
   onRemove: () => void;
+  onRename: () => void;
+  onResolve: (approve: boolean) => void;
 }) {
   const expired = invite ? new Date(invite.expiresAt).getTime() <= Date.now() : false;
   return (
@@ -331,16 +335,24 @@ function ParticipantRow({
         </p>
         {invite && !participant.teamId && (
           <p className="break-words text-sm text-muted-foreground">
-            {expired ? "Invitation expired" : "Invitation pending"} · {invite.email}<br />
-            {expired ? "Expired" : "Expires"} {new Date(invite.expiresAt).toLocaleString()}
+            {invite.status === "verification" ? "Verification required" : expired ? "Invitation expired" : "Invitation pending"} · {invite.email}<br />
+            {invite.status === "verification" && <><strong>Coach's team: {invite.proposedName}</strong><br />
+              Confirm this is the intended team before linking.<br /></>}
+            {invite.status === "verification" ? "Coach confirmed their team" : `${expired ? "Expired" : "Expires"} ${new Date(invite.expiresAt).toLocaleString()}`}
           </p>
         )}
       </div>
       {isAdmin && (
         <div className="flex shrink-0 flex-wrap gap-2">
           {!participant.teamId && <>
-            <Button variant="outline" disabled={inviteDisabled} onClick={onInvite}>{invite ? "Resend" : "Invite coach"}</Button>
-            {invite && <Button variant="outline" onClick={onRevoke}>Revoke</Button>}
+            {invite?.status === "verification" ? <>
+              <Button disabled={inviteDisabled} onClick={() => onResolve(true)}>Approve team</Button>
+              <Button variant="outline" disabled={inviteDisabled} onClick={() => onResolve(false)}>Reject</Button>
+            </> : <>
+              <Button variant="outline" disabled={inviteDisabled} onClick={onInvite}>{invite ? "Resend" : "Invite representative"}</Button>
+              {invite && <Button variant="outline" onClick={onRevoke}>Revoke</Button>}
+            </>}
+            <Button variant="outline" onClick={onRename}>Edit name</Button>
           </>}
           {!isFoundingTeam && <Button variant="outline" disabled={removeDisabled} onClick={onRemove}>Remove</Button>}
         </div>
@@ -362,6 +374,8 @@ function ParticipantManagementPanel({
   onInvite,
   onRevoke,
   onRemove,
+  onRename,
+  onResolve,
 }: {
   competition: CompetitionDetail;
   teamId?: string;
@@ -374,6 +388,8 @@ function ParticipantManagementPanel({
   onDeleteCompetition: () => void;
   onInvite: (participant: Participant, email?: string) => void;
   onRevoke: (invite: CompetitionInvite) => void;
+  onRename: (participant: Participant) => void;
+  onResolve: (invite: CompetitionInvite, approve: boolean) => void;
   onRemove: (participant: Participant) => void;
 }) {
   return (
@@ -413,6 +429,8 @@ function ParticipantManagementPanel({
             onInvite={() => onInvite(participant, invite?.email)}
             onRevoke={() => { if (invite) onRevoke(invite); }}
             onRemove={() => onRemove(participant)}
+            onRename={() => onRename(participant)}
+            onResolve={(approve) => { if (invite) onResolve(invite, approve); }}
           />;
         })}
       </ul>
@@ -460,6 +478,8 @@ type CompetitionDetailsContentProps = {
   onDeleteCompetition: () => void;
   onInvite: (participant: Participant, email?: string) => void;
   onRevoke: (invite: CompetitionInvite) => void;
+  onRename: (participant: Participant) => void;
+  onResolve: (invite: CompetitionInvite, approve: boolean) => void;
   onRemove: (participant: Participant) => void;
   onEditSettings: () => void;
   onCloseSettings: () => void;
@@ -522,6 +542,8 @@ function SharedCompetitionDetailsContent({
   onInvite,
   onRevoke,
   onRemove,
+  onRename,
+  onResolve,
   onEditSettings,
   onCloseSettings,
   onSettingsSaved,
@@ -580,6 +602,8 @@ function SharedCompetitionDetailsContent({
       onInvite={onInvite}
       onRevoke={onRevoke}
       onRemove={onRemove}
+      onRename={onRename}
+      onResolve={onResolve}
     />
     {competition.isAdmin && <SettingsSummary competition={competition} locked={settingsLocked} editDisabled={!fixtureStateKnown} onEdit={onEditSettings} />}
     <CompetitionManagementDialogs
@@ -671,9 +695,9 @@ function CompetitionDetails({ id }: { id: string }) {
   const manualFixtureByResult = useMemo(() => new Map(fixtures.filter((fixture) => fixture.legacyResultId).map((fixture) => [fixture.legacyResultId!, fixture])), [fixtures]);
 
   const openInvite = (participant: Participant, email?: string) => setAction({
-    title: email ? "Resend invitation" : "Invite coach",
-    description: `Invite a coach for ${participant.displayName}. Issuing an invitation replaces any previous pending link for this team.`,
-    label: "Coach email address", inputType: "email", initialValue: email,
+    title: email ? "Resend invitation" : "Invite representative",
+    description: `Invite a coach or authorized assistant for ${participant.displayName}. Issuing an invitation replaces any previous pending link for this team.`,
+    label: "Representative email address", inputType: "email", initialValue: email,
     confirm: email ? "Resend invitation" : "Send invitation",
     action: (value) => inviteCoach(participant.id, value),
     onSuccess: () => setNotice(`Invitation issued for ${participant.displayName}.`),
@@ -749,6 +773,22 @@ function CompetitionDetails({ id }: { id: string }) {
         onSuccess: () => navigate(basePath, { replace: true }),
       })}
       onInvite={openInvite}
+      onRename={(participant) => setAction({
+        title: "Edit participant name",
+        description: `Correct the unlinked participant ${participant.displayName}. This does not rename a registered Gaffer team.`,
+        label: "Team name", initialValue: participant.displayName, confirm: "Save name",
+        action: (value) => renameParticipant(id, participant.id, value),
+      })}
+      onResolve={(invite, approve) => setAction({
+        title: approve ? "Approve team verification" : "Reject team verification",
+        description: approve
+          ? `Link ${invite.proposedName} to ${competition?.participants.find(p => p.id === invite.competitionTeamId)?.displayName}? The registered team name will be used.`
+          : `Reject ${invite.proposedName}'s claim? You can send a corrected invitation afterward.`,
+        confirm: approve ? "Approve and link" : "Reject request",
+        destructive: !approve,
+        action: () => resolveTeamVerification(invite.id, approve),
+        onSuccess: () => setNotice(approve ? "Team verified and linked." : "Verification rejected. You can send a new invitation."),
+      })}
       onRevoke={(invite) => setAction({
         title: "Revoke invitation",
         description: `Revoke the invitation to ${invite.email} for ${competition?.participants.find((participant) => participant.id === invite.competitionTeamId)?.displayName ?? "this team"}?`,
