@@ -86,6 +86,7 @@ export function startGoalUnlockCelebration(
   cancelGoalUnlockCelebration();
 
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    revealUnlockPage();
     options.onReveal();
     options.onComplete?.();
     return () => {};
@@ -163,6 +164,10 @@ export function startGoalUnlockCelebration(
       logError("Unlock celebration teardown failed", error);
     }
     host.remove();
+    const main = document.querySelector("main.app-shell-main");
+    if (main instanceof HTMLElement) {
+      main.style.removeProperty("overflow");
+    }
     if (activeCleanup === cancel) activeCleanup = null;
     if (completed) {
       try {
@@ -180,6 +185,7 @@ export function startGoalUnlockCelebration(
   function reveal() {
     if (revealed || cleaned) return;
     try {
+      revealUnlockPage();
       options.onReveal();
       revealed = true;
     } catch (error) {
@@ -466,6 +472,21 @@ export function startGoalUnlockCelebration(
     finishCleanup(true);
   }
   return cancel;
+}
+
+function revealUnlockPage(): void {
+  for (const node of document.querySelectorAll("[data-unlock-page]")) {
+    if (!(node instanceof HTMLElement)) continue;
+    node.style.opacity = "1";
+    node.style.pointerEvents = "auto";
+    node.removeAttribute("inert");
+    node.removeAttribute("aria-hidden");
+  }
+  const main = document.querySelector("main.app-shell-main");
+  if (!(main instanceof HTMLElement)) return;
+  if (!document.querySelector(".events-page")) {
+    main.style.overflow = "auto";
+  }
 }
 
 function applyContentInset(visual: HTMLElement): void {

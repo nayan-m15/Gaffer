@@ -83,28 +83,19 @@ function GatedPageBody({
   const showSpinner = showingGate && isLoading;
   const showCard = showingGate && !isLoading;
   const showOutlet = !showingGate || unlocked;
-  const outletInert = showingGate && unlocked;
-  const outletConcealed = outletInert && !pageRevealed;
+  const pageHidden = showingGate && unlocked && !pageRevealed;
 
   return (
-    <div
-      className={cn(
-        "relative flex min-h-full flex-1 flex-col",
-        showingGate && !pageRevealed && "min-h-0 overflow-hidden",
-      )}
-    >
+    <div className="relative flex min-h-full flex-1 flex-col">
       {showOutlet && (
         <div
+          data-unlock-page=""
           className={cn(
-            showCard &&
-              !pageRevealed &&
-              "absolute inset-0 overflow-hidden",
-            outletInert && "pointer-events-none overflow-hidden",
-            outletConcealed &&
+            pageHidden &&
               "pointer-events-none opacity-0 isolate [transform:translate(0)]",
           )}
-          aria-hidden={outletInert || undefined}
-          inert={outletInert || undefined}
+          aria-hidden={pageHidden || undefined}
+          inert={pageHidden || undefined}
         >
           <Outlet />
         </div>
@@ -121,7 +112,7 @@ function GatedPageBody({
       {showCard && (
         <div
           className={cn(
-            "relative z-10 flex min-h-full flex-1 items-center justify-center px-6 py-8",
+            "absolute inset-0 z-10 flex items-center justify-center px-6 py-8",
             celebrating && "pointer-events-none",
           )}
         >
@@ -275,7 +266,6 @@ function AppShellContent() {
             "app-shell-content flex-1",
             (isEventsPage || isDashboardPage) && "min-h-0",
             showingGate && "relative flex min-h-0 flex-col",
-            showingGate && !pageRevealed && "overflow-hidden",
           )}
         >
           {gateEligible && pageKey && user?.id ? (

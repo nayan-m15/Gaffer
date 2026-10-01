@@ -1127,7 +1127,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardFrame lockViewport={gateBlocksScroll}>
+    <DashboardFrame lockViewport={isFirstTime}>
       {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <DashboardStadiumOverlay
           fading={
@@ -1145,7 +1145,7 @@ export default function DashboardPage() {
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         firstTime={isFirstTime}
-        hideAddTeam={(unlockGateApplies || unlockCelebrating) && !dashPageRevealed}
+        hideAddTeam={unlockGateApplies || unlockCelebrating}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
@@ -1172,10 +1172,11 @@ export default function DashboardPage() {
 
       {!isFirstTime && !hideMainForUnlock && (
       <div
+        data-unlock-page=""
         className={cn(
           "mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10",
           concealDashboardMain &&
-            "absolute inset-0 overflow-hidden pointer-events-none opacity-0 isolate [transform:translate(0)]",
+            "pointer-events-none opacity-0 isolate [transform:translate(0)]",
         )}
         aria-hidden={concealDashboardMain || undefined}
         inert={concealDashboardMain || undefined}
