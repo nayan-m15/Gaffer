@@ -71,22 +71,26 @@ export function createPlayerRadarScene(visual: HTMLElement): SceneController {
 
       const tick = (now: number) => {
         if (stopped) return;
-        const t = Math.min(1, (now - start) / BUILD_MS);
-        const eased = easeOutCubic(t);
-        if (fill) {
-          const points = VALUES.map((value, index) =>
-            hexPoint(R * value * eased, index).join(","),
-          ).join(" ");
-          fill.setAttribute("points", points);
+        try {
+          const t = Math.min(1, (now - start) / BUILD_MS);
+          const eased = easeOutCubic(t);
+          if (fill) {
+            const points = VALUES.map((value, index) =>
+              hexPoint(R * value * eased, index).join(","),
+            ).join(" ");
+            fill.setAttribute("points", points);
+          }
+          if (t < 1) {
+            frame = requestAnimationFrame(tick);
+            return;
+          }
+          for (const dot of root.querySelectorAll(".unlock-scene-radar-dot")) {
+            dot.classList.add("is-on");
+          }
+          rating?.classList.add("is-on");
+        } catch {
+          stopped = true;
         }
-        if (t < 1) {
-          frame = requestAnimationFrame(tick);
-          return;
-        }
-        for (const dot of root.querySelectorAll(".unlock-scene-radar-dot")) {
-          dot.classList.add("is-on");
-        }
-        rating?.classList.add("is-on");
       };
 
       frame = requestAnimationFrame(tick);
@@ -106,6 +110,7 @@ export function createPlayerRadarScene(visual: HTMLElement): SceneController {
     teardown() {
       stopped = true;
       if (frame) cancelAnimationFrame(frame);
+      frame = 0;
     },
   };
 }

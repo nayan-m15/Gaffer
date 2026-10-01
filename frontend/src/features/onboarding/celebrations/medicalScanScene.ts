@@ -129,28 +129,32 @@ export function createMedicalScanScene(visual: HTMLElement): SceneController {
 
       const tick = (now: number) => {
         if (stopped) return;
-        const t = Math.min(1, (now - start) / BUILD_MS);
-        const pct = t * 100;
-        if (clip instanceof SVGRectElement) {
-          const y = scanTop + (scanBottom - scanTop) * t;
-          clip.setAttribute("height", String(y));
-          if (svgLine instanceof SVGRectElement) svgLine.setAttribute("y", String(y));
-          if (spot && y >= iconKneeY) spot.classList.add("is-healed");
-        } else {
-          if (fill instanceof HTMLElement) {
-            fill.style.clipPath = `inset(0 0 ${100 - pct}% 0)`;
+        try {
+          const t = Math.min(1, (now - start) / BUILD_MS);
+          const pct = t * 100;
+          if (clip instanceof SVGRectElement) {
+            const y = scanTop + (scanBottom - scanTop) * t;
+            clip.setAttribute("height", String(y));
+            if (svgLine instanceof SVGRectElement) svgLine.setAttribute("y", String(y));
+            if (spot && y >= iconKneeY) spot.classList.add("is-healed");
+          } else {
+            if (fill instanceof HTMLElement) {
+              fill.style.clipPath = `inset(0 0 ${100 - pct}% 0)`;
+            }
+            if (beam instanceof HTMLElement) {
+              beam.style.top = `${pct}%`;
+            }
+            if (spot && pct >= photoKneeTop) spot.classList.add("is-healed");
           }
-          if (beam instanceof HTMLElement) {
-            beam.style.top = `${pct}%`;
+          if (readout) readout.textContent = `SCAN ${Math.round(pct)}%`;
+          if (t < 1) {
+            frame = requestAnimationFrame(tick);
+            return;
           }
-          if (spot && pct >= photoKneeTop) spot.classList.add("is-healed");
+          badge?.classList.add("is-on");
+        } catch {
+          stopped = true;
         }
-        if (readout) readout.textContent = `SCAN ${Math.round(pct)}%`;
-        if (t < 1) {
-          frame = requestAnimationFrame(tick);
-          return;
-        }
-        badge?.classList.add("is-on");
       };
 
       frame = requestAnimationFrame(tick);
@@ -172,6 +176,7 @@ export function createMedicalScanScene(visual: HTMLElement): SceneController {
     teardown() {
       stopped = true;
       if (frame) cancelAnimationFrame(frame);
+      frame = 0;
     },
   };
 }

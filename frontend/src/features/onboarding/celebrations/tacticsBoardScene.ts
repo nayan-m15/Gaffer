@@ -41,6 +41,8 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
   `;
   visual.append(root);
 
+  const animations: Animation[] = [];
+
   return {
     root,
     play() {
@@ -50,40 +52,58 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
       const runDuration = Math.round(BUILD_MS * 0.32);
       const runDelay = BUILD_MS - runDuration;
       magnets.forEach((node, index) => {
-        if (!(node instanceof HTMLElement)) return;
+        if (!(node instanceof HTMLElement) || !node.isConnected) return;
         const fromLeft = index % 2 === 0;
         const fromX = fromLeft ? -170 : 170;
         const overshoot = fromLeft ? 12 : -12;
-        node.animate(
-          [
-            { transform: `translate(${fromX}px, 0)`, opacity: 0 },
-            {
-              transform: `translate(${overshoot}px, 0)`,
-              opacity: 1,
-              offset: 0.78,
-            },
-            { transform: "translate(0, 0)", opacity: 1 },
-          ],
-          {
-            duration: magnetDuration,
-            delay: index * magnetStagger,
-            easing: "cubic-bezier(0.22, 1.4, 0.36, 1)",
-            fill: "forwards",
-          },
-        );
+        try {
+          animations.push(
+            node.animate(
+              [
+                { transform: `translate(${fromX}px, 0)`, opacity: 0 },
+                {
+                  transform: `translate(${overshoot}px, 0)`,
+                  opacity: 1,
+                  offset: 0.78,
+                },
+                { transform: "translate(0, 0)", opacity: 1 },
+              ],
+              {
+                duration: magnetDuration,
+                delay: index * magnetStagger,
+                easing: "cubic-bezier(0.22, 1.4, 0.36, 1)",
+                fill: "forwards",
+              },
+            ),
+          );
+        } catch {
+          node.style.opacity = "1";
+        }
       });
 
       for (const path of root.querySelectorAll(".unlock-scene-run")) {
-        if (!(path instanceof SVGPathElement)) continue;
-        const length = path.getTotalLength();
+        if (!(path instanceof SVGPathElement) || !path.isConnected) continue;
+        let length = 0;
+        try {
+          length = path.getTotalLength();
+        } catch {
+          continue;
+        }
+        if (!Number.isFinite(length) || length <= 0) continue;
         path.style.strokeDasharray = `${length}`;
         path.style.strokeDashoffset = `${length}`;
-        path.animate([{ strokeDashoffset: `${length}` }, { strokeDashoffset: "0" }], {
-          duration: runDuration,
-          delay: runDelay,
-          easing: "ease-out",
-          fill: "forwards",
-        });
+        try {
+          animations.push(
+            path.animate([{ strokeDashoffset: `${length}` }, { strokeDashoffset: "0" }], {
+              duration: runDuration,
+              delay: runDelay,
+              easing: "ease-out",
+              fill: "forwards",
+            }),
+          );
+        } catch {
+          path.style.strokeDashoffset = "0";
+        }
       }
     },
     impact() {},
@@ -92,6 +112,15 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
       if (board instanceof HTMLElement) return sceneCenter(board);
       return sceneCenter(root);
     },
-    teardown() {},
+    teardown() {
+      for (const animation of animations) {
+        try {
+          animation.cancel();
+        } catch {
+          /* already finished or cancelled */
+        }
+      }
+      animations.length = 0;
+    },
   };
 }

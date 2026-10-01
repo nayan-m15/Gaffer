@@ -5,12 +5,14 @@ import { STAMP_HEADLINES } from "./celebrations/headlines";
 import {
   BACKDROP_OUT_MS,
   BALL_SIZE_PX,
+  CELEBRATION_WATCHDOG_MS,
   SCENE_PLAY_DELAY_MS,
   CONFETTI_FADE_MS,
   CONFETTI_LIFE_MS,
   IMPACT_MS,
   MAX_PIECES,
   REVEAL_MS,
+  REVEAL_STAGGER_MS,
   SECOND_WAVE_MS,
   STAMP_MS,
 } from "./celebrations/timings";
@@ -62,6 +64,11 @@ type CelebrationOptions = {
   onComplete?: () => void;
 };
 
+type ClockStep = {
+  at: number;
+  run: () => void;
+};
+
 let activeCleanup: (() => void) | null = null;
 
 export function cancelGoalUnlockCelebration(): void {
@@ -84,8 +91,9 @@ export function startGoalUnlockCelebration(
     return () => {};
   }
 
-  const timers: number[] = [];
-  let frame = 0;
+  const startedAt = performance.now();
+  let clockFrame = 0;
+  let confettiFrame = 0;
   let revealed = false;
   let cleaned = false;
   let canvas: HTMLCanvasElement | null = null;
@@ -93,6 +101,10 @@ export function startGoalUnlockCelebration(
   let particles: Particle[] = [];
   let wavesDone = false;
   let colors = FALLBACK_COLORS;
+  let scene: ReturnType<typeof createUnlockScene> | null = null;
+  let onResize: (() => void) | null = null;
+  let clearWillChange: ((event: TransitionEvent) => void) | null = null;
+  let stepIndex = 0;
 
   const host = document.createElement("div");
   host.className = "goal-unlock-host";
@@ -104,190 +116,378 @@ export function startGoalUnlockCelebration(
 
   const backdrop = document.createElement("div");
   backdrop.className = "goal-unlock-backdrop";
-  visual.append(backdrop);
 
-  const scene = createUnlockScene(options.pageKey, visual);
-  getBallImage();
+  const stage = document.createElement("div");
+  stage.className = "goal-unlock-stage";
 
   const flash = document.createElement("div");
   flash.className = "goal-unlock-flash";
 
   const stamp = document.createElement("div");
   stamp.className = "goal-unlock-stamp";
-  stamp.innerHTML = `<p class="goal-unlock-stamp-goal">${escapeHtml(STAMP_HEADLINES[options.pageKey])}</p><p class="goal-unlock-stamp-sub">${escapeHtml(options.label.toUpperCase())} UNLOCKED</p>`;
 
-  canvas = document.createElement("canvas");
-  canvas.className = "goal-unlock-canvas";
-
-  visual.append(flash, stamp, canvas);
-
-  const live = document.createElement("div");
-  live.className = "sr-only";
-  live.setAttribute("aria-live", "polite");
-  live.textContent = `${options.label} unlocked`;
-
-  host.append(visual, live);
-  document.body.append(host);
-
-  const primary = getComputedStyle(document.documentElement)
-    .getPropertyValue("--primary")
-    .trim();
-  if (primary) {
-    colors = [primary, ...FALLBACK_COLORS.slice(1)];
+  function logError(message: string, error?: unknown) {
+    if (error === undefined) {
+      console.error(message);
+      return;
+    }
+    console.error(message, error);
   }
 
-  requestAnimationFrame(() => {
-    backdrop.classList.add("is-in");
-  });
+  function stopConfetti() {
+    if (confettiFrame) cancelAnimationFrame(confettiFrame);
+    confettiFrame = 0;
+    particles = [];
+    if (canvas) {
+      canvas.remove();
+      canvas = null;
+      ctx = null;
+    }
+  }
 
   function finishCleanup(completed: boolean) {
     if (cleaned) return;
     cleaned = true;
-    for (const id of timers) window.clearTimeout(id);
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
-    particles = [];
-    scene.teardown();
+    if (clockFrame) cancelAnimationFrame(clockFrame);
+    clockFrame = 0;
+    if (onResize) window.removeEventListener("resize", onResize);
+    if (clearWillChange) {
+      backdrop.removeEventListener("transitionend", clearWillChange);
+      clearWillChange = null;
+    }
+    stopConfetti();
+    backdrop.style.willChange = "auto";
+    try {
+      scene?.teardown();
+    } catch (error) {
+      logError("Unlock celebration teardown failed", error);
+    }
     host.remove();
     if (activeCleanup === cancel) activeCleanup = null;
-    if (completed) options.onComplete?.();
+    if (completed) {
+      try {
+        options.onComplete?.();
+      } catch (error) {
+        logError("Unlock celebration onComplete failed", error);
+      }
+    }
   }
 
   function cancel() {
     finishCleanup(false);
   }
 
-  activeCleanup = cancel;
-
-  const schedule = (fn: () => void, ms: number) => {
-    timers.push(window.setTimeout(fn, ms));
-  };
-
-  const reveal = () => {
+  function reveal() {
     if (revealed || cleaned) return;
-    revealed = true;
-    options.onReveal();
-  };
-
-  schedule(() => {
-    scene.root.classList.add("is-in");
-  }, 160);
-
-  schedule(() => {
-    scene.play();
-  }, SCENE_PLAY_DELAY_MS);
-
-  schedule(() => {
-    scene.impact();
-    flash.classList.add("is-on");
-    stamp.classList.add("is-on");
-    sizeCanvas(canvas!);
-    ctx = canvas!.getContext("2d");
-    if (!ctx) return;
-    const origin = scene.getImpactOrigin();
-    spawnBurst(particles, colors, origin.x, origin.y, 170, -Math.PI * 0.92, -Math.PI * 0.08, 7, 17);
-    spawnBurst(
-      particles,
-      colors,
-      12,
-      window.innerHeight - 8,
-      90,
-      -Math.PI * 0.72,
-      -Math.PI * 0.18,
-      8,
-      16,
-    );
-    spawnBurst(
-      particles,
-      colors,
-      window.innerWidth - 12,
-      window.innerHeight - 8,
-      90,
-      -Math.PI * 0.82,
-      -Math.PI * 0.28,
-      8,
-      16,
-    );
-    loop();
-  }, IMPACT_MS);
-
-  schedule(() => {
-    spawnBurst(
-      particles,
-      colors,
-      18,
-      window.innerHeight - 10,
-      50,
-      -Math.PI * 0.7,
-      -Math.PI * 0.22,
-      6,
-      13,
-    );
-    spawnBurst(
-      particles,
-      colors,
-      window.innerWidth - 18,
-      window.innerHeight - 10,
-      50,
-      -Math.PI * 0.78,
-      -Math.PI * 0.3,
-      6,
-      13,
-    );
-    spawnBurst(
-      particles,
-      colors,
-      window.innerWidth / 2,
-      window.innerHeight - 6,
-      10,
-      -Math.PI * 0.68,
-      -Math.PI * 0.32,
-      7,
-      14,
-      true,
-    );
-    wavesDone = true;
-  }, SECOND_WAVE_MS);
-
-  schedule(() => {
-    backdrop.classList.remove("is-in");
-    backdrop.classList.add("is-out");
-    scene.root.classList.remove("is-in");
-    scene.root.classList.add("is-out");
-    reveal();
-  }, REVEAL_MS);
-
-  const finishAt = SECOND_WAVE_MS + CONFETTI_LIFE_MS + CONFETTI_FADE_MS + 80;
-  schedule(() => {
-    if (canvas) {
-      canvas.remove();
-      canvas = null;
-      ctx = null;
+    try {
+      options.onReveal();
+      revealed = true;
+    } catch (error) {
+      logError("Unlock celebration onReveal failed", error);
     }
-  }, finishAt);
-
-  schedule(() => finishCleanup(true), Math.max(finishAt, REVEAL_MS + BACKDROP_OUT_MS, IMPACT_MS + STAMP_MS) + 120);
-
-  function loop() {
-    if (cleaned) return;
-    const now = performance.now();
-    drawParticles(ctx, canvas, particles, now);
-    particles = particles.filter(
-      (p) => now - p.born < CONFETTI_LIFE_MS + CONFETTI_FADE_MS,
-    );
-    if (particles.length === 0 && wavesDone) {
-      frame = 0;
-      if (canvas) {
-        canvas.remove();
-        canvas = null;
-        ctx = null;
-      }
-      return;
-    }
-    frame = requestAnimationFrame(loop);
   }
 
+  function callScene(
+    method: "play" | "impact" | "teardown",
+  ): void {
+    if (!scene) return;
+    try {
+      scene[method]();
+    } catch (error) {
+      logError(`Unlock celebration scene.${method} failed`, error);
+    }
+  }
+
+  activeCleanup = cancel;
+
+  try {
+    applyContentInset(visual);
+    visual.append(backdrop, stage);
+
+    try {
+      scene = createUnlockScene(options.pageKey, stage);
+    } catch (error) {
+      logError("Unlock celebration scene create failed", error);
+      scene = null;
+    }
+
+    try {
+      getBallImage();
+    } catch (error) {
+      logError("Unlock celebration ball image failed", error);
+    }
+
+    stamp.innerHTML = `<p class="goal-unlock-stamp-goal">${escapeHtml(STAMP_HEADLINES[options.pageKey])}</p><p class="goal-unlock-stamp-sub">${escapeHtml(options.label.toUpperCase())} UNLOCKED</p>`;
+    stage.append(stamp);
+
+    canvas = document.createElement("canvas");
+    canvas.className = "goal-unlock-canvas";
+    visual.append(flash, canvas);
+
+    const live = document.createElement("div");
+    live.className = "sr-only";
+    live.setAttribute("aria-live", "polite");
+    live.textContent = `${options.label} unlocked`;
+
+    host.append(visual, live);
+    document.body.append(host);
+
+    onResize = () => applyContentInset(visual);
+    window.addEventListener("resize", onResize);
+
+    const primary = getComputedStyle(document.documentElement)
+      .getPropertyValue("--primary")
+      .trim();
+    if (primary) {
+      colors = [primary, ...FALLBACK_COLORS.slice(1)];
+    }
+  } catch (error) {
+    logError("Unlock celebration host setup failed", error);
+  }
+
+  const finishAt = SECOND_WAVE_MS + CONFETTI_LIFE_MS + CONFETTI_FADE_MS + 80;
+  const removeAt =
+    Math.max(
+      finishAt,
+      REVEAL_MS + REVEAL_STAGGER_MS + BACKDROP_OUT_MS,
+      IMPACT_MS + STAMP_MS,
+    ) + 120;
+
+  const steps: ClockStep[] = [
+    {
+      at: 0,
+      run: () => {
+        backdrop.classList.add("is-in");
+      },
+    },
+    {
+      at: 160,
+      run: () => {
+        try {
+          scene?.root.classList.add("is-in");
+        } catch (error) {
+          logError("Unlock celebration scene enter failed", error);
+        }
+      },
+    },
+    {
+      at: SCENE_PLAY_DELAY_MS,
+      run: () => {
+        callScene("play");
+      },
+    },
+    {
+      at: IMPACT_MS,
+      run: () => {
+        callScene("impact");
+        flash.classList.add("is-on");
+        stamp.classList.add("is-on");
+        try {
+          if (!canvas) return;
+          sizeCanvas(canvas);
+          ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          let origin = contentCenterOrigin(stage);
+          try {
+            if (scene) origin = scene.getImpactOrigin();
+          } catch (error) {
+            logError("Unlock celebration impact origin failed", error);
+          }
+          spawnBurst(particles, colors, origin.x, origin.y, 170, -Math.PI * 0.92, -Math.PI * 0.08, 7, 17);
+          spawnBurst(
+            particles,
+            colors,
+            12,
+            window.innerHeight - 8,
+            90,
+            -Math.PI * 0.72,
+            -Math.PI * 0.18,
+            8,
+            16,
+          );
+          spawnBurst(
+            particles,
+            colors,
+            window.innerWidth - 12,
+            window.innerHeight - 8,
+            90,
+            -Math.PI * 0.82,
+            -Math.PI * 0.28,
+            8,
+            16,
+          );
+          loopConfetti();
+        } catch (error) {
+          logError("Unlock celebration confetti failed", error);
+        }
+      },
+    },
+    {
+      at: SECOND_WAVE_MS,
+      run: () => {
+        try {
+          spawnBurst(
+            particles,
+            colors,
+            18,
+            window.innerHeight - 10,
+            50,
+            -Math.PI * 0.7,
+            -Math.PI * 0.22,
+            6,
+            13,
+          );
+          spawnBurst(
+            particles,
+            colors,
+            window.innerWidth - 18,
+            window.innerHeight - 10,
+            50,
+            -Math.PI * 0.78,
+            -Math.PI * 0.3,
+            6,
+            13,
+          );
+          spawnBurst(
+            particles,
+            colors,
+            contentCenterX(stage),
+            window.innerHeight - 6,
+            10,
+            -Math.PI * 0.68,
+            -Math.PI * 0.32,
+            7,
+            14,
+            true,
+          );
+        } catch (error) {
+          logError("Unlock celebration confetti wave failed", error);
+        }
+        wavesDone = true;
+      },
+    },
+    {
+      at: REVEAL_MS,
+      run: () => {
+        try {
+          scene?.root.classList.remove("is-in");
+          scene?.root.classList.add("is-out");
+        } catch (error) {
+          logError("Unlock celebration scene exit failed", error);
+        }
+        reveal();
+      },
+    },
+    {
+      at: REVEAL_MS + REVEAL_STAGGER_MS,
+      run: () => {
+        backdrop.style.willChange = "opacity";
+        backdrop.classList.remove("is-in");
+        backdrop.classList.add("is-out");
+        clearWillChange = (event: TransitionEvent) => {
+          if (event.propertyName !== "opacity") return;
+          backdrop.style.willChange = "auto";
+          if (clearWillChange) {
+            backdrop.removeEventListener("transitionend", clearWillChange);
+            clearWillChange = null;
+          }
+        };
+        backdrop.addEventListener("transitionend", clearWillChange);
+      },
+    },
+    {
+      at: CELEBRATION_WATCHDOG_MS,
+      run: () => {
+        if (revealed && backdrop.classList.contains("is-out")) return;
+        logError("Unlock celebration timed out");
+        reveal();
+        finishCleanup(true);
+      },
+    },
+    {
+      at: finishAt,
+      run: () => {
+        stopConfetti();
+      },
+    },
+    {
+      at: removeAt,
+      run: () => {
+        finishCleanup(true);
+      },
+    },
+  ];
+
+  function loopConfetti() {
+    if (cleaned || !canvas) {
+      confettiFrame = 0;
+      return;
+    }
+    try {
+      const now = performance.now();
+      drawParticles(ctx, canvas, particles, now);
+      particles = particles.filter(
+        (p) => now - p.born < CONFETTI_LIFE_MS + CONFETTI_FADE_MS,
+      );
+      if (particles.length === 0 && wavesDone) {
+        stopConfetti();
+        return;
+      }
+      confettiFrame = requestAnimationFrame(loopConfetti);
+    } catch (error) {
+      logError("Unlock celebration confetti frame failed", error);
+      stopConfetti();
+    }
+  }
+
+  function tickClock(now: number) {
+    if (cleaned) return;
+    const elapsed = now - startedAt;
+    while (stepIndex < steps.length && elapsed >= steps[stepIndex]!.at) {
+      const step = steps[stepIndex]!;
+      stepIndex += 1;
+      try {
+        step.run();
+      } catch (error) {
+        logError("Unlock celebration step failed", error);
+      }
+      if (cleaned) return;
+    }
+    if (stepIndex < steps.length) {
+      clockFrame = requestAnimationFrame(tickClock);
+    }
+  }
+
+  try {
+    tickClock(performance.now());
+  } catch (error) {
+    logError("Unlock celebration clock failed to start", error);
+    reveal();
+    finishCleanup(true);
+  }
   return cancel;
+}
+
+function applyContentInset(visual: HTMLElement): void {
+  const main = document.querySelector("main.app-shell-main");
+  const left =
+    main instanceof HTMLElement
+      ? parseFloat(getComputedStyle(main).paddingLeft) || 0
+      : 0;
+  visual.style.setProperty("--unlock-content-left", `${left}px`);
+}
+
+function contentCenterX(stage: HTMLElement): number {
+  const rect = stage.getBoundingClientRect();
+  return rect.left + rect.width / 2;
+}
+
+function contentCenterOrigin(stage: HTMLElement): { x: number; y: number } {
+  const rect = stage.getBoundingClientRect();
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
 }
 
 function sizeCanvas(canvas: HTMLCanvasElement): void {

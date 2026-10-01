@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -64,6 +64,7 @@ function GatedPageBody({
   userId,
   showingGate,
   celebrating,
+  pageRevealed,
   onUnlocked,
   onRevealed,
   onCelebrationComplete,
@@ -72,6 +73,7 @@ function GatedPageBody({
   userId: string;
   showingGate: boolean;
   celebrating: boolean;
+  pageRevealed: boolean;
   onUnlocked: () => void;
   onRevealed: () => void;
   onCelebrationComplete: () => void;
@@ -82,15 +84,24 @@ function GatedPageBody({
   const showCard = showingGate && !isLoading;
   const showOutlet = !showingGate || unlocked;
   const outletInert = showingGate && unlocked;
+  const outletConcealed = outletInert && !pageRevealed;
 
   return (
-    <div className="relative flex min-h-full flex-1 flex-col">
+    <div
+      className={cn(
+        "relative flex min-h-full flex-1 flex-col",
+        showingGate && !pageRevealed && "min-h-0 overflow-hidden",
+      )}
+    >
       {showOutlet && (
         <div
           className={cn(
-            showCard && "absolute inset-0 overflow-hidden",
-            outletInert &&
-              "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
+            showCard &&
+              !pageRevealed &&
+              "absolute inset-0 overflow-hidden",
+            outletInert && "pointer-events-none overflow-hidden",
+            outletConcealed &&
+              "pointer-events-none opacity-0 isolate [transform:translate(0)]",
           )}
           aria-hidden={outletInert || undefined}
           inert={outletInert || undefined}
@@ -154,19 +165,23 @@ function AppShellContent() {
   const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
   const [celebrating, setCelebrating] = useState(false);
   const [celebrationActive, setCelebrationActive] = useState(false);
+  const [pageRevealed, setPageRevealed] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     setCelebrating(false);
     setCelebrationActive(false);
+    setPageRevealed(false);
     cancelGoalUnlockCelebration();
   }, [pageKey]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       cancelGoalUnlockCelebration();
-    },
-    [],
-  );
+    };
+  }, []);
 
   const gateEligible = Boolean(
     pageKey &&
@@ -188,6 +203,7 @@ function AppShellContent() {
   );
 
   const handleUnlocked = () => {
+    if (!mountedRef.current) return;
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -197,12 +213,15 @@ function AppShellContent() {
   };
 
   const handleRevealed = () => {
-    setCelebrating(false);
+    if (!mountedRef.current) return;
+    setPageRevealed(true);
   };
 
   const handleCelebrationComplete = () => {
+    if (!mountedRef.current) return;
     setCelebrating(false);
     setCelebrationActive(false);
+    setPageRevealed(false);
   };
 
   const showDashboardScene =
@@ -236,7 +255,9 @@ function AppShellContent() {
       <main
         className={cn(
           "app-shell-main relative z-10 flex min-h-0 min-w-0 flex-1 flex-col transition-[padding] duration-300 motion-reduce:transition-none",
-          isEventsPage ? "overflow-hidden" : "overflow-y-auto",
+          isEventsPage || (showingGate && !pageRevealed)
+            ? "overflow-hidden"
+            : "overflow-y-auto",
           expanded ? "lg:pl-72" : "lg:pl-24",
         )}
       >
@@ -252,8 +273,9 @@ function AppShellContent() {
         <div
           className={cn(
             "app-shell-content flex-1",
-            isEventsPage && "min-h-0",
-            showingGate && "relative flex min-h-0 flex-col overflow-y-auto",
+            (isEventsPage || isDashboardPage) && "min-h-0",
+            showingGate && "relative flex min-h-0 flex-col",
+            showingGate && !pageRevealed && "overflow-hidden",
           )}
         >
           {gateEligible && pageKey && user?.id ? (
@@ -262,6 +284,7 @@ function AppShellContent() {
               userId={user.id}
               showingGate={showingGate}
               celebrating={celebrating}
+              pageRevealed={pageRevealed}
               onUnlocked={handleUnlocked}
               onRevealed={handleRevealed}
               onCelebrationComplete={handleCelebrationComplete}

@@ -31,11 +31,14 @@ export function createGoalScene(visual: HTMLElement): SceneController {
   visual.append(ball);
 
   let setTimer = 0;
+  let stopped = false;
+  const animations: Animation[] = [];
 
   return {
     root,
     play() {
-      const startX = window.innerWidth / 2;
+      if (stopped || !ball.isConnected) return;
+      const startX = kickStartX(root);
       const startY = window.innerHeight - 28;
       const tf = (x: number, y: number, rot: number, scale: number) =>
         `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
@@ -43,22 +46,34 @@ export function createGoalScene(visual: HTMLElement): SceneController {
       ball.style.transform = tf(startX, startY, 0, 1);
       ball.classList.add("is-kicking");
       const setMs = BALL_DELAY_MS - SCENE_PLAY_DELAY_MS;
-      ball.animate(
-        [
-          { transform: tf(startX, startY, 0, 1) },
-          { transform: tf(startX, startY - 11, -12, 1.05) },
-          { transform: tf(startX, startY, 0, 1) },
-        ],
-        {
-          duration: setMs,
-          easing: "ease-in-out",
-        },
-      );
+      try {
+        animations.push(
+          ball.animate(
+            [
+              { transform: tf(startX, startY, 0, 1) },
+              { transform: tf(startX, startY - 11, -12, 1.05) },
+              { transform: tf(startX, startY, 0, 1) },
+            ],
+            {
+              duration: setMs,
+              easing: "ease-in-out",
+            },
+          ),
+        );
+      } catch {
+        /* keep the kick even if the set-bounce animation is unavailable */
+      }
       setTimer = window.setTimeout(() => {
-        kickBall(ball, root);
+        if (stopped || !ball.isConnected) return;
+        try {
+          kickBall(ball, root, animations, () => stopped);
+        } catch (error) {
+          console.error("Unlock celebration scene.play failed", error);
+        }
       }, setMs);
     },
     impact() {
+      if (stopped) return;
       ball.classList.add("is-gone");
       root.querySelector(".goal-unlock-net")?.classList.add("is-bulging");
     },
@@ -66,13 +81,29 @@ export function createGoalScene(visual: HTMLElement): SceneController {
       return goalOrigin(root);
     },
     teardown() {
+      stopped = true;
       if (setTimer) window.clearTimeout(setTimer);
+      setTimer = 0;
+      for (const animation of animations) {
+        try {
+          animation.cancel();
+        } catch {
+          /* already finished or cancelled */
+        }
+      }
+      animations.length = 0;
     },
   };
 }
 
-function kickBall(ball: HTMLElement, goalWrap: HTMLElement): void {
-  const startX = window.innerWidth / 2;
+function kickBall(
+  ball: HTMLElement,
+  goalWrap: HTMLElement,
+  animations: Animation[],
+  isStopped: () => boolean,
+): void {
+  if (isStopped() || !ball.isConnected) return;
+  const startX = kickStartX(goalWrap);
   const startY = window.innerHeight - 28;
   const rect = goalWrap.getBoundingClientRect();
   const endX = rect.left + rect.width / 2;
@@ -84,18 +115,33 @@ function kickBall(ball: HTMLElement, goalWrap: HTMLElement): void {
     `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
 
   ball.style.transform = tf(startX, startY, 0, 1);
-  ball.animate(
-    [
-      { transform: tf(startX, startY, 0, 1) },
-      { transform: tf(midX, midY, 380, 0.74) },
-      { transform: tf(endX, endY, 720, 0.5) },
-    ],
-    {
-      duration: BALL_MS,
-      easing: "cubic-bezier(0.18, 0.7, 0.28, 1)",
-      fill: "forwards",
-    },
-  );
+  try {
+    animations.push(
+      ball.animate(
+        [
+          { transform: tf(startX, startY, 0, 1) },
+          { transform: tf(midX, midY, 380, 0.74) },
+          { transform: tf(endX, endY, 720, 0.5) },
+        ],
+        {
+          duration: BALL_MS,
+          easing: "cubic-bezier(0.18, 0.7, 0.28, 1)",
+          fill: "forwards",
+        },
+      ),
+    );
+  } catch {
+    /* kick pose already applied */
+  }
+}
+
+function kickStartX(goalWrap: HTMLElement): number {
+  const stage = goalWrap.parentElement;
+  if (stage instanceof HTMLElement) {
+    const rect = stage.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  }
+  return window.innerWidth / 2;
 }
 
 function goalOrigin(goalWrap: HTMLElement): ImpactOrigin {

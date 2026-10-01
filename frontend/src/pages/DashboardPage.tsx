@@ -17,6 +17,10 @@ import { UnlockGateCard, UnlockRoad } from "@/features/onboarding/UnlockGateCard
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
 import {
+  BACKDROP_OUT_MS,
+  REVEAL_STAGGER_MS,
+} from "@/features/onboarding/celebrations/timings";
+import {
   usePageCelebrated,
   useUnlockRequirements,
   pageRequirementsMet,
@@ -157,8 +161,23 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
  *  SHARED UI PRIMITIVES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function DashboardFrame({ children }: { children: ReactNode }) {
-  return <div className="relative min-h-full">{children}</div>;
+function DashboardFrame({
+  children,
+  lockViewport,
+}: {
+  children: ReactNode;
+  lockViewport?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative min-h-full",
+        lockViewport && "h-full overflow-hidden",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 function DashboardStadiumOverlay({
@@ -166,7 +185,7 @@ function DashboardStadiumOverlay({
   fadeMs,
 }: {
   fading: boolean;
-  fadeMs: 400 | 800;
+  fadeMs: number;
 }) {
   const host =
     typeof document === "undefined"
@@ -179,10 +198,11 @@ function DashboardStadiumOverlay({
       aria-hidden="true"
       className={cn(
         "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
-        "transition-[opacity,background-color,backdrop-filter] ease-out motion-reduce:transition-none",
-        fadeMs === 400 ? "duration-[400ms]" : "duration-[800ms]",
-        fading && "bg-transparent opacity-0 backdrop-blur-none",
+        "transition-opacity ease-out motion-reduce:transition-none",
+        fading && "opacity-0",
+        fading && "will-change-[opacity]",
       )}
+      style={{ transitionDuration: `${fadeMs}ms` }}
     />,
     host,
   );
@@ -795,6 +815,7 @@ function DashboardUnlockLayer({
   fading,
   onUnlocked,
   onRevealed,
+  onCelebrationComplete,
   onRequirements,
 }: {
   userId: string;
@@ -802,6 +823,7 @@ function DashboardUnlockLayer({
   fading: boolean;
   onUnlocked: () => void;
   onRevealed: () => void;
+  onCelebrationComplete: () => void;
   onRequirements: (unlocked: boolean) => void;
 }) {
   const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
@@ -839,6 +861,7 @@ function DashboardUnlockLayer({
           exiting={fading}
           onUnlocked={onUnlocked}
           onRevealed={onRevealed}
+          onCelebrationComplete={onCelebrationComplete}
         />
       )}
     </div>
@@ -859,6 +882,7 @@ export default function DashboardPage() {
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const [unlockCelebrating, setUnlockCelebrating] = useState(false);
   const [unlockOverlayFading, setUnlockOverlayFading] = useState(false);
+  const [dashPageRevealed, setDashPageRevealed] = useState(false);
   const [dashUnlocked, setDashUnlocked] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
   const now = useNow();
@@ -924,17 +948,35 @@ export default function DashboardPage() {
   );
   const hideMainForUnlock = (unlockGateApplies || unlockCelebrating) && !dashUnlocked;
   const showUnlockOverlay =
-    unlockGateApplies || unlockCelebrating || unlockOverlayFading;
+    ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed) ||
+    unlockOverlayFading;
   const concealDashboardMain =
     (unlockGateApplies || unlockCelebrating) &&
     dashUnlocked &&
-    !unlockOverlayFading;
-  const revealDashboardMain = unlockOverlayFading && dashUnlocked;
+    !dashPageRevealed;
+  const gateBlocksScroll = Boolean(
+    isFirstTime ||
+      ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed),
+  );
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
   const overlayFadeTimeoutRef = useRef<number | null>(null);
+  const overlayStaggerTimeoutRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
+  const clearOverlayTimers = () => {
+    if (overlayFadeTimeoutRef.current != null) {
+      window.clearTimeout(overlayFadeTimeoutRef.current);
+      overlayFadeTimeoutRef.current = null;
+    }
+    if (overlayStaggerTimeoutRef.current != null) {
+      window.clearTimeout(overlayStaggerTimeoutRef.current);
+      overlayStaggerTimeoutRef.current = null;
+    }
+  };
 
   const handleDashboardUnlocked = () => {
+    if (!mountedRef.current) return;
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -943,26 +985,52 @@ export default function DashboardPage() {
   };
 
   const handleDashboardRevealed = () => {
-    setUnlockCelebrating(false);
-    setUnlockOverlayFading(true);
-    if (overlayFadeTimeoutRef.current != null) {
-      window.clearTimeout(overlayFadeTimeoutRef.current);
-    }
-    overlayFadeTimeoutRef.current = window.setTimeout(() => {
-      overlayFadeTimeoutRef.current = null;
-      setUnlockOverlayFading(false);
-    }, 400);
+    if (!mountedRef.current) return;
+    setDashPageRevealed(true);
+    clearOverlayTimers();
+    overlayStaggerTimeoutRef.current = window.setTimeout(() => {
+      overlayStaggerTimeoutRef.current = null;
+      if (!mountedRef.current) return;
+      setUnlockOverlayFading(true);
+      overlayFadeTimeoutRef.current = window.setTimeout(() => {
+        overlayFadeTimeoutRef.current = null;
+        if (!mountedRef.current) return;
+        setUnlockOverlayFading(false);
+      }, BACKDROP_OUT_MS);
+    }, REVEAL_STAGGER_MS);
   };
 
-  useEffect(
-    () => () => {
+  const handleDashboardCelebrationComplete = () => {
+    if (!mountedRef.current) return;
+    clearOverlayTimers();
+    setUnlockCelebrating(false);
+    setDashPageRevealed(false);
+    setUnlockOverlayFading(false);
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       cancelGoalUnlockCelebration();
       if (overlayFadeTimeoutRef.current != null) {
         window.clearTimeout(overlayFadeTimeoutRef.current);
       }
-    },
-    [],
-  );
+      if (overlayStaggerTimeoutRef.current != null) {
+        window.clearTimeout(overlayStaggerTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const main = document.querySelector("main.app-shell-main");
+    if (!(main instanceof HTMLElement) || !gateBlocksScroll) return;
+    const previous = main.style.overflow;
+    main.style.overflow = "hidden";
+    return () => {
+      main.style.overflow = previous;
+    };
+  }, [gateBlocksScroll]);
 
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
@@ -1059,7 +1127,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardFrame>
+    <DashboardFrame lockViewport={gateBlocksScroll}>
       {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <DashboardStadiumOverlay
           fading={
@@ -1068,7 +1136,7 @@ export default function DashboardPage() {
               !unlockGateApplies &&
               !unlockCelebrating)
           }
-          fadeMs={unlockOverlayFading ? 400 : 800}
+          fadeMs={unlockOverlayFading ? BACKDROP_OUT_MS : 800}
         />
       )}
       <DashboardHeader
@@ -1077,7 +1145,7 @@ export default function DashboardPage() {
         hasTeam={!!team}
         pendingInvite={hasPendingInvite}
         firstTime={isFirstTime}
-        hideAddTeam={(unlockGateApplies || unlockCelebrating) && !unlockOverlayFading}
+        hideAddTeam={(unlockGateApplies || unlockCelebrating) && !dashPageRevealed}
         onAddTeam={() => setAddTeamOpen(true)}
       />
 
@@ -1097,6 +1165,7 @@ export default function DashboardPage() {
           fading={unlockCelebrating}
           onUnlocked={handleDashboardUnlocked}
           onRevealed={handleDashboardRevealed}
+          onCelebrationComplete={handleDashboardCelebrationComplete}
           onRequirements={setDashUnlocked}
         />
       )}
@@ -1106,9 +1175,7 @@ export default function DashboardPage() {
         className={cn(
           "mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10",
           concealDashboardMain &&
-            "pointer-events-none overflow-hidden opacity-0 [clip-path:inset(100%)] [contain:strict] [content-visibility:hidden]",
-          revealDashboardMain &&
-            "opacity-100 transition-opacity duration-[400ms] ease-out motion-reduce:transition-none",
+            "absolute inset-0 overflow-hidden pointer-events-none opacity-0 isolate [transform:translate(0)]",
         )}
         aria-hidden={concealDashboardMain || undefined}
         inert={concealDashboardMain || undefined}

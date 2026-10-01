@@ -44,6 +44,7 @@ export function createMatchTimelineScene(visual: HTMLElement): SceneController {
 
   let frame = 0;
   let stopped = false;
+  let progressAnimation: Animation | null = null;
 
   return {
     root,
@@ -54,28 +55,39 @@ export function createMatchTimelineScene(visual: HTMLElement): SceneController {
       const popped = new Set<Element>();
       const start = performance.now();
 
-      if (progress instanceof HTMLElement) {
-        progress.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], {
-          duration: BUILD_MS,
-          easing: "linear",
-          fill: "forwards",
-        });
+      if (progress instanceof HTMLElement && progress.isConnected) {
+        try {
+          progressAnimation = progress.animate(
+            [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }],
+            {
+              duration: BUILD_MS,
+              easing: "linear",
+              fill: "forwards",
+            },
+          );
+        } catch {
+          progress.style.transform = "scaleX(1)";
+        }
       }
 
       const tick = (now: number) => {
         if (stopped) return;
-        const t = Math.min(1, (now - start) / BUILD_MS);
-        const minute = Math.round(t * 90);
-        if (clock) clock.textContent = `${minute}'`;
-        for (const node of nodes) {
-          const eventMinute = Number(node.getAttribute("data-minute"));
-          if (minute >= eventMinute && !popped.has(node)) {
-            popped.add(node);
-            node.classList.add("is-pop");
+        try {
+          const t = Math.min(1, (now - start) / BUILD_MS);
+          const minute = Math.round(t * 90);
+          if (clock) clock.textContent = `${minute}'`;
+          for (const node of nodes) {
+            const eventMinute = Number(node.getAttribute("data-minute"));
+            if (minute >= eventMinute && !popped.has(node)) {
+              popped.add(node);
+              node.classList.add("is-pop");
+            }
           }
-        }
-        if (t < 1) {
-          frame = requestAnimationFrame(tick);
+          if (t < 1) {
+            frame = requestAnimationFrame(tick);
+          }
+        } catch {
+          stopped = true;
         }
       };
 
@@ -90,6 +102,13 @@ export function createMatchTimelineScene(visual: HTMLElement): SceneController {
     teardown() {
       stopped = true;
       if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      try {
+        progressAnimation?.cancel();
+      } catch {
+        /* already finished or cancelled */
+      }
+      progressAnimation = null;
     },
   };
 }

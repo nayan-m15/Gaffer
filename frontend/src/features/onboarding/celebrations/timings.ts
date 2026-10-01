@@ -8,12 +8,16 @@ export const IMPACT_MS = 1200;
 export const BALL_DELAY_MS = IMPACT_MS - BALL_MS;
 /** Play → impact; non-goal scenes spread their build-up across this window. */
 export const BUILD_MS = IMPACT_MS - SCENE_PLAY_DELAY_MS;
-/** Same gap after impact as before (was 2300 − 900). */
-export const REVEAL_MS = IMPACT_MS + 1400;
+export const STAMP_MS = 1600;
+/** Scene fade + page reveal when the stamp starts fading (81% of STAMP_MS). */
+export const REVEAL_MS = IMPACT_MS + Math.round(STAMP_MS * 0.81);
+/** Page is shown under the still-opaque backdrop before the fade starts. */
+export const REVEAL_STAGGER_MS = 64;
 export const SECOND_WAVE_MS = IMPACT_MS + 280;
 export const BACKDROP_OUT_MS = 380;
-export const STAMP_MS = 1600;
 export const CONFETTI_LIFE_MS = 3000;
 export const CONFETTI_FADE_MS = 600;
+/** Force-reveal only if the overlay is still covering the page. Must not fire in normal play. */
+export const CELEBRATION_WATCHDOG_MS = 4000;
 export const MAX_PIECES = 550;
 export const BALL_SIZE_PX = 20;

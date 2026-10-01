@@ -248,12 +248,18 @@ export function UnlockGateCard({
       return;
     }
     onUnlocked();
-    startGoalUnlockCelebration({
-      pageKey,
-      label: page.label,
-      onReveal: () => onRevealed?.(),
-      onComplete: () => onCelebrationComplete?.(),
-    });
+    try {
+      startGoalUnlockCelebration({
+        pageKey,
+        label: page.label,
+        onReveal: () => onRevealed?.(),
+        onComplete: () => onCelebrationComplete?.(),
+      });
+    } catch (error) {
+      console.error("Unlock celebration failed to start", error);
+      onRevealed?.();
+      onCelebrationComplete?.();
+    }
   };
 
   return (
