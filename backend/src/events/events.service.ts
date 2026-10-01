@@ -240,6 +240,19 @@ export class EventsService {
       throw new ForbiddenException('No claimed player profile on this team.');
     }
 
+    // The database stores an absolute timestamptz instant. Comparing it to
+    // the server clock prevents late RSVPs regardless of the player's timezone
+    // or any manipulated client clock. A coach rescheduling the event into the
+    // future naturally reopens RSVPs if its status is still scheduled.
+    if (
+      event.status !== 'scheduled' ||
+      event.scheduledAt.getTime() <= Date.now()
+    ) {
+      throw new ConflictException(
+        'RSVP closed: this event has already started or is no longer scheduled.',
+      );
+    }
+
     const [rsvp] = await this.databaseService.database
       .insert(eventRsvps)
       .values({

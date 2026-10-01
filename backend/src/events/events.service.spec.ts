@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
@@ -13,6 +17,8 @@ const teamEvent = {
   id: 'event-id',
   teamId: 'team-id',
   title: 'Cup final',
+  status: 'scheduled',
+  scheduledAt: new Date('2099-10-10T15:00:00Z'),
 };
 
 describe('EventsService', () => {
@@ -222,6 +228,94 @@ describe('EventsService', () => {
           updatedAt: expect.any(Date) as Date,
         }) as Record<string, unknown>,
       });
+    });
+
+    it('rejects an RSVP on an event from a previous day', async () => {
+      mockAthletesService.findClaimedAthleteOnTeam.mockResolvedValue({
+        id: 'athlete-id',
+      });
+      const insert = jest.fn();
+      mockDatabaseService.database = {
+        select: jest
+          .fn()
+          .mockReturnValue(
+            selectChain([
+              { ...teamEvent, scheduledAt: new Date('2020-01-01T12:00:00Z') },
+            ]),
+          ),
+        insert,
+      };
+      await expect(
+        service.rsvp('user-id', 'event-id', { status: 'going' }),
+      ).rejects.toThrow(ConflictException);
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it.each(['cancelled', 'completed'])(
+      'rejects a %s event even when its date is in the future',
+      async (status) => {
+        mockAthletesService.findClaimedAthleteOnTeam.mockResolvedValue({
+          id: 'athlete-id',
+        });
+        const insert = jest.fn();
+        mockDatabaseService.database = {
+          select: jest
+            .fn()
+            .mockReturnValue(selectChain([{ ...teamEvent, status }])),
+          insert,
+        };
+        await expect(
+          service.rsvp('user-id', 'event-id', { status: 'maybe' }),
+        ).rejects.toThrow(ConflictException);
+        expect(insert).not.toHaveBeenCalled();
+      },
+    );
+
+    it('closes at the exact start time, including on the same day', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-09-29T17:00:00Z'));
+      try {
+        mockAthletesService.findClaimedAthleteOnTeam.mockResolvedValue({
+          id: 'athlete-id',
+        });
+        const insert = jest.fn();
+        mockDatabaseService.database = {
+          select: jest
+            .fn()
+            .mockReturnValue(
+              selectChain([
+                { ...teamEvent, scheduledAt: new Date('2026-09-29T17:00:00Z') },
+              ]),
+            ),
+          insert,
+        };
+        await expect(
+          service.rsvp('user-id', 'event-id', { status: 'going' }),
+        ).rejects.toThrow(ConflictException);
+        expect(insert).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('reopens RSVP when a scheduled event is moved into the future', async () => {
+      mockAthletesService.findClaimedAthleteOnTeam.mockResolvedValue({
+        id: 'athlete-id',
+      });
+      const upsert = upsertChain({ status: 'maybe' });
+      mockDatabaseService.database = {
+        select: jest
+          .fn()
+          .mockReturnValue(
+            selectChain([
+              { ...teamEvent, scheduledAt: new Date('2099-12-01T12:00:00Z') },
+            ]),
+          ),
+        insert: upsert.insert,
+      };
+      await expect(
+        service.rsvp('user-id', 'event-id', { status: 'maybe' }),
+      ).resolves.toEqual({ status: 'maybe' });
+      expect(upsert.insert).toHaveBeenCalledTimes(1);
     });
 
     it('throws NotFoundException for an unknown event', async () => {

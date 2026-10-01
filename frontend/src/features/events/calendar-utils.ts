@@ -11,6 +11,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import type { EventType, TeamEvent } from "./types";
+import { matchesCompetitionFilter, type CalendarCompetition, type MatchCompetitionFilter } from "./match-competition-filter";
 
 /** Weeks start on Monday across the events calendar. */
 export const WEEK_STARTS_ON = 1 as const;
@@ -86,11 +87,12 @@ export function getDayEvents(
 export function filterEventTypes(
   events: TeamEvent[],
   hiddenTypes: ReadonlySet<EventType>,
+  matchFilter: MatchCompetitionFilter = "all",
+  competitions: readonly CalendarCompetition[] = [],
 ): TeamEvent[] {
-  if (hiddenTypes.size === 0) {
-    return events;
-  }
-  return events.filter((event) => !hiddenTypes.has(event.type));
+  return events.filter(
+    (event) => !hiddenTypes.has(event.type) && matchesCompetitionFilter(event, matchFilter, competitions),
+  );
 }
 
 /** Events that fall inside the calendar month of `month`. */

@@ -330,6 +330,20 @@
       "when": 1790368545000,
       "tag": "0041_confirmed_lineup_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790712000000,
+      "tag": "0042_competition_team_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790712005000,
+      "tag": "0043_competition_team_verification_columns",
+      "breakpoints": true
     }
   ]
 }

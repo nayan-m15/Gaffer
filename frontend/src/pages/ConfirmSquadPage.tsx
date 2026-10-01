@@ -179,7 +179,7 @@ function canonicalSnapshot(value: unknown): string {
   if (value !== null && typeof value === "object") {
     const object = value as Record<string, unknown>;
     return `{${Object.keys(object)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
       .map((key) => `${JSON.stringify(key)}:${canonicalSnapshot(object[key])}`)
       .join(",")}}`;
   }

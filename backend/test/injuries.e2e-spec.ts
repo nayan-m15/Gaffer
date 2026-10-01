@@ -218,10 +218,8 @@ describe('Injuries (e2e)', () => {
     });
 
     it('rejects an athlete on another team', async () => {
-      const [{ agent }, other] = await Promise.all([
-        newCoach(),
-        newCoachWithAthlete(),
-      ]);
+      const { agent } = await newCoach();
+      const other = await newCoachWithAthlete();
 
       const response = await logInjury(agent, other.athlete.id).expect(404);
 
@@ -560,10 +558,8 @@ describe('Injuries (e2e)', () => {
     });
 
     it('rejects an athlete on another team', async () => {
-      const [{ agent }, other] = await Promise.all([
-        newCoach(),
-        newCoachWithAthlete(),
-      ]);
+      const { agent } = await newCoach();
+      const other = await newCoachWithAthlete();
 
       await agent.get(`/injuries/recovery/${other.athlete.id}`).expect(404);
     });

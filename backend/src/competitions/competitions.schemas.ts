@@ -87,6 +87,7 @@ export const createCompetitionTeamSchema = z.object({
 export type CreateCompetitionTeamDto = z.infer<
   typeof createCompetitionTeamSchema
 >;
+export const renameCompetitionTeamSchema = createCompetitionTeamSchema;
 
 const competitionScoreField = z
   .number()

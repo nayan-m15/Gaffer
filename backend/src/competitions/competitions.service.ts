@@ -20,6 +20,7 @@ import {
   matchProjectionState,
   matches,
   standings,
+  teams,
 } from '../database/schema';
 import {
   planFixtures,
@@ -61,6 +62,7 @@ function isUniqueViolation(error: unknown): boolean {
 export interface CompetitionTeamView {
   id: string;
   displayName: string;
+  originalDisplayName?: string | null;
   teamId: string | null;
   createdAt: Date;
 }
@@ -429,6 +431,46 @@ export class CompetitionsService {
     await this.requireAdmin(userId, competitionId);
 
     return this.insertParticipant(competitionId, null, dto.displayName);
+  }
+
+  /** Correct only unlinked participant labels; never mutate the registered team. */
+  async renameParticipant(
+    userId: string,
+    competitionId: string,
+    slotId: string,
+    dto: CreateCompetitionTeamDto,
+  ) {
+    await this.requireAdmin(userId, competitionId);
+    try {
+      const [row] = await this.databaseService.database
+        .update(competitionTeams)
+        .set({ displayName: dto.displayName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(competitionTeams.id, slotId),
+            eq(competitionTeams.competitionId, competitionId),
+            sql`${competitionTeams.teamId} is null`,
+          ),
+        )
+        .returning();
+      if (!row)
+        throw new ConflictException(
+          'Only existing unlinked participants can be renamed.',
+        );
+      return {
+        id: row.id,
+        displayName: row.displayName,
+        teamId: row.teamId,
+        createdAt: row.createdAt,
+      };
+    } catch (error) {
+      if (isUniqueViolation(error))
+        throw new ConflictException(
+          'Another participant already uses that name.',
+        );
+      this.rethrowFixtureGuard(error);
+      throw error;
+    }
   }
 
   /**
@@ -1295,11 +1337,13 @@ export class CompetitionsService {
     const rows = await this.databaseService.database
       .select({
         id: competitionTeams.id,
-        displayName: competitionTeams.displayName,
+        displayName: sql<string>`coalesce(${teams.name}, ${competitionTeams.displayName})`,
+        originalDisplayName: competitionTeams.originalDisplayName,
         teamId: competitionTeams.teamId,
         createdAt: competitionTeams.createdAt,
       })
       .from(competitionTeams)
+      .leftJoin(teams, eq(competitionTeams.teamId, teams.id))
       .where(eq(competitionTeams.competitionId, competitionId))
       .orderBy(asc(competitionTeams.createdAt), asc(competitionTeams.id));
 

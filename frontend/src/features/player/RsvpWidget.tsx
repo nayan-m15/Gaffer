@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, HelpCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ApiError } from "@/lib/api";
+import { isRsvpOpen } from "@/features/events/event-utils";
+import type { EventStatus } from "@/features/events/types";
 import { submitRsvp, type RsvpStatus } from "@/services/rsvps";
 
 /**
@@ -15,6 +18,8 @@ import { submitRsvp, type RsvpStatus } from "@/services/rsvps";
  */
 interface RsvpWidgetProps {
   eventId: string;
+  scheduledAt: string;
+  eventStatus: EventStatus;
   currentStatus: RsvpStatus | null;
   currentNote: string | null;
   /** Query key to invalidate after a successful RSVP submission. */
@@ -49,6 +54,8 @@ const RSVP_OPTIONS: {
 
 export function RsvpWidget({
   eventId,
+  scheduledAt,
+  eventStatus,
   currentStatus,
   currentNote,
   queryKey,
@@ -56,17 +63,55 @@ export function RsvpWidget({
   const queryClient = useQueryClient();
   const [note, setNote] = useState(currentNote ?? "");
   const [showNote, setShowNote] = useState(Boolean(currentNote));
+  const [clock, setClock] = useState(() => Date.now());
+  const canRespond = isRsvpOpen({ status: eventStatus, scheduledAt }, new Date(clock));
+
+  // Close the controls exactly at the deadline, even if the modal remains
+  // open. Long timers are rearmed safely for distant future events.
+  useEffect(() => {
+    let timer: number | undefined;
+    const refresh = () => setClock(Date.now());
+    const scheduleRefresh = () => {
+      const remaining = new Date(scheduledAt).getTime() - Date.now();
+      if (eventStatus !== "scheduled" || !(remaining > 0)) return;
+      timer = window.setTimeout(() => {
+        refresh();
+        scheduleRefresh();
+      }, Math.min(remaining, 2_147_483_647));
+    };
+    refresh();
+    scheduleRefresh();
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [eventStatus, scheduledAt]);
+
+  useEffect(() => {
+    setNote(currentNote ?? "");
+    setShowNote(Boolean(currentNote));
+  }, [currentNote]);
 
   const rsvpMutation = useMutation({
-    mutationFn: (status: RsvpStatus) =>
-      submitRsvp(eventId, {
+    mutationFn: (status: RsvpStatus) => {
+      // A tab left open must not submit using an outdated button state.
+      if (!isRsvpOpen({ status: eventStatus, scheduledAt })) {
+        setClock(Date.now());
+        throw new Error("RSVP closed: this event has already started or is no longer scheduled.");
+      }
+      return submitRsvp(eventId, {
         status,
         ...(showNote && note.trim() ? { note: note.trim() } : {}),
-      }),
+      });
+    },
     onSuccess: async () => {
       if (queryKey) {
         await queryClient.invalidateQueries({ queryKey: [...queryKey] });
       }
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) setClock(Date.now());
     },
   });
 
@@ -80,6 +125,12 @@ export function RsvpWidget({
         Your RSVP
       </p>
 
+      {!canRespond && (
+        <p className="mb-2 text-xs text-muted-foreground" role="status">
+          RSVP closed — {currentStatus ? "your recorded response is shown below." : "you did not submit a response."}
+        </p>
+      )}
+
       {/* Status buttons */}
       <div className="flex flex-wrap gap-2">
         {RSVP_OPTIONS.map((option) => {
@@ -90,16 +141,17 @@ export function RsvpWidget({
             <button
               key={option.status}
               type="button"
-              disabled={rsvpMutation.isPending}
+              disabled={!canRespond || rsvpMutation.isPending}
               onClick={() => rsvpMutation.mutate(option.status)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                 isActive
                   ? option.activeClass
                   : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                rsvpMutation.isPending && "opacity-60",
+                (!canRespond || rsvpMutation.isPending) && "cursor-not-allowed opacity-60",
               )}
               aria-pressed={isActive}
+              title={!canRespond ? "RSVP closed" : undefined}
             >
               <Icon className="size-3.5" />
               {option.label}
@@ -109,7 +161,8 @@ export function RsvpWidget({
       </div>
 
       {/* Note toggle + field */}
-      <div className="mt-2">
+      {canRespond ? (
+        <div className="mt-2">
         {!showNote ? (
           <button
             type="button"
@@ -149,12 +202,19 @@ export function RsvpWidget({
             "{currentNote}"
           </p>
         )}
-      </div>
+        </div>
+      ) : currentNote ? (
+        <p className="mt-2 text-xs italic text-muted-foreground">Note: {currentNote}</p>
+      ) : null}
 
       {/* Error state */}
       {rsvpMutation.isError && (
         <p className="mt-2 text-xs text-destructive">
-          Failed to save RSVP. Please try again.
+          {rsvpMutation.error instanceof ApiError && rsvpMutation.error.status === 409
+            ? "RSVP closed — your response can no longer be changed."
+            : rsvpMutation.error?.message.startsWith("RSVP closed")
+              ? rsvpMutation.error.message
+              : "Failed to save RSVP. Please try again."}
         </p>
       )}
     </div>

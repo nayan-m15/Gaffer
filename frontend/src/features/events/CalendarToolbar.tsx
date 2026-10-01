@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { EVENT_TYPE_OPTIONS } from "./event-utils";
 import { getEventTypeStyle } from "./event-style";
+import { MatchCompetitionSelect } from "./MatchCompetitionSelect";
+import type { MatchCompetitionFilter } from "./match-competition-filter";
 import type { CalendarView } from "./calendar-utils";
 import type { EventType } from "./types";
 
@@ -12,6 +14,9 @@ interface CalendarToolbarProps {
   label: string;
   hiddenTypes: ReadonlySet<EventType>;
   onToggleType: (type: EventType) => void;
+  matchFilter: MatchCompetitionFilter;
+  competitionOptions: readonly { value: string; label: string }[];
+  onMatchFilterChange: (value: MatchCompetitionFilter) => void;
   onViewChange: (view: CalendarView) => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -37,6 +42,9 @@ export function CalendarToolbar({
   label,
   hiddenTypes,
   onToggleType,
+  matchFilter,
+  competitionOptions,
+  onMatchFilterChange,
   onViewChange,
   onPrevious,
   onNext,
@@ -124,6 +132,14 @@ export function CalendarToolbar({
             );
           })}
         </div>
+
+        {!hiddenTypes.has("match") && (
+          <MatchCompetitionSelect
+            value={matchFilter}
+            options={competitionOptions}
+            onChange={onMatchFilterChange}
+          />
+        )}
 
         <Button
           variant="outline"

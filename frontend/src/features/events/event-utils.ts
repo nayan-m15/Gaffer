@@ -116,6 +116,17 @@ export function isScheduleInThePast(
  * Status shown in the UI. Past `scheduled` events read as completed without
  * writing to the API; `cancelled` is never overridden.
  */
+/** RSVP changes stop at the event's scheduled start instant (inclusive). */
+export function isRsvpOpen(
+  event: { status: EventStatus; scheduledAt: string },
+  now = new Date(),
+): boolean {
+  const scheduledAt = new Date(event.scheduledAt).getTime();
+  return event.status === "scheduled" &&
+    Number.isFinite(scheduledAt) &&
+    scheduledAt > now.getTime();
+}
+
 export function displayEventStatus(
   event: { status: EventStatus; scheduledAt: string },
   now = new Date(),

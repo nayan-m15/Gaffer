@@ -22,6 +22,7 @@ import {
   createCompetitionResultSchema,
   createCompetitionSchema,
   createCompetitionTeamSchema,
+  renameCompetitionTeamSchema,
   updateCompetitionResultSchema,
   updateCompetitionSchema,
 } from './competitions.schemas';
@@ -186,6 +187,22 @@ export class CompetitionsController {
   ) {
     const dto = zodValidate(createCompetitionTeamSchema, body);
     return this.competitionsService.addParticipant(user.id, id, dto);
+  }
+
+  @Patch(':id/teams/:competitionTeamId')
+  async renameParticipant(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('competitionTeamId', ParseUUIDPipe) competitionTeamId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(renameCompetitionTeamSchema, body);
+    return this.competitionsService.renameParticipant(
+      user.id,
+      id,
+      competitionTeamId,
+      dto,
+    );
   }
 
   @Delete(':id/teams/:competitionTeamId')

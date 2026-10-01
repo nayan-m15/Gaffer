@@ -2,6 +2,8 @@ export interface CompetitionStandingParticipant {
   id: string;
   teamId: string | null;
   displayName: string;
+  /** Admin-entered name before linking; used to retain legacy standings. */
+  originalDisplayName?: string | null;
 }
 
 export interface CompetitionStandingResult {
@@ -75,7 +77,11 @@ export function calculateCompetitionStandings(
   >();
 
   for (const participant of participants) {
-    const baseline = baselineByName.get(nameKey(participant.displayName));
+    const baseline =
+      baselineByName.get(nameKey(participant.displayName)) ??
+      (participant.originalDisplayName
+        ? baselineByName.get(nameKey(participant.originalDisplayName))
+        : undefined);
     rows.set(participant.id, {
       id: baseline?.id ?? `participant:${participant.id}`,
       competitionId,

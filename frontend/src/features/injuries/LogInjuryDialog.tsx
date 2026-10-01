@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -134,26 +135,23 @@ export function LogInjuryDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="log-injury-title"
-        className="themed-scrollbar relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl"
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="themed-scrollbar max-h-[90vh] overflow-y-auto rounded-2xl border-border bg-card p-6 shadow-2xl sm:max-w-lg"
       >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h2
-              id="log-injury-title"
-              className="text-lg font-bold text-foreground"
-            >
+            <DialogTitle className="text-lg font-bold text-foreground">
               Log an injury
-            </h2>
+            </DialogTitle>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Creates an injury record and marks the player unavailable.
             </p>
@@ -294,7 +292,7 @@ export function LogInjuryDialog({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
