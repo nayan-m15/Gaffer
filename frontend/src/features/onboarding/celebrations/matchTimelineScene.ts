@@ -1,7 +1,7 @@
 import { BALL_SVG } from "./futbolMark";
+import { BUILD_MS } from "./timings";
 import { createSceneRoot, sceneCenter, type SceneController } from "./types";
 
-const CLOCK_MS = 600;
 const EVENTS = [
   { minute: 12, kind: "ball" },
   { minute: 34, kind: "card" },
@@ -56,7 +56,7 @@ export function createMatchTimelineScene(visual: HTMLElement): SceneController {
 
       if (progress instanceof HTMLElement) {
         progress.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], {
-          duration: CLOCK_MS,
+          duration: BUILD_MS,
           easing: "linear",
           fill: "forwards",
         });
@@ -64,7 +64,7 @@ export function createMatchTimelineScene(visual: HTMLElement): SceneController {
 
       const tick = (now: number) => {
         if (stopped) return;
-        const t = Math.min(1, (now - start) / CLOCK_MS);
+        const t = Math.min(1, (now - start) / BUILD_MS);
         const minute = Math.round(t * 90);
         if (clock) clock.textContent = `${minute}'`;
         for (const node of nodes) {

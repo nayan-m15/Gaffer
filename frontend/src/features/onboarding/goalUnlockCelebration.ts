@@ -4,8 +4,8 @@ import { BALL_SVG } from "./celebrations/futbolMark";
 import { STAMP_HEADLINES } from "./celebrations/headlines";
 import {
   BACKDROP_OUT_MS,
-  BALL_DELAY_MS,
   BALL_SIZE_PX,
+  SCENE_PLAY_DELAY_MS,
   CONFETTI_FADE_MS,
   CONFETTI_LIFE_MS,
   IMPACT_MS,
@@ -175,7 +175,7 @@ export function startGoalUnlockCelebration(
 
   schedule(() => {
     scene.play();
-  }, BALL_DELAY_MS);
+  }, SCENE_PLAY_DELAY_MS);
 
   schedule(() => {
     scene.impact();

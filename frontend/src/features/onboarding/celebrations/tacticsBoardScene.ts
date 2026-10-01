@@ -1,3 +1,4 @@
+import { BUILD_MS } from "./timings";
 import { createSceneRoot, sceneCenter, type SceneController } from "./types";
 
 const MAGNETS = [
@@ -44,6 +45,10 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
     root,
     play() {
       const magnets = root.querySelectorAll(".unlock-scene-magnet");
+      const magnetDuration = Math.round(BUILD_MS * 0.48);
+      const magnetStagger = Math.round(BUILD_MS * 0.075);
+      const runDuration = Math.round(BUILD_MS * 0.32);
+      const runDelay = BUILD_MS - runDuration;
       magnets.forEach((node, index) => {
         if (!(node instanceof HTMLElement)) return;
         const fromLeft = index % 2 === 0;
@@ -60,8 +65,8 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
             { transform: "translate(0, 0)", opacity: 1 },
           ],
           {
-            duration: 300,
-            delay: index * 45,
+            duration: magnetDuration,
+            delay: index * magnetStagger,
             easing: "cubic-bezier(0.22, 1.4, 0.36, 1)",
             fill: "forwards",
           },
@@ -74,8 +79,8 @@ export function createTacticsBoardScene(visual: HTMLElement): SceneController {
         path.style.strokeDasharray = `${length}`;
         path.style.strokeDashoffset = `${length}`;
         path.animate([{ strokeDashoffset: `${length}` }, { strokeDashoffset: "0" }], {
-          duration: 280,
-          delay: 395,
+          duration: runDuration,
+          delay: runDelay,
           easing: "ease-out",
           fill: "forwards",
         });

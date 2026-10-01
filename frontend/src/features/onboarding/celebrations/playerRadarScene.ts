@@ -1,6 +1,5 @@
+import { BUILD_MS } from "./timings";
 import { createSceneRoot, sceneCenter, type SceneController } from "./types";
-
-const GROW_MS = 480;
 const CX = 210;
 const CY = 205;
 const R = 118;
@@ -72,7 +71,7 @@ export function createPlayerRadarScene(visual: HTMLElement): SceneController {
 
       const tick = (now: number) => {
         if (stopped) return;
-        const t = Math.min(1, (now - start) / GROW_MS);
+        const t = Math.min(1, (now - start) / BUILD_MS);
         const eased = easeOutCubic(t);
         if (fill) {
           const points = VALUES.map((value, index) =>

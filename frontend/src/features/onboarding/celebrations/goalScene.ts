@@ -1,5 +1,5 @@
 import { BALL_SVG } from "./futbolMark";
-import { BALL_MS } from "./timings";
+import { BALL_DELAY_MS, BALL_MS, SCENE_PLAY_DELAY_MS } from "./timings";
 import {
   createSceneRoot,
   type ImpactOrigin,
@@ -30,10 +30,33 @@ export function createGoalScene(visual: HTMLElement): SceneController {
   ball.innerHTML = BALL_SVG;
   visual.append(ball);
 
+  let setTimer = 0;
+
   return {
     root,
     play() {
-      kickBall(ball, root);
+      const startX = window.innerWidth / 2;
+      const startY = window.innerHeight - 28;
+      const tf = (x: number, y: number, rot: number, scale: number) =>
+        `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
+
+      ball.style.transform = tf(startX, startY, 0, 1);
+      ball.classList.add("is-kicking");
+      const setMs = BALL_DELAY_MS - SCENE_PLAY_DELAY_MS;
+      ball.animate(
+        [
+          { transform: tf(startX, startY, 0, 1) },
+          { transform: tf(startX, startY - 11, -12, 1.05) },
+          { transform: tf(startX, startY, 0, 1) },
+        ],
+        {
+          duration: setMs,
+          easing: "ease-in-out",
+        },
+      );
+      setTimer = window.setTimeout(() => {
+        kickBall(ball, root);
+      }, setMs);
     },
     impact() {
       ball.classList.add("is-gone");
@@ -42,7 +65,9 @@ export function createGoalScene(visual: HTMLElement): SceneController {
     getImpactOrigin() {
       return goalOrigin(root);
     },
-    teardown() {},
+    teardown() {
+      if (setTimer) window.clearTimeout(setTimer);
+    },
   };
 }
 
@@ -59,7 +84,6 @@ function kickBall(ball: HTMLElement, goalWrap: HTMLElement): void {
     `translate(${x}px, ${y}px) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
 
   ball.style.transform = tf(startX, startY, 0, 1);
-  ball.classList.add("is-kicking");
   ball.animate(
     [
       { transform: tf(startX, startY, 0, 1) },

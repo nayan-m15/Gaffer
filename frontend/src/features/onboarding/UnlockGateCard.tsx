@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, Lock } from "lucide-react";
 import { GiShirt, GiSoccerField, GiSoccerKick } from "react-icons/gi";
@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { AppCard as Card } from "@/components/app/AppCard";
 import { cn } from "@/lib/utils";
 import { startGoalUnlockCelebration } from "./goalUnlockCelebration";
+import { preloadMedicalScanSnapshot } from "./celebrations/medicalScanScene";
 import "./tour.css";
 import "./unlock-gate.css";
 import {
@@ -216,6 +217,12 @@ export function UnlockGateCard({
 }) {
   const page = PAGE_UNLOCKS[pageKey];
   const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
+
+  useEffect(() => {
+    if (pageKey === "injuries" && unlocked) {
+      preloadMedicalScanSnapshot();
+    }
+  }, [pageKey, unlocked]);
 
   const eyebrow = unlocked
     ? "Unlocked"
