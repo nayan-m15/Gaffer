@@ -3,6 +3,7 @@ import {
   fixtureResultSourceMatches,
   reopenSessionConfirmations,
   shouldFinaliseSession,
+  sessionHasTimedOutConfirmation,
 } from './session-finalisation';
 
 describe('two-sided result confirmation', () => {
@@ -22,16 +23,19 @@ describe('two-sided result confirmation', () => {
   });
 
   it('finalises one confirmation after the 24-hour response window', () => {
+    const state = {
+      homeConfirmedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      awayConfirmedAt: null,
+      finalisedAt: null,
+    };
+    expect(shouldFinaliseSession(state, now)).toBe(true);
+    expect(sessionHasTimedOutConfirmation(state, now)).toBe(true);
     expect(
-      shouldFinaliseSession(
-        {
-          homeConfirmedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-          awayConfirmedAt: null,
-          finalisedAt: null,
-        },
+      sessionHasTimedOutConfirmation(
+        { ...state, homeConfirmedAt: new Date(now.getTime() - 1) },
         now,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('does not finalise early and permits reopening before finalisation', () => {

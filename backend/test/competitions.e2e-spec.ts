@@ -3,7 +3,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { eq, sql } from 'drizzle-orm';
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
+import {
+  competitionTeams,
+  events,
+  matches,
+  matchSessions,
+} from '../src/database/schema';
+import { syncFixtureResult } from '../src/competitions/competition-fixture-results';
 import { registerCoach } from './utils/auth-helpers';
 import {
   cleanupUsers,
@@ -147,7 +156,7 @@ describe('Shared competitions (e2e)', () => {
     const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     try {
-      const { agent } = await newCoach();
+      const { agent, team, user } = await newCoach();
       const competition = (
         await agent
           .post('/competitions')
@@ -171,7 +180,13 @@ describe('Shared competitions (e2e)', () => {
           .post(`/competitions/${competition.id}/fixtures/generate`)
           .send({})
           .expect(201)
-      ).body as Array<{ id: string; sharedSessionId: string | null }>;
+      ).body as Array<{
+        id: string;
+        sharedSessionId: string | null;
+        homeCompetitionTeamId: string;
+        awayCompetitionTeamId: string;
+        scheduledAt: string;
+      }>;
       expect(fixtures).toHaveLength(1);
       expect(fixtures[0].sharedSessionId).toEqual(expect.any(String));
 
@@ -181,6 +196,115 @@ describe('Shared competitions (e2e)', () => {
       expect(again.map((fixture) => fixture.sharedSessionId)).toEqual([
         fixtures[0].sharedSessionId,
       ]);
+
+      const database = app.get(DatabaseService).database;
+      const fixture = fixtures[0];
+      const [ownParticipant] = await database
+        .select({ id: competitionTeams.id })
+        .from(competitionTeams)
+        .where(eq(competitionTeams.teamId, team.id))
+        .limit(1);
+      const isHome = fixture.homeCompetitionTeamId === ownParticipant.id;
+      const opponentCompetitionTeamId = isHome
+        ? fixture.awayCompetitionTeamId
+        : fixture.homeCompetitionTeamId;
+      const [event] = await database
+        .select({ id: events.id })
+        .from(events)
+        .where(eq(events.competitionFixtureId, fixture.id))
+        .limit(1);
+      expect(event).toBeDefined();
+      await database
+        .update(events)
+        .set({ status: 'completed' })
+        .where(eq(events.id, event.id));
+      const [existingMatch] = await database
+        .select({ id: matches.id })
+        .from(matches)
+        .where(eq(matches.eventId, event.id))
+        .limit(1);
+      const [match] = existingMatch
+        ? [existingMatch]
+        : await database
+            .insert(matches)
+            .values({
+              eventId: event.id,
+              sharedMatchId: fixture.sharedSessionId!,
+              competitionId: competition.id,
+              opponentCompetitionTeamId,
+              opponentName: 'Session Opponent',
+              isHome,
+            })
+            .returning({ id: matches.id });
+      await database.execute(
+        sql`select refresh_match_projection(${match.id}::uuid)`,
+      );
+      await database
+        .update(matchSessions)
+        .set({
+          homeConfirmedAt: new Date('2026-01-01T00:00:00.000Z'),
+          homeConfirmedByUserId: user.id,
+        })
+        .where(eq(matchSessions.id, fixture.sharedSessionId!));
+      const report = await agent.get(`/matches/${match.id}`).expect(200);
+      expect(report.body.projection.finalisationState).toBe('finalised');
+      const input = {
+        homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+        awayCompetitionTeamId: fixture.awayCompetitionTeamId,
+        homeScore: isHome
+          ? report.body.projection.confirmedTeamScore
+          : report.body.projection.confirmedOpponentScore,
+        awayScore: isHome
+          ? report.body.projection.confirmedOpponentScore
+          : report.body.projection.confirmedTeamScore,
+      };
+      await syncFixtureResult(
+        app.get(DatabaseService),
+        competition.id,
+        {
+          kind: 'live',
+          id: match.id,
+          sessionId: fixture.sharedSessionId!,
+        },
+        input,
+      );
+      await syncFixtureResult(
+        app.get(DatabaseService),
+        competition.id,
+        {
+          kind: 'live',
+          id: match.id,
+          sessionId: fixture.sharedSessionId!,
+        },
+        input,
+      );
+      const detail = (
+        await agent.get(`/competitions/${competition.id}`).expect(200)
+      ).body as {
+        results: Array<{
+          linkedMatchId: string | null;
+          homeScore: number;
+          awayScore: number;
+        }>;
+        standings: Array<{ played: number }>;
+      };
+      expect(detail.results).toHaveLength(1);
+      expect(detail.results[0]).toMatchObject({
+        linkedMatchId: match.id,
+        homeScore: input.homeScore,
+        awayScore: input.awayScore,
+      });
+      expect(
+        detail.standings.reduce((played, row) => played + row.played, 0),
+      ).toBe(2);
+      await database
+        .update(matchSessions)
+        .set({
+          finalisedByUserId: null,
+          homeConfirmedByUserId: null,
+          awayConfirmedByUserId: null,
+        })
+        .where(eq(matchSessions.id, fixture.sharedSessionId!));
     } finally {
       if (previousFlag === undefined) {
         delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;

@@ -25,6 +25,21 @@ export function shouldFinaliseSession(
   );
 }
 
+export function sessionHasTimedOutConfirmation(
+  state: SessionConfirmations,
+  now: Date,
+): boolean {
+  if (
+    state.finalisedAt ||
+    Boolean(state.homeConfirmedAt) === Boolean(state.awayConfirmedAt)
+  )
+    return false;
+  const confirmedAt = state.homeConfirmedAt ?? state.awayConfirmedAt;
+  return Boolean(
+    confirmedAt && now.getTime() - confirmedAt.getTime() >= 24 * 60 * 60 * 1000,
+  );
+}
+
 export function canPublishSessionFixtureResult(fixture: {
   stage: string;
   competitionId: string | null;

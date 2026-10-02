@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
@@ -14,11 +14,13 @@ import {
   events,
   matchEvents,
   matchProjectionState,
+  matchSessions,
   matches,
   standings,
 } from '../database/schema';
 import { planFixtures } from './competition-fixtures';
 import { fixtureResultSourceMatches } from '../matches/session-finalisation';
+import { sessionHasTimedOutConfirmation } from '../matches/session-finalisation';
 
 export interface FixtureResultInput {
   homeCompetitionTeamId: string;
@@ -27,11 +29,111 @@ export interface FixtureResultInput {
   awayScore: number;
 }
 
+/** Finalise one-confirmation sessions lazily when a report or standings view is read. */
+export async function finaliseTimedOutSession(
+  databaseService: DatabaseService,
+  sessionId: string,
+  now = new Date(),
+): Promise<boolean> {
+  if (!twoSidedLiveLoggingEnabled()) return false;
+  const [session] = await databaseService.database
+    .select()
+    .from(matchSessions)
+    .where(eq(matchSessions.id, sessionId))
+    .limit(1);
+  if (!session || !sessionHasTimedOutConfirmation(session, now)) return false;
+  const [row] = await databaseService.database
+    .select({ match: matches, event: events, projection: matchProjectionState })
+    .from(matches)
+    .innerJoin(events, eq(events.id, matches.eventId))
+    .innerJoin(
+      matchProjectionState,
+      eq(matchProjectionState.matchId, matches.id),
+    )
+    .where(eq(matches.sharedMatchId, sessionId))
+    .limit(1);
+  const actorId =
+    session.homeConfirmedByUserId ?? session.awayConfirmedByUserId;
+  if (
+    !row ||
+    row.event.status !== 'completed' ||
+    row.projection.unresolvedReviewCount > 0 ||
+    !actorId
+  )
+    return false;
+  const finalised = await databaseService.database.execute<{
+    accepted: boolean;
+  }>(sql`
+    select finalise_match_projection(${row.match.id}::uuid, ${row.projection.revision}::integer, ${actorId}::text) as accepted`);
+  if (!finalised.rows[0]?.accepted) return false;
+  await databaseService.database
+    .update(matchSessions)
+    .set({ finalisedAt: now, finalisedByUserId: actorId, updatedAt: now })
+    .where(
+      and(
+        eq(matchSessions.id, sessionId),
+        sql`${matchSessions.finalisedAt} is null`,
+      ),
+    );
+
+  const [fixture] = await databaseService.database
+    .select()
+    .from(competitionFixtures)
+    .where(eq(competitionFixtures.sharedSessionId, sessionId))
+    .limit(1);
+  if (
+    fixture?.competitionId &&
+    fixture.homeCompetitionTeamId &&
+    fixture.awayCompetitionTeamId
+  ) {
+    const homeScore = row.match.isHome
+      ? row.projection.confirmedTeamScore
+      : row.projection.confirmedOpponentScore;
+    const awayScore = row.match.isHome
+      ? row.projection.confirmedOpponentScore
+      : row.projection.confirmedTeamScore;
+    await syncFixtureResult(
+      databaseService,
+      fixture.competitionId,
+      { kind: 'live', id: row.match.id, sessionId },
+      {
+        homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+        awayCompetitionTeamId: fixture.awayCompetitionTeamId,
+        homeScore,
+        awayScore,
+      },
+    );
+  }
+  return true;
+}
+
+export async function finaliseTimedOutCompetitionSessions(
+  databaseService: DatabaseService,
+  competitionId: string,
+  now = new Date(),
+) {
+  if (!twoSidedLiveLoggingEnabled()) return;
+  const rows = await databaseService.database
+    .select({ sessionId: competitionFixtures.sharedSessionId })
+    .from(competitionFixtures)
+    .where(
+      and(
+        eq(competitionFixtures.competitionId, competitionId),
+        sql`${competitionFixtures.sharedSessionId} is not null`,
+      ),
+    );
+  for (const row of rows) {
+    if (row.sessionId)
+      await finaliseTimedOutSession(databaseService, row.sessionId, now);
+  }
+}
+
 type ResultSource =
   | { kind: 'manual'; id: string }
   | { kind: 'live'; id: string; sessionId?: string };
 
 type FixtureRow = typeof competitionFixtures.$inferSelect;
+const logger = new Logger('CompetitionFixtureResults');
 
 function hasActivity(fixture: FixtureRow) {
   return (
@@ -407,6 +509,17 @@ export async function syncFixtureResult(
     input,
   );
   if (!fixture) return;
+  if (
+    source.kind === 'live' &&
+    source.sessionId &&
+    fixture.status === 'completed' &&
+    (fixture.homeScore !== input.homeScore ||
+      fixture.awayScore !== input.awayScore)
+  ) {
+    logger.error(
+      `Fixture/session result disagreement: fixture=${fixture.id} session=${source.sessionId} fixtureScore=${fixture.homeScore}-${fixture.awayScore} sessionScore=${input.homeScore}-${input.awayScore}`,
+    );
+  }
 
   const winner =
     input.homeScore === input.awayScore

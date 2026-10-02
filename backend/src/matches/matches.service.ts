@@ -37,6 +37,7 @@ import {
   unavailableFriendlyOpponentLineup,
 } from '../friendly-fixtures/friendly-fixtures.service';
 import {
+  finaliseTimedOutSession,
   syncFixtureResult,
   validateFixtureResult,
 } from '../competitions/competition-fixture-results';
@@ -73,6 +74,9 @@ export class MatchesService {
   async findOne(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) {
+      await finaliseTimedOutSession(this.databaseService, match.sharedMatchId);
+    }
 
     let competitionName: string | null = null;
     let competitionSeason: string | null = null;
@@ -619,6 +623,9 @@ export class MatchesService {
       })
       .where(eq(matchEventReviews.id, reviewId))
       .returning();
+    this.logger.warn(
+      `Open match review dispute: session=${review.sessionId ?? 'legacy'} review=${review.id} actor=${userId}`,
+    );
     return updated;
   }
 
@@ -1224,10 +1231,12 @@ export class MatchesService {
         participant.side === 'home'
           ? {
               homeConfirmedAt: sql`coalesce(${matchSessions.homeConfirmedAt}, ${now})`,
+              homeConfirmedByUserId: sql`coalesce(${matchSessions.homeConfirmedByUserId}, ${userId})`,
               updatedAt: now,
             }
           : {
               awayConfirmedAt: sql`coalesce(${matchSessions.awayConfirmedAt}, ${now})`,
+              awayConfirmedByUserId: sql`coalesce(${matchSessions.awayConfirmedByUserId}, ${userId})`,
               updatedAt: now,
             },
       )
@@ -1295,7 +1304,9 @@ export class MatchesService {
         .update(matchSessions)
         .set({
           homeConfirmedAt: null,
+          homeConfirmedByUserId: null,
           awayConfirmedAt: null,
+          awayConfirmedByUserId: null,
           updatedAt: new Date(),
         })
         .where(eq(matchSessions.id, match.sharedMatchId));

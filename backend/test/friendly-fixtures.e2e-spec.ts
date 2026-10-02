@@ -309,6 +309,50 @@ describe('Friendly fixtures (e2e)', () => {
     }
   });
 
+  it('assigns a rematch a fresh session after the prior friendly is cancelled', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const home = await newCoach();
+      const away = await newCoach();
+      const schedule = async (title: string) =>
+        (
+          await home.agent
+            .post('/events')
+            .send({
+              title,
+              type: 'match',
+              scheduledAt: futureIso(48),
+              location: 'Rematch Ground',
+              friendlyOpponentTeamId: away.team.id,
+            })
+            .expect(201)
+        ).body as EventBody;
+
+      const firstEvent = await schedule('First fixture');
+      const firstAcceptance = await away.agent
+        .post(`/friendly-fixtures/${firstEvent.friendlyFixtureId}/accept`)
+        .expect(201);
+      const firstSession = (firstAcceptance.body as AcceptedBody).fixture
+        .sharedSessionId;
+      expect(firstSession).toEqual(expect.any(String));
+      await home.agent.delete(`/events/${firstEvent.id}`).expect(200);
+
+      const rematchEvent = await schedule('Rematch fixture');
+      const rematchAcceptance = await away.agent
+        .post(`/friendly-fixtures/${rematchEvent.friendlyFixtureId}/accept`)
+        .expect(201);
+      const rematchSession = (rematchAcceptance.body as AcceptedBody).fixture
+        .sharedSessionId;
+      expect(rematchSession).toEqual(expect.any(String));
+      expect(rematchSession).not.toBe(firstSession);
+    } finally {
+      if (previousFlag === undefined)
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+    }
+  }, 60_000);
+
   it('creates a pending friendly fixture request visible to the opponent coach only', async () => {
     const coachA = await newCoach();
     const coachB = await newCoach();

@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
+import { finaliseTimedOutCompetitionSessions } from './competition-fixture-results';
 import { DatabaseService } from '../database/database.service';
 import {
   ensureCompetitionFixtureSession,
@@ -787,6 +788,10 @@ export class CompetitionsService {
   }
 
   private async loadCompetitionResults(competitionId: string) {
+    await finaliseTimedOutCompetitionSessions(
+      this.databaseService,
+      competitionId,
+    );
     const [manualRows, liveRows] = await Promise.all([
       this.databaseService.database
         .select()

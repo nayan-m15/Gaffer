@@ -256,6 +256,9 @@ export class SyncController {
       if (!(error instanceof HttpException) || error.getStatus() >= 500) {
         throw error;
       }
+      this.logger.warn(
+        `Offline upload rejected: item=${id} status=${error.getStatus()}`,
+      );
       return this.recordRejectedUpload(
         userId,
         item,

@@ -133,7 +133,13 @@ export const matchSessionConfirmationState = pgEnum(
 export const matchSessions = pgTable('match_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   homeConfirmedAt: timestamp('home_confirmed_at', { withTimezone: true }),
+  homeConfirmedByUserId: text('home_confirmed_by_user_id').references(
+    () => user.id,
+  ),
   awayConfirmedAt: timestamp('away_confirmed_at', { withTimezone: true }),
+  awayConfirmedByUserId: text('away_confirmed_by_user_id').references(
+    () => user.id,
+  ),
   finalisedAt: timestamp('finalised_at', { withTimezone: true }),
   finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
   ...timestamps,

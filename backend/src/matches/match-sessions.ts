@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import {
   competitionFixtures,
@@ -7,6 +8,8 @@ import {
   matchSessionParticipants,
   matchSessions,
 } from '../database/schema';
+
+const logger = new Logger('MatchSessions');
 
 export function twoSidedLiveLoggingEnabled(): boolean {
   return (
@@ -124,6 +127,9 @@ export async function ensureFriendlyFixtureSession(
       .where(eq(matchSessions.id, candidate.id));
     const winningSessionId = winner?.sharedSessionId ?? sessionId;
     if (!winningSessionId) return null;
+    logger.warn(
+      `Duplicate friendly session candidate discarded for fixture ${fixture.id}; using ${winningSessionId}.`,
+    );
     await ensureFriendlyParticipants(
       databaseService,
       winningSessionId,
@@ -183,6 +189,9 @@ export async function ensureCompetitionFixtureSession(
       .where(eq(matchSessions.id, candidate.id));
     const winningSessionId = winner?.sharedSessionId ?? sessionId;
     if (!winningSessionId) return null;
+    logger.warn(
+      `Duplicate competition session candidate discarded for fixture ${fixture.id}; using ${winningSessionId}.`,
+    );
     await ensureCompetitionParticipants(
       databaseService,
       winningSessionId,
