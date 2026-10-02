@@ -170,6 +170,7 @@ function DashboardFrame({
 }) {
   return (
     <div
+      data-gate-fill={fillVisible ? "" : undefined}
       className={cn("relative", fillVisible ? "min-h-0 flex-1" : "min-h-full")}
     >
       {children}
@@ -943,17 +944,18 @@ export default function DashboardPage() {
       !dashboardCelebrated,
   );
   const hideMainForUnlock = (unlockGateApplies || unlockCelebrating) && !dashUnlocked;
+  const dashGateLayout = Boolean(
+    isFirstTime ||
+      ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed),
+  );
   const showUnlockOverlay =
-    ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed) ||
+    overlayPhase !== "hidden" ||
+    dashGateLayout ||
     unlockOverlayFading;
   const concealDashboardMain =
     (unlockGateApplies || unlockCelebrating) &&
     dashUnlocked &&
     !dashPageRevealed;
-  const gateBlocksScroll = Boolean(
-    isFirstTime ||
-      ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed),
-  );
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
   const overlayFadeTimeoutRef = useRef<number | null>(null);
@@ -1020,13 +1022,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const main = document.querySelector("main.app-shell-main");
-    if (!(main instanceof HTMLElement) || !gateBlocksScroll) return;
+    if (!(main instanceof HTMLElement) || !dashGateLayout) return;
     const previous = main.style.overflow;
     main.style.overflow = "hidden";
     return () => {
       main.style.overflow = previous;
     };
-  }, [gateBlocksScroll]);
+  }, [dashGateLayout]);
+
+  useEffect(() => {
+    const content = document.querySelector("div.app-shell-content");
+    if (!(content instanceof HTMLElement) || !dashGateLayout) return;
+    content.classList.add("relative", "flex", "min-h-0", "flex-col");
+    return () => {
+      content.classList.remove("relative", "flex", "min-h-0", "flex-col");
+    };
+  }, [dashGateLayout]);
 
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
@@ -1123,11 +1134,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardFrame
-      fillVisible={
-        isFirstTime || unlockGateApplies || unlockCelebrating
-      }
-    >
+    <DashboardFrame fillVisible={dashGateLayout}>
       {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <DashboardStadiumOverlay
           fading={

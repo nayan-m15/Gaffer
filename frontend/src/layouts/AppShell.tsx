@@ -5,9 +5,14 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
 import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
+import { GatePageBackdrop } from "@/features/onboarding/GatePageBackdrop";
 import { PageTourProvider } from "@/features/onboarding/pageTourContext";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
+import {
+  BACKDROP_OUT_MS,
+  REVEAL_STAGGER_MS,
+} from "@/features/onboarding/celebrations/timings";
 import {
   usePageCelebrated,
   useUnlockRequirements,
@@ -87,10 +92,12 @@ function GatedPageBody({
 
   return (
     <div
-      className={cn(
-        "relative flex flex-1 flex-col",
-        showingGate ? "min-h-0" : "min-h-full",
-      )}
+      data-gate-body=""
+      className={
+        showingGate && !pageRevealed
+          ? "relative flex min-h-0 flex-1 flex-col"
+          : undefined
+      }
     >
       {showOutlet && (
         <div
@@ -162,12 +169,34 @@ function AppShellContent() {
   const [celebrating, setCelebrating] = useState(false);
   const [celebrationActive, setCelebrationActive] = useState(false);
   const [pageRevealed, setPageRevealed] = useState(false);
+  const [gateBgFading, setGateBgFading] = useState(false);
+  const [gateBgRemoved, setGateBgRemoved] = useState(false);
   const mountedRef = useRef(true);
+  const gateBgStaggerTimeoutRef = useRef<number | null>(null);
+  const gateBgFadeTimeoutRef = useRef<number | null>(null);
+
+  const clearGateBgTimers = () => {
+    if (gateBgStaggerTimeoutRef.current != null) {
+      window.clearTimeout(gateBgStaggerTimeoutRef.current);
+      gateBgStaggerTimeoutRef.current = null;
+    }
+    if (gateBgFadeTimeoutRef.current != null) {
+      window.clearTimeout(gateBgFadeTimeoutRef.current);
+      gateBgFadeTimeoutRef.current = null;
+    }
+  };
+
+  const resetGateBackground = () => {
+    clearGateBgTimers();
+    setGateBgFading(false);
+    setGateBgRemoved(false);
+  };
 
   useEffect(() => {
     setCelebrating(false);
     setCelebrationActive(false);
     setPageRevealed(false);
+    resetGateBackground();
     cancelGoalUnlockCelebration();
   }, [pageKey]);
 
@@ -175,6 +204,7 @@ function AppShellContent() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      clearGateBgTimers();
       cancelGoalUnlockCelebration();
     };
   }, []);
@@ -211,6 +241,25 @@ function AppShellContent() {
   const handleRevealed = () => {
     if (!mountedRef.current) return;
     setPageRevealed(true);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) {
+      clearGateBgTimers();
+      setGateBgRemoved(true);
+      return;
+    }
+    clearGateBgTimers();
+    gateBgStaggerTimeoutRef.current = window.setTimeout(() => {
+      gateBgStaggerTimeoutRef.current = null;
+      if (!mountedRef.current) return;
+      setGateBgFading(true);
+      gateBgFadeTimeoutRef.current = window.setTimeout(() => {
+        gateBgFadeTimeoutRef.current = null;
+        if (!mountedRef.current) return;
+        setGateBgRemoved(true);
+      }, BACKDROP_OUT_MS);
+    }, REVEAL_STAGGER_MS);
   };
 
   const handleCelebrationComplete = () => {
@@ -218,6 +267,7 @@ function AppShellContent() {
     setCelebrating(false);
     setCelebrationActive(false);
     setPageRevealed(false);
+    resetGateBackground();
   };
 
   const showDashboardScene =
@@ -257,7 +307,13 @@ function AppShellContent() {
           expanded ? "lg:pl-72" : "lg:pl-24",
         )}
       >
-      
+        {showingGate && pageKey && !gateBgRemoved && (
+          <GatePageBackdrop
+            pageKey={pageKey}
+            fading={gateBgFading}
+            fadeMs={BACKDROP_OUT_MS}
+          />
+        )}
         <div className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border/60 bg-background/75 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-2">
             <SportLogo size={26} className="rounded-md" />
@@ -269,12 +325,13 @@ function AppShellContent() {
         <div
           className={cn(
             "app-shell-content flex-1",
-            (isEventsPage || isDashboardPage) && "min-h-0",
-            (showingGate || isDashboardPage) && "relative",
-            (showingGate || isDashboardPage) && "flex min-h-0 flex-col",
+            isEventsPage && "min-h-0",
+            showingGate &&
+              !pageRevealed &&
+              "relative z-20 flex min-h-0 flex-col",
           )}
         >
-          {gateEligible && pageKey && user?.id ? (
+          {gateEligible && pageKey && user?.id && showingGate ? (
             <GatedPageBody
               pageKey={pageKey}
               userId={user.id}

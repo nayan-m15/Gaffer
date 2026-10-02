@@ -1,0 +1,113 @@
+.unlock-gate-page-photo {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--background);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.unlock-gate-page-dim {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-color: rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unlock-gate-page-dim {
+    backdrop-filter: none;
+  }
+}
+
+.unlock-gate-page-photo[data-page="events"] {
+  background-image: url("/eventsBgLightMobile.png");
+}
+
+.dark .unlock-gate-page-photo[data-page="events"] {
+  background-image: url("/eventsBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .unlock-gate-page-photo[data-page="events"] {
+    background-image: url("/eventsBgLight.png");
+  }
+
+  .dark .unlock-gate-page-photo[data-page="events"] {
+    background-image: url("/eventsBgDark.png");
+  }
+}
+
+.unlock-gate-page-photo[data-page="team"] {
+  background-image: url("/teamBgLightMobile.png");
+}
+
+.dark .unlock-gate-page-photo[data-page="team"] {
+  background-image: url("/teamBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .unlock-gate-page-photo[data-page="team"] {
+    background-image: url("/teamBgLight.png");
+  }
+
+  .dark .unlock-gate-page-photo[data-page="team"] {
+    background-image: url("/teamBgDark.png");
+  }
+}
+
+.unlock-gate-page-photo[data-page="injuries"] {
+  background-image: url("/injuriesBgLightMobile.png");
+}
+
+.dark .unlock-gate-page-photo[data-page="injuries"] {
+  background-image: url("/injuriesBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .unlock-gate-page-photo[data-page="injuries"] {
+    background-image: url("/injuriesBgLight.png");
+  }
+
+  .dark .unlock-gate-page-photo[data-page="injuries"] {
+    background-image: url("/injuriesBgDark.png");
+  }
+}
+
+.unlock-gate-page-photo[data-page="live-logger"] {
+  background-image: url("/liveLoggerBgLightMobile.png");
+}
+
+.dark .unlock-gate-page-photo[data-page="live-logger"] {
+  background-image: url("/liveLoggerBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .unlock-gate-page-photo[data-page="live-logger"] {
+    background-image: url("/liveLoggerBgLight.png");
+  }
+
+  .dark .unlock-gate-page-photo[data-page="live-logger"] {
+    background-image: url("/liveLoggerBgDark.png");
+  }
+}
+
+.unlock-gate-page-photo[data-page="statistics"] {
+  background-image: url("/statsBgLightMobile.png");
+}
+
+.dark .unlock-gate-page-photo[data-page="statistics"] {
+  background-image: url("/statsBgDarkMobile.png");
+}
+
+@media (min-width: 1024px) {
+  .unlock-gate-page-photo[data-page="statistics"] {
+    background-image: url("/statsBGLight.png");
+  }
+
+  .dark .unlock-gate-page-photo[data-page="statistics"] {
+    background-image: url("/statsBGDark.png");
+  }
+}

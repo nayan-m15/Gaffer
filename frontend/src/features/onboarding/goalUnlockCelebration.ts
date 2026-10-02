@@ -475,17 +475,46 @@ export function startGoalUnlockCelebration(
 }
 
 function revealUnlockPage(): void {
+  const isEventsPage = Boolean(document.querySelector(".events-page"));
+
   for (const node of document.querySelectorAll("[data-unlock-page]")) {
     if (!(node instanceof HTMLElement)) continue;
     node.style.opacity = "1";
     node.style.pointerEvents = "auto";
     node.removeAttribute("inert");
     node.removeAttribute("aria-hidden");
+    node.classList.remove(
+      "pointer-events-none",
+      "opacity-0",
+      "isolate",
+      "[transform:translate(0)]",
+    );
   }
+
   const main = document.querySelector("main.app-shell-main");
-  if (!(main instanceof HTMLElement)) return;
-  if (!document.querySelector(".events-page")) {
+  if (main instanceof HTMLElement && !isEventsPage) {
     main.style.overflow = "auto";
+    main.classList.remove("overflow-hidden");
+    main.classList.add("overflow-y-auto");
+  }
+
+  const content = document.querySelector("div.app-shell-content");
+  if (content instanceof HTMLElement) {
+    content.classList.remove("relative", "flex", "min-h-0", "flex-col", "z-20");
+    if (isEventsPage) {
+      content.classList.add("min-h-0");
+    }
+  }
+
+  for (const body of document.querySelectorAll("[data-gate-body]")) {
+    if (!(body instanceof HTMLElement)) continue;
+    body.className = "";
+  }
+
+  for (const frame of document.querySelectorAll("[data-gate-fill]")) {
+    if (!(frame instanceof HTMLElement)) continue;
+    frame.classList.remove("min-h-0", "flex-1");
+    frame.classList.add("min-h-full");
   }
 }
 
