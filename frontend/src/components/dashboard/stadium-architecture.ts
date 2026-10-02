@@ -280,37 +280,6 @@ export function buildStadium(maxAnisotropy: number) {
   seats.receiveShadow = true;
   group.add(seats);
 
-  // Retain the old scene's lightweight, seeded crowd idea as a single batch
-  // of seated silhouettes. Alpha testing avoids sorting transparent people.
-  const crowdTexture = canvasTexture(64, 128, (ctx) => {
-    ctx.clearRect(0, 0, 64, 128);
-    ctx.fillStyle = "#dedcd5";
-    ctx.beginPath(); ctx.moveTo(13, 125); ctx.lineTo(15, 55); ctx.quadraticCurveTo(32, 40, 49, 55); ctx.lineTo(51, 125); ctx.fill();
-    ctx.fillStyle = "#c99c79"; ctx.beginPath(); ctx.ellipse(32, 28, 11, 14, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#252a2d"; ctx.beginPath(); ctx.ellipse(32, 19, 11, 6, 0, Math.PI, Math.PI * 2); ctx.fill();
-  });
-  const crowdMaterial = new THREE.MeshStandardMaterial({ map: crowdTexture, alphaTest: 0.45, roughness: 1, side: THREE.DoubleSide });
-  const crowdMatrices: THREE.Matrix4[] = [];
-  const crowdColors: THREE.Color[] = [];
-  const crowdPalette = [0x48525c, 0x728079, 0x566a77, 0x8e8170, 0x26493e, 0xa3a8a2, 0x49545d].map((hex) => new THREE.Color(hex).convertSRGBToLinear());
-  seatTransforms.forEach((matrix, i) => {
-    if ((Math.imul(i + 11, 1664525) >>> 0) % 11 > 6) return;
-    seatTransform.matrix.copy(matrix);
-    seatTransform.matrix.decompose(seatTransform.position, seatTransform.quaternion, seatTransform.scale);
-    seatTransform.position.y += 0.45;
-    seatTransform.scale.set(0.45, 0.85, 1);
-    seatTransform.updateMatrix();
-    crowdMatrices.push(seatTransform.matrix.clone());
-    crowdColors.push(crowdPalette[i % crowdPalette.length]);
-  });
-  const crowd = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), crowdMaterial, crowdMatrices.length);
-  crowdMatrices.forEach((matrix, i) => { crowd.setMatrixAt(i, matrix); crowd.setColorAt(i, crowdColors[i]); });
-  crowd.instanceMatrix.needsUpdate = true;
-  if (crowd.instanceColor) crowd.instanceColor.needsUpdate = true;
-  crowd.frustumCulled = false;
-  crowd.name = `${crowdMatrices.length} static instanced spectators`;
-  group.add(crowd);
-
   // Hospitality is a deep gallery: floor, rear wall, ceiling, furniture,
   // warm recess lighting and mullions sit behind a continuous glazed front.
   strip([[19.7, 13.8], [19.7, 18.3]], glass, group, "Smoked-glass executive suites");
@@ -515,8 +484,6 @@ export function buildStadium(maxAnisotropy: number) {
   // staging arrays instead of retaining them in the theme callback's scope.
   seatTransforms.length = 0;
   seatColors.length = 0;
-  crowdMatrices.length = 0;
-  crowdColors.length = 0;
   panelMatrices.forEach((matrices) => { matrices.length = 0; });
   return {
     group,
