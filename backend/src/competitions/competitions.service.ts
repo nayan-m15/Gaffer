@@ -10,6 +10,10 @@ import { and, asc, count, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
 import {
+  ensureCompetitionFixtureSession,
+  twoSidedLiveLoggingEnabled,
+} from '../matches/match-sessions';
+import {
   athletes,
   competitionMatches,
   competitionFixtures,
@@ -1141,7 +1145,14 @@ export class CompetitionsService {
         throw new ConflictException('Fixtures already exist.');
       throw error;
     }
-    return this.listFixtures(userId, competitionId);
+    const fixtures = await this.listFixtures(userId, competitionId);
+    if (twoSidedLiveLoggingEnabled()) {
+      for (const fixture of fixtures) {
+        await ensureCompetitionFixtureSession(this.databaseService, fixture.id);
+      }
+      return this.listFixtures(userId, competitionId);
+    }
+    return fixtures;
   }
 
   private async requireFixtureScheduleContext(

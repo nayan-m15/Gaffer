@@ -122,6 +122,53 @@ export const teams = pgTable('teams', {
   ...timestamps,
 });
 
+export const matchSessionSide = pgEnum('match_session_side', ['home', 'away']);
+export const matchSessionConfirmationState = pgEnum(
+  'match_session_confirmation_state',
+  ['pending', 'confirmed'],
+);
+
+// Canonical shared timeline identity. Team-specific match sheets remain in
+// `matches`; this row only represents the fixture/session they may share.
+export const matchSessions = pgTable('match_sessions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ...timestamps,
+});
+
+export const matchSessionParticipants = pgTable(
+  'match_session_participants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => matchSessions.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+    competitionTeamId: uuid('competition_team_id').references(
+      () => competitionTeams.id,
+      { onDelete: 'cascade' },
+    ),
+    side: matchSessionSide('side').notNull(),
+    confirmationState: matchSessionConfirmationState('confirmation_state')
+      .default('pending')
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('match_session_participants_session_side_unique').on(
+      table.sessionId,
+      table.side,
+    ),
+    index('match_session_participants_team_id_index').on(table.teamId),
+    index('match_session_participants_competition_team_id_index').on(
+      table.competitionTeamId,
+    ),
+    check(
+      'match_session_participants_identity_check',
+      sql`${table.teamId} is not null or ${table.competitionTeamId} is not null`,
+    ),
+  ],
+);
+
 export const teamMembers = pgTable(
   'team_members',
   {
@@ -389,6 +436,10 @@ export const friendlyFixtures = pgTable(
       .references(() => user.id),
     respondedByUserId: text('responded_by_user_id').references(() => user.id),
     respondedAt: timestamp('responded_at', { withTimezone: true }),
+    sharedSessionId: uuid('shared_session_id').references(
+      () => matchSessions.id,
+      { onDelete: 'set null' },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -399,6 +450,9 @@ export const friendlyFixtures = pgTable(
     index('friendly_fixtures_opponent_status_index').on(
       table.opponentTeamId,
       table.status,
+    ),
+    uniqueIndex('friendly_fixtures_shared_session_unique').on(
+      table.sharedSessionId,
     ),
   ],
 );
@@ -782,6 +836,9 @@ export const matches = pgTable(
       .notNull()
       .unique()
       .references(() => events.id, { onDelete: 'cascade' }),
+    sharedMatchId: uuid('shared_match_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
@@ -827,6 +884,7 @@ export const matches = pgTable(
     ),
     index('matches_opponent_team_id_index').on(table.opponentTeamId),
     index('matches_game_plan_id_index').on(table.gamePlanId),
+    index('matches_shared_match_id_index').on(table.sharedMatchId),
   ],
 );
 
@@ -1430,6 +1488,10 @@ export const competitionFixtures = pgTable(
     nextFixtureId: uuid('next_fixture_id'),
     nextFixtureSlot: text('next_fixture_slot'),
     linkedMatchId: uuid('linked_match_id').references(() => matches.id),
+    sharedSessionId: uuid('shared_session_id').references(
+      () => matchSessions.id,
+      { onDelete: 'set null' },
+    ),
     legacyResultId: uuid('legacy_result_id').references(
       () => competitionMatches.id,
     ),
@@ -1480,6 +1542,9 @@ export const competitionFixtures = pgTable(
     ),
     uniqueIndex('competition_fixtures_linked_match_unique').on(
       table.linkedMatchId,
+    ),
+    uniqueIndex('competition_fixtures_shared_session_unique').on(
+      table.sharedSessionId,
     ),
     uniqueIndex('competition_fixtures_legacy_result_unique').on(
       table.legacyResultId,

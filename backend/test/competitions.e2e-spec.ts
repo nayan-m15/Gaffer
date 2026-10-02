@@ -143,6 +143,53 @@ describe('Shared competitions (e2e)', () => {
     expect(detail.participants).toHaveLength(2);
   });
 
+  it('creates one shared session for each newly generated competition fixture when enabled', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const { agent } = await newCoach();
+      const competition = (
+        await agent
+          .post('/competitions')
+          .send({
+            name: uniqueName('Shared Session League'),
+            type: 'league',
+            format: 'league',
+            configuredTeamCount: 2,
+            startDate: '2027-01-01',
+            allowedPlayingDays: [6],
+          })
+          .expect(201)
+      ).body as CompetitionBody;
+      await agent
+        .post(`/competitions/${competition.id}/teams`)
+        .send({ displayName: uniqueName('Session Opponent') })
+        .expect(201);
+
+      const fixtures = (
+        await agent
+          .post(`/competitions/${competition.id}/fixtures/generate`)
+          .send({})
+          .expect(201)
+      ).body as Array<{ id: string; sharedSessionId: string | null }>;
+      expect(fixtures).toHaveLength(1);
+      expect(fixtures[0].sharedSessionId).toEqual(expect.any(String));
+
+      const again = (
+        await agent.get(`/competitions/${competition.id}/fixtures`).expect(200)
+      ).body as Array<{ id: string; sharedSessionId: string | null }>;
+      expect(again.map((fixture) => fixture.sharedSessionId)).toEqual([
+        fixtures[0].sharedSessionId,
+      ]);
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      } else {
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+      }
+    }
+  });
+
   it('rejects a duplicate participant display name case-insensitively', async () => {
     const { agent } = await newCoach();
     const competition = await createCompetition(

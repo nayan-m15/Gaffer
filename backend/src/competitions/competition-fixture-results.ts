@@ -3,6 +3,10 @@ import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
 import {
+  ensureCompetitionFixtureSession,
+  twoSidedLiveLoggingEnabled,
+} from '../matches/match-sessions';
+import {
   competitionFixtures,
   competitionMatches,
   competitions,
@@ -370,7 +374,7 @@ async function ensureHybridKnockoutStage(
   );
 
   if (!plan.length) return;
-  await databaseService.database
+  const inserted = await databaseService.database
     .insert(competitionFixtures)
     .values(
       plan.map((fixture) => ({
@@ -379,7 +383,13 @@ async function ensureHybridKnockoutStage(
         competitionId,
       })),
     )
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: competitionFixtures.id });
+  if (twoSidedLiveLoggingEnabled()) {
+    for (const fixture of inserted) {
+      await ensureCompetitionFixtureSession(databaseService, fixture.id);
+    }
+  }
 }
 
 export async function syncFixtureResult(

@@ -3,7 +3,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { eq } from 'drizzle-orm';
 import { AppModule } from '../src/app.module';
+import { createDatabaseClient } from '../src/database/drizzle';
+import { matchSessionParticipants } from '../src/database/schema';
 import { registerCoach } from './utils/auth-helpers';
 import {
   cleanupUser,
@@ -39,7 +42,7 @@ interface IncomingRequestBody {
 }
 
 interface AcceptedBody {
-  fixture: { id: string; status: string };
+  fixture: { id: string; status: string; sharedSessionId?: string | null };
   event: EventBody;
 }
 
@@ -93,6 +96,7 @@ function startMatchBody() {
 describe('Friendly fixtures (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
+  const database = createDatabaseClient();
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -235,6 +239,74 @@ describe('Friendly fixtures (e2e)', () => {
       .expect(201);
 
     expect((response.body as EventBody).friendlyFixtureId).toBeNull();
+  });
+
+  it('creates one shared session and home/away participants when an accepted friendly is enabled', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const coachA = await newCoach();
+      const coachB = await newCoach();
+      const event = (
+        await coachA.agent
+          .post('/events')
+          .send({
+            title: coachB.team.name,
+            type: 'match',
+            scheduledAt: futureIso(0),
+            location: 'Session Ground',
+            friendlyOpponentTeamId: coachB.team.id,
+          })
+          .expect(201)
+      ).body as EventBody;
+
+      const acceptanceAttempts = await Promise.all([
+        coachB.agent
+          .post(`/friendly-fixtures/${event.friendlyFixtureId}/accept`)
+          .then((response) => response),
+        coachB.agent
+          .post(`/friendly-fixtures/${event.friendlyFixtureId}/accept`)
+          .then((response) => response),
+      ]);
+      const acceptedResponse = acceptanceAttempts.find(
+        (response) => response.status === 201,
+      );
+      expect(
+        acceptanceAttempts.filter((response) => response.status === 201),
+      ).toHaveLength(1);
+      expect(
+        acceptanceAttempts.every((response) =>
+          [201, 404, 409].includes(response.status),
+        ),
+      ).toBe(true);
+      const accepted = acceptedResponse!.body as AcceptedBody;
+      expect(accepted.fixture.sharedSessionId).toEqual(expect.any(String));
+
+      const participants = await database
+        .select({
+          teamId: matchSessionParticipants.teamId,
+          side: matchSessionParticipants.side,
+        })
+        .from(matchSessionParticipants)
+        .where(
+          eq(
+            matchSessionParticipants.sessionId,
+            accepted.fixture.sharedSessionId!,
+          ),
+        );
+      expect(participants.sort((a, b) => a.side.localeCompare(b.side))).toEqual(
+        [
+          { teamId: coachB.team.id, side: 'away' },
+          { teamId: coachA.team.id, side: 'home' },
+        ],
+      );
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      } else {
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+      }
+    }
   });
 
   it('creates a pending friendly fixture request visible to the opponent coach only', async () => {

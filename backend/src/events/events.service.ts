@@ -19,6 +19,11 @@ import { alias } from 'drizzle-orm/pg-core';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
 import {
+  ensureCompetitionFixtureSession,
+  ensureFriendlyFixtureSession,
+  twoSidedLiveLoggingEnabled,
+} from '../matches/match-sessions';
+import {
   athleteMatchStats,
   athletes,
   competitions,
@@ -848,6 +853,19 @@ export class EventsService {
       ? await this.getAcceptedFriendlyOpponent(team.id, event.friendlyFixtureId)
       : null;
 
+    let sharedMatchId: string | null = null;
+    if (twoSidedLiveLoggingEnabled() && event.friendlyFixtureId) {
+      sharedMatchId = await ensureFriendlyFixtureSession(
+        this.databaseService,
+        event.friendlyFixtureId,
+      );
+    } else if (twoSidedLiveLoggingEnabled() && event.competitionFixtureId) {
+      sharedMatchId = await ensureCompetitionFixtureSession(
+        this.databaseService,
+        event.competitionFixtureId,
+      );
+    }
+
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
         'Matches cannot be started before match day.',
@@ -963,6 +981,7 @@ export class EventsService {
       .insert(matches)
       .values({
         eventId: event.id,
+        sharedMatchId,
         competitionId: event.competitionId,
         opponentCompetitionTeamId: matchValues.opponentCompetitionTeamId,
         opponentTeamId: matchValues.opponentTeamId,

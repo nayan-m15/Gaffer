@@ -17,6 +17,7 @@ import {
   teams,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import { ensureFriendlyFixtureSession } from '../matches/match-sessions';
 
 export interface IncomingFriendlyFixture {
   id: string;
@@ -202,7 +203,15 @@ export class FriendlyFixturesService {
         })
         .returning();
 
-      return { fixture: accepted, event: opponentEvent };
+      const sharedSessionId = await ensureFriendlyFixtureSession(
+        this.databaseService,
+        fixture.id,
+      );
+
+      return {
+        fixture: { ...accepted, sharedSessionId },
+        event: opponentEvent,
+      };
     } catch (error) {
       // Neon HTTP has no interactive transactions: revert the flip so a
       // failed accept can simply be retried from the requests banner.
