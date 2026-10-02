@@ -157,7 +157,7 @@ These are settled product decisions for implementation:
 - [x] Step 2 — Canonical session schema
 - [x] Step 3 — Idempotent fixture session creation
 - [x] Step 4 — Participant authorization
-- [ ] Step 5 — Normalized event storage and reconciliation
+- [x] Step 5 — Normalized event storage and reconciliation
 - [ ] Step 6 — Authorised shared sync
 - [ ] Step 7 — Match setup and live logger UI
 - [ ] Step 8 — Shared report, reviews, and disputes
@@ -167,5 +167,6 @@ These are settled product decisions for implementation:
 Implementation notes:
 - Accepted friendlies assign the requesting team to the home side and the accepting team to the away side, since the plan did not define a friendly home/away rule.
 - Session creation is gated by `TWO_SIDED_LIVE_LOGGING_ENABLED`, defaulting off as specified by the rollout plan. Unlinked generated competition participants retain their participant ID with a null team ID.
-- Step 4 permits current session participants to read shared timeline, review, event-operation, and clock-operation endpoints when the flag is enabled. Match reports, squads, opponent squads, event details, and lineups remain scoped to the owning team; participant writes stay on the owning-team path until event identity is normalized in Step 5(b).
-- Step 5(a) is complete: session identity and actual home/away side columns were added with a legacy backfill across observations, canonical events, reviews, event and clock operations, and projections. Work stopped before Step 5(b); no ingestion/reconciliation SQL or candidate matching logic was changed. Add the idempotency, locking, and candidate-matching tests before implementing that part.
+- Step 4 permits current session participants to read shared timeline, review, event-operation, and clock-operation endpoints when the flag is enabled. Match reports, squads, opponent squads, event details, and lineups remain scoped to the owning team. Event uploads continue through each team's own match sheet; Step 5 adds the shared session identity used to reconcile those observations.
+- Step 5(b) is complete in migration `0047_session_event_reconciliation`: flag-enabled linked matches use session-locked ingestion, persist session and actual side identity, and create deterministic review candidates across sheets by period, event type, normalized side, and elapsed time. Player attribution differences do not block a candidate; observations remain separate until an explicit merge decision. The legacy ingestion/review functions remain the flag-off and unlinked-match path.
+- Step 5 tests cover parallel cross-sheet ingestion and retry idempotency, differing player identities, two distinct goals with the same displayed minute outside the candidate window, and retry-safe explicit merge/separate decisions. Reviews and reconciliation rows are session-tagged; the review HTTP route still addresses the initiating match sheet. Step 6/8 should provide shared review visibility to both participants without widening private match-sheet data.

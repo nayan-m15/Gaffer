@@ -325,9 +325,41 @@ export class MatchesService {
       }
     }
 
-    const persistedResult = await this.databaseService.database.execute<{
-      canonical_event_id: string;
-    }>(sql`select ingest_match_event_observation(
+    const side = match.isHome
+      ? dto.team === 'own'
+        ? 'home'
+        : 'away'
+      : dto.team === 'own'
+        ? 'away'
+        : 'home';
+    const persistedResult =
+      match.sharedMatchId && twoSidedLiveLoggingEnabled()
+        ? await this.databaseService.database.execute<{
+            canonical_event_id: string;
+          }>(sql`select ingest_match_session_event_observation(
+          ${dto.clientRequestId}::uuid,
+          ${match.id}::uuid,
+          ${match.sharedMatchId}::uuid,
+          ${side}::match_session_side,
+          ${dto.deviceId ?? dto.clientRequestId}::uuid,
+          ${userId}::text,
+          ${dto.eventType}::match_event_type,
+          ${dto.team}::match_event_team,
+          ${dto.athleteId ?? null}::uuid,
+          ${opponentLabel}::text,
+          ${opponentPlayerId}::uuid,
+          ${period}::text,
+          ${matchElapsedMs}::integer,
+          ${dto.minute}::integer,
+          ${dto.detail ?? null}::text,
+          ${JSON.stringify(payload)}::jsonb,
+          ${payloadHash}::text,
+          ${(dto.clientCreatedAt ? new Date(dto.clientCreatedAt) : new Date()).toISOString()}::timestamptz,
+          ${event.status === 'completed'}::boolean
+        ) as canonical_event_id`)
+        : await this.databaseService.database.execute<{
+            canonical_event_id: string;
+          }>(sql`select ingest_match_event_observation(
           ${dto.clientRequestId}::uuid,
           ${match.id}::uuid,
           ${dto.deviceId ?? dto.clientRequestId}::uuid,
@@ -546,9 +578,18 @@ export class MatchesService {
     causalParentIds: string[],
     dto: ResolveMatchEventReviewDto,
   ) {
-    const result = await this.databaseService.database.execute<{
-      canonical_event_id: string;
-    }>(sql`select resolve_match_event_candidate(
+    const result =
+      match.sharedMatchId && twoSidedLiveLoggingEnabled()
+        ? await this.databaseService.database.execute<{
+            canonical_event_id: string;
+          }>(sql`select resolve_match_session_event_candidate(
+      ${reviewId}::uuid, ${matchId}::uuid, ${match.sharedMatchId}::uuid,
+      ${userId}::text, ${operationId}::uuid, ${dto.resolution}::text,
+      ${JSON.stringify(causalParentIds)}::jsonb
+    ) as canonical_event_id`)
+        : await this.databaseService.database.execute<{
+            canonical_event_id: string;
+          }>(sql`select resolve_match_event_candidate(
       ${reviewId}::uuid, ${matchId}::uuid, ${userId}::text,
       ${operationId}::uuid, ${dto.resolution}::text,
       ${JSON.stringify(causalParentIds)}::jsonb
