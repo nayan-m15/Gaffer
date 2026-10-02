@@ -1210,7 +1210,13 @@ export async function readSyncedMatchProjection(
   import("@/features/matches/types").MatchRecord["projection"] | null
 > {
   const db = await database();
+  const match = await db.getOptional<{ shared_match_id: string | null }>(
+    "SELECT shared_match_id FROM matches WHERE id = ?",
+    [matchId],
+  );
   const row = await db.getOptional<{
+    id: string;
+    session_id: string | null;
     revision: number;
     confirmed_team_score: number;
     confirmed_opponent_score: number;
@@ -1219,18 +1225,46 @@ export async function readSyncedMatchProjection(
     possible_effects: string | Record<string, unknown>;
     unresolved_review_count: number;
     finalisation_state: "open" | "finalised" | "amendment_required";
-  }>("SELECT * FROM match_projection_state WHERE id = ?", [matchId]);
+  }>("SELECT * FROM match_projection_state WHERE id = ?", [matchId]) ??
+    (match?.shared_match_id
+      ? await db.getOptional<{
+          id: string;
+          session_id: string | null;
+          revision: number;
+          confirmed_team_score: number;
+          confirmed_opponent_score: number;
+          provisional_team_score: number;
+          provisional_opponent_score: number;
+          possible_effects: string | Record<string, unknown>;
+          unresolved_review_count: number;
+          finalisation_state: "open" | "finalised" | "amendment_required";
+        }>(
+          `SELECT * FROM match_projection_state
+            WHERE session_id = ? AND id <> ?
+            LIMIT 1`,
+          [match.shared_match_id, matchId],
+        )
+      : null);
   if (!row) return null;
+  const storedPossibleEffects =
+    typeof row.possible_effects === "string"
+      ? JSON.parse(row.possible_effects)
+      : row.possible_effects;
+  const possibleEffects =
+    row.id === matchId || !storedPossibleEffects
+      ? storedPossibleEffects
+      : {
+          ...storedPossibleEffects,
+          teamGoals: storedPossibleEffects.opponentGoals,
+          opponentGoals: storedPossibleEffects.teamGoals,
+        };
   return {
     revision: row.revision,
     confirmedTeamScore: row.confirmed_team_score,
     confirmedOpponentScore: row.confirmed_opponent_score,
     provisionalTeamScore: row.provisional_team_score,
     provisionalOpponentScore: row.provisional_opponent_score,
-    possibleEffects:
-      typeof row.possible_effects === "string"
-        ? JSON.parse(row.possible_effects)
-        : row.possible_effects,
+    possibleEffects,
     unresolvedReviewCount: row.unresolved_review_count,
     finalisationState: row.finalisation_state,
   };

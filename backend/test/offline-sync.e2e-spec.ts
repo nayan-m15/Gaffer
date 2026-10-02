@@ -90,6 +90,8 @@ describe('Offline collaborative sync (e2e)', () => {
     const reviewId = randomUUID();
     const awayEventId = randomUUID();
     const awayReviewId = randomUUID();
+    const homeClockOperationId = randomUUID();
+    const awayClockOperationId = randomUUID();
     await database.execute(sql`
       insert into match_sessions (id) values (${sessionId}::uuid)
     `);
@@ -126,6 +128,21 @@ describe('Offline collaborative sync (e2e)', () => {
       values (${awayReviewId}::uuid, ${awayMatchId}::uuid, ${sessionId}::uuid,
               ${awayEventId}::uuid, '[]'::jsonb, 'cross-side candidate')
     `);
+    for (const [id, matchId, actorId] of [
+      [homeClockOperationId, homeMatchId, home.user.id],
+      [awayClockOperationId, awayMatchId, away.user.id],
+    ]) {
+      await database.execute(sql`
+        insert into match_clock_operations (
+          id, match_id, actor_user_id, period, elapsed_ms, running,
+          base_revision, applied_revision, outcome, payload_hash,
+          client_created_at
+        ) values (
+          ${id}::uuid, ${matchId}::uuid, ${actorId}, 'first_half', 12000,
+          true, 0, 1, 'applied', ${id}, now()
+        )
+      `);
+    }
 
     const config = readFileSync(
       resolve(__dirname, '../../powersync/sync-config.yaml'),
@@ -172,10 +189,36 @@ describe('Offline collaborative sync (e2e)', () => {
       'shared_session_match_memberships',
       'shared_session_match_operations',
       'shared_session_match_projections',
-      'shared_session_match_clock_operations',
     ]) {
       await readRows(stream, home.team.id, home.user.id);
     }
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          home.team.id,
+          home.user.id,
+        )
+      ).rows,
+    ).toEqual([expect.objectContaining({ id: awayClockOperationId })]);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toEqual([expect.objectContaining({ id: homeClockOperationId })]);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          unrelated.team.id,
+          unrelated.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
 
     await database.execute(sql`
       delete from team_members where user_id = ${away.user.id}
@@ -194,6 +237,15 @@ describe('Offline collaborative sync (e2e)', () => {
       (
         await readRows(
           'shared_session_match_reviews',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
           away.team.id,
           away.user.id,
         )
