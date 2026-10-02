@@ -17,6 +17,7 @@ import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
 import { AuthService } from './auth.service';
 import {
+  changePasswordSchema,
   resendVerificationEmailSchema,
   signInSchema,
   signUpSchema,
@@ -243,6 +244,33 @@ export class AuthController {
       // Better Auth deliberately returns the uniform "Invalid email or
       // password" 401 whether the address is unknown, Google-only, or the
       // password is wrong — preventing account enumeration.
+      throw toHttpException(error);
+    }
+  }
+
+
+  @UseGuards(AuthGuard)
+  @Post('change-password')
+  async changePassword(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const dto = zodValidate(changePasswordSchema, body);
+
+    try {
+      await auth.api.changePassword({
+        body: {
+          currentPassword: dto.currentPassword,
+          newPassword: dto.newPassword,
+          // A password change is a security-sensitive action. Keep this
+          // browser signed in, but invalidate sessions on other devices.
+          revokeOtherSessions: true,
+        },
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      return { status: true };
+    } catch (error) {
       throw toHttpException(error);
     }
   }

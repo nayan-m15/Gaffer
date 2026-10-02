@@ -6,6 +6,7 @@ jest.mock('./auth', () => ({
       signUpEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
       signInEmail: jest.fn(),
+      changePassword: jest.fn(),
       signOut: jest.fn(),
     },
   },
@@ -49,6 +50,7 @@ import { TeamsService } from '../teams/teams.service';
 
 const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
 const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
+const changePassword = auth.api.changePassword as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
 
@@ -405,4 +407,59 @@ describe('AuthController', () => {
       ).rejects.toThrow('Too many requests.');
     });
   });
+
+  describe('changePassword', () => {
+    const req = { headers: { cookie: 'better-auth.session_token=signed-token' } } as never;
+
+    it('verifies the current password, changes it and revokes other sessions', async () => {
+      changePassword.mockResolvedValue({ status: true });
+
+      const result = await controller.changePassword(
+        {
+          currentPassword: 'password123',
+          newPassword: 'newpassword456',
+        },
+        req,
+      );
+
+      expect(changePassword).toHaveBeenCalledWith({
+        body: {
+          currentPassword: 'password123',
+          newPassword: 'newpassword456',
+          revokeOtherSessions: true,
+        },
+        headers: undefined,
+      });
+      expect(result).toEqual({ status: true });
+    });
+
+    it('rejects a new password shorter than the existing eight-character minimum', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'password123',
+            newPassword: 'short',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Password must be at least 8 characters.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('requires the current password before calling Better Auth', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: '',
+            newPassword: 'newpassword456',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Current password is required.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+  });
+
 });

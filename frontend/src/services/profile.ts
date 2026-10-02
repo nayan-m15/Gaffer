@@ -44,3 +44,23 @@ export async function updateProfile(
     body: JSON.stringify(input),
   });
 }
+
+
+/** Fields required to securely change the signed-in user's password. */
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/**
+ * Changes the signed-in user's credential password after the backend verifies
+ * their current password. Other active sessions are revoked server-side.
+ */
+export async function changePassword(
+  input: ChangePasswordInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

@@ -43,6 +43,19 @@ export const signInSchema = z.object({
 });
 export type SignInDto = z.infer<typeof signInSchema>;
 
+export const changePasswordSchema = z.object({
+  currentPassword: z
+    .string()
+    .min(1, 'Current password is required.')
+    .max(128, 'Current password must be 128 characters or fewer.'),
+  newPassword: z
+    .string()
+    .min(8, 'Password must be at least 8 characters.')
+    .max(128, 'Password must be 128 characters or fewer.'),
+});
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
+
+
 export const resendVerificationEmailSchema = z.object({
   email: z
     .string()

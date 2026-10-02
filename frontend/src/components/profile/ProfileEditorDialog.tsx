@@ -4,6 +4,9 @@ import {
   AlertCircle,
   Cake,
   Check,
+  Eye,
+  EyeOff,
+  KeyRound,
   Loader2,
   Mail,
   Pencil,
@@ -19,6 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
+  changePassword,
   getProfile,
   updateProfile,
   type BackendProfile,
@@ -470,6 +474,83 @@ function EditForm({
 }: EditFormProps) {
   const errorMessage = validationError ?? getMutationMessage(mutationError);
   const today = new Date().toISOString().slice(0, 10);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordValidationError, setPasswordValidationError] = useState<string | null>(null);
+  const [passwordChanged, setPasswordChanged] = useState(false);
+
+  const passwordMutation = useMutation({ mutationFn: changePassword });
+
+  const resetPasswordForm = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordValidationError(null);
+    setPasswordChanged(false);
+    passwordMutation.reset();
+  };
+
+  const handleTogglePassword = () => {
+    if (isChangingPassword) {
+      resetPasswordForm();
+    }
+    setIsChangingPassword((value) => !value);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!currentPassword) {
+      setPasswordValidationError("Current password is required.");
+      return;
+    }
+    if (currentPassword.length > 128) {
+      setPasswordValidationError("Current password must be 128 characters or fewer.");
+      return;
+    }
+    if (!newPassword) {
+      setPasswordValidationError("New password is required.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordValidationError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword.length > 128) {
+      setPasswordValidationError("Password must be 128 characters or fewer.");
+      return;
+    }
+    if (!confirmPassword) {
+      setPasswordValidationError("Please confirm your new password.");
+      return;
+    }
+    if (confirmPassword !== newPassword) {
+      setPasswordValidationError("Passwords do not match.");
+      return;
+    }
+
+    setPasswordValidationError(null);
+    setPasswordChanged(false);
+
+    try {
+      await passwordMutation.mutateAsync({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordChanged(true);
+    } catch {
+      // Error surfaced via passwordMutation.error below.
+    }
+  };
+
+  const passwordError =
+    passwordValidationError ?? getPasswordMutationMessage(passwordMutation.error ?? null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -557,6 +638,94 @@ function EditForm({
         />
       </div>
 
+      <div className="border-t border-border pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleTogglePassword}
+          disabled={isSaving || passwordMutation.isPending}
+          className="w-full justify-between"
+        >
+          <span className="flex items-center gap-2">
+            <KeyRound className="size-4" />
+            Change Password
+          </span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {isChangingPassword ? "Hide" : "Security"}
+          </span>
+        </Button>
+
+        {isChangingPassword && (
+          <div className="mt-4 space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-xs text-muted-foreground">
+              Enter your current password, then choose a new password of 8 to 128 characters.
+            </p>
+
+            <PasswordField
+              id="current-password"
+              label="Current Password"
+              value={currentPassword}
+              onChange={setCurrentPassword}
+              visible={showCurrentPassword}
+              onToggle={() => setShowCurrentPassword((value) => !value)}
+              autoComplete="current-password"
+              disabled={passwordMutation.isPending}
+            />
+            <PasswordField
+              id="new-password"
+              label="New Password"
+              value={newPassword}
+              onChange={setNewPassword}
+              visible={showNewPassword}
+              onToggle={() => setShowNewPassword((value) => !value)}
+              autoComplete="new-password"
+              disabled={passwordMutation.isPending}
+            />
+            <PasswordField
+              id="confirm-new-password"
+              label="Confirm New Password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              visible={showConfirmPassword}
+              onToggle={() => setShowConfirmPassword((value) => !value)}
+              autoComplete="new-password"
+              disabled={passwordMutation.isPending}
+            />
+
+            {passwordError && (
+              <p className="flex items-center gap-1.5 text-sm text-destructive">
+                <AlertCircle className="size-3.5 shrink-0" />
+                {passwordError}
+              </p>
+            )}
+            {passwordChanged && (
+              <p className="flex items-center gap-1.5 text-sm text-brand">
+                <Check className="size-3.5 shrink-0" />
+                Password changed successfully. Other signed-in sessions have been revoked.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <StatefulButton
+                type="button"
+                onClick={() => void handlePasswordSubmit()}
+                disabled={passwordMutation.isPending}
+                status={passwordMutation.isPending ? "loading" : passwordError ? "error" : "idle"}
+                loadingText="Changing..."
+                errorText="Try again"
+              >
+                {passwordMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <KeyRound className="size-4" />
+                )}
+                {passwordMutation.isPending ? "Changing…" : "Update Password"}
+              </StatefulButton>
+            </div>
+          </div>
+        )}
+      </div>
+
       {errorMessage && (
         <p className="flex items-center gap-1.5 text-sm text-destructive">
           <AlertCircle className="size-3.5" />
@@ -592,6 +761,69 @@ function EditForm({
       </div>
     </form>
   );
+}
+
+interface PasswordFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  visible: boolean;
+  onToggle: () => void;
+  autoComplete: string;
+  disabled: boolean;
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  visible,
+  onToggle,
+  autoComplete,
+  disabled,
+}: PasswordFieldProps) {
+  return (
+    <div>
+      <label
+        className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+        htmlFor={id}
+      >
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          maxLength={128}
+          className={cn(
+            "h-10 w-full rounded-lg border border-input bg-background px-3 pr-10 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
+            disabled && "opacity-60",
+          )}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        >
+          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getPasswordMutationMessage(error: Error | null): string | null {
+  if (!error) return null;
+  if (error instanceof ApiError) return error.message;
+  return "Failed to change password. Please try again.";
 }
 
 function getMutationMessage(error: Error | null): string | null {
