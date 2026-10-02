@@ -163,17 +163,14 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
 
 function DashboardFrame({
   children,
-  lockViewport,
+  fillVisible,
 }: {
   children: ReactNode;
-  lockViewport?: boolean;
+  fillVisible?: boolean;
 }) {
   return (
     <div
-      className={cn(
-        "relative min-h-full",
-        lockViewport && "h-full overflow-hidden",
-      )}
+      className={cn("relative", fillVisible ? "min-h-0 flex-1" : "min-h-full")}
     >
       {children}
     </div>
@@ -836,9 +833,8 @@ function DashboardUnlockLayer({
   return (
     <div
       className={cn(
-        "absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10",
-        fading &&
-          "pointer-events-none",
+        "absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10",
+        fading && "pointer-events-none",
       )}
     >
       {isLoading ? (
@@ -1127,7 +1123,11 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardFrame lockViewport={isFirstTime}>
+    <DashboardFrame
+      fillVisible={
+        isFirstTime || unlockGateApplies || unlockCelebrating
+      }
+    >
       {(overlayPhase !== "hidden" || showUnlockOverlay) && (
         <DashboardStadiumOverlay
           fading={
@@ -1150,7 +1150,7 @@ export default function DashboardPage() {
       />
 
       {isFirstTime && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center px-6 sm:px-8 lg:px-10">
+        <div className="absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10">
           <CreateTeamHero
             userName={user?.name ?? null}
             onCreateTeam={() => setAddTeamOpen(true)}

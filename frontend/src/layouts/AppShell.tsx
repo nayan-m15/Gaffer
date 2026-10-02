@@ -86,7 +86,12 @@ function GatedPageBody({
   const pageHidden = showingGate && unlocked && !pageRevealed;
 
   return (
-    <div className="relative flex min-h-full flex-1 flex-col">
+    <div
+      className={cn(
+        "relative flex flex-1 flex-col",
+        showingGate ? "min-h-0" : "min-h-full",
+      )}
+    >
       {showOutlet && (
         <div
           data-unlock-page=""
@@ -101,7 +106,7 @@ function GatedPageBody({
         </div>
       )}
       {showSpinner && (
-        <div className="flex min-h-full flex-1 items-center justify-center py-16">
+        <div className="flex min-h-0 flex-1 items-center justify-center py-16">
           <Loader2
             className="size-6 animate-spin text-primary motion-reduce:animate-none"
             role="status"
@@ -112,7 +117,7 @@ function GatedPageBody({
       {showCard && (
         <div
           className={cn(
-            "absolute inset-0 z-10 flex items-center justify-center px-6 py-8",
+            "absolute inset-0 z-20 flex items-center justify-center px-6 py-8",
             celebrating && "pointer-events-none",
           )}
         >
@@ -265,7 +270,8 @@ function AppShellContent() {
           className={cn(
             "app-shell-content flex-1",
             (isEventsPage || isDashboardPage) && "min-h-0",
-            showingGate && "relative flex min-h-0 flex-col",
+            (showingGate || isDashboardPage) && "relative",
+            (showingGate || isDashboardPage) && "flex min-h-0 flex-col",
           )}
         >
           {gateEligible && pageKey && user?.id ? (
