@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { createDatabaseClient } from '../database/drizzle';
 import * as schema from '../database/schema';
-import { sendVerificationEmail } from '../email/email';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../email/email';
 
 /**
  * The single Better Auth instance for the backend.
@@ -36,6 +36,21 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    minPasswordLength: 10,
+    maxPasswordLength: 128,
+    resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      // Do not await this request: keeping the response timing uniform makes
+      // it harder to determine whether an email address has an account.
+      void sendPasswordResetEmail({
+        to: user.email,
+        name: user.name,
+        url,
+      }).catch((error) => {
+        console.error('Failed to send password reset email', error);
+      });
+    },
   },
   emailVerification: {
     sendOnSignUp: true,

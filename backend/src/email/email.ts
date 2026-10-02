@@ -70,6 +70,51 @@ export async function sendVerificationEmail({
   });
 }
 
+
+export interface SendPasswordResetEmailInput {
+  to: string;
+  name: string;
+  url: string;
+}
+
+/**
+ * Sends the password-reset link through the same Brevo transactional channel
+ * as account verification. In local development the link is logged instead,
+ * which keeps the reset flow testable without Brevo credentials.
+ */
+export async function sendPasswordResetEmail({
+  to,
+  name,
+  url,
+}: SendPasswordResetEmailInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the password reset link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safeName = escapeHtml(name || 'Coach');
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to, name }],
+    subject: 'Reset your Gaffer password',
+    htmlContent: `
+      <p>Hi ${safeName},</p>
+      <p>We received a request to reset the password for your Gaffer account.</p>
+      <p><a href="${safeUrl}">Reset password</a></p>
+      <p>This link expires in 1 hour.</p>
+      <p>If you did not request a password reset, you can safely ignore this email.</p>
+    `,
+  });
+}
+
 export interface SendPlayerClaimInviteEmailInput {
   to: string;
   playerName: string;

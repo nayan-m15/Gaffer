@@ -64,3 +64,26 @@ export async function changePassword(
     body: JSON.stringify(input),
   });
 }
+
+export interface PasswordStatus {
+  hasPassword: boolean;
+}
+
+/** Returns whether the signed-in account already has an email/password credential. */
+export async function getPasswordStatus(): Promise<PasswordStatus> {
+  return apiFetch<PasswordStatus>("/auth/password-status");
+}
+
+export interface SetPasswordInput {
+  newPassword: string;
+}
+
+/** Creates the first credential password for an OAuth-only account. */
+export async function setPassword(
+  input: SetPasswordInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/set-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

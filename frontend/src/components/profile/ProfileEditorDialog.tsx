@@ -18,12 +18,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatefulButton } from "@/components/ui/stateful-button";
+import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { getNewPasswordValidationError } from "@/lib/password-policy";
 import { cn } from "@/lib/utils";
 import {
   changePassword,
+  getPasswordStatus,
   getProfile,
+  setPassword,
   updateProfile,
   type BackendProfile,
   type Sex,
@@ -482,9 +486,23 @@ function EditForm({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordValidationError, setPasswordValidationError] = useState<string | null>(null);
-  const [passwordChanged, setPasswordChanged] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
-  const passwordMutation = useMutation({ mutationFn: changePassword });
+  const passwordStatusQuery = useQuery({
+    queryKey: ["password-status"],
+    queryFn: getPasswordStatus,
+    enabled: isChangingPassword,
+  });
+  const hasPassword = passwordStatusQuery.data?.hasPassword ?? true;
+
+  const passwordMutation = useMutation({
+    mutationFn: async () => {
+      if (hasPassword) {
+        return changePassword({ currentPassword, newPassword });
+      }
+      return setPassword({ newPassword });
+    },
+  });
 
   const resetPasswordForm = () => {
     setCurrentPassword("");
@@ -494,7 +512,7 @@ function EditForm({
     setShowNewPassword(false);
     setShowConfirmPassword(false);
     setPasswordValidationError(null);
-    setPasswordChanged(false);
+    setPasswordSuccess(null);
     passwordMutation.reset();
   };
 
@@ -505,25 +523,40 @@ function EditForm({
     setIsChangingPassword((value) => !value);
   };
 
+  const clearPasswordFeedback = () => {
+    setPasswordValidationError(null);
+    setPasswordSuccess(null);
+    passwordMutation.reset();
+  };
+
   const handlePasswordSubmit = async () => {
-    if (!currentPassword) {
-      setPasswordValidationError("Current password is required.");
+    if (passwordStatusQuery.isPending) {
+      setPasswordValidationError("Checking your sign-in methods. Please try again in a moment.");
       return;
     }
-    if (currentPassword.length > 128) {
-      setPasswordValidationError("Current password must be 128 characters or fewer.");
+    if (passwordStatusQuery.isError) {
+      setPasswordValidationError("Could not determine whether this account already has a password.");
       return;
     }
-    if (!newPassword) {
-      setPasswordValidationError("New password is required.");
+
+    if (hasPassword) {
+      if (!currentPassword) {
+        setPasswordValidationError("Current password is required.");
+        return;
+      }
+      if (currentPassword.length > 128) {
+        setPasswordValidationError("Current password must be 128 characters or fewer.");
+        return;
+      }
+    }
+
+    const newPasswordError = getNewPasswordValidationError(newPassword);
+    if (newPasswordError) {
+      setPasswordValidationError(newPasswordError.replace(/^Password/, "New password"));
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordValidationError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword.length > 128) {
-      setPasswordValidationError("Password must be 128 characters or fewer.");
+    if (hasPassword && newPassword === currentPassword) {
+      setPasswordValidationError("New password must be different from your current password.");
       return;
     }
     if (!confirmPassword) {
@@ -536,14 +569,21 @@ function EditForm({
     }
 
     setPasswordValidationError(null);
-    setPasswordChanged(false);
+    setPasswordSuccess(null);
 
     try {
-      await passwordMutation.mutateAsync({ currentPassword, newPassword });
+      await passwordMutation.mutateAsync();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPasswordChanged(true);
+      setPasswordSuccess(
+        hasPassword
+          ? "Password changed successfully. Other signed-in sessions have been revoked."
+          : "Password set successfully. You can now sign in with your email and password.",
+      );
+      if (!hasPassword) {
+        await passwordStatusQuery.refetch();
+      }
     } catch {
       // Error surfaced via passwordMutation.error below.
     }
@@ -648,7 +688,7 @@ function EditForm({
         >
           <span className="flex items-center gap-2">
             <KeyRound className="size-4" />
-            Change Password
+            {hasPassword ? "Change Password" : "Set Password"}
           </span>
           <span className="text-xs font-normal text-muted-foreground">
             {isChangingPassword ? "Hide" : "Security"}
@@ -658,34 +698,50 @@ function EditForm({
         {isChangingPassword && (
           <div className="mt-4 space-y-4 rounded-xl border border-border bg-muted/20 p-4">
             <p className="text-xs text-muted-foreground">
-              Enter your current password, then choose a new password of 8 to 128 characters.
+              {passwordStatusQuery.isPending
+                ? "Checking your account security settings…"
+                : hasPassword
+                  ? "Enter your current password, then choose a new password that meets every requirement below."
+                  : "You currently sign in without a password. Set one here to also enable email and password sign-in."}
             </p>
 
-            <PasswordField
-              id="current-password"
-              label="Current Password"
-              value={currentPassword}
-              onChange={setCurrentPassword}
-              visible={showCurrentPassword}
-              onToggle={() => setShowCurrentPassword((value) => !value)}
-              autoComplete="current-password"
-              disabled={passwordMutation.isPending}
-            />
+            {hasPassword && !passwordStatusQuery.isPending && (
+              <PasswordField
+                id="current-password"
+                label="Current Password"
+                value={currentPassword}
+                onChange={(value) => {
+                  setCurrentPassword(value);
+                  clearPasswordFeedback();
+                }}
+                visible={showCurrentPassword}
+                onToggle={() => setShowCurrentPassword((value) => !value)}
+                autoComplete="current-password"
+                disabled={passwordMutation.isPending}
+              />
+            )}
             <PasswordField
               id="new-password"
               label="New Password"
               value={newPassword}
-              onChange={setNewPassword}
+              onChange={(value) => {
+                setNewPassword(value);
+                clearPasswordFeedback();
+              }}
               visible={showNewPassword}
               onToggle={() => setShowNewPassword((value) => !value)}
               autoComplete="new-password"
               disabled={passwordMutation.isPending}
             />
+            <PasswordRequirements password={newPassword} />
             <PasswordField
               id="confirm-new-password"
               label="Confirm New Password"
               value={confirmPassword}
-              onChange={setConfirmPassword}
+              onChange={(value) => {
+                setConfirmPassword(value);
+                clearPasswordFeedback();
+              }}
               visible={showConfirmPassword}
               onToggle={() => setShowConfirmPassword((value) => !value)}
               autoComplete="new-password"
@@ -698,10 +754,10 @@ function EditForm({
                 {passwordError}
               </p>
             )}
-            {passwordChanged && (
+            {passwordSuccess && (
               <p className="flex items-center gap-1.5 text-sm text-brand">
                 <Check className="size-3.5 shrink-0" />
-                Password changed successfully. Other signed-in sessions have been revoked.
+                {passwordSuccess}
               </p>
             )}
 
@@ -709,9 +765,13 @@ function EditForm({
               <StatefulButton
                 type="button"
                 onClick={() => void handlePasswordSubmit()}
-                disabled={passwordMutation.isPending}
+                disabled={
+                  passwordMutation.isPending ||
+                  passwordStatusQuery.isPending ||
+                  passwordStatusQuery.isError
+                }
                 status={passwordMutation.isPending ? "loading" : passwordError ? "error" : "idle"}
-                loadingText="Changing..."
+                loadingText={hasPassword ? "Changing..." : "Setting..."}
                 errorText="Try again"
               >
                 {passwordMutation.isPending ? (
@@ -719,7 +779,13 @@ function EditForm({
                 ) : (
                   <KeyRound className="size-4" />
                 )}
-                {passwordMutation.isPending ? "Changing…" : "Update Password"}
+                {passwordMutation.isPending
+                  ? hasPassword
+                    ? "Changing…"
+                    : "Setting…"
+                  : hasPassword
+                    ? "Update Password"
+                    : "Set Password"}
               </StatefulButton>
             </div>
           </div>
@@ -756,7 +822,7 @@ function EditForm({
           ) : (
             <Check className="size-4" />
           )}
-          {isSaving ? "Saving…" : "Save Changes"}
+          {isSaving ? "Saving…" : "Save Profile"}
         </StatefulButton>
       </div>
     </form>

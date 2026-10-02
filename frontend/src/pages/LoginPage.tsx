@@ -59,6 +59,7 @@ export default function LoginPage() {
 
   const errorParam = searchParams.get("error");
   const verifiedParam = searchParams.get("verified");
+  const resetParam = searchParams.get("reset");
 
   useEffect(() => {
     if (errorParam === "google") {
@@ -70,7 +71,11 @@ export default function LoginPage() {
     if (verifiedParam === "1") {
       setNotice("Email verified — you can sign in now.");
     }
-  }, [errorParam, verifiedParam]);
+
+    if (resetParam === "1") {
+      setNotice("Password reset successfully — sign in with your new password.");
+    }
+  }, [errorParam, verifiedParam, resetParam]);
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {
@@ -230,6 +235,16 @@ export default function LoginPage() {
                 </button>
               }
             />
+
+            <div className="flex justify-end -mt-2">
+              <Link
+                to="/forgot-password"
+                state={{ email }}
+                className="text-sm font-medium text-primary transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <div className="space-y-1">
               <label htmlFor="remember-me" className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
