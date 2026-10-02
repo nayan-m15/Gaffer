@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import {
+  buildEventDestination,
+  buildEventMapUrl,
+  buildEventOsmEmbedUrl,
   combineScheduledAt,
   displayEventStatus,
   eventStatusLabel,
   eventTypeLabel,
   formatLocalDate,
+  getEventMapTiles,
   isScheduleInThePast,
   isRsvpOpen,
   parseLocalDate,
@@ -128,3 +132,46 @@ assert.equal(isRsvpOpen({ status: "cancelled", scheduledAt: "2099-01-01T00:00:00
 assert.equal(isRsvpOpen({ status: "completed", scheduledAt: "2099-01-01T00:00:00.000Z" }, rsvpNow), false);
 assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "invalid" }, rsvpNow), false);
 assert.equal(isRsvpOpen({ status: "scheduled", scheduledAt: "2099-01-01T00:00:00.000Z" }, rsvpNow), true);
+
+/* ─── buildEventDestination / buildEventMapUrl / buildEventOsmEmbedUrl ─── */
+assert.equal(
+  buildEventDestination({
+    location: "Lenasia",
+    venueName: "Lenasia Football Stadium",
+    venueAddress: "12 River Road",
+  }),
+  "Lenasia, Lenasia Football Stadium, 12 River Road",
+);
+assert.equal(
+  buildEventDestination({
+    location: "Lenasia",
+    venueName: null,
+    venueAddress: undefined,
+  }),
+  "Lenasia",
+);
+assert.equal(
+  buildEventDestination({ location: "   ", venueName: "", venueAddress: null }),
+  "",
+);
+
+const mapUrl = buildEventMapUrl("Lenasia, Lenasia Football Stadium");
+assert.equal(
+  mapUrl,
+  "https://www.google.com/maps/search/?api=1&query=Lenasia%2C%20Lenasia%20Football%20Stadium",
+);
+
+const osmUrl = buildEventOsmEmbedUrl(-26.181667, 28.027778);
+assert.ok(osmUrl.startsWith("https://www.openstreetmap.org/export/embed.html?"));
+assert.ok(osmUrl.includes("marker=-26.181667%2C28.027778"));
+assert.ok(osmUrl.includes("layer=mapnik"));
+
+/* ─── getEventMapTiles ─────────────────────────────────────────────────── */
+const tiles = getEventMapTiles(-26.181667, 28.027778, 15, 128, 128);
+assert.ok(tiles.length >= 1 && tiles.length <= 4);
+for (const tile of tiles) {
+  assert.match(tile.url, /^https:\/\/tile\.openstreetmap\.org\/15\/\d+\/\d+\.png$/);
+  assert.equal(typeof tile.left, "number");
+  assert.equal(typeof tile.top, "number");
+  assert.ok(tile.key.startsWith("15-"));
+}

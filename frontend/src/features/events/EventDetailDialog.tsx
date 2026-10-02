@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -8,7 +9,16 @@ import {
 import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { displayEventStatus, eventStatusLabel, eventTypeLabel, formatEventDateTime } from "./event-utils";
+import { searchLocations } from "./api";
+import {
+  buildEventDestination,
+  buildEventMapUrl,
+  displayEventStatus,
+  eventStatusLabel,
+  eventTypeLabel,
+  formatEventDateTime,
+  getEventMapTiles,
+} from "./event-utils";
 import { useCancelEvent } from "./hooks";
 import type { EventStatus, TeamEvent } from "./types";
 import { fetchEventRsvps, type AthleteRsvp } from "@/services/rsvps";
@@ -166,10 +176,7 @@ export function EventDetailDialog({
             </div>
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
             <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
-            <DetailRow label="Location" value={event.location || "Not set"} />
-            {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
-            {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
-            <LocationLinks event={event} />
+            <EventLocationSection event={event} />
             <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
             {generatedFixture && event.status === "scheduled" && (
               <div
@@ -264,19 +271,165 @@ export function EventDetailDialog({
   );
 }
 
+function EventLocationSection({ event }: { event: TeamEvent | PlayerEvent }) {
+  const destination = buildEventDestination(event);
+  if (!destination) {
+    return <DetailRow label="Location" value="Not set" />;
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1 space-y-4">
+        <DetailRow label="Location" value={event.location || "Not set"} />
+        {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
+        {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
+        <LocationLinks event={event} />
+      </div>
+      <EventLocationMapSquare event={event} destination={destination} />
+    </div>
+  );
+}
+
 function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
-  const destination = [event.location, event.venueName, event.venueAddress]
-    .filter(Boolean)
-    .join(", ");
+  const destination = buildEventDestination(event);
   if (!destination) {
     return null;
   }
   const encoded = encodeURIComponent(destination);
   return (
     <div className="flex gap-3 text-xs">
-      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/search/?api=1&query=${encoded}`} target="_blank" rel="noreferrer">View map</a>
-      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`} target="_blank" rel="noreferrer">Get directions</a>
+      <a
+        className="font-medium text-primary hover:underline"
+        href={buildEventMapUrl(destination)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        View map
+      </a>
+      <a
+        className="font-medium text-primary hover:underline"
+        href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Get directions
+      </a>
     </div>
+  );
+}
+
+function EventLocationMapSquare({
+  event,
+  destination,
+}: {
+  event: TeamEvent | PlayerEvent;
+  destination: string;
+}) {
+  const mapUrl = buildEventMapUrl(destination);
+
+  const hasEventCoords =
+    event.weatherLatitude != null && event.weatherLongitude != null;
+
+  // Fallback to searching coordinates by location if missing
+  const { data: searchResults, isLoading: isSearching } = useQuery({
+    queryKey: ["locations", "search", event.location],
+    queryFn: () => searchLocations(event.location),
+    enabled:
+      !hasEventCoords &&
+      Boolean(event.location && event.location.trim().length >= 3),
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+
+  const latitude = hasEventCoords
+    ? event.weatherLatitude
+    : searchResults?.[0]?.latitude ?? null;
+  const longitude = hasEventCoords
+    ? event.weatherLongitude
+    : searchResults?.[0]?.longitude ?? null;
+
+  const [tileError, setTileError] = useState(false);
+
+  const tiles = useMemo(() => {
+    if (latitude == null || longitude == null || tileError) return null;
+    return getEventMapTiles(latitude, longitude, 15, 128, 128);
+  }, [latitude, longitude, tileError]);
+
+  return (
+    <a
+      href={mapUrl}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${destination} in Google Maps`}
+      aria-label={`Open ${destination} in Google Maps`}
+      className="group relative flex size-28 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40 shadow-xs transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:size-32"
+    >
+      {tiles ? (
+        <>
+          {/* Direct OpenStreetMap tiles without iframe clutter */}
+          <div className="pointer-events-none absolute inset-0 select-none overflow-hidden">
+            {tiles.map((tile) => (
+              <img
+                key={tile.key}
+                src={tile.url}
+                alt=""
+                onError={() => setTileError(true)}
+                className="absolute size-[256px] max-w-none select-none"
+                style={{
+                  left: `${tile.left}px`,
+                  top: `${tile.top}px`,
+                }}
+                loading="lazy"
+                draggable={false}
+              />
+            ))}
+          </div>
+
+          {/* Centered green map pin */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full drop-shadow-md">
+            <svg
+              viewBox="0 0 24 36"
+              className="h-7 w-auto"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24c0-6.63-5.37-12-12-12z"
+                fill="#84cc16"
+              />
+              <circle cx="12" cy="12" r="4.5" fill="#ffffff" />
+            </svg>
+          </div>
+
+          {/* Clean minimal OSM attribution badge */}
+          <span className="pointer-events-none absolute bottom-0.5 right-1 z-10 rounded bg-background/80 px-1 py-0.5 text-[8px] font-medium text-muted-foreground/80 backdrop-blur-xs">
+            © OSM
+          </span>
+        </>
+      ) : (
+        <div className="relative flex size-full flex-col items-center justify-center bg-muted/30 p-2 text-center">
+          <div className="relative mb-1 flex items-center justify-center">
+            <span className="absolute inline-flex size-7 animate-ping rounded-full bg-primary/20 opacity-75" />
+            <div className="relative flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MapPin className="size-4.5" />
+            </div>
+          </div>
+          <span className="line-clamp-1 max-w-full text-[10px] font-medium text-foreground">
+            {event.venueName || event.location}
+          </span>
+          <span className="text-[9px] text-muted-foreground">
+            {isSearching ? "Finding location…" : "Open map"}
+          </span>
+        </div>
+      )}
+
+      {/* Floating hover badge */}
+      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40">
+        <div className="flex items-center gap-1 rounded bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <span>View map</span>
+          <ExternalLink className="size-3 text-primary" />
+        </div>
+      </div>
+    </a>
   );
 }
 
