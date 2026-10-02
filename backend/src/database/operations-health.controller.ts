@@ -44,18 +44,56 @@ export class OperationsHealthController {
           rejected_items: number;
           oldest_pending_at: Date | null;
           oldest_pending_age_seconds: number | null;
+          active_reporting_devices: number;
+          active_pending_items: number;
+          active_oldest_pending_age_seconds: number | null;
+          stale_pending_devices: number;
+          stale_pending_items: number;
           stalest_report_at: Date | null;
         }>(sql`
           SELECT
-            count(*)::int AS reporting_devices,
-            coalesce(sum(pending_count), 0)::int AS pending_items,
-            coalesce(sum(rejected_count), 0)::int AS rejected_items,
-            min(oldest_pending_at) AS oldest_pending_at,
-            extract(epoch from (now() - min(oldest_pending_at)))::int
-              AS oldest_pending_age_seconds,
-            min(updated_at) AS stalest_report_at
+            count(*) FILTER (
+              WHERE updated_at >= now() - interval '7 days'
+            )::int AS reporting_devices,
+            coalesce(sum(pending_count) FILTER (
+              WHERE updated_at >= now() - interval '7 days'
+            ), 0)::int AS pending_items,
+            coalesce(sum(rejected_count) FILTER (
+              WHERE updated_at >= now() - interval '7 days'
+            ), 0)::int AS rejected_items,
+            min(oldest_pending_at) FILTER (
+              WHERE updated_at >= now() - interval '7 days'
+                AND pending_count > 0
+            ) AS oldest_pending_at,
+            extract(epoch from (
+              now() - min(oldest_pending_at) FILTER (
+                WHERE updated_at >= now() - interval '7 days'
+                  AND pending_count > 0
+              )
+            ))::int AS oldest_pending_age_seconds,
+            count(*) FILTER (
+              WHERE updated_at >= now() - interval '15 minutes'
+            )::int AS active_reporting_devices,
+            coalesce(sum(pending_count) FILTER (
+              WHERE updated_at >= now() - interval '15 minutes'
+            ), 0)::int AS active_pending_items,
+            extract(epoch from (
+              now() - min(oldest_pending_at) FILTER (
+                WHERE updated_at >= now() - interval '15 minutes'
+                  AND pending_count > 0
+              )
+            ))::int AS active_oldest_pending_age_seconds,
+            count(*) FILTER (
+              WHERE updated_at < now() - interval '15 minutes'
+                AND pending_count > 0
+            )::int AS stale_pending_devices,
+            coalesce(sum(pending_count) FILTER (
+              WHERE updated_at < now() - interval '15 minutes'
+            ), 0)::int AS stale_pending_items,
+            min(updated_at) FILTER (
+              WHERE updated_at >= now() - interval '7 days'
+            ) AS stalest_report_at
           FROM sync_client_telemetry
-          WHERE updated_at >= now() - interval '7 days'
         `),
         database.execute<{ unresolved_reviews: number }>(sql`
           SELECT count(*)::int AS unresolved_reviews

@@ -30,9 +30,18 @@ const health = await response.json();
 const uploads = Number(health.uploads?.uploads_24h ?? 0);
 const rejected = Number(health.uploads?.rejected_24h ?? 0);
 const rejectedRate = uploads > 0 ? rejected / uploads : 0;
+const activeQueueMetricsAvailable =
+  health.clients?.active_oldest_pending_age_seconds !== undefined;
 const oldestPendingAge = Number(
-  health.clients?.oldest_pending_age_seconds ?? 0,
+  health.clients?.active_oldest_pending_age_seconds ??
+    health.clients?.oldest_pending_age_seconds ??
+    0,
 );
+const activeReportingDevices = activeQueueMetricsAvailable
+  ? Number(health.clients?.active_reporting_devices ?? 0)
+  : null;
+const stalePendingDevices = Number(health.clients?.stale_pending_devices ?? 0);
+const stalePendingItems = Number(health.clients?.stale_pending_items ?? 0);
 const p95Processing = Number(health.uploads?.p95_processing_ms ?? 0);
 const replicationLag = Number(health.replicationLagBytes ?? 0);
 const unresolvedReviews = Number(health.unresolvedReviews ?? 0);
@@ -45,7 +54,11 @@ const maximumUnresolvedReviews = Number(
 const failures = [];
 
 if (oldestPendingAge > 15 * 60) {
-  failures.push(`oldest queued item is ${oldestPendingAge}s old`);
+  failures.push(
+    activeQueueMetricsAvailable
+      ? `oldest queued item from an active reporting device is ${oldestPendingAge}s old`
+      : `oldest queued item is ${oldestPendingAge}s old (active telemetry metrics are unavailable)`,
+  );
 }
 if (rejectedRate > 0.01) {
   failures.push(`${(rejectedRate * 100).toFixed(2)}% of uploads were rejected`);
@@ -69,7 +82,16 @@ console.log(
       checkedAt: health.checkedAt,
       uploads,
       rejectedRate,
+      activeReportingDevices,
+      activePendingItems: activeQueueMetricsAvailable
+        ? Number(health.clients?.active_pending_items ?? 0)
+        : null,
       oldestPendingAge,
+      pendingAgeScope: activeQueueMetricsAvailable
+        ? 'active_reporting_devices'
+        : 'legacy_aggregate',
+      stalePendingDevices,
+      stalePendingItems,
       p95Processing,
       replicationLag,
       replicationSlotActive: health.replicationSlotActive,

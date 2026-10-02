@@ -42,9 +42,14 @@ curl.exe -H "Authorization: Bearer $env:OPERATIONS_HEALTH_TOKEN" `
   https://gaffer-api-ynaf.onrender.com/health/operations
 ```
 
-Monitor at least every five minutes and alert when:
+The automated health check runs every five minutes. It applies the pending-age
+threshold to devices that reported telemetry in the last 15 minutes. Older
+telemetry remains visible in `stale_pending_devices` and `stale_pending_items`
+so dormant devices do not keep the active sync check failing; review those
+queues when their users reconnect. Alert when:
 
-- the oldest pending client item is older than 15 minutes during a live match;
+- the oldest pending item from an actively reporting device is older than 15
+  minutes;
 - rejected uploads exceed 1% of uploads in 24 hours;
 - p95 reconciliation processing exceeds 2 seconds;
 - unresolved reviews grow continuously for 30 minutes;
