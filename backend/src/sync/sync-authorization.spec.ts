@@ -58,7 +58,7 @@ describe('PowerSync shared session authorization', () => {
   it('shares review decisions without exporting private correction payloads', () => {
     const query = streamQuery('shared_session_match_operations');
     expect(query).toMatch(
-      /match_event_operations\.operation_type IN \('merge', 'separate'\)/,
+      /match_event_operations\.operation_type = 'merge' OR match_event_operations\.operation_type = 'separate'/,
     );
     expect(query).toMatch(/match_event_operations\.decision/);
     expect(query).not.toMatch(/jsonb_build_object|replacement/i);
