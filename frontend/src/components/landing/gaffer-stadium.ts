@@ -64,6 +64,77 @@ function scoreboardTexture() {
   return texture;
 }
 
+
+function createRoofLightRig(span: number, y: number, z: number, count: number, materials: ReturnType<typeof makeMaterials>) {
+  const group = new THREE.Group();
+  group.name = "Roof floodlight gantry";
+
+  // Use a light, open gantry instead of another broad roof slab. From pitch level
+  // this reads as a row of proper stadium floodlight banks, similar to the
+  // reference image, without filling the whole roofline with lamps.
+  const usableSpan = Math.max(0, span - 12);
+  const positions = Array.from(
+    { length: count },
+    (_, index) => count === 1 ? 0 : -usableSpan / 2 + index * (usableSpan / (count - 1)),
+  );
+
+  // Two slim rails tie the banks together and keep the silhouette architectural.
+  group.add(
+    block([span, .12, .16], [0, y + .08, z], materials.steel),
+    block([span, .08, .12], [0, y + .58, z + .24], materials.steel),
+  );
+
+  positions.forEach(x => {
+    const leftPost = new THREE.Vector3(x - 1.55, y, z + .02);
+    const leftTop = new THREE.Vector3(x - 1.35, y + .68, z + .22);
+    const rightPost = new THREE.Vector3(x + 1.55, y, z + .02);
+    const rightTop = new THREE.Vector3(x + 1.35, y + .68, z + .22);
+    group.add(
+      strut(leftPost, leftTop, .055, materials.steel),
+      strut(rightPost, rightTop, .055, materials.steel),
+      block([3.05, .09, .13], [x, y + .68, z + .22], materials.steel),
+    );
+
+    // Four fixtures per bank keeps the lighting recognisable without making the
+    // skyline as busy as a full real-world floodlight array.
+    for (const offset of [-1.02, -.34, .34, 1.02]) {
+      const housing = block([.5, .3, .34], [x + offset, y + .54, z - .02], materials.lightHousing);
+      housing.rotation.x = -.36;
+      const lamp = block([.34, .16, .07], [x + offset, y + .455, z - .185], materials.lampGlow);
+      lamp.rotation.x = -.36;
+      const lens = block([.29, .02, .08], [x + offset, y + .42, z - .245], materials.lampLens);
+      lens.rotation.x = -.36;
+      const coreOuter = block([.2, .012, .038], [x + offset, y + .414, z - .258], materials.lampCoreOuter);
+      coreOuter.rotation.x = -.36;
+      const coreMid = block([.16, .012, .03], [x + offset, y + .4145, z - .259], materials.lampCoreMid);
+      coreMid.rotation.x = -.36;
+      const coreInner = block([.145, .012, .027], [x + offset, y + .415, z - .26], materials.lampCoreInner);
+      coreInner.rotation.x = -.36;
+      group.add(housing, lamp, lens, coreOuter, coreMid, coreInner);
+    }
+
+    // Keep a subtle reading line under each bank, but let the individual lamps
+    // be the main visible feature so the result feels more natural.
+    const strip = block([2.86, .022, .06], [x, y + .382, z - .286], materials.lampStrip);
+    strip.rotation.x = -.36;
+    group.add(strip);
+
+    // Softer, tighter glow cards feel more like real lamp spill than flat white
+    // rectangles, while remaining lightweight and only active in dark mode.
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(3.95, .72), materials.lampHalo);
+    halo.position.set(x, y + .455, z - .355);
+    halo.rotation.x = -.36;
+    halo.renderOrder = 4;
+    const wideHalo = new THREE.Mesh(new THREE.PlaneGeometry(5.15, 1.04), materials.lampHaloWide);
+    wideHalo.position.set(x, y + .46, z - .42);
+    wideHalo.rotation.x = -.36;
+    wideHalo.renderOrder = 3;
+    group.add(halo, wideHalo);
+  });
+
+  return group;
+}
+
 function standTransform(group: THREE.Group, side: Side) {
   if (side === "east") { group.position.x = 37.5; group.rotation.y = Math.PI / 2; }
   if (side === "west") { group.position.x = -37.5; group.rotation.y = -Math.PI / 2; }
@@ -219,15 +290,14 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   const frontY = spec.roof - 2.4;
   const rearY = spec.roof + 1.7;
   const roofDepth = roofBack - roofFront;
-  const pitch = Math.atan2(rearY - frontY, roofDepth);
-  const roofSegments = lowPower ? Math.ceil(spec.length / 12) : Math.ceil(spec.length / 7);
-  const segmentWidth = spec.length / roofSegments;
-  const panelMat = materials.roofPanel;
-  for (let i = 0; i < roofSegments; i++) {
-    const x = -spec.length / 2 + (i + .5) * segmentWidth;
-    const panel = block([segmentWidth - .18, .12, roofDepth - .15], [x, (frontY + rearY) / 2, (roofFront + roofBack) / 2], i % 4 === 0 ? materials.solidRoof : panelMat);
-    panel.rotation.x = -pitch; stand.add(panel);
-  }
+  // The former full-depth translucent roof panels produced a stretched sheet-like
+  // shape across the top of the stands from the walk-out camera. Keep the roof
+  // visually open instead: the truss structure below defines the canopy and only
+  // a narrow rear cap remains for depth at the back of the stand.
+  const rearCapDepth = 2.1;
+  const rearCapZ = roofBack - rearCapDepth / 2;
+  const rearCapY = frontY + (rearCapZ - roofFront) / roofDepth * (rearY - frontY);
+  stand.add(block([spec.length + .8, .14, rearCapDepth], [0, rearCapY, rearCapZ], materials.solidRoof));
   stand.add(block([spec.length + 2, 1.05, .72], [0, frontY - .32, roofFront], fascia, !lowPower));
   stand.add(block([spec.length + 2, .62, .9], [0, rearY, roofBack], steel));
   const trusses = lowPower ? Math.ceil(spec.length / 14) : Math.ceil(spec.length / 8);
@@ -251,10 +321,11 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const y = frontY + (z - roofFront) / roofDepth * (rearY - frontY) - .18;
     stand.add(block([spec.length + 1, .16, .18], [0, y, z], steel));
   }
-  const signMap = signTexture(spec.name === "Kop" ? "GAFFER  •  OWN THE TOUCHLINE" : "GAFFER  •  PREPARE. PERFORM. IMPROVE.");
-  textures.push(signMap);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(spec.length * .64, 60), .84), new THREE.MeshBasicMaterial({ map: signMap }));
-  sign.position.set(0, frontY - .31, roofFront - .38); sign.rotation.y = Math.PI; stand.add(sign);
+  // Stadium-style floodlight banks replace the old stretched roof surface at the
+  // visible front edge. Counts are intentionally modest so the roofline stays clean.
+  const lightRigCount = spec.length > 100 ? (lowPower ? 4 : 6) : (lowPower ? 3 : 4);
+  stand.add(createRoofLightRig(spec.length * .88, frontY + .28, roofFront - .08, lightRigCount, materials));
+  // Keep the roof edge clean: no long banner planes on any stand.
   return stand;
 }
 
@@ -268,8 +339,30 @@ function makeMaterials() {
     aisle: new THREE.MeshStandardMaterial({ color: 0x858d88, roughness: .92 }),
     rail: new THREE.MeshStandardMaterial({ color: 0x9ba8a0, roughness: .6, metalness: .34 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x6d9187, roughness: .27, metalness: .22, transparent: true, opacity: .35, depthWrite: false }),
-    roofPanel: new THREE.MeshStandardMaterial({ color: 0x8da8a3, roughness: .48, metalness: .1, transparent: true, opacity: .32, side: THREE.DoubleSide, depthWrite: false }),
-    solidRoof: new THREE.MeshStandardMaterial({ color: 0x454d4b, roughness: .72, metalness: .25 }),
+    solidRoof: new THREE.MeshStandardMaterial({ color: 0x2e3735, roughness: .82, metalness: .18 }),
+    lightHousing: new THREE.MeshStandardMaterial({ color: 0x202826, roughness: .5, metalness: .48 }),
+    lampGlow: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4fbff, emissiveIntensity: 2.8, roughness: .18, metalness: .01, transparent: true }),
+    lampLens: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }),
+    lampCoreOuter: new THREE.MeshBasicMaterial({ color: 0xf2f8ff, transparent: true, opacity: 0 }),
+    lampCoreMid: new THREE.MeshBasicMaterial({ color: 0xfcfeff, transparent: true, opacity: 0 }),
+    lampCoreInner: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
+    lampStrip: new THREE.MeshBasicMaterial({ color: 0xf6fbff, transparent: true, opacity: .92 }),
+    lampHalo: new THREE.MeshBasicMaterial({
+      color: 0xe6f6ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    }),
+    lampHaloWide: new THREE.MeshBasicMaterial({
+      color: 0x9fd7ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    }),
   };
 }
 
@@ -430,5 +523,37 @@ export function createGafferStadium(lowPower: boolean) {
   const adMap = signTexture("GAFFER"); textures.push(adMap);
   const adMaterial = new THREE.MeshStandardMaterial({ map: adMap, emissive: 0x073a2a, emissiveIntensity: .16, roughness: .72 });
   group.add(createAdvertisingBoards(adMaterial, materials.aisle));
-  return { group, textures };
+
+  const updateTheme = (lightMode: boolean) => {
+    // Dark mode: clearly illuminated roof floodlights with a restrained halo.
+    // Light mode: the gantry/housings remain, but the actual lamps are switched off.
+    materials.lampGlow.color.setHex(0xffffff);
+    materials.lampGlow.emissive.setHex(0xffffff);
+    materials.lampGlow.emissiveIntensity = lightMode ? 0 : 28;
+    materials.lampGlow.opacity = lightMode ? 0 : 1;
+    materials.lampLens.color.setHex(0xffffff);
+    materials.lampLens.opacity = lightMode ? 0 : 1;
+    materials.lampCoreOuter.color.setHex(0xf2f8ff);
+    materials.lampCoreOuter.opacity = lightMode ? 0 : .58;
+    materials.lampCoreMid.color.setHex(0xfbfdff);
+    materials.lampCoreMid.opacity = lightMode ? 0 : .88;
+    materials.lampCoreInner.color.setHex(0xffffff);
+    materials.lampCoreInner.opacity = lightMode ? 0 : 1;
+    materials.lampStrip.color.setHex(0xffffff);
+    materials.lampStrip.opacity = lightMode ? 0 : .92;
+    materials.lampHalo.color.setHex(0xf2f9ff);
+    materials.lampHalo.opacity = lightMode ? 0 : .5;
+    materials.lampHaloWide.color.setHex(0xd8edff);
+    materials.lampHaloWide.opacity = lightMode ? 0 : .18;
+    materials.lampGlow.needsUpdate = true;
+    materials.lampLens.needsUpdate = true;
+    materials.lampCoreOuter.needsUpdate = true;
+    materials.lampCoreMid.needsUpdate = true;
+    materials.lampCoreInner.needsUpdate = true;
+    materials.lampStrip.needsUpdate = true;
+    materials.lampHalo.needsUpdate = true;
+    materials.lampHaloWide.needsUpdate = true;
+  };
+
+  return { group, textures, updateTheme };
 }
