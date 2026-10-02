@@ -24,6 +24,7 @@ import {
   matchEventReviews,
   matchClockOperations,
   matchProjectionState,
+  matchSessionParticipants,
   matches,
   opponentMatchPlayers,
   seasons,
@@ -43,6 +44,7 @@ import type {
   UpdateMatchLogEventDto,
   UpdateMatchClockDto,
 } from './matches.schemas';
+import { twoSidedLiveLoggingEnabled } from './match-sessions';
 
 function isGoalkeeperPosition(position: string | null | undefined) {
   const normalized = position?.trim().toLowerCase();
@@ -158,7 +160,7 @@ export class MatchesService {
 
   async listEvents(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    await this.requireSharedMatch(team.id, matchId);
 
     const rows = await this.databaseService.database
       .select({
@@ -364,7 +366,7 @@ export class MatchesService {
 
   async listEventReviews(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    await this.requireSharedMatch(team.id, matchId);
     const rows = await this.databaseService.database
       .select()
       .from(matchEventReviews)
@@ -959,7 +961,7 @@ export class MatchesService {
 
   async listClockOperations(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    await this.requireSharedMatch(team.id, matchId);
     return this.databaseService.database
       .select()
       .from(matchClockOperations)
@@ -1088,7 +1090,7 @@ export class MatchesService {
 
   async listEventOperations(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireMatch(team.id, matchId);
+    await this.requireSharedMatch(team.id, matchId);
     return this.databaseService.database
       .select()
       .from(matchEventOperations)
@@ -1443,6 +1445,42 @@ export class MatchesService {
       throw new NotFoundException('Match not found.');
     }
 
+    return row;
+  }
+
+  /**
+   * Shared read endpoints may address either team's match sheet once a
+   * canonical session is enabled. Private sheet endpoints continue to use
+   * `requireMatch`, and the feature flag off path is exactly the legacy gate.
+   */
+  private async requireSharedMatch(teamId: string, matchId: string) {
+    if (!twoSidedLiveLoggingEnabled()) {
+      return this.requireMatch(teamId, matchId);
+    }
+
+    const [row] = await this.databaseService.database
+      .select({ match: matches, event: events })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .where(eq(matches.id, matchId))
+      .limit(1);
+    if (!row) throw new NotFoundException('Match not found.');
+    if (row.event.teamId === teamId) return row;
+    if (!row.match.sharedMatchId) {
+      throw new NotFoundException('Match not found.');
+    }
+
+    const [participant] = await this.databaseService.database
+      .select({ id: matchSessionParticipants.id })
+      .from(matchSessionParticipants)
+      .where(
+        and(
+          eq(matchSessionParticipants.sessionId, row.match.sharedMatchId),
+          eq(matchSessionParticipants.teamId, teamId),
+        ),
+      )
+      .limit(1);
+    if (!participant) throw new NotFoundException('Match not found.');
     return row;
   }
 

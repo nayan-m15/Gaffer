@@ -1,8 +1,17 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { and, eq } from 'drizzle-orm';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { registerCoach } from './utils/auth-helpers';
+import { DatabaseService } from '../src/database/database.service';
+import {
+  events,
+  matchSessionParticipants,
+  matchSessions,
+  matches,
+  teamMembers,
+} from '../src/database/schema';
+import { registerAssistant, registerCoach } from './utils/auth-helpers';
 import {
   cleanupUsers,
   uniqueTestIdentity,
@@ -21,6 +30,7 @@ interface SessionBody {
 describe('Team isolation (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
+  const sessionIds: string[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -32,6 +42,12 @@ describe('Team isolation (e2e)', () => {
   });
 
   afterAll(async () => {
+    const database = app.get(DatabaseService).database;
+    for (const sessionId of sessionIds) {
+      await database
+        .delete(matchSessions)
+        .where(eq(matchSessions.id, sessionId));
+    }
     await cleanupUsers(identities);
     await app.close();
   });
@@ -79,5 +95,121 @@ describe('Team isolation (e2e)', () => {
     expect(bodyB.team?.name).not.toEqual(coachA.identity.teamName);
     expect(bodyA.user.email).toEqual(coachA.identity.email);
     expect(bodyB.user.email).toEqual(coachB.identity.email);
+  });
+
+  it('authorizes shared reads by current session participation but keeps match sheets private', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const database = app.get(DatabaseService).database;
+      const coachA = await newCoach('Home Coach');
+      const coachB = await newCoach('Away Coach');
+      const outsider = await newCoach('Unrelated Coach');
+      const assistantIdentity = uniqueTestIdentity('s4-session-assistant');
+      identities.push(assistantIdentity);
+      const assistant = await registerAssistant(
+        app.getHttpServer(),
+        coachB.agent,
+        assistantIdentity,
+      );
+
+      const [session] = await database
+        .insert(matchSessions)
+        .values({})
+        .returning({ id: matchSessions.id });
+      sessionIds.push(session.id);
+      await database.insert(matchSessionParticipants).values([
+        { sessionId: session.id, teamId: coachA.team.id, side: 'home' },
+        { sessionId: session.id, teamId: coachB.team.id, side: 'away' },
+      ]);
+
+      const [eventA] = await database
+        .insert(events)
+        .values({
+          teamId: coachA.team.id,
+          title: 'Private Home Sheet',
+          type: 'match',
+          status: 'scheduled',
+          scheduledAt: new Date(),
+          location: 'Home Ground',
+          notes: 'home private notes',
+        })
+        .returning({ id: events.id });
+      const [eventB] = await database
+        .insert(events)
+        .values({
+          teamId: coachB.team.id,
+          title: 'Private Away Sheet',
+          type: 'match',
+          status: 'scheduled',
+          scheduledAt: new Date(),
+          location: 'Away Ground',
+          notes: 'away private notes',
+        })
+        .returning({ id: events.id });
+      const [matchA] = await database
+        .insert(matches)
+        .values({
+          eventId: eventA.id,
+          sharedMatchId: session.id,
+          opponentName: coachB.team.name,
+        })
+        .returning({ id: matches.id });
+      const [matchB] = await database
+        .insert(matches)
+        .values({
+          eventId: eventB.id,
+          sharedMatchId: session.id,
+          opponentName: coachA.team.name,
+          isHome: false,
+        })
+        .returning({ id: matches.id });
+
+      // The flag-off path keeps the pre-session team boundary unchanged.
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+      await coachB.agent.get(`/matches/${matchA.id}/events`).expect(404);
+
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+      await coachB.agent.get(`/matches/${matchA.id}/events`).expect(200);
+      await assistant.agent.get(`/matches/${matchA.id}/events`).expect(200);
+      await coachB.agent.get(`/matches/${matchA.id}/event-reviews`).expect(200);
+      await coachB.agent
+        .get(`/matches/${matchA.id}/event-operations`)
+        .expect(200);
+      await coachB.agent
+        .get(`/matches/${matchA.id}/clock-operations`)
+        .expect(200);
+      await outsider.agent.get(`/matches/${matchA.id}/events`).expect(404);
+
+      // Session participation does not grant the other team's private sheet.
+      await coachB.agent.get(`/matches/${matchA.id}`).expect(404);
+      await coachB.agent.get(`/matches/${matchA.id}/squad`).expect(404);
+      await coachB.agent
+        .get(`/matches/${matchA.id}/opponent-squad`)
+        .expect(404);
+      await coachB.agent.get(`/events/${eventA.id}`).expect(404);
+      await coachB.agent.get(`/events/${eventA.id}/lineup`).expect(404);
+      const ownSheet = await coachB.agent
+        .get(`/matches/${matchB.id}`)
+        .expect(200);
+      expect(ownSheet.body.eventNotes).toBe('away private notes');
+
+      // Current membership is checked on each request, not cached in session.
+      await database
+        .delete(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.teamId, coachB.team.id),
+            eq(teamMembers.userId, assistant.user.id),
+          ),
+        );
+      await assistant.agent.get(`/matches/${matchA.id}/events`).expect(403);
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      } else {
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+      }
+    }
   });
 });

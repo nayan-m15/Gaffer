@@ -1059,6 +1059,10 @@ export const matchEvents = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    side: matchSessionSide('side'),
     athleteId: uuid('athlete_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
@@ -1087,6 +1091,12 @@ export const matchEvents = pgTable(
   },
   (table) => [
     index('match_events_match_id_index').on(table.matchId),
+    index('match_events_session_side_index').on(
+      table.sessionId,
+      table.side,
+      table.period,
+      table.matchElapsedMs,
+    ),
     index('match_events_opponent_player_id_index').on(table.opponentPlayerId),
     // Serves the per-athlete event counts in StatisticsService, which filter on
     // (match_id, athlete_id, team, event_type) once per athlete_match_stats row.
@@ -1301,6 +1311,10 @@ export const matchEventObservations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    side: matchSessionSide('side'),
     deviceId: uuid('device_id').notNull(),
     loggedByUserId: text('logged_by_user_id')
       .notNull()
@@ -1330,6 +1344,12 @@ export const matchEventObservations = pgTable(
   (table) => [
     index('match_event_observations_match_index').on(
       table.matchId,
+      table.period,
+      table.matchElapsedMs,
+    ),
+    index('match_event_observations_session_side_index').on(
+      table.sessionId,
+      table.side,
       table.period,
       table.matchElapsedMs,
     ),
@@ -1366,6 +1386,9 @@ export const matchEventOperations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     actorUserId: text('actor_user_id')
       .notNull()
       .references(() => user.id),
@@ -1395,6 +1418,10 @@ export const matchEventOperations = pgTable(
       table.createdAt,
     ),
     index('match_event_operations_actor_index').on(table.actorUserId),
+    index('match_event_operations_session_index').on(
+      table.sessionId,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -1408,6 +1435,9 @@ export const matchClockOperations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     actorUserId: text('actor_user_id')
       .notNull()
       .references(() => user.id),
@@ -1431,6 +1461,10 @@ export const matchClockOperations = pgTable(
       table.appliedRevision,
     ),
     index('match_clock_operations_actor_index').on(table.actorUserId),
+    index('match_clock_operations_session_index').on(
+      table.sessionId,
+      table.appliedRevision,
+    ),
   ],
 );
 
@@ -1441,6 +1475,9 @@ export const matchEventReviews = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
@@ -1459,6 +1496,10 @@ export const matchEventReviews = pgTable(
   (table) => [
     index('match_event_reviews_match_status_index').on(
       table.matchId,
+      table.status,
+    ),
+    index('match_event_reviews_session_status_index').on(
+      table.sessionId,
       table.status,
     ),
   ],
@@ -1604,37 +1645,48 @@ export const competitionFixtures = pgTable(
 );
 
 /** One authoritative projection revision for every consumer of a match. */
-export const matchProjectionState = pgTable('match_projection_state', {
-  matchId: uuid('match_id')
-    .primaryKey()
-    .references(() => matches.id, { onDelete: 'cascade' }),
-  revision: integer('revision').default(0).notNull(),
-  inputDigest: text('input_digest').notNull(),
-  rulesVersion: integer('rules_version').default(1).notNull(),
-  confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
-  confirmedOpponentScore: integer('confirmed_opponent_score')
-    .default(0)
-    .notNull(),
-  provisionalTeamScore: integer('provisional_team_score').default(0).notNull(),
-  provisionalOpponentScore: integer('provisional_opponent_score')
-    .default(0)
-    .notNull(),
-  possibleEffects: jsonb('possible_effects')
-    .$type<Record<string, unknown>>()
-    .default({})
-    .notNull(),
-  disciplinaryProjection: jsonb('disciplinary_projection')
-    .$type<Record<string, unknown>>()
-    .default({})
-    .notNull(),
-  unresolvedReviewCount: integer('unresolved_review_count')
-    .default(0)
-    .notNull(),
-  finalisationState: text('finalisation_state').default('open').notNull(),
-  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
-  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const matchProjectionState = pgTable(
+  'match_projection_state',
+  {
+    matchId: uuid('match_id')
+      .primaryKey()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    revision: integer('revision').default(0).notNull(),
+    inputDigest: text('input_digest').notNull(),
+    rulesVersion: integer('rules_version').default(1).notNull(),
+    confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
+    confirmedOpponentScore: integer('confirmed_opponent_score')
+      .default(0)
+      .notNull(),
+    provisionalTeamScore: integer('provisional_team_score')
+      .default(0)
+      .notNull(),
+    provisionalOpponentScore: integer('provisional_opponent_score')
+      .default(0)
+      .notNull(),
+    possibleEffects: jsonb('possible_effects')
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    disciplinaryProjection: jsonb('disciplinary_projection')
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    unresolvedReviewCount: integer('unresolved_review_count')
+      .default(0)
+      .notNull(),
+    finalisationState: text('finalisation_state').default('open').notNull(),
+    finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
+    finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('match_projection_state_session_index').on(table.sessionId),
+  ],
+);
 
 export const matchInsightStatus = pgEnum('match_insight_status', [
   'pending',

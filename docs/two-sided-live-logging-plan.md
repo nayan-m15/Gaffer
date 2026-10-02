@@ -156,7 +156,7 @@ These are settled product decisions for implementation:
 - [ ] Step 1 — Regression cases and API contracts
 - [x] Step 2 — Canonical session schema
 - [x] Step 3 — Idempotent fixture session creation
-- [ ] Step 4 — Participant authorization
+- [x] Step 4 — Participant authorization
 - [ ] Step 5 — Normalized event storage and reconciliation
 - [ ] Step 6 — Authorised shared sync
 - [ ] Step 7 — Match setup and live logger UI
@@ -167,3 +167,5 @@ These are settled product decisions for implementation:
 Implementation notes:
 - Accepted friendlies assign the requesting team to the home side and the accepting team to the away side, since the plan did not define a friendly home/away rule.
 - Session creation is gated by `TWO_SIDED_LIVE_LOGGING_ENABLED`, defaulting off as specified by the rollout plan. Unlinked generated competition participants retain their participant ID with a null team ID.
+- Step 4 permits current session participants to read shared timeline, review, event-operation, and clock-operation endpoints when the flag is enabled. Match reports, squads, opponent squads, event details, and lineups remain scoped to the owning team; participant writes stay on the owning-team path until event identity is normalized in Step 5(b).
+- Step 5(a) is complete: session identity and actual home/away side columns were added with a legacy backfill across observations, canonical events, reviews, event and clock operations, and projections. Work stopped before Step 5(b); no ingestion/reconciliation SQL or candidate matching logic was changed. Add the idempotency, locking, and candidate-matching tests before implementing that part.
