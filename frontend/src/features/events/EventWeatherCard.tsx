@@ -113,7 +113,7 @@ export function EventWeatherCard({
       </p>
       {event.weatherLocation && (
         <p className="mb-2 text-xs text-muted-foreground">
-          Forecast area: {event.weatherLocation}
+          Forecast location: {event.weatherLocation}
         </p>
       )}
       {details}

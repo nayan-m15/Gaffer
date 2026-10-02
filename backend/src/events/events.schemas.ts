@@ -38,6 +38,7 @@ const timezoneSchema = z
   );
 
 const venueFieldsSchema = z.object({
+  venueName: z.string().trim().max(200).nullable().optional(),
   venueAddress: z.string().trim().max(300).nullable().optional(),
   weatherLocation: z.string().trim().max(300).nullable().optional(),
   weatherLatitude: z.number().min(-90).max(90).nullable().optional(),

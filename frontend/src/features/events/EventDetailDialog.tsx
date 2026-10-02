@@ -167,6 +167,7 @@ export function EventDetailDialog({
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
             <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
             <DetailRow label="Location" value={event.location || "Not set"} />
+            {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
             {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
             <LocationLinks event={event} />
             <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
@@ -264,7 +265,7 @@ export function EventDetailDialog({
 }
 
 function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
-  const destination = [event.location, event.venueAddress]
+  const destination = [event.location, event.venueName, event.venueAddress]
     .filter(Boolean)
     .join(", ");
   if (!destination) {
