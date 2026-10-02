@@ -77,14 +77,25 @@ export function StadiumScene() {
     const dayFog = new THREE.Color(0xb4cad8), nightFog = new THREE.Color(0x182239);
     const daySun = new THREE.Color(0xffdeb1), nightSun = new THREE.Color(0x91b1de);
     const lookTarget = new THREE.Vector3();
-    const frameCamera = (phase = 0) => {
+    let panElapsed = 0;
+    const frameCamera = () => {
       if (mobile) {
         // Portrait looks along the long axis rather than cropping the corner view.
-        camera.position.set(99, 38, 8 + phase * 0.5);
+        camera.position.set(91, 38, 8);
         lookTarget.set(-12, 8, 0);
       } else {
-        camera.position.set(82 + phase * 1.8 + pointerX * 1.4, 39 + pointerY * 0.7, 70 - phase * 1.8);
+        camera.position.set(74, 39, 56);
         lookTarget.set(-5, 6, -5);
+      }
+      // Keep the orbit inside the bowl; sweep 45 degrees in 60 seconds.
+      const angle = motionQuery.matches ? 0 : -Math.cos(panElapsed * Math.PI / 60) * Math.PI / 8;
+      const x = camera.position.x - lookTarget.x;
+      const z = camera.position.z - lookTarget.z;
+      camera.position.x = lookTarget.x + x * Math.cos(angle) - z * Math.sin(angle);
+      camera.position.z = lookTarget.z + x * Math.sin(angle) + z * Math.cos(angle);
+      if (!mobile && !motionQuery.matches) {
+        camera.position.x += pointerX * 1.4;
+        camera.position.y += pointerY * 0.7;
       }
       camera.lookAt(lookTarget);
     };
@@ -125,6 +136,7 @@ export function StadiumScene() {
         const delta = Math.min((time - lastTime) / 1000, 0.1);
         lastTime = time;
         lastRender = time;
+        if (!motionQuery.matches) panElapsed += delta;
         night += (targetNight - night) * (motionQuery.matches ? 1 : 1 - Math.exp(-delta * 5));
         if (Math.abs(targetNight - night) < 0.002) night = targetNight;
         (skyMaterial.uniforms.top.value as THREE.Color).copy(dayTop).lerp(nightTop, night);
@@ -137,7 +149,7 @@ export function StadiumScene() {
         floodlights.forEach((light) => { light.intensity = 0.08 + night * 0.95; });
         stadium.setNight(night);
         renderer.toneMappingExposure = 0.92 + night * 0.16;
-        frameCamera(motionQuery.matches ? 0 : Math.sin(time * 0.000035));
+        frameCamera();
         renderer.render(scene, camera);
         canvas.dataset.ready = "true";
       }
