@@ -69,8 +69,10 @@ const gamePlanContentSchema = z.object({
   freeKicksCommitment: commitment,
   captainId: z.string().uuid().nullable(),
   freeKickTakerId: z.string().uuid().nullable(),
+  longFreeKickTakerId: z.string().uuid().nullable(),
   penaltyTakerId: z.string().uuid().nullable(),
   cornerTakerId: z.string().uuid().nullable(),
+  rightCornerTakerId: z.string().uuid().nullable(),
 });
 
 /**

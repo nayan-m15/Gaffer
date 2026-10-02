@@ -351,6 +351,27 @@
       "when": 1790935200000,
       "tag": "0044_event_venue_name",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0045_game_plan_set_piece_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0046_match_tactical_change_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791100010000,
+      "tag": "0047_match_tactical_change_ingest",
+      "breakpoints": true
     }
   ]
 }

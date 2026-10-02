@@ -1,5 +1,6 @@
 /**
- * Match-format + formation selectors for the Team Management page.
+ * Match-format + formation selectors for the Team Management toolbar, rendered
+ * as two labelled fields ("Players" and "Formation").
  *
  * Switching format chooses that format's default formation. The lineup hook
  * remaps existing starters and moves overflow players to the bench.
@@ -19,6 +20,7 @@ import {
   getFormationOptionsForPlayerCount,
   getFormationPlayerCount,
 } from "./formations";
+import { ToolbarDivider, ToolbarField } from "./ToolbarField";
 
 import type { FormationPlayerCount } from "./types";
 
@@ -37,79 +39,73 @@ export function FormationSelector({
     getFormationOptionsForPlayerCount(playerCount);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label
-        htmlFor="format-select"
-        className="text-xs font-medium text-muted-foreground"
-      >
-        Format
-      </label>
+    <>
+      <ToolbarField label="Players" htmlFor="format-select">
+        <Select
+          value={String(playerCount)}
+          onValueChange={(val) => {
+            const next = Number(val) as FormationPlayerCount;
 
-      <Select
-        value={String(playerCount)}
-        onValueChange={(val) => {
-          const next = Number(val) as FormationPlayerCount;
-
-          if (next === 5 || next === 7 || next === 11) {
-            onChange(getDefaultFormationIdForPlayerCount(next));
-          }
-        }}
-      >
-        <SelectTrigger
-          id="format-select"
-          aria-label="Select match format"
+            if (next === 5 || next === 7 || next === 11) {
+              onChange(getDefaultFormationIdForPlayerCount(next));
+            }
+          }}
         >
-          <SelectValue placeholder="Select format" />
-        </SelectTrigger>
+          <SelectTrigger
+            id="format-select"
+            aria-label="Select match format"
+            className="h-8 w-[4.5rem] font-semibold"
+          >
+            <SelectValue placeholder="Players" />
+          </SelectTrigger>
 
-        <SelectContent>
-          {FORMAT_OPTIONS.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={String(option.value)}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <SelectContent>
+            {FORMAT_OPTIONS.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={String(option.value)}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </ToolbarField>
 
-      <label
-        htmlFor="formation-select"
-        className="text-xs font-medium text-muted-foreground"
-      >
-        Formation
-      </label>
+      <ToolbarDivider />
 
-      <Select
-        value={value}
-        onValueChange={(val) => {
-          if (val) {
-            onChange(val);
-          }
-        }}
-      >
-        <SelectTrigger
-          id="formation-select"
-          aria-label="Select formation"
+      <ToolbarField label="Formation" htmlFor="formation-select">
+        <Select
+          value={value}
+          onValueChange={(val) => {
+            if (val) {
+              onChange(val);
+            }
+          }}
         >
-          <SelectValue placeholder="Select formation" />
-        </SelectTrigger>
+          <SelectTrigger
+            id="formation-select"
+            aria-label="Select formation"
+            className="h-8 w-32 font-semibold"
+          >
+            <SelectValue placeholder="Select formation" />
+          </SelectTrigger>
 
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="max-h-[min(20rem,var(--available-height))]"
-        >
-          {formationOptions.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+          <SelectContent
+            alignItemWithTrigger={false}
+            className="max-h-[min(20rem,var(--available-height))]"
+          >
+            {formationOptions.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </ToolbarField>
+    </>
   );
 }

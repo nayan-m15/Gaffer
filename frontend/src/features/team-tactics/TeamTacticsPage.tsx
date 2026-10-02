@@ -1,8 +1,11 @@
 /**
- * Team Tactics panel — a FIFA-style "Custom Tactics" editor rendered inside
- * the Team Management page's "Tactics" section. It edits the tactical half of
- * the selected game plan; the squad half lives on the board in the "Squad"
- * section and is saved with it.
+ * Team Tactics panel — the tactical editor rendered inside the Team Management
+ * page's "Tactics" section. It edits the tactical half of the selected game
+ * plan; the squad half lives on the board in the "Squad" section and is saved
+ * with it.
+ *
+ * The Tactics tab lays its controls out beside a live mini pitch, so it is given
+ * the full width of the page; the narrower tabs stay centred.
  *
  * The save controls and dialogs live on the page itself; this component
  * renders the tab strip and the active tab body. All state comes from the
@@ -13,7 +16,6 @@ import { ClipboardList, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PlaceholderTab } from "./PlaceholderTab";
-import { RolesTab } from "./RolesTab";
 import { TacticsTab } from "./TacticsTab";
 import { TACTICS_TABS } from "./tactics-options";
 import type { GamePlanEditor } from "./useGamePlanEditor";
@@ -32,7 +34,7 @@ export default function TeamTacticsPanel({
   readOnly = false,
 }: TeamTacticsPanelProps) {
   const {
-    athletes,
+    lineup,
     isPlansLoading,
     isError,
     refetch,
@@ -67,7 +69,7 @@ export default function TeamTacticsPanel({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto w-full max-w-6xl space-y-4">
         <nav
           className="flex gap-1 overflow-x-auto"
           aria-label="Tactics sections"
@@ -118,26 +120,20 @@ export default function TeamTacticsPanel({
             {activeTab === "Tactics" && (
               <TacticsTab
                 content={content}
-                onChange={patch}
-                disabled={saving || readOnly}
-              />
-            )}
-
-            {activeTab === "Roles" && (
-              <RolesTab
-                content={content}
-                athletes={athletes}
+                formation={lineup.formation}
                 onChange={patch}
                 disabled={saving || readOnly}
               />
             )}
 
             {activeTab === "Instructions" && (
-              <PlaceholderTab
-                icon={ClipboardList}
-                title="Player instructions"
-                description="Per-player instructions (attacking support, defensive behaviour, width, runs) will hang off each formation slot here in a future update."
-              />
+              <div className="mx-auto max-w-3xl">
+                <PlaceholderTab
+                  icon={ClipboardList}
+                  title="Player instructions"
+                  description="Per-player instructions (attacking support, defensive behaviour, width, runs) will hang off each formation slot here in a future update."
+                />
+              </div>
             )}
           </>
         )}

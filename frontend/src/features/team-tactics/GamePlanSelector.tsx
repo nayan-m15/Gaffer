@@ -1,7 +1,7 @@
 /**
- * The "Game plan" dropdown in the Team Tactics header. Lists the team's saved
- * tactical profiles plus a "New game plan" entry that starts a fresh one from
- * the default settings.
+ * The "Game plan" field in the Team Management toolbar. Lists the team's saved
+ * plans plus a "New game plan" entry that starts a fresh one from the default
+ * settings.
  */
 
 import { useMemo } from "react";
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToolbarField } from "@/features/team-management/ToolbarField";
 import type { BackendGamePlan } from "@/services/gamePlans";
 
 /** Sentinel value for the "New game plan" entry. */
@@ -40,15 +41,7 @@ export function GamePlanSelector({
   }, [gamePlans]);
 
   return (
-    <div className="flex items-center gap-2">
-      <label
-        htmlFor="game-plan-select"
-        className="text-xs font-medium leading-tight text-muted-foreground"
-      >
-        Game
-        <br />
-        plan
-      </label>
+    <ToolbarField label="Game Plan" htmlFor="game-plan-select">
       <Select
         items={items}
         value={selectedId ?? NEW_GAME_PLAN_VALUE}
@@ -61,7 +54,7 @@ export function GamePlanSelector({
         <SelectTrigger
           id="game-plan-select"
           aria-label="Select game plan"
-          className="h-10 min-w-44 font-semibold"
+          className="h-8 w-36 font-semibold"
         >
           <SelectValue placeholder="New game plan" />
         </SelectTrigger>
@@ -75,6 +68,6 @@ export function GamePlanSelector({
           <SelectItem value={NEW_GAME_PLAN_VALUE}>New game plan…</SelectItem>
         </SelectContent>
       </Select>
-    </div>
+    </ToolbarField>
   );
 }

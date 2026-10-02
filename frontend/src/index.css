@@ -680,6 +680,35 @@ select:-webkit-autofill {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
 }
 
+/* ─── Tactical mini pitch ───────────────────────────────────────────────── *
+ * Markers on the Team Tactics preview are <g> elements moved with a CSS
+ * transform, so the browser tweens each tactical change instead of snapping the
+ * shape. Kept short — the pitch has to feel like it is tracking the slider.   */
+
+.tactical-marker {
+  transition: transform 140ms ease-out;
+}
+
+/* A focusable marker is an SVG group, so the browser's outline would draw a
+ * box around it. Suppress it and reveal a circular ring drawn inside instead. */
+.tactical-marker:focus {
+  outline: none;
+}
+
+.tactical-marker-focus {
+  opacity: 0;
+}
+
+.tactical-marker:focus-visible .tactical-marker-focus {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tactical-marker {
+    transition: none;
+  }
+}
+
 .squad-formation-pitch {
   background: #143322;
 }

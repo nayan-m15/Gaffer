@@ -319,18 +319,29 @@ export const gamePlans = pgTable(
     cornersCommitment: integer('corners_commitment').notNull().default(3),
     freeKicksCommitment: integer('free_kicks_commitment').notNull().default(3),
     // Roles — one athlete each; cleared to null if the athlete is removed.
+    // `freeKickTakerId` is the short free kick and `cornerTakerId` the left
+    // corner: both predate the split into near/far takers and keep their
+    // column names so existing game plans carry their taker over.
     captainId: uuid('captain_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
     freeKickTakerId: uuid('free_kick_taker_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
+    longFreeKickTakerId: uuid('long_free_kick_taker_id').references(
+      () => athletes.id,
+      { onDelete: 'set null' },
+    ),
     penaltyTakerId: uuid('penalty_taker_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
     cornerTakerId: uuid('corner_taker_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
+    rightCornerTakerId: uuid('right_corner_taker_id').references(
+      () => athletes.id,
+      { onDelete: 'set null' },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -355,8 +366,10 @@ export interface GamePlanSnapshot {
   freeKicksCommitment: number;
   captainId: string | null;
   freeKickTakerId: string | null;
+  longFreeKickTakerId: string | null;
   penaltyTakerId: string | null;
   cornerTakerId: string | null;
+  rightCornerTakerId: string | null;
 }
 
 export const friendlyFixtureStatus = pgEnum('friendly_fixture_status', [
@@ -992,6 +1005,9 @@ export const matchEventType = pgEnum('match_event_type', [
   'penalty',
   'injury',
   'goalkeeper_save',
+  // A coach instruction rather than an observation of play: the formation
+  // and/or tactical settings the team switched to, held in structured_payload.
+  'tactical_change',
 ]);
 
 export const matchEvents = pgTable(

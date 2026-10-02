@@ -62,8 +62,10 @@ export class GamePlansService {
       substituteIds: input.substituteIds ?? [],
       captainId: input.captainId ?? null,
       freeKickTakerId: input.freeKickTakerId ?? null,
+      longFreeKickTakerId: input.longFreeKickTakerId ?? null,
       penaltyTakerId: input.penaltyTakerId ?? null,
       cornerTakerId: input.cornerTakerId ?? null,
+      rightCornerTakerId: input.rightCornerTakerId ?? null,
     });
     try {
       const [plan] = await this.databaseService.database
@@ -136,8 +138,10 @@ export class GamePlansService {
       substituteIds: string[];
       captainId: string | null;
       freeKickTakerId: string | null;
+      longFreeKickTakerId: string | null;
       penaltyTakerId: string | null;
       cornerTakerId: string | null;
+      rightCornerTakerId: string | null;
     },
   ) {
     const starters = Object.values(plan.assignments).filter(
@@ -249,8 +253,10 @@ export class GamePlansService {
       ...plan.substituteIds,
       plan.captainId,
       plan.freeKickTakerId,
+      plan.longFreeKickTakerId,
       plan.penaltyTakerId,
       plan.cornerTakerId,
+      plan.rightCornerTakerId,
     ].filter((id): id is string => id !== null);
     const uniqueIds = [...new Set(referencedIds)];
     if (uniqueIds.length === 0) return;

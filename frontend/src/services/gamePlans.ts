@@ -47,10 +47,18 @@ export interface BackendGamePlan {
   playersInBox: number;
   cornersCommitment: number;
   freeKicksCommitment: number;
+  /**
+   * Set-piece and leadership roles, one athlete each. `freeKickTakerId` is the
+   * short free kick and `cornerTakerId` the left corner — both predate the
+   * split into near/far takers and kept their names so saved plans carry their
+   * taker over.
+   */
   captainId: string | null;
   freeKickTakerId: string | null;
+  longFreeKickTakerId: string | null;
   penaltyTakerId: string | null;
   cornerTakerId: string | null;
+  rightCornerTakerId: string | null;
   createdAt: string;
   updatedAt: string;
 }

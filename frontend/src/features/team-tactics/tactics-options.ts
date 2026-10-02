@@ -96,24 +96,69 @@ export function offensiveStyleDescription(value: OffensiveStyle): string {
 export interface SliderMeta {
   min: number;
   max: number;
+  /**
+   * The value that means "no bias" — the stored default. The tactical preview
+   * pivots its shape maths around it so a freshly created plan draws the
+   * formation's own neutral shape.
+   */
+  neutral: number;
   lowLabel: string;
   highLabel: string;
 }
 
 export const SLIDER_META = {
-  width: { min: 1, max: 10, lowLabel: "Narrow", highLabel: "Wide" },
-  depth: { min: 1, max: 10, lowLabel: "Deep", highLabel: "High" },
-  playersInBox: { min: 0, max: 10, lowLabel: "Few", highLabel: "Many" },
-  commitment: { min: 0, max: 10, lowLabel: "Low", highLabel: "High" },
+  width: { min: 1, max: 10, neutral: 5, lowLabel: "Narrow", highLabel: "Wide" },
+  depth: { min: 1, max: 10, neutral: 5, lowLabel: "Deep", highLabel: "High" },
+  playersInBox: {
+    min: 0,
+    max: 10,
+    neutral: 4,
+    lowLabel: "Few",
+    highLabel: "Many",
+  },
+  commitment: {
+    min: 0,
+    max: 10,
+    neutral: 3,
+    lowLabel: "Low",
+    highLabel: "High",
+  },
 } satisfies Record<string, SliderMeta>;
 
+/** Which slider scale each tactical field is stored on. */
+export const SETTING_SLIDER_META = {
+  defensiveWidth: SLIDER_META.width,
+  defensiveDepth: SLIDER_META.depth,
+  offensiveWidth: SLIDER_META.width,
+  playersInBox: SLIDER_META.playersInBox,
+  cornersCommitment: SLIDER_META.commitment,
+  freeKicksCommitment: SLIDER_META.commitment,
+} satisfies Record<string, SliderMeta>;
+
+/**
+ * Re-bases a stored slider value onto the 0–100 scale the tactical preview and
+ * the descriptive labels work in, with the slider's neutral value landing
+ * exactly on 50.
+ *
+ * The wire format stays the backend's integer 1–10 / 0–10 scale (saved plans,
+ * match snapshots and the PDF export all read it), so the two halves of each
+ * slider are normalised independently rather than stretched linearly — that is
+ * what keeps "the default is balanced" true for sliders whose default is not
+ * their arithmetic midpoint, such as Corners (3 of 0–10).
+ */
+export function toTacticPercent(value: number, meta: SliderMeta): number {
+  const { min, max, neutral } = meta;
+  const clamped = Math.min(max, Math.max(min, value));
+  if (clamped <= neutral) {
+    return neutral === min ? 0 : ((clamped - min) / (neutral - min)) * 50;
+  }
+  return 50 + ((clamped - neutral) / (max - neutral)) * 50;
+}
+
 /** Tactical settings shown within the Team page. Squad and formation are
- * configured and saved by the Team lineup board, so they are not duplicated. */
-export const TACTICS_TABS = [
-  "Tactics",
-  "Roles",
-  "Instructions",
-] as const;
+ * configured and saved by the Team lineup board, and the leadership/set-piece
+ * roles have their own Team section, so neither is duplicated here. */
+export const TACTICS_TABS = ["Tactics", "Instructions"] as const;
 
 export type TacticsTab = (typeof TACTICS_TABS)[number];
 
@@ -134,6 +179,8 @@ export const DEFAULT_GAME_PLAN_TACTICS: GamePlanTactics = {
   freeKicksCommitment: 3,
   captainId: null,
   freeKickTakerId: null,
+  longFreeKickTakerId: null,
   penaltyTakerId: null,
   cornerTakerId: null,
+  rightCornerTakerId: null,
 };

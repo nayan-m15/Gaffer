@@ -17,33 +17,30 @@ import { AnimatedTabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import {
-  Check,
-  Move,
-  RotateCcw,
-  Wand2,
   Users,
   ShieldAlert,
   Loader2,
   SlidersHorizontal,
+  Star,
 } from "lucide-react";
 
 import { useAthletes } from "./api";
 import { FootballPitch } from "./FootballPitch";
 import { PitchPlayer } from "./PitchPlayer";
 import { CustomFormationHandle } from "./CustomFormationHandle";
-import { FormationSelector } from "./FormationSelector";
 import { SubstitutesArea } from "./SubstitutesArea";
+import { TeamToolbarActions, TeamToolbarFields } from "./TeamToolbar";
 import type { BackendAthlete } from "@/services/athletes";
 import { useAuth } from "@/hooks/useAuth";
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
+import TeamRolesPanel from "./roles/TeamRolesPanel";
 import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDialog";
-import { GamePlanControls } from "@/features/team-tactics/GamePlanControls";
 import { SaveGamePlanDialog } from "@/features/team-tactics/SaveGamePlanDialog";
 import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 import "./team-background.css";
 
-type TeamSection = "squad" | "tactics";
+type TeamSection = "squad" | "tactics" | "roles";
 
 const TEAM_SECTIONS = [
   {
@@ -56,6 +53,11 @@ const TEAM_SECTIONS = [
     label: "Tactics",
     icon: <SlidersHorizontal className="size-4" aria-hidden="true" />,
   },
+  {
+    value: "roles",
+    label: "Roles",
+    icon: <Star className="size-4" aria-hidden="true" />,
+  },
 ] satisfies Array<{ value: TeamSection; label: string; icon: ReactNode }>;
 
 export default function TeamManagementPage() {
@@ -65,11 +67,14 @@ export default function TeamManagementPage() {
   // management controls are hidden here and the backend rejects game-plan
   // mutations from non-coaches with 403.
   const canManageTeam = team?.role === "coach";
-  const activeSection =
-    searchParams.get("section") === "tactics" ? "tactics" : "squad";
+  const sectionParam = searchParams.get("section");
+  const activeSection: TeamSection =
+    sectionParam === "tactics" || sectionParam === "roles"
+      ? sectionParam
+      : "squad";
 
   const setActiveSection = (section: TeamSection) => {
-    setSearchParams(section === "tactics" ? { section } : {});
+    setSearchParams(section === "squad" ? {} : { section });
   };
 
   const { data: athletes, isLoading, isError, refetch } = useAthletes();
@@ -211,79 +216,33 @@ export default function TeamManagementPage() {
         title="Team Management"
         subtitle="Configure your starting lineup, match format, tactical formation, and matchday squad."
         actions={
-          <GamePlanControls editor={gamePlanEditor} readOnly={!canManageTeam}>
-            {activeSection === "squad" && canManageTeam && (
-              <>
-                <FormationSelector
-                  value={lineup.formationId}
-                  onChange={lineup.setFormation}
-                />
-
-                {lineup.isCustomFormation && (
-                  <Button
-                    variant={lineup.customEditMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={lineup.toggleCustomEditMode}
-                    className="gap-1.5"
-                    aria-pressed={lineup.customEditMode}
-                  >
-                    {lineup.customEditMode ? (
-                      <Check className="size-3.5" />
-                    ) : (
-                      <Move className="size-3.5" />
-                    )}
-                    {lineup.customEditMode ? "Done" : "Edit shape"}
-                  </Button>
-                )}
-
-                {lineup.isCustomFormation && lineup.customEditMode && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={lineup.resetCustomPositions}
-                    className="gap-1.5"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Reset shape
-                  </Button>
-                )}
-
-                <Button
-                  variant={lineup.autoFillEnabled ? "default" : "outline"}
-                  size="sm"
-                  onClick={lineup.toggleAutoFill}
-                  disabled={lineup.customEditMode}
-                  className="gap-1.5"
-                  aria-pressed={lineup.autoFillEnabled}
-                >
-                  <Wand2 className="size-3.5" />
-                  Auto-fill {lineup.autoFillEnabled ? "On" : "Off"}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={lineup.resetLineup}
-                  className="gap-1.5"
-                >
-                  <RotateCcw className="size-3.5" />
-                  Reset
-                </Button>
-              </>
-            )}
-          </GamePlanControls>
+          <TeamToolbarActions
+            editor={gamePlanEditor}
+            section={activeSection}
+            readOnly={!canManageTeam}
+          />
         }
       >
-        <AnimatedTabs
-          items={TEAM_SECTIONS}
-          value={activeSection}
-          onValueChange={setActiveSection}
-          ariaLabel="Team sections"
-        />
+        <div className="space-y-3">
+          <AnimatedTabs
+            items={TEAM_SECTIONS}
+            value={activeSection}
+            onValueChange={setActiveSection}
+            ariaLabel="Team sections"
+            variant="primary"
+          />
+          <TeamToolbarFields
+            editor={gamePlanEditor}
+            section={activeSection}
+            readOnly={!canManageTeam}
+          />
+        </div>
       </PageHeader>
 
       <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        {activeSection === "tactics" ? (
+        {activeSection === "roles" ? (
+          <TeamRolesPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
+        ) : activeSection === "tactics" ? (
           <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (
           <>

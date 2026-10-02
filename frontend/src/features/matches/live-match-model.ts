@@ -7,7 +7,7 @@ import {
   resolveFormation,
 } from "../team-management/formations.ts";
 import type { FormationPlayerCount } from "@/features/team-management/types";
-import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
+import type { GamePlanSnapshot } from "@/services/gamePlans";
 import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals.ts";
 import type {
@@ -383,9 +383,39 @@ function applyOpponentSubstitutions(
   onPitch.forEach((id) => bench.delete(id));
 }
 
+/**
+ * The game plan in force at a point in the match: the plan the match kicked off
+ * with, plus every tactical change the coach logged, applied in order.
+ *
+ * The starting plan is never mutated — `matches.gamePlanSnapshot` keeps it — so
+ * the report can show what the team started with and what it switched to. Pass
+ * `uptoMinute` to read the shape as it was at that point in the timeline.
+ *
+ * A match with no saved plan still folds its changes, so a coach who picks a
+ * formation mid-match gets it even on a legacy, plan-less match sheet.
+ */
+export function effectiveGamePlan(
+  base: Partial<GamePlanSnapshot> | undefined,
+  timeline: MatchLogEvent[],
+  uptoMinute: number = Number.POSITIVE_INFINITY,
+): Partial<GamePlanSnapshot> | undefined {
+  const changes = chronological(timeline).filter(
+    (event) =>
+      event.eventType === "tactical_change" &&
+      event.team === "own" &&
+      event.minute <= uptoMinute &&
+      event.tacticalChange,
+  );
+  if (changes.length === 0) return base;
+  return changes.reduce<Partial<GamePlanSnapshot>>(
+    (plan, event) => ({ ...plan, ...event.tacticalChange }),
+    base ?? {},
+  );
+}
+
 export function placeOwnPlayers(
   onPitch: MatchSquadAthlete[],
-  gamePlan: BackendGamePlan | GamePlanSnapshot | undefined,
+  gamePlan: Partial<GamePlanSnapshot> | undefined,
   half: PitchHalf,
   timeline: MatchLogEvent[],
   layout: "full" | "own" = "full",
