@@ -439,7 +439,7 @@ streams:
              match_event_operations.created_at
       FROM match_event_operations
       WHERE match_event_operations.session_id IS NOT NULL
-        AND match_event_operations.operation_type IN ('merge', 'separate')
+        AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_operations.session_id IN (
           SELECT match_session_participants.session_id
