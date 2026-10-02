@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, MapPin, Navigation } from "lucide-react";
@@ -168,9 +168,9 @@ export function EventDetailDialog({
         </DialogHeader>
 
         {event && (
-          <div className={cn("space-y-3.5 rounded-2xl border border-white/10 bg-[#11161F] p-4 shadow-xl", event.status === "cancelled" && "opacity-70")}>
+          <div className={cn("space-y-3.5 rounded-xl border border-border bg-card p-4 shadow-sm", event.status === "cancelled" && "opacity-70")}>
             <div className="flex items-center justify-between">
-              <h3 className={cn("text-xl font-bold text-white tracking-tight", event.status === "cancelled" && "line-through")}>
+              <h3 className={cn("text-xl font-bold text-foreground tracking-tight", event.status === "cancelled" && "line-through")}>
                 {event.title}
               </h3>
               <StatusBadge status={displayEventStatus(event, now)} />
@@ -178,7 +178,6 @@ export function EventDetailDialog({
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
             <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
             <EventLocationSection event={event} />
-            <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
             {generatedFixture && event.status === "scheduled" && (
               <div
                 className={cn(
@@ -275,16 +274,22 @@ export function EventDetailDialog({
 function EventLocationSection({ event }: { event: TeamEvent | PlayerEvent }) {
   const destination = buildEventDestination(event);
   if (!destination) {
-    return <DetailRow label="Location" value="Not set" />;
+    return (
+      <>
+        <DetailRow label="Location" value="Not set" />
+        <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+      </>
+    );
   }
 
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex items-stretch justify-between gap-3 sm:gap-4">
       <div className="min-w-0 flex-1 space-y-2.5">
         <DetailRow label="Location" value={event.location || "Not set"} />
         {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
         {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
         <LocationLinks event={event} />
+        <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
       </div>
       <EventLocationMapSquare event={event} destination={destination} />
     </div>
@@ -300,7 +305,7 @@ function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
   return (
     <div className="flex items-center gap-2 pt-1 text-xs">
       <a
-        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 shadow-xs transition hover:bg-white/10"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-foreground/80 shadow-xs transition hover:bg-muted hover:text-foreground"
         href={buildEventMapUrl(destination)}
         target="_blank"
         rel="noreferrer"
@@ -309,7 +314,7 @@ function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
         <span className="text-[10px] opacity-70">↗</span>
       </a>
       <a
-        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-400 shadow-xs transition hover:bg-sky-500/25"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-500 dark:text-emerald-400 shadow-xs transition hover:bg-emerald-500/25"
         href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`}
         target="_blank"
         rel="noreferrer"
@@ -329,6 +334,22 @@ function EventLocationMapSquare({
   destination: string;
 }) {
   const mapUrl = buildEventMapUrl(destination);
+  const containerRef = useRef<HTMLAnchorElement>(null);
+  const [mapSize, setMapSize] = useState({ width: 224, height: 180 });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setMapSize({ width: Math.round(width), height: Math.round(height) });
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const hasEventCoords =
     event.weatherLatitude != null && event.weatherLongitude != null;
@@ -354,17 +375,18 @@ function EventLocationMapSquare({
 
   const tiles = useMemo(() => {
     if (latitude == null || longitude == null || tileError) return null;
-    return getEventMapTiles(latitude, longitude, 15, 112, 96);
-  }, [latitude, longitude, tileError]);
+    return getEventMapTiles(latitude, longitude, 15, mapSize.width, mapSize.height);
+  }, [latitude, longitude, tileError, mapSize.width, mapSize.height]);
 
   return (
     <a
+      ref={containerRef}
       href={mapUrl}
       target="_blank"
       rel="noreferrer"
       title={`Open ${destination} in Google Maps`}
       aria-label={`Open ${destination} in Google Maps`}
-      className="group relative flex h-24 w-28 shrink-0 flex-col items-center justify-center overflow-hidden rounded-xl border border-emerald-500/40 bg-muted/40 shadow-md transition-all hover:border-emerald-500/70 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="group relative flex w-44 sm:w-60 shrink-0 self-stretch min-h-[170px] flex-col items-center justify-center overflow-hidden rounded-xl border border-emerald-500/40 bg-muted/40 shadow-md transition-all hover:border-emerald-500/70 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {tiles ? (
         <>
@@ -391,13 +413,13 @@ function EventLocationMapSquare({
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full drop-shadow-md">
             <svg
               viewBox="0 0 24 36"
-              className="h-6 w-auto"
+              className="h-7 w-auto"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
               <path
                 d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24c0-6.63-5.37-12-12-12z"
-                fill="#84cc16"
+                fill="#10b981"
               />
               <circle cx="12" cy="12" r="4.5" fill="#ffffff" />
             </svg>
@@ -405,23 +427,23 @@ function EventLocationMapSquare({
 
           {/* GPS Coordinates bottom bar */}
           {latitude != null && longitude != null && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-black/75 px-1 py-0.5 text-center font-mono text-[8px] text-slate-300">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-black/80 px-2 py-0.5 text-center font-mono text-[9px] text-zinc-300 backdrop-blur-xs">
               {formatCoordinatesDms(latitude, longitude)}
             </div>
           )}
         </>
       ) : (
-        <div className="relative flex size-full flex-col items-center justify-center bg-muted/30 p-2 text-center">
-          <div className="relative mb-1 flex items-center justify-center">
-            <span className="absolute inline-flex size-6 animate-ping rounded-full bg-primary/20 opacity-75" />
-            <div className="relative flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <MapPin className="size-4" />
+        <div className="relative flex size-full flex-col items-center justify-center bg-muted/30 p-3 text-center">
+          <div className="relative mb-2 flex items-center justify-center">
+            <span className="absolute inline-flex size-7 animate-ping rounded-full bg-primary/20 opacity-75" />
+            <div className="relative flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MapPin className="size-4.5" />
             </div>
           </div>
-          <span className="line-clamp-1 max-w-full text-[10px] font-medium text-foreground">
+          <span className="line-clamp-1 max-w-full text-xs font-medium text-foreground">
             {event.venueName || event.location}
           </span>
-          <span className="text-[9px] text-muted-foreground">
+          <span className="text-[10px] text-muted-foreground mt-0.5">
             {isSearching ? "Finding location…" : "Open map"}
           </span>
         </div>
@@ -429,9 +451,9 @@ function EventLocationMapSquare({
 
       {/* Floating hover badge */}
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40">
-        <div className="flex items-center gap-1 rounded bg-background/95 px-2 py-0.5 text-[10px] font-medium text-foreground shadow-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="flex items-center gap-1.5 rounded-md bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <span>View map</span>
-          <ExternalLink className="size-2.5 text-primary" />
+          <ExternalLink className="size-3 text-primary" />
         </div>
       </div>
     </a>
@@ -441,10 +463,10 @@ function EventLocationMapSquare({
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
         {label}
       </div>
-      <div className="text-sm font-medium text-slate-200 mt-0.5">{value}</div>
+      <div className="text-sm font-medium text-foreground mt-0.5">{value}</div>
     </div>
   );
 }
