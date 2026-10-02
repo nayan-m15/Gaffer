@@ -73,7 +73,9 @@ export function AthleteComparisonSection({
       {query.data && query.data.athletes.length >= 2 && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ComparisonTable athletes={query.data.athletes} />
-          <AthleteComparisonChart athletes={query.data.athletes} />
+          <div className="no-print">
+            <AthleteComparisonChart athletes={query.data.athletes} />
+          </div>
         </div>
       )}
     </section>

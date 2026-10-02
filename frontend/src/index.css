@@ -823,6 +823,7 @@ select:-webkit-autofill {
 
   html,
   body {
+    color-scheme: light !important;
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
@@ -865,16 +866,59 @@ select:-webkit-autofill {
   .statistics-page {
     width: auto !important;
     max-width: none !important;
+
+    /* Printing is always rendered with a light report palette, regardless of
+     * the active app theme. Keep these semantic tokens in sync with the light
+     * theme because statistics components use both shadcn and surface tokens. */
+    --brand: #047857;
+    --brand-dark: #065f46;
+    --brand-light: #059669;
+    --brand-foreground: #fff;
+
+    --surface-page: #fff;
+    --surface-sidebar: #fff;
+    --surface-header: #fff;
+    --surface-card: #fff;
+    --surface-nested: #f5f4f2;
+    --surface-elevated: #efedea;
+    --surface-hover: #ece9e5;
+    --surface-active: #dedbd6;
+
+    --text-primary: #171717;
+    --text-secondary: #3f423f;
+    --text-muted: #5f625f;
+    --text-disabled: #858985;
+
+    --border-subtle: #e4e1dd;
+    --border-default: #d9d6d2;
+    --border-strong: #a8a39d;
+
+    --success: #047857;
+    --warning: #b45309;
+    --danger: #c24145;
+    --info: #1d4ed8;
+
     --background: #fff;
     --foreground: #171717;
     --card: #fff;
     --card-foreground: #171717;
     --popover: #fff;
     --popover-foreground: #171717;
-    --muted: #f2f3f2;
+    --primary: #047857;
+    --primary-foreground: #fff;
+    --secondary: #e8e5e1;
+    --secondary-foreground: #171717;
+    --muted: #e8e5e1;
     --muted-foreground: #5f625f;
+    --accent: #e8e5e1;
+    --accent-foreground: #171717;
+    --destructive: #c24145;
     --border: #d9d6d2;
+    --input: #a8a39d;
+    --ring: #047857;
+
     color: #171717 !important;
+    background: #fff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -906,6 +950,32 @@ select:-webkit-autofill {
 
   .statistics-page :where(.bg-card, [class*="bg-card"], .report-cover) {
     background: #fff !important;
+  }
+
+  /* Tailwind surface utilities resolve through semantic CSS variables above,
+   * but these explicit print rules protect the report from theme leakage if a
+   * component introduces a dark surface utility later. */
+  .statistics-page :where(
+    .bg-surface-card,
+    [class*="bg-surface-card"],
+    .bg-surface-nested,
+    [class*="bg-surface-nested"]
+  ) {
+    background: #fff !important;
+  }
+
+  .statistics-page :where(
+    .bg-surface-elevated,
+    [class*="bg-surface-elevated"]
+  ) {
+    background: #efedea !important;
+  }
+
+  .statistics-page :where(
+    .bg-surface-active,
+    [class*="bg-surface-active"]
+  ) {
+    background: #dedbd6 !important;
   }
 
   .statistics-page :where(.text-foreground, [class*="text-foreground"]) {
