@@ -158,3 +158,105 @@ export function eventStatusLabel(status: EventStatus) {
       return "Completed";
   }
 }
+
+/** Formats the full event venue destination string from location, venue name, and address. */
+export function buildEventDestination(event: {
+  location?: string | null;
+  venueName?: string | null;
+  venueAddress?: string | null;
+}): string {
+  return [event.location, event.venueName, event.venueAddress]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** Builds the Google Maps search link matching the "View map" button. */
+export function buildEventMapUrl(destination: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
+}
+
+/** Builds an OpenStreetMap embed iframe URL centered on the given coordinates. */
+export function buildEventOsmEmbedUrl(
+  latitude: number,
+  longitude: number,
+  deltaLon = 0.007,
+  deltaLat = 0.005,
+): string {
+  const minLon = (longitude - deltaLon).toFixed(6);
+  const maxLon = (longitude + deltaLon).toFixed(6);
+  const minLat = (latitude - deltaLat).toFixed(6);
+  const maxLat = (latitude + deltaLat).toFixed(6);
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik&marker=${latitude.toFixed(6)}%2C${longitude.toFixed(6)}`;
+}
+
+export interface EventMapTile {
+  url: string;
+  left: number;
+  top: number;
+  key: string;
+}
+
+/** Calculates standard OpenStreetMap slippy tiles and offsets to cover a centered preview box. */
+export function getEventMapTiles(
+  latitude: number,
+  longitude: number,
+  zoom = 15,
+  width = 128,
+  height = 128,
+): EventMapTile[] {
+  const sinY = Math.sin((latitude * Math.PI) / 180);
+  const clampedSinY = Math.min(Math.max(sinY, -0.9999), 0.9999);
+  const scale = 256 * Math.pow(2, zoom);
+  const centerX = scale * (0.5 + longitude / 360);
+  const centerY = scale * (0.5 - Math.log((1 + clampedSinY) / (1 - clampedSinY)) / (4 * Math.PI));
+
+  const originX = centerX - width / 2;
+  const originY = centerY - height / 2;
+
+  const minTileX = Math.floor(originX / 256);
+  const maxTileX = Math.floor((originX + width) / 256);
+  const minTileY = Math.floor(originY / 256);
+  const maxTileY = Math.floor((originY + height) / 256);
+
+  const tiles: EventMapTile[] = [];
+  for (let x = minTileX; x <= maxTileX; x++) {
+    for (let y = minTileY; y <= maxTileY; y++) {
+      tiles.push({
+        url: `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`,
+        left: Math.round(x * 256 - originX),
+        top: Math.round(y * 256 - originY),
+        key: `${zoom}-${x}-${y}`,
+      });
+    }
+  }
+  return tiles;
+}
+
+/** Formats latitude and longitude coordinates into GPS Degrees-Minutes-Seconds (DMS) string. */
+export function formatCoordinatesDms(latitude: number, longitude: number): string {
+  function toDms(val: number, pos: string, neg: string): string {
+    const dir = val >= 0 ? pos : neg;
+    const abs = Math.abs(val);
+    const deg = Math.floor(abs);
+    const minFloat = (abs - deg) * 60;
+    const min = Math.floor(minFloat);
+    const sec = ((minFloat - min) * 60).toFixed(1);
+    return `${deg}°${min}'${sec}"${dir}`;
+  }
+  return `${toDms(latitude, "N", "S")} ${toDms(longitude, "E", "W")}`;
+}
+
+/** Determines sports pitch firmness and condition from precipitation chance. */
+export function calculatePitchCondition(rainChance: number): {
+  label: string;
+  tone: "firm" | "damp" | "wet";
+} {
+  if (rainChance < 15) {
+    return { label: "Pitch: Dry & Firm", tone: "firm" };
+  }
+  if (rainChance < 50) {
+    return { label: "Pitch: Damp & Soft", tone: "damp" };
+  }
+  return { label: "Pitch: Wet & Greasy", tone: "wet" };
+}
