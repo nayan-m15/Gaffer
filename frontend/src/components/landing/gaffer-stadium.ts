@@ -68,23 +68,46 @@ function scoreboardTexture() {
 function createRoofLightRig(span: number, y: number, z: number, count: number, materials: ReturnType<typeof makeMaterials>) {
   const group = new THREE.Group();
   group.name = "Roof floodlight gantry";
-
-  // Use a light, open gantry instead of another broad roof slab. From pitch level
-  // this reads as a row of proper stadium floodlight banks, similar to the
-  // reference image, without filling the whole roofline with lamps.
   const usableSpan = Math.max(0, span - 12);
   const positions = Array.from(
     { length: count },
     (_, index) => count === 1 ? 0 : -usableSpan / 2 + index * (usableSpan / (count - 1)),
   );
 
-  // Two slim rails tie the banks together and keep the silhouette architectural.
   group.add(
     block([span, .12, .16], [0, y + .08, z], materials.steel),
     block([span, .08, .12], [0, y + .58, z + .24], materials.steel),
   );
 
-  positions.forEach(x => {
+  const fixtureOffsets = [-1.02, -.34, .34, 1.02];
+  const fixtureCount = positions.length * fixtureOffsets.length;
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  const housingMesh = new THREE.InstancedMesh(unitBox, materials.lightHousing, fixtureCount);
+  const lampMesh = new THREE.InstancedMesh(unitBox, materials.lampGlow, fixtureCount);
+  const lensMesh = new THREE.InstancedMesh(unitBox, materials.lampLens, fixtureCount);
+  const coreOuterMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreOuter, fixtureCount);
+  const coreMidMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreMid, fixtureCount);
+  const coreInnerMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreInner, fixtureCount);
+  const stripMesh = new THREE.InstancedMesh(unitBox, materials.lampStrip, positions.length);
+  const haloMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(3.95, .72), materials.lampHalo, positions.length);
+  const wideHaloMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(5.15, 1.04), materials.lampHaloWide, positions.length);
+  const dummy = new THREE.Object3D();
+  let fixtureIndex = 0;
+
+  const setBoxInstance = (
+    mesh: THREE.InstancedMesh,
+    index: number,
+    px: number, py: number, pz: number,
+    sx: number, sy: number, sz: number,
+  ) => {
+    dummy.position.set(px, py, pz);
+    dummy.rotation.set(-.36, 0, 0);
+    dummy.scale.set(sx, sy, sz);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  };
+
+  positions.forEach((x, bankIndex) => {
     const leftPost = new THREE.Vector3(x - 1.55, y, z + .02);
     const leftTop = new THREE.Vector3(x - 1.35, y + .68, z + .22);
     const rightPost = new THREE.Vector3(x + 1.55, y, z + .02);
@@ -95,43 +118,28 @@ function createRoofLightRig(span: number, y: number, z: number, count: number, m
       block([3.05, .09, .13], [x, y + .68, z + .22], materials.steel),
     );
 
-    // Four fixtures per bank keeps the lighting recognisable without making the
-    // skyline as busy as a full real-world floodlight array.
-    for (const offset of [-1.02, -.34, .34, 1.02]) {
-      const housing = block([.5, .3, .34], [x + offset, y + .54, z - .02], materials.lightHousing);
-      housing.rotation.x = -.36;
-      const lamp = block([.34, .16, .07], [x + offset, y + .455, z - .185], materials.lampGlow);
-      lamp.rotation.x = -.36;
-      const lens = block([.29, .02, .08], [x + offset, y + .42, z - .245], materials.lampLens);
-      lens.rotation.x = -.36;
-      const coreOuter = block([.2, .012, .038], [x + offset, y + .414, z - .258], materials.lampCoreOuter);
-      coreOuter.rotation.x = -.36;
-      const coreMid = block([.16, .012, .03], [x + offset, y + .4145, z - .259], materials.lampCoreMid);
-      coreMid.rotation.x = -.36;
-      const coreInner = block([.145, .012, .027], [x + offset, y + .415, z - .26], materials.lampCoreInner);
-      coreInner.rotation.x = -.36;
-      group.add(housing, lamp, lens, coreOuter, coreMid, coreInner);
-    }
+    fixtureOffsets.forEach(offset => {
+      setBoxInstance(housingMesh, fixtureIndex, x + offset, y + .54, z - .02, .5, .3, .34);
+      setBoxInstance(lampMesh, fixtureIndex, x + offset, y + .455, z - .185, .34, .16, .07);
+      setBoxInstance(lensMesh, fixtureIndex, x + offset, y + .42, z - .245, .29, .02, .08);
+      setBoxInstance(coreOuterMesh, fixtureIndex, x + offset, y + .414, z - .258, .2, .012, .038);
+      setBoxInstance(coreMidMesh, fixtureIndex, x + offset, y + .4145, z - .259, .16, .012, .03);
+      setBoxInstance(coreInnerMesh, fixtureIndex, x + offset, y + .415, z - .26, .145, .012, .027);
+      fixtureIndex += 1;
+    });
 
-    // Keep a subtle reading line under each bank, but let the individual lamps
-    // be the main visible feature so the result feels more natural.
-    const strip = block([2.86, .022, .06], [x, y + .382, z - .286], materials.lampStrip);
-    strip.rotation.x = -.36;
-    group.add(strip);
-
-    // Softer, tighter glow cards feel more like real lamp spill than flat white
-    // rectangles, while remaining lightweight and only active in dark mode.
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(3.95, .72), materials.lampHalo);
-    halo.position.set(x, y + .455, z - .355);
-    halo.rotation.x = -.36;
-    halo.renderOrder = 4;
-    const wideHalo = new THREE.Mesh(new THREE.PlaneGeometry(5.15, 1.04), materials.lampHaloWide);
-    wideHalo.position.set(x, y + .46, z - .42);
-    wideHalo.rotation.x = -.36;
-    wideHalo.renderOrder = 3;
-    group.add(halo, wideHalo);
+    setBoxInstance(stripMesh, bankIndex, x, y + .382, z - .286, 2.86, .022, .06);
+    dummy.position.set(x, y + .455, z - .355); dummy.rotation.set(-.36, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); haloMesh.setMatrixAt(bankIndex, dummy.matrix);
+    dummy.position.set(x, y + .46, z - .42); dummy.updateMatrix(); wideHaloMesh.setMatrixAt(bankIndex, dummy.matrix);
   });
 
+  [housingMesh, lampMesh, lensMesh, coreOuterMesh, coreMidMesh, coreInnerMesh, stripMesh, haloMesh, wideHaloMesh].forEach(mesh => {
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = true;
+  });
+  haloMesh.renderOrder = 4;
+  wideHaloMesh.renderOrder = 3;
+  group.add(housingMesh, lampMesh, lensMesh, coreOuterMesh, coreMidMesh, coreInnerMesh, stripMesh, haloMesh, wideHaloMesh);
   return group;
 }
 
@@ -542,9 +550,9 @@ export function createGafferStadium(lowPower: boolean) {
     materials.lampStrip.color.setHex(0xffffff);
     materials.lampStrip.opacity = lightMode ? 0 : .92;
     materials.lampHalo.color.setHex(0xf2f9ff);
-    materials.lampHalo.opacity = lightMode ? 0 : .5;
+    materials.lampHalo.opacity = lightMode ? 0 : .42;
     materials.lampHaloWide.color.setHex(0xd8edff);
-    materials.lampHaloWide.opacity = lightMode ? 0 : .18;
+    materials.lampHaloWide.opacity = lightMode ? 0 : .11;
     materials.lampGlow.needsUpdate = true;
     materials.lampLens.needsUpdate = true;
     materials.lampCoreOuter.needsUpdate = true;

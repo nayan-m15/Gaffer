@@ -467,6 +467,26 @@ function box(size: [number, number, number], position: [number, number, number],
   return mesh;
 }
 
+function instancedBoxes(
+  entries: Array<{ size: [number, number, number]; position: [number, number, number] }>,
+  material: THREE.Material,
+  cast = false,
+) {
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, entries.length);
+  const dummy = new THREE.Object3D();
+  entries.forEach((entry, index) => {
+    dummy.position.set(...entry.position);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(...entry.size);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = cast;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 function roundedBox(size: [number, number, number], position: [number, number, number], material: THREE.Material, radius = .06, cast = false) {
   const [width, height, depth] = size;
   const r = Math.min(radius, width / 2, height / 2);
@@ -579,32 +599,47 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
   const count = lowPower ? 6 : LOCKER_CONFIG.count;
   const spacing = (LOCKER_CONFIG.endX - LOCKER_CONFIG.startX) / (count - 1);
   const z = side * 8.18, frontZ = side * 7.54;
-  group.add(
-    box([16.9, .22, 1.68], [-70.3, 4.02, side * 8.15], kit.metal, !lowPower),
-    box([16.75, .08, .12], [-70.3, 3.89, side * 7.35], kit.greenLight),
-  );
+
+  // The locker row used to create well over a hundred individual box meshes.
+  // Batch the repeated rectangular pieces by material instead so the appearance
+  // stays the same but the row costs only a handful of draw calls.
+  const metalEntries: Array<{ size: [number, number, number]; position: [number, number, number] }> = [
+    { size: [16.9, .22, 1.68], position: [-70.3, 4.02, side * 8.15] },
+  ];
+  const woodEntries: Array<{ size: [number, number, number]; position: [number, number, number] }> = [];
+  const woodDarkEntries: Array<{ size: [number, number, number]; position: [number, number, number] }> = [];
+  const greenLightEntries: Array<{ size: [number, number, number]; position: [number, number, number] }> = [
+    { size: [16.75, .08, .12], position: [-70.3, 3.89, side * 7.35] },
+  ];
+  const warmLightEntries: Array<{ size: [number, number, number]; position: [number, number, number] }> = [
+    { size: [15.7, .055, .1], position: [-70.45, .78, side * 7.5] },
+  ];
+
   for (let i = 0; i < count; i += 1) {
     const x = LOCKER_CONFIG.startX + i * spacing;
-    group.add(
-      box([LOCKER_CONFIG.width, 2.45, .12], [x, 2.55, side * 8.68], kit.wood),
-      box([LOCKER_CONFIG.width - .18, 1.58, .045], [x, 2.55, side * 8.6], kit.woodDark),
-      box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x - LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
-      box([.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], [x + LOCKER_CONFIG.width / 2, 2.05, z], kit.metal),
-      box([LOCKER_CONFIG.width, .58, LOCKER_CONFIG.depth], [x, 3.72, z], kit.woodDark),
-      box([LOCKER_CONFIG.width - .2, .055, .08], [x, 3.4, frontZ], kit.warmLight),
-      roundedBox([LOCKER_CONFIG.width - .16, .18, 1.2], [x, 1.08, side * 7.92], kit.cushion, .055),
-      box([LOCKER_CONFIG.width - .12, .12, 1.18], [x, .91, side * 7.96], kit.woodDark),
-      box([LOCKER_CONFIG.width - .22, .055, .055], [x, 3.08, frontZ], kit.metal),
+    woodEntries.push({ size: [LOCKER_CONFIG.width, 2.45, .12], position: [x, 2.55, side * 8.68] });
+    woodDarkEntries.push(
+      { size: [LOCKER_CONFIG.width - .18, 1.58, .045], position: [x, 2.55, side * 8.6] },
+      { size: [LOCKER_CONFIG.width, .58, LOCKER_CONFIG.depth], position: [x, 3.72, z] },
+      { size: [LOCKER_CONFIG.width - .12, .12, 1.18], position: [x, .91, side * 7.96] },
+      { size: [LOCKER_CONFIG.width - .13, .08, .98], position: [x, .2, side * 8.08] },
     );
-    // Small hardware highlights break up the large rectangular locker faces at almost no cost.
+    metalEntries.push(
+      { size: [.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], position: [x - LOCKER_CONFIG.width / 2, 2.05, z] },
+      { size: [.12, LOCKER_CONFIG.height, LOCKER_CONFIG.depth], position: [x + LOCKER_CONFIG.width / 2, 2.05, z] },
+      { size: [LOCKER_CONFIG.width - .22, .055, .055], position: [x, 3.08, frontZ] },
+      { size: [LOCKER_CONFIG.width - .15, .62, .05], position: [x, .5, side * 8.58] },
+    );
+    warmLightEntries.push({ size: [LOCKER_CONFIG.width - .2, .055, .08], position: [x, 3.4, frontZ] });
+
+    // Cushions, shirts, handles and loose kit keep their existing geometry because
+    // they provide the close-up detail the user actually notices.
+    group.add(roundedBox([LOCKER_CONFIG.width - .16, .18, 1.2], [x, 1.08, side * 7.92], kit.cushion, .055));
     const handle = roundedBox([.055, .3, .055], [x + side * .42, 2.43, frontZ - side * .045], kit.metal, .018);
     handle.rotation.x = side > 0 ? Math.PI : 0;
     group.add(handle);
     const shirt = createShirt(kit, numberMaps[i]);
     shirt.position.set(x, 2.5, side * 7.47); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
-    const cubbyFloor = box([LOCKER_CONFIG.width - .13, .08, .98], [x, .2, side * 8.08], kit.woodDark);
-    const cubbyBack = box([LOCKER_CONFIG.width - .15, .62, .05], [x, .5, side * 8.58], kit.metal);
-    group.add(cubbyFloor, cubbyBack);
     if ((i + (side > 0 ? 1 : 0)) % 3 === 0) {
       const boot = box([.47, .16, .18], [x - .17, .36, side * 7.72], kit.boot); boot.rotation.y = side * .18; group.add(boot);
       const boot2 = boot.clone(); boot2.position.x += .36; boot2.rotation.y *= -1; group.add(boot2);
@@ -612,7 +647,14 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
       group.add(box([.62, .15, .42], [x, .35, side * 7.83], kit.towel));
     }
   }
-  const benchLight = box([15.7, .055, .1], [-70.45, .78, side * 7.5], kit.warmLight); group.add(benchLight);
+
+  group.add(
+    instancedBoxes(metalEntries, kit.metal, !lowPower),
+    instancedBoxes(woodEntries, kit.wood, !lowPower),
+    instancedBoxes(woodDarkEntries, kit.woodDark, false),
+    instancedBoxes(greenLightEntries, kit.greenLight, false),
+    instancedBoxes(warmLightEntries, kit.warmLight, false),
+  );
   return group;
 }
 
@@ -1031,8 +1073,8 @@ function buildPitchAndStadium(
   const netMat=new THREE.LineBasicMaterial({color:0xdce8e2,transparent:true,opacity:.48});
   scene.add(footballGoal(-1,goalMat,netMat),footballGoal(1,goalMat,netMat));
   const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(DARK_SKY_TOP)},bottomColor:{value:new THREE.Color(DARK_SKY_BOTTOM)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);float t=smoothstep(0.0,1.0,pow(h,.86));gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(138,lowPower?32:64,lowPower?18:32),skyMat));
-  scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.58));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1536,lowPower?512:1536);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
-  const daylightSun=new THREE.DirectionalLight(0xfff1d6,.85);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=!lowPower;daylightSun.shadow.mapSize.set(lowPower?512:1536,lowPower?512:1536);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;daylightSun.visible=false;scene.add(daylightSun,daylightSun.target);
+  scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.58));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1024,lowPower?512:1024);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
+  const daylightSun=new THREE.DirectionalLight(0xfff1d6,.85);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=false;daylightSun.shadow.mapSize.set(512,512);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;daylightSun.visible=false;scene.add(daylightSun,daylightSun.target);
   const roomLight=new THREE.PointLight(0xffdfaa,.34,22,2);roomLight.position.set(-70,3.45,0);
   const lockerLightLeft=new THREE.PointLight(0xffc978,.38,10,2);lockerLightLeft.position.set(-70.8,2.7,-5.7);
   const lockerLightRight=new THREE.PointLight(0xffc978,.38,10,2);lockerLightRight.position.set(-70.8,2.7,5.7);
@@ -1058,8 +1100,8 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
   const constrainedDevice =
-    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4) ||
-    (deviceMemory !== undefined && deviceMemory <= 4);
+    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 6) ||
+    (deviceMemory !== undefined && deviceMemory <= 6);
   let lowPower = initialWidth < 768 || constrainedDevice;
   const renderer = new THREE.WebGLRenderer({
     alpha: false,
@@ -1110,6 +1152,14 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   scene.traverse(object => { if (!animatedShirt && object instanceof THREE.Group && object.name === "Dressing room shirt") animatedShirt = object; });
   const shirtBaseRoll = animatedShirt?.rotation.z ?? 0;
   const flagBaseYaw = cornerFlag.pivot.rotation.y;
+  // Static geometry dominates this scene. Stop Three.js from rebuilding local
+  // matrices for every static mesh on every rendered scroll frame.
+  scene.traverse(object => {
+    if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh || object instanceof THREE.Line || object instanceof THREE.LineSegments) {
+      object.updateMatrix();
+      object.matrixAutoUpdate = false;
+    }
+  });
   const updateEnvironmentalMotion=(progress:number)=>{
     if(reducedMotion){
       if(animatedShirt)animatedShirt.rotation.z=shirtBaseRoll;
@@ -1145,7 +1195,9 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
   const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;if(Math.abs(difference)<.00008){currentProgress=targetProgress;updateCamera(currentProgress);render();return;}currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(targetProgress-currentProgress)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
-  const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.15:width<1280?1.4:1.7,budget=lowPower?900000:width<1280?1500000:2400000;renderer.setPixelRatio(Math.max(.75,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height)))));renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
+  const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.05:width<1280?1.28:1.45,budget=lowPower?760000:width<1280?1250000:1750000;
+    const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
+    renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
   return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
