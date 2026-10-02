@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, MapPin } from "lucide-react";
+import { ExternalLink, MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -16,6 +16,7 @@ import {
   displayEventStatus,
   eventStatusLabel,
   eventTypeLabel,
+  formatCoordinatesDms,
   formatEventDateTime,
   getEventMapTiles,
 } from "./event-utils";
@@ -167,9 +168,9 @@ export function EventDetailDialog({
         </DialogHeader>
 
         {event && (
-          <div className={cn("space-y-4 rounded-lg border border-border bg-background p-4", event.status === "cancelled" && "opacity-70")}>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className={cn("text-xl font-semibold text-foreground", event.status === "cancelled" && "line-through")}>
+          <div className={cn("space-y-3.5 rounded-2xl border border-white/10 bg-[#11161F] p-4 shadow-xl", event.status === "cancelled" && "opacity-70")}>
+            <div className="flex items-center justify-between">
+              <h3 className={cn("text-xl font-bold text-white tracking-tight", event.status === "cancelled" && "line-through")}>
                 {event.title}
               </h3>
               <StatusBadge status={displayEventStatus(event, now)} />
@@ -279,7 +280,7 @@ function EventLocationSection({ event }: { event: TeamEvent | PlayerEvent }) {
 
   return (
     <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 flex-1 space-y-4">
+      <div className="min-w-0 flex-1 space-y-2.5">
         <DetailRow label="Location" value={event.location || "Not set"} />
         {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
         {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
@@ -297,22 +298,24 @@ function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
   }
   const encoded = encodeURIComponent(destination);
   return (
-    <div className="flex gap-3 text-xs">
+    <div className="flex items-center gap-2 pt-1 text-xs">
       <a
-        className="font-medium text-primary hover:underline"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 shadow-xs transition hover:bg-white/10"
         href={buildEventMapUrl(destination)}
         target="_blank"
         rel="noreferrer"
       >
-        View map
+        <span>Map</span>
+        <span className="text-[10px] opacity-70">↗</span>
       </a>
       <a
-        className="font-medium text-primary hover:underline"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-400 shadow-xs transition hover:bg-sky-500/25"
         href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`}
         target="_blank"
         rel="noreferrer"
       >
-        Get directions
+        <Navigation className="size-3" />
+        <span>Route</span>
       </a>
     </div>
   );
@@ -351,7 +354,7 @@ function EventLocationMapSquare({
 
   const tiles = useMemo(() => {
     if (latitude == null || longitude == null || tileError) return null;
-    return getEventMapTiles(latitude, longitude, 15, 128, 128);
+    return getEventMapTiles(latitude, longitude, 15, 112, 96);
   }, [latitude, longitude, tileError]);
 
   return (
@@ -361,7 +364,7 @@ function EventLocationMapSquare({
       rel="noreferrer"
       title={`Open ${destination} in Google Maps`}
       aria-label={`Open ${destination} in Google Maps`}
-      className="group relative flex size-28 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40 shadow-xs transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:size-32"
+      className="group relative flex h-24 w-28 shrink-0 flex-col items-center justify-center overflow-hidden rounded-xl border border-emerald-500/40 bg-muted/40 shadow-md transition-all hover:border-emerald-500/70 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {tiles ? (
         <>
@@ -388,7 +391,7 @@ function EventLocationMapSquare({
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full drop-shadow-md">
             <svg
               viewBox="0 0 24 36"
-              className="h-7 w-auto"
+              className="h-6 w-auto"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
@@ -400,17 +403,19 @@ function EventLocationMapSquare({
             </svg>
           </div>
 
-          {/* Clean minimal OSM attribution badge */}
-          <span className="pointer-events-none absolute bottom-0.5 right-1 z-10 rounded bg-background/80 px-1 py-0.5 text-[8px] font-medium text-muted-foreground/80 backdrop-blur-xs">
-            © OSM
-          </span>
+          {/* GPS Coordinates bottom bar */}
+          {latitude != null && longitude != null && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-black/75 px-1 py-0.5 text-center font-mono text-[8px] text-slate-300">
+              {formatCoordinatesDms(latitude, longitude)}
+            </div>
+          )}
         </>
       ) : (
         <div className="relative flex size-full flex-col items-center justify-center bg-muted/30 p-2 text-center">
           <div className="relative mb-1 flex items-center justify-center">
-            <span className="absolute inline-flex size-7 animate-ping rounded-full bg-primary/20 opacity-75" />
-            <div className="relative flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <MapPin className="size-4.5" />
+            <span className="absolute inline-flex size-6 animate-ping rounded-full bg-primary/20 opacity-75" />
+            <div className="relative flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MapPin className="size-4" />
             </div>
           </div>
           <span className="line-clamp-1 max-w-full text-[10px] font-medium text-foreground">
@@ -424,23 +429,22 @@ function EventLocationMapSquare({
 
       {/* Floating hover badge */}
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40">
-        <div className="flex items-center gap-1 rounded bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="flex items-center gap-1 rounded bg-background/95 px-2 py-0.5 text-[10px] font-medium text-foreground shadow-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <span>View map</span>
-          <ExternalLink className="size-3 text-primary" />
+          <ExternalLink className="size-2.5 text-primary" />
         </div>
       </div>
     </a>
   );
 }
 
-// DetailRow, StatusBadge, RsvpGroup — unchanged, keep as-is.
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
         {label}
-      </p>
-      <p className="mt-1 text-sm text-foreground">{value}</p>
+      </div>
+      <div className="text-sm font-medium text-slate-200 mt-0.5">{value}</div>
     </div>
   );
 }

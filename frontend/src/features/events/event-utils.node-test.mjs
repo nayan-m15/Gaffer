@@ -3,10 +3,12 @@ import {
   buildEventDestination,
   buildEventMapUrl,
   buildEventOsmEmbedUrl,
+  calculatePitchCondition,
   combineScheduledAt,
   displayEventStatus,
   eventStatusLabel,
   eventTypeLabel,
+  formatCoordinatesDms,
   formatLocalDate,
   getEventMapTiles,
   isScheduleInThePast,
@@ -175,3 +177,13 @@ for (const tile of tiles) {
   assert.equal(typeof tile.top, "number");
   assert.ok(tile.key.startsWith("15-"));
 }
+
+/* ─── formatCoordinatesDms / calculatePitchCondition ─────────────────── */
+const dms = formatCoordinatesDms(-26.3206, 27.8561);
+assert.ok(dms.includes("26°19'14.2\"S"));
+assert.ok(dms.includes("27°51'22.0\"E"));
+
+assert.deepEqual(calculatePitchCondition(0), { label: "Pitch: Dry & Firm", tone: "firm" });
+assert.deepEqual(calculatePitchCondition(10), { label: "Pitch: Dry & Firm", tone: "firm" });
+assert.deepEqual(calculatePitchCondition(25), { label: "Pitch: Damp & Soft", tone: "damp" });
+assert.deepEqual(calculatePitchCondition(70), { label: "Pitch: Wet & Greasy", tone: "wet" });

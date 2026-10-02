@@ -232,3 +232,31 @@ export function getEventMapTiles(
   }
   return tiles;
 }
+
+/** Formats latitude and longitude coordinates into GPS Degrees-Minutes-Seconds (DMS) string. */
+export function formatCoordinatesDms(latitude: number, longitude: number): string {
+  function toDms(val: number, pos: string, neg: string): string {
+    const dir = val >= 0 ? pos : neg;
+    const abs = Math.abs(val);
+    const deg = Math.floor(abs);
+    const minFloat = (abs - deg) * 60;
+    const min = Math.floor(minFloat);
+    const sec = ((minFloat - min) * 60).toFixed(1);
+    return `${deg}°${min}'${sec}"${dir}`;
+  }
+  return `${toDms(latitude, "N", "S")} ${toDms(longitude, "E", "W")}`;
+}
+
+/** Determines sports pitch firmness and condition from precipitation chance. */
+export function calculatePitchCondition(rainChance: number): {
+  label: string;
+  tone: "firm" | "damp" | "wet";
+} {
+  if (rainChance < 15) {
+    return { label: "Pitch: Dry & Firm", tone: "firm" };
+  }
+  if (rainChance < 50) {
+    return { label: "Pitch: Damp & Soft", tone: "damp" };
+  }
+  return { label: "Pitch: Wet & Greasy", tone: "wet" };
+}
