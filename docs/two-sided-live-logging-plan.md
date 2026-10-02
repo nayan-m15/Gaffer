@@ -153,15 +153,15 @@ These are settled product decisions for implementation:
 
 ## 6. Session handoff
 
-- [ ] Step 1 — Regression cases and API contracts
+- [x] Step 1 — Regression cases and API contracts (skipped: later focused tests and handoff notes already recorded the gap and participant contracts)
 - [x] Step 2 — Canonical session schema
 - [x] Step 3 — Idempotent fixture session creation
 - [x] Step 4 — Participant authorization
 - [x] Step 5 — Normalized event storage and reconciliation
 - [x] Step 6 — Authorised shared sync
 - [x] Step 7 — Match setup and live logger UI
-- [ ] Step 8 — Shared report, reviews, and disputes
-- [ ] Step 9 — Bilateral final result and standings
+- [x] Step 8 — Shared report, reviews, and disputes
+- [x] Step 9 — Bilateral final result and standings
 - [ ] Step 10 — End-to-end hardening and release gate
 
 Implementation notes:
@@ -175,3 +175,6 @@ Implementation notes:
 - Step 7 reads shared synced rows by the viewer's match session, maps actual home/away attribution to own/opponent using the viewer's `is_home`, and merges those rows with online events. Private match, squad, and opponent-squad reads remain match-sheet scoped. The existing live logger consumes the normalized event hook without changes to its page component.
 - Sync authorization tests execute the shared event and review PowerSync SQL for both participants, an unrelated team, and after membership revocation. This plan step was completed without a schema migration; the stream-level projection reuses the existing session-tagged rows.
 - The focused shared-stream authorization e2e passes. The full offline-sync e2e file had unrelated remote database connection resets/timeouts, and the Playwright offline browser command exited with spawn EPERM; browser scenarios remain to be rerun where process launch is available.
+- Step 8 mounts the shared review queue on linked session reports, returns reviews from both match sheets, records the resolving actor and decision, and permits only the other participating team to flag one immutable dispute. Review resolution operations remain the audit trail when a later decision revises an earlier one. Dispute actor/time are additive columns in migration `0048_shared_review_disputes`.
+- Step 9 stores side confirmations and session finalisation on `match_sessions` (`0049_session_result_confirmation`). The finalisation decision uses a controllable `now` argument; a later confirmation request after the 24-hour window enforces timeout without a background scheduler. Reopen clears both confirmations while the session is still non-final. Generated fixture result retries match on `sharedSessionId`; friendlies never publish generated competition results.
+- The Step 8/9 e2e suites could not execute in this environment: the configured Jest run fails during module loading at `better-auth/node` (`ReferenceError: exports is not defined`). Frontend TypeScript compilation passed, but Vite build stopped at the local Tailwind native binding and a sandbox `spawn EPERM`. Backend focused unit tests and build pass; rerun e2e/browser validation in the supported runner before Step 10.

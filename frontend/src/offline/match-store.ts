@@ -122,6 +122,8 @@ async function database() {
           resolution: column.text,
           resolved_by_user_id: column.text,
           resolved_at: column.text,
+          disputed_by_user_id: column.text,
+          disputed_at: column.text,
           created_at: column.text,
           updated_at: column.text,
         }),
@@ -881,6 +883,9 @@ export interface SyncedMatchReview {
   status: string;
   resolution: string | null;
   resolvedByUserId: string | null;
+  resolvedAt?: string | null;
+  disputedByUserId?: string | null;
+  disputedAt?: string | null;
   observations: Array<{
     id: string;
     eventType: string;
@@ -907,6 +912,9 @@ export async function readSyncedMatchReviews(
     status: string;
     resolution: string | null;
     resolved_by_user_id: string | null;
+    resolved_at: string | null;
+    disputed_by_user_id: string | null;
+    disputed_at: string | null;
     observation_ids: string | string[];
   }>(
     `SELECT * FROM match_event_reviews
@@ -945,6 +953,9 @@ export async function readSyncedMatchReviews(
       status: review.status,
       resolution: review.resolution,
       resolvedByUserId: review.resolved_by_user_id,
+      resolvedAt: review.resolved_at,
+      disputedByUserId: review.disputed_by_user_id,
+      disputedAt: review.disputed_at,
       observations: ids.flatMap((id) => {
         const row = byId.get(id);
         return row

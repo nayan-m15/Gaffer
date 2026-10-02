@@ -100,6 +100,15 @@ export class MatchesController {
     );
   }
 
+  @Post(':matchId/event-reviews/:reviewId/dispute')
+  async disputeEventReview(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+  ) {
+    return this.matchesService.disputeEventReview(user.id, matchId, reviewId);
+  }
+
   @Patch(':matchId/events/:eventId')
   async updateEvent(
     @CurrentUser() user: AuthenticatedRequest['user'],

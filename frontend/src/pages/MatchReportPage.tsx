@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+﻿import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
@@ -78,6 +78,7 @@ import {
 } from "@/features/matches/match-report-charts";
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
 import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
+import { EventReviewPanel } from "@/offline/EventReviewPanel";
 import {
   LiveBenchRow,
   LivePitch,
@@ -353,6 +354,7 @@ export default function MatchReportPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
@@ -775,6 +777,15 @@ export default function MatchReportPage() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {match.sharedSessionId ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-warning/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warning transition-colors hover:bg-warning/10"
+                  onClick={() => setReviewPanelOpen(true)}
+                >
+                  Review queue
+                </button>
+              ) : null}
               {team?.role === "coach" && (
                 <button
                   type="button"
@@ -798,7 +809,7 @@ export default function MatchReportPage() {
                   ) : (
                     <Lock className="size-3.5" />
                   )}
-                  {isFinalised ? "Reopen Result" : "Finalise Result"}
+                  {isFinalised ? "Reopen Result" : match.sharedSessionId ? "Confirm Result" : "Finalise Result"}
                 </button>
               )}
               <button
@@ -1121,6 +1132,12 @@ export default function MatchReportPage() {
           }}
         />
       )}
+      {reviewPanelOpen && match.sharedSessionId ? (
+        <EventReviewPanel
+          matchId={match.id}
+          onClose={() => setReviewPanelOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

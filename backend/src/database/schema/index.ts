@@ -132,6 +132,10 @@ export const matchSessionConfirmationState = pgEnum(
 // `matches`; this row only represents the fixture/session they may share.
 export const matchSessions = pgTable('match_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
+  homeConfirmedAt: timestamp('home_confirmed_at', { withTimezone: true }),
+  awayConfirmedAt: timestamp('away_confirmed_at', { withTimezone: true }),
+  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
   ...timestamps,
 });
 
@@ -1491,6 +1495,8 @@ export const matchEventReviews = pgTable(
     resolution: text('resolution'),
     resolvedByUserId: text('resolved_by_user_id').references(() => user.id),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    disputedByUserId: text('disputed_by_user_id').references(() => user.id),
+    disputedAt: timestamp('disputed_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [

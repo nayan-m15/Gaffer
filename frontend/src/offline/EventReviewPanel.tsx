@@ -142,13 +142,34 @@ export function EventReviewPanel({
     }
   };
 
+  const dispute = async (reviewId: string) => {
+    try {
+      await apiFetch(`/matches/${matchId}/event-reviews/${reviewId}/dispute`, {
+        method: "POST",
+      });
+      await load();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not flag dispute.",
+      );
+    }
+  };
+
   const openReviews = reviews.filter((review) => review.status === "open");
   const history = reviews.filter((review) => review.status === "resolved");
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="event-review-title">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="event-review-title"
+    >
       <section className="themed-scrollbar max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border-default bg-popover p-5 text-popover-foreground shadow-2xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 id="event-review-title" className="font-oswald text-xl tracking-wide text-foreground">
+          <h2
+            id="event-review-title"
+            className="font-oswald text-xl tracking-wide text-foreground"
+          >
             Event review
           </h2>
           <button
@@ -165,7 +186,9 @@ export function EventReviewPanel({
           </p>
         ) : null}
         {openReviews.length === 0 ? (
-          <p className="mt-5 text-sm text-muted-foreground">No events need review.</p>
+          <p className="mt-5 text-sm text-muted-foreground">
+            No events need review.
+          </p>
         ) : null}
         <div className="mt-4 space-y-3">
           {openReviews.map((review) => (
@@ -254,7 +277,9 @@ export function EventReviewPanel({
         </div>
         {history.length > 0 ? (
           <section className="mt-6 border-t border-border-subtle pt-4">
-            <h3 className="text-sm font-semibold text-foreground">Review history</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              Review history
+            </h3>
             <ul className="mt-2 space-y-1 text-xs text-secondary-foreground">
               {history.map((review) => (
                 <li
@@ -264,7 +289,23 @@ export function EventReviewPanel({
                   <span>
                     {review.reason.replaceAll("_", " ")} ·{" "}
                     {review.resolution?.replaceAll("_", " ") ?? "resolved"}
+                    {review.resolvedByUserId
+                      ? ` · resolved by coach ${review.resolvedByUserId.slice(0, 8)}`
+                      : ""}
+                    {review.disputedByUserId
+                      ? ` · disputed by coach ${review.disputedByUserId.slice(0, 8)}`
+                      : ""}
                   </span>
+                  {team?.role === "coach" && !review.disputedAt ? (
+                    <button
+                      type="button"
+                      disabled={!navigator.onLine}
+                      onClick={() => void dispute(review.id)}
+                      className="rounded border border-warning/50 px-2 py-1 text-warning hover:bg-warning/10 disabled:opacity-50"
+                    >
+                      Flag dispute
+                    </button>
+                  ) : null}
                   {team?.role === "coach" &&
                   review.reviewVersion === 2 &&
                   review.resolution ? (

@@ -18,6 +18,7 @@ import {
   standings,
 } from '../database/schema';
 import { planFixtures } from './competition-fixtures';
+import { fixtureResultSourceMatches } from '../matches/session-finalisation';
 
 export interface FixtureResultInput {
   homeCompetitionTeamId: string;
@@ -27,7 +28,8 @@ export interface FixtureResultInput {
 }
 
 type ResultSource =
-  { kind: 'manual'; id: string } | { kind: 'live'; id: string };
+  | { kind: 'manual'; id: string }
+  | { kind: 'live'; id: string; sessionId?: string };
 
 type FixtureRow = typeof competitionFixtures.$inferSelect;
 
@@ -45,7 +47,7 @@ function hasActivity(fixture: FixtureRow) {
 function sourceMatches(fixture: FixtureRow, source: ResultSource) {
   return source.kind === 'manual'
     ? fixture.legacyResultId === source.id
-    : fixture.linkedMatchId === source.id;
+    : fixtureResultSourceMatches(fixture, source);
 }
 
 function sourcePatch(source: ResultSource) {
