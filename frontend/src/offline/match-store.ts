@@ -90,6 +90,8 @@ async function database() {
         }),
         match_events: new Table({
           match_id: column.text,
+          session_id: column.text,
+          side: column.text,
           athlete_id: column.text,
           team: column.text,
           opponent_label: column.text,
@@ -111,6 +113,7 @@ async function database() {
         }),
         match_event_reviews: new Table({
           match_id: column.text,
+          session_id: column.text,
           canonical_event_id: column.text,
           observation_ids: column.text,
           review_version: column.integer,
@@ -124,6 +127,8 @@ async function database() {
         }),
         match_event_observations: new Table({
           match_id: column.text,
+          session_id: column.text,
+          side: column.text,
           device_id: column.text,
           logged_by_user_id: column.text,
           schema_version: column.integer,
@@ -141,6 +146,7 @@ async function database() {
         }),
         match_event_operations: new Table({
           match_id: column.text,
+          session_id: column.text,
           actor_user_id: column.text,
           operation_type: column.text,
           target_observation_ids: column.text,
@@ -152,11 +158,14 @@ async function database() {
           created_at: column.text,
         }),
         match_event_memberships: new Table({
+          match_id: column.text,
+          session_id: column.text,
           canonical_event_id: column.text,
           projection_revision: column.integer,
           created_at: column.text,
         }),
         match_projection_state: new Table({
+          session_id: column.text,
           revision: column.integer,
           input_digest: column.text,
           rules_version: column.integer,
@@ -175,6 +184,7 @@ async function database() {
         }),
         matches: new Table({
           event_id: column.text,
+          shared_match_id: column.text,
           competition_id: column.text,
           opponent_name: column.text,
           is_home: column.integer,
@@ -219,6 +229,7 @@ async function database() {
         }),
         match_clock_operations: new Table({
           match_id: column.text,
+          session_id: column.text,
           actor_user_id: column.text,
           period: column.text,
           elapsed_ms: column.integer,
@@ -523,6 +534,7 @@ export async function readSyncedPreparedMatch(
   const row = await db.getOptional<{
     id: string;
     event_id: string;
+    shared_match_id: string | null;
     competition_id: string | null;
     opponent_name: string;
     is_home: number;
@@ -559,6 +571,7 @@ export async function readSyncedPreparedMatch(
   ]);
   return {
     id: row.id,
+    sharedSessionId: row.shared_match_id,
     eventId: row.event_id,
     competitionId: row.competition_id,
     opponentName: row.opponent_name,
@@ -782,6 +795,8 @@ export async function requestPersistentStorage() {
 interface SyncedEventRow {
   id: string;
   match_id: string;
+  session_id: string | null;
+  side: "home" | "away" | null;
   athlete_id: string | null;
   team: MatchLogEvent["team"];
   opponent_label: string | null;
@@ -804,15 +819,29 @@ export async function readSyncedMatchEvents(
   matchId: string,
 ): Promise<MatchLogEvent[]> {
   const db = await database();
-  const rows = await db.getAll<SyncedEventRow>(
-    "SELECT * FROM match_events WHERE match_id = ? AND lifecycle_status <> 'voided' ORDER BY minute DESC, created_at DESC",
+  const match = await db.getOptional<{ is_home: number }>(
+    "SELECT is_home FROM matches WHERE id = ?",
     [matchId],
+  );
+  const rows = await db.getAll<SyncedEventRow>(
+    `SELECT * FROM match_events
+      WHERE (match_id = ? OR (session_id = (
+        SELECT shared_match_id FROM matches WHERE id = ?
+      ) AND session_id IS NOT NULL))
+        AND lifecycle_status <> 'voided'
+      ORDER BY minute DESC, created_at DESC`,
+    [matchId, matchId],
   );
   return rows.map((row) => ({
     id: row.id,
     matchId: row.match_id,
     athleteId: row.athlete_id,
-    team: row.team,
+    team: row.side
+      ? row.side === (match?.is_home ? "home" : "away")
+        ? "own"
+        : "opponent"
+      : row.team,
+    side: row.side,
     opponentLabel: row.opponent_label,
     opponentPlayerId: row.opponent_player_id,
     eventType: row.event_type,
@@ -867,6 +896,10 @@ export async function readSyncedMatchReviews(
   matchId: string,
 ): Promise<SyncedMatchReview[]> {
   const db = await database();
+  const match = await db.getOptional<{ is_home: number }>(
+    "SELECT is_home FROM matches WHERE id = ?",
+    [matchId],
+  );
   const reviews = await db.getAll<{
     id: string;
     review_version: number;
@@ -876,18 +909,29 @@ export async function readSyncedMatchReviews(
     resolved_by_user_id: string | null;
     observation_ids: string | string[];
   }>(
-    "SELECT * FROM match_event_reviews WHERE match_id = ? ORDER BY created_at DESC",
-    [matchId],
+    `SELECT * FROM match_event_reviews
+      WHERE match_id = ? OR (session_id = (
+        SELECT shared_match_id FROM matches WHERE id = ?
+      ) AND session_id IS NOT NULL)
+      ORDER BY created_at DESC`,
+    [matchId, matchId],
   );
   const observations = await db.getAll<{
     id: string;
     event_type: string;
     team: string;
+    side: "home" | "away" | null;
     match_elapsed_ms: number;
     logged_by_user_id: string;
     athlete_id: string | null;
     opponent_label: string | null;
-  }>("SELECT * FROM match_event_observations WHERE match_id = ?", [matchId]);
+  }>(
+    `SELECT * FROM match_event_observations
+      WHERE match_id = ? OR (session_id = (
+        SELECT shared_match_id FROM matches WHERE id = ?
+      ) AND session_id IS NOT NULL)`,
+    [matchId, matchId],
+  );
   const byId = new Map(observations.map((row) => [row.id, row]));
   return reviews.map((review) => {
     const ids =
@@ -908,7 +952,11 @@ export async function readSyncedMatchReviews(
               {
                 id: row.id,
                 eventType: row.event_type,
-                team: row.team,
+                team: row.side
+                  ? row.side === (match?.is_home ? "home" : "away")
+                    ? "own"
+                    : "opponent"
+                  : row.team,
                 matchElapsedMs: row.match_elapsed_ms,
                 loggedByUserId: row.logged_by_user_id,
                 athleteId: row.athlete_id,
@@ -1004,10 +1052,20 @@ export async function checkOfflineReadiness(
       (async () => {
         if (!("caches" in window)) return false;
         const names = await caches.keys();
-        const appCaches = await Promise.all(names.map((name) => caches.open(name)));
-        return (await Promise.all(appCaches.map(async (cache) =>
-          Boolean(await cache.match(new URL("/index.html", window.location.origin).href)),
-        ))).some(Boolean);
+        const appCaches = await Promise.all(
+          names.map((name) => caches.open(name)),
+        );
+        return (
+          await Promise.all(
+            appCaches.map(async (cache) =>
+              Boolean(
+                await cache.match(
+                  new URL("/index.html", window.location.origin).href,
+                ),
+              ),
+            ),
+          )
+        ).some(Boolean);
       })(),
     ]);
   return {
@@ -1165,4 +1223,25 @@ export async function readSyncedMatchProjection(
     unresolvedReviewCount: row.unresolved_review_count,
     finalisationState: row.finalisation_state,
   };
+}
+
+export async function readSyncedSessionClockOperation(matchId: string) {
+  const db = await database();
+  return db.getOptional<{
+    period: import("@/features/matches/types").MatchClockPeriod;
+    elapsed_ms: number;
+    running: number;
+    applied_revision: number;
+    created_at: string;
+  }>(
+    `SELECT period, elapsed_ms, running, applied_revision, created_at
+       FROM match_clock_operations
+      WHERE session_id = (
+        SELECT shared_match_id FROM matches WHERE id = ?
+      )
+        AND outcome IN ('applied', 'applied_after_stale_base')
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [matchId],
+  );
 }

@@ -41,6 +41,7 @@ describe('SyncController', () => {
   it('issues a short-lived token containing the authorised team', async () => {
     process.env.POWERSYNC_URL = 'https://example.powersync.journeyapps.com';
     process.env.POWERSYNC_KID = 'test-key';
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     process.env.POWERSYNC_SHARED_SECRET = Buffer.from(
       'a sufficiently long development secret',
     ).toString('base64url');
@@ -57,6 +58,22 @@ describe('SyncController', () => {
     const result = await controller.token({ id: 'user-1' } as never);
     expect(result.endpoint).toBe(process.env.POWERSYNC_URL);
     expect(result.token.split('.')).toHaveLength(3);
+    const claims = JSON.parse(
+      Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    expect(claims).toMatchObject({
+      user_id: 'user-1',
+      team_id: 'team-1',
+      two_sided_live_logging: 'true',
+    });
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+    const disabledResult = await controller.token({ id: 'user-1' } as never);
+    const disabledClaims = JSON.parse(
+      Buffer.from(disabledResult.token.split('.')[1], 'base64url').toString(
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    expect(disabledClaims.two_sided_live_logging).toBe('false');
     expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });
 

@@ -1,6 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import type { Agent } from 'supertest';
 import type { App } from 'supertest/types';
@@ -68,6 +70,136 @@ describe('Offline collaborative sync (e2e)', () => {
       .expect(201);
     return (started.body as { id: string }).id;
   }
+
+  it('authorizes shared event and candidate streams by current session membership', async () => {
+    const homeIdentity = uniqueTestIdentity('sync-home');
+    const awayIdentity = uniqueTestIdentity('sync-away');
+    const unrelatedIdentity = uniqueTestIdentity('sync-unrelated');
+    identities.push(homeIdentity, awayIdentity, unrelatedIdentity);
+    const home = await registerCoach(app.getHttpServer(), homeIdentity);
+    const away = await registerCoach(app.getHttpServer(), awayIdentity);
+    const unrelated = await registerCoach(
+      app.getHttpServer(),
+      unrelatedIdentity,
+    );
+    const homeMatchId = await createLiveMatch(home.agent);
+    const awayMatchId = await createLiveMatch(away.agent, false);
+    const database = app.get(DatabaseService).database;
+    const sessionId = randomUUID();
+    const eventId = randomUUID();
+    const reviewId = randomUUID();
+    const awayEventId = randomUUID();
+    const awayReviewId = randomUUID();
+    await database.execute(sql`
+      insert into match_sessions (id) values (${sessionId}::uuid)
+    `);
+    await database.execute(sql`
+      update matches set shared_match_id = ${sessionId}::uuid
+      where id in (${homeMatchId}::uuid, ${awayMatchId}::uuid);
+    `);
+    await database.execute(sql`
+      insert into match_session_participants (session_id, team_id, side)
+      values (${sessionId}::uuid, ${home.team.id}::uuid, 'home'),
+             (${sessionId}::uuid, ${away.team.id}::uuid, 'away')
+    `);
+    await database.execute(sql`
+      insert into match_events
+        (id, match_id, session_id, side, team, event_type, minute, logged_by_user_id)
+      values (${eventId}::uuid, ${homeMatchId}::uuid, ${sessionId}::uuid,
+              'home', 'own', 'goal', 12, ${home.user.id})
+    `);
+    await database.execute(sql`
+      insert into match_event_reviews
+        (id, match_id, session_id, canonical_event_id, observation_ids, reason)
+      values (${reviewId}::uuid, ${homeMatchId}::uuid, ${sessionId}::uuid,
+              ${eventId}::uuid, '[]'::jsonb, 'cross-side candidate')
+    `);
+    await database.execute(sql`
+      insert into match_events
+        (id, match_id, session_id, side, team, event_type, minute, logged_by_user_id)
+      values (${awayEventId}::uuid, ${awayMatchId}::uuid, ${sessionId}::uuid,
+              'away', 'own', 'goal', 15, ${away.user.id})
+    `);
+    await database.execute(sql`
+      insert into match_event_reviews
+        (id, match_id, session_id, canonical_event_id, observation_ids, reason)
+      values (${awayReviewId}::uuid, ${awayMatchId}::uuid, ${sessionId}::uuid,
+              ${awayEventId}::uuid, '[]'::jsonb, 'cross-side candidate')
+    `);
+
+    const config = readFileSync(
+      resolve(__dirname, '../../powersync/sync-config.yaml'),
+      'utf8',
+    );
+    const streamSql = (name: string) => {
+      const start = config.indexOf(`  ${name}:`);
+      const nextMatch = /\n  [a-z][a-z0-9_]*:/g;
+      nextMatch.lastIndex = start + 3;
+      const end = nextMatch.exec(config)?.index ?? config.length;
+      return config
+        .slice(start, end)
+        .split(/query:\s*\|\s*\n/)[1]
+        .split('\n')
+        .map((line) => line.replace(/^\s{6}/, ''))
+        .join('\n')
+        .replaceAll("auth.parameter('team_id')", `'$TEAM_ID'`)
+        .replaceAll("auth.parameter('user_id')", `'$USER_ID'`)
+        .replaceAll("auth.parameter('two_sided_live_logging')", "'true'");
+    };
+    const readRows = async (stream: string, teamId: string, userId: string) => {
+      const query = streamSql(stream)
+        .replaceAll('$TEAM_ID', teamId)
+        .replaceAll('$USER_ID', userId);
+      return database.execute(sql.raw(query));
+    };
+
+    for (const stream of [
+      'shared_session_match_events',
+      'shared_session_match_reviews',
+    ]) {
+      expect(
+        (await readRows(stream, home.team.id, home.user.id)).rows,
+      ).toHaveLength(1);
+      expect(
+        (await readRows(stream, away.team.id, away.user.id)).rows,
+      ).toHaveLength(1);
+      expect(
+        (await readRows(stream, unrelated.team.id, unrelated.user.id)).rows,
+      ).toHaveLength(0);
+    }
+    for (const stream of [
+      'shared_session_match_observations',
+      'shared_session_match_memberships',
+      'shared_session_match_operations',
+      'shared_session_match_projections',
+      'shared_session_match_clock_operations',
+    ]) {
+      await readRows(stream, home.team.id, home.user.id);
+    }
+
+    await database.execute(sql`
+      delete from team_members where user_id = ${away.user.id}
+        and team_id = ${away.team.id}::uuid
+    `);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_events',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_reviews',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
 
   it('reconciles session observations idempotently across match sheets', async () => {
     const identity = uniqueTestIdentity('session-reconcile');

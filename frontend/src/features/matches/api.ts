@@ -26,6 +26,7 @@ import {
   readSyncedMatchEvents,
   readSyncedObservationMemberships,
   readSyncedMatchProjection,
+  readSyncedSessionClockOperation,
   rejectQueuedEvent,
   setQueuedItemOutcome,
   setQueuedEventState,
@@ -36,15 +37,16 @@ export async function fetchMatch(matchId: string) {
     const match = await apiFetch<MatchRecord>(`/matches/${matchId}`, {
       cache: "no-store",
     });
-    await cacheResponse(`match:${matchId}`, match);
-    return match;
+    const withClock = await applySyncedSessionClock(matchId, match);
+    await cacheResponse(`match:${matchId}`, withClock);
+    return withClock;
   } catch (error) {
     const match =
       (await readSyncedPreparedMatch(matchId)) ??
       (await readCachedResponse<MatchRecord>(`match:${matchId}`));
     if (!match) throw error;
     const projection = await readSyncedMatchProjection(matchId);
-    return projection
+    const withProjection = projection
       ? {
           ...match,
           teamScore: projection.provisionalTeamScore,
@@ -52,6 +54,28 @@ export async function fetchMatch(matchId: string) {
           projection,
         }
       : match;
+    return applySyncedSessionClock(matchId, withProjection);
+  }
+}
+
+async function applySyncedSessionClock(
+  matchId: string,
+  match: MatchRecord,
+): Promise<MatchRecord> {
+  try {
+    const clock = await readSyncedSessionClockOperation(matchId);
+    if (!clock) return match;
+    return {
+      ...match,
+      clockPeriod: clock.period,
+      clockElapsedMs: clock.elapsed_ms,
+      clockStartedAt: clock.running ? clock.created_at : null,
+      clockRevision: Math.max(match.clockRevision, clock.applied_revision),
+    };
+  } catch {
+    // Keep the API/cache result usable if the local PowerSync database is
+    // unavailable; shared clock data is an offline enhancement.
+    return match;
   }
 }
 
@@ -115,6 +139,32 @@ export async function fetchMatchEvents(matchId: string) {
     else if (cached) events = cached;
     else throw error;
   }
+  const syncedEvents = await readSyncedMatchEvents(matchId);
+  const eventsById = new Map(events.map((event) => [event.id, event]));
+  for (const synced of syncedEvents) {
+    const online = eventsById.get(synced.id);
+    eventsById.set(
+      synced.id,
+      online
+        ? {
+            ...synced,
+            ...online,
+            team: synced.side ? synced.team : online.team,
+            side: synced.side ?? online.side,
+            athleteId: online.athleteId ?? synced.athleteId,
+            athlete: online.athlete ?? synced.athlete,
+            opponentPlayerId:
+              online.opponentPlayerId ?? synced.opponentPlayerId,
+            opponentPlayer: online.opponentPlayer ?? synced.opponentPlayer,
+          }
+        : synced,
+    );
+  }
+  events = [...eventsById.values()].sort(
+    (left, right) =>
+      right.minute - left.minute ||
+      right.createdAt.localeCompare(left.createdAt),
+  );
   const allQueued = await listQueuedEvents(matchId);
   const memberships = await readSyncedObservationMemberships(matchId);
   const canonicalIds = new Set(events.map((event) => event.id));

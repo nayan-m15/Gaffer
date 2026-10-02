@@ -14,6 +14,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { MatchesService } from '../matches/matches.service';
+import { twoSidedLiveLoggingEnabled } from '../matches/match-sessions';
 import { DatabaseService } from '../database/database.service';
 import {
   matchEventOperations,
@@ -64,6 +65,8 @@ export class SyncController {
         exp: expiresAt,
         team_id: team?.id ?? null,
         team_role: team?.role ?? null,
+        user_id: user.id,
+        two_sided_live_logging: twoSidedLiveLoggingEnabled() ? 'true' : 'false',
       }),
     ).toString('base64url');
     const unsigned = `${header}.${payload}`;

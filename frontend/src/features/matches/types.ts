@@ -1,4 +1,5 @@
 export type MatchEventTeam = "own" | "opponent";
+export type MatchSessionSide = "home" | "away";
 
 export type MatchEventType =
   | "goal"
@@ -23,11 +24,7 @@ export interface OpponentMatchPlayer {
 }
 
 export type MatchInsightStatus =
-  | "ready"
-  | "failed"
-  | "stale"
-  | "pending"
-  | "unavailable";
+  "ready" | "failed" | "stale" | "pending" | "unavailable";
 
 export interface MatchInsightHighlights {
   playerOfTheMatch?: { athleteName: string; reason: string } | null;
@@ -44,6 +41,8 @@ export interface MatchInsight {
 
 export interface MatchRecord {
   id: string;
+  /** Shared canonical session; absent on legacy and free-text matches. */
+  sharedSessionId?: string | null;
   eventId: string;
   competitionId: string | null;
   opponentName: string;
@@ -108,7 +107,8 @@ export interface FriendlyOpponentLineup {
   players: MatchSquadAthlete[];
   formationId?: string | null;
   pitchAssignments?: Record<string, string | null> | null;
-  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
+  customPositions?:
+    import("@/features/team-management/types").FormationPosition[] | null;
   confirmedAt?: string | null;
 }
 
@@ -117,6 +117,8 @@ export interface MatchLogEvent {
   matchId: string;
   athleteId: string | null;
   team: MatchEventTeam;
+  /** Actual fixture side for session events, independent of the viewer. */
+  side?: MatchSessionSide | null;
   opponentLabel: string | null;
   opponentPlayerId: string | null;
   eventType: MatchEventType;

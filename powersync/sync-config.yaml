@@ -80,6 +80,7 @@ streams:
     query: |
       SELECT matches.id,
              matches.event_id,
+             matches.shared_match_id,
              matches.competition_id,
              matches.opponent_name,
              matches.is_home,
@@ -152,8 +153,291 @@ streams:
   team_match_clock_operations:
     auto_subscribe: true
     query: |
-      SELECT match_clock_operations.*
+      SELECT match_clock_operations.id,
+             match_clock_operations.match_id,
+             COALESCE(match_clock_operations.session_id, matches.shared_match_id) AS session_id,
+             match_clock_operations.actor_user_id,
+             match_clock_operations.period,
+             match_clock_operations.elapsed_ms,
+             match_clock_operations.running,
+             match_clock_operations.base_revision,
+             match_clock_operations.applied_revision,
+             match_clock_operations.outcome,
+             match_clock_operations.payload_hash,
+             match_clock_operations.client_created_at,
+             match_clock_operations.created_at
       FROM match_clock_operations
       JOIN matches ON matches.id = match_clock_operations.match_id
       JOIN events ON events.id = matches.event_id
       WHERE events.team_id = auth.parameter('team_id')
+
+  # Shared streams contain only the session ledger. Participation is checked
+  # against current team membership on every subscription/query evaluation so
+  # deleting team_members revokes an already-issued short-lived sync token.
+  shared_session_match_events:
+    auto_subscribe: true
+    query: |
+      SELECT match_events.id,
+             match_events.session_id AS match_id,
+             match_events.session_id,
+             match_events.side,
+             match_events.team,
+             match_events.event_type,
+             match_events.minute,
+             COALESCE(
+               match_events.opponent_label,
+               CASE WHEN event_athlete.id IS NOT NULL THEN
+                 concat_ws(' ', event_athlete.first_name, event_athlete.last_name) ||
+                 CASE WHEN event_athlete.squad_number IS NOT NULL
+                   THEN ' #' || event_athlete.squad_number::text ELSE '' END
+               END
+             ) AS opponent_label,
+             match_events.detail,
+             match_events.logged_by_user_id,
+             match_events.manually_adjusted,
+             match_events.client_request_id,
+             match_events.period,
+             match_events.match_elapsed_ms,
+             match_events.lifecycle_status,
+             match_events.projection_revision,
+             match_events.created_at,
+             match_events.updated_at
+      FROM match_events
+      LEFT JOIN athletes event_athlete ON event_athlete.id = match_events.athlete_id
+      WHERE match_events.session_id IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members membership ON membership.team_id = participant.team_id
+          WHERE participant.session_id = match_events.session_id
+            AND participant.team_id = auth.parameter('team_id')
+            AND membership.user_id = auth.parameter('user_id')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM matches source_match
+          JOIN events source_event ON source_event.id = source_match.event_id
+          WHERE source_match.id = match_events.match_id
+            AND source_event.team_id = auth.parameter('team_id')
+        )
+
+  shared_session_match_reviews:
+    auto_subscribe: true
+    query: |
+      SELECT match_event_reviews.id,
+             match_event_reviews.session_id AS match_id,
+             match_event_reviews.session_id,
+             match_event_reviews.canonical_event_id,
+             match_event_reviews.observation_ids,
+             match_event_reviews.review_version,
+             match_event_reviews.reason,
+             match_event_reviews.status,
+             match_event_reviews.resolution,
+             match_event_reviews.resolved_by_user_id,
+             match_event_reviews.resolved_at,
+             match_event_reviews.created_at,
+             match_event_reviews.updated_at
+      FROM match_event_reviews
+      WHERE match_event_reviews.session_id IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members membership ON membership.team_id = participant.team_id
+          WHERE participant.session_id = match_event_reviews.session_id
+            AND participant.team_id = auth.parameter('team_id')
+            AND membership.user_id = auth.parameter('user_id')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM matches source_match
+          JOIN events source_event ON source_event.id = source_match.event_id
+          WHERE source_match.id = match_event_reviews.match_id
+            AND source_event.team_id = auth.parameter('team_id')
+        )
+
+  shared_session_match_observations:
+    auto_subscribe: true
+    query: |
+      SELECT observation.id,
+             observation.session_id AS match_id,
+             observation.session_id,
+             observation.side,
+             observation.logged_by_user_id,
+             observation.event_type,
+             observation.team,
+             observation.opponent_label,
+             observation.period,
+             observation.match_elapsed_ms,
+             observation.client_created_at,
+             observation.server_received_at
+      FROM match_event_observations observation
+      WHERE observation.session_id IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members membership ON membership.team_id = participant.team_id
+          WHERE participant.session_id = observation.session_id
+            AND participant.team_id = auth.parameter('team_id')
+            AND membership.user_id = auth.parameter('user_id')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM matches source_match
+          JOIN events source_event ON source_event.id = source_match.event_id
+          WHERE source_match.id = observation.match_id
+            AND source_event.team_id = auth.parameter('team_id')
+        )
+
+  shared_session_match_memberships:
+    auto_subscribe: true
+    query: |
+      SELECT membership.observation_id AS id,
+             observation.session_id AS match_id,
+             observation.session_id,
+             membership.canonical_event_id,
+             membership.projection_revision,
+             membership.created_at
+      FROM match_event_memberships membership
+      JOIN match_event_observations observation ON observation.id = membership.observation_id
+      WHERE observation.session_id IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members current_membership ON current_membership.team_id = participant.team_id
+          WHERE participant.session_id = observation.session_id
+            AND participant.team_id = auth.parameter('team_id')
+            AND current_membership.user_id = auth.parameter('user_id')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM matches source_match
+          JOIN events source_event ON source_event.id = source_match.event_id
+          WHERE source_match.id = observation.match_id
+            AND source_event.team_id = auth.parameter('team_id')
+        )
+
+  shared_session_match_operations:
+    auto_subscribe: true
+    query: |
+      SELECT operation.id,
+             operation.session_id AS match_id,
+             operation.session_id,
+             operation.actor_user_id,
+             operation.operation_type,
+             operation.target_observation_ids,
+             operation.canonical_event_id,
+             operation.causal_parent_ids,
+             jsonb_build_object(
+               'reviewId', operation.decision -> 'reviewId',
+               'resolution', operation.decision -> 'resolution'
+             ) AS decision,
+             operation.reason,
+             operation.schema_version,
+             operation.created_at
+      FROM match_event_operations operation
+      WHERE operation.session_id IS NOT NULL
+        AND operation.operation_type IN ('merge', 'separate')
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members membership ON membership.team_id = participant.team_id
+          WHERE participant.session_id = operation.session_id
+            AND participant.team_id = auth.parameter('team_id')
+            AND membership.user_id = auth.parameter('user_id')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM matches source_match
+          JOIN events source_event ON source_event.id = source_match.event_id
+          WHERE source_match.id = operation.match_id
+            AND source_event.team_id = auth.parameter('team_id')
+        )
+
+  shared_session_match_projections:
+    auto_subscribe: true
+    query: |
+      SELECT viewer_match.id AS id,
+             source_projection.session_id,
+             source_projection.revision,
+             source_projection.input_digest,
+             source_projection.rules_version,
+             CASE WHEN source_match.is_home = viewer_match.is_home
+               THEN source_projection.confirmed_team_score
+               ELSE source_projection.confirmed_opponent_score END AS confirmed_team_score,
+             CASE WHEN source_match.is_home = viewer_match.is_home
+               THEN source_projection.confirmed_opponent_score
+               ELSE source_projection.confirmed_team_score END AS confirmed_opponent_score,
+             CASE WHEN source_match.is_home = viewer_match.is_home
+               THEN source_projection.provisional_team_score
+               ELSE source_projection.provisional_opponent_score END AS provisional_team_score,
+             CASE WHEN source_match.is_home = viewer_match.is_home
+               THEN source_projection.provisional_opponent_score
+               ELSE source_projection.provisional_team_score END AS provisional_opponent_score,
+             CASE WHEN source_match.is_home = viewer_match.is_home
+               THEN source_projection.possible_effects
+               ELSE (source_projection.possible_effects - 'teamGoals' - 'opponentGoals') ||
+                 jsonb_build_object(
+                   'teamGoals', source_projection.possible_effects -> 'opponentGoals',
+                   'opponentGoals', source_projection.possible_effects -> 'teamGoals'
+                 ) END AS possible_effects,
+             source_projection.disciplinary_projection,
+             source_projection.unresolved_review_count,
+             source_projection.finalisation_state,
+             source_projection.finalised_by_user_id,
+             source_projection.finalised_at,
+             source_projection.created_at,
+             source_projection.updated_at
+      FROM match_projection_state source_projection
+      JOIN matches source_match ON source_match.id = source_projection.match_id
+      JOIN events source_event ON source_event.id = source_match.event_id
+      JOIN match_session_participants participant
+        ON participant.session_id = source_projection.session_id
+       AND participant.team_id = auth.parameter('team_id')
+      JOIN team_members membership
+        ON membership.team_id = participant.team_id
+       AND membership.user_id = auth.parameter('user_id')
+      JOIN matches viewer_match
+        ON viewer_match.shared_match_id = source_projection.session_id
+       AND viewer_match.id <> source_match.id
+      JOIN events viewer_event
+        ON viewer_event.id = viewer_match.event_id
+       AND viewer_event.team_id = participant.team_id
+      WHERE source_projection.session_id IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND source_event.team_id <> participant.team_id
+
+  shared_session_match_clock_operations:
+    auto_subscribe: true
+    query: |
+      SELECT operation.id,
+             COALESCE(operation.session_id, clock_match.shared_match_id) AS match_id,
+             COALESCE(operation.session_id, clock_match.shared_match_id) AS session_id,
+             operation.actor_user_id,
+             operation.period,
+             operation.elapsed_ms,
+             operation.running,
+             operation.base_revision,
+             operation.applied_revision,
+             operation.outcome,
+             operation.payload_hash,
+             operation.client_created_at,
+             operation.created_at
+      FROM match_clock_operations operation
+      JOIN matches clock_match ON clock_match.id = operation.match_id
+      JOIN events clock_event ON clock_event.id = clock_match.event_id
+      WHERE COALESCE(operation.session_id, clock_match.shared_match_id) IS NOT NULL
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND EXISTS (
+          SELECT 1
+          FROM match_session_participants participant
+          JOIN team_members membership ON membership.team_id = participant.team_id
+          WHERE participant.session_id = COALESCE(operation.session_id, clock_match.shared_match_id)
+            AND participant.team_id = auth.parameter('team_id')
+            AND membership.user_id = auth.parameter('user_id')
+        )
+        AND clock_event.team_id <> auth.parameter('team_id')
