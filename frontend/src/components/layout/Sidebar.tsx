@@ -206,8 +206,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border/70 px-4 py-4">
-        {/* Profile — clickable to open the profile editor (coach only) */}
-        {resolvedVariant !== "player" && (
+        {/* Profile — available to coaches, assistants, and players. */}
         <button
           onClick={() => {
             setIsMobileOpen(false);
@@ -224,19 +223,19 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 className="size-full rounded-full object-cover"
               />
             ) : (
-              (user?.name?.charAt(0).toUpperCase() ?? "C")
+              (user?.name?.charAt(0).toUpperCase() ??
+                (resolvedVariant === "player" ? "P" : "C"))
             )}
           </div>
           <div className={cn("min-w-0 flex-1", !expanded && "lg:hidden")}>
             <p className="truncate text-sm font-medium text-sidebar-foreground">
-              {user?.name ?? "Coach"}
+              {user?.name ?? (resolvedVariant === "player" ? "Player" : "Coach")}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {team?.name ?? "Your Team"}
+              {team?.name ?? (resolvedVariant === "player" ? "Player Account" : "Your Team")}
             </p>
           </div>
         </button>
-        )}
 
         {/* Theme toggle */}
         <button
