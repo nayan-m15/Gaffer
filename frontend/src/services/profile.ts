@@ -95,3 +95,18 @@ export async function deleteProfile(): Promise<{ status: true }> {
     method: "DELETE",
   });
 }
+
+
+export interface ChangeEmailInput {
+  newEmail: string;
+}
+
+/** Starts Better Auth's verified email-change flow for the signed-in user. */
+export async function requestEmailChange(
+  input: ChangeEmailInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/change-email", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

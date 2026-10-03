@@ -60,6 +60,7 @@ export default function LoginPage() {
   const errorParam = searchParams.get("error");
   const verifiedParam = searchParams.get("verified");
   const resetParam = searchParams.get("reset");
+  const emailChangedParam = searchParams.get("emailChanged");
 
   useEffect(() => {
     if (errorParam === "google") {
@@ -75,7 +76,11 @@ export default function LoginPage() {
     if (resetParam === "1") {
       setNotice("Password reset successfully — sign in with your new password.");
     }
-  }, [errorParam, verifiedParam, resetParam]);
+
+    if (emailChangedParam === "1") {
+      setNotice("Email changed successfully — sign in with your new email address.");
+    }
+  }, [errorParam, verifiedParam, resetParam, emailChangedParam]);
 
   /* ── Force dark theme for the login page ─────────────────────────────── */
   useEffect(() => {

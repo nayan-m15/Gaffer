@@ -17,6 +17,7 @@ import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
 import { AuthService } from './auth.service';
 import {
+  changeEmailSchema,
   changePasswordSchema,
   setPasswordSchema,
   requestPasswordResetSchema,
@@ -301,6 +302,38 @@ export class AuthController {
     }
   }
 
+
+
+  @UseGuards(AuthGuard)
+  @Post('change-email')
+  async changeEmail(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+    @CurrentUser() user: AuthenticatedRequest['user'],
+  ) {
+    const dto = zodValidate(changeEmailSchema, body);
+
+    if (dto.newEmail.toLowerCase() === user.email.toLowerCase()) {
+      throw new HttpException(
+        'New email address must be different from your current email address.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      await auth.api.changeEmail({
+        body: {
+          newEmail: dto.newEmail,
+          callbackURL: `${FRONTEND_URL}/login?emailChanged=1`,
+        },
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      return { status: true };
+    } catch (error) {
+      throw toHttpException(error);
+    }
+  }
 
 
   @UseGuards(AuthGuard)

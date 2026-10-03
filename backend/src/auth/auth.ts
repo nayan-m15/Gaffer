@@ -2,7 +2,11 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { createDatabaseClient } from '../database/drizzle';
 import * as schema from '../database/schema';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../email/email';
+import {
+  sendEmailChangeConfirmationEmail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from '../email/email';
 
 /**
  * The single Better Auth instance for the backend.
@@ -33,6 +37,20 @@ export const auth = betterAuth({
     schema,
     transaction: false,
   }),
+  user: {
+    changeEmail: {
+      enabled: true,
+      updateEmailWithoutVerification: false,
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        await sendEmailChangeConfirmationEmail({
+          to: user.email,
+          name: user.name,
+          newEmail,
+          url,
+        });
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,

@@ -29,6 +29,7 @@ import {
   deleteProfile,
   getPasswordStatus,
   getProfile,
+  requestEmailChange,
   setPassword,
   updateProfile,
   type BackendProfile,
@@ -345,6 +346,7 @@ function ProfileBody({
       {/* Edit form or read-only details */}
       {isEditing ? (
         <EditForm
+          currentEmail={profile.email}
           editName={editName}
           editPhoneNumber={editPhoneNumber}
           editSex={editSex}
@@ -450,6 +452,7 @@ function DetailRow({ icon, label, value }: DetailRowProps) {
 }
 
 interface EditFormProps {
+  currentEmail: string;
   editName: string;
   editPhoneNumber: string;
   editSex: Sex | "";
@@ -466,6 +469,7 @@ interface EditFormProps {
 }
 
 function EditForm({
+  currentEmail,
   editName,
   editPhoneNumber,
   editSex,
@@ -482,8 +486,10 @@ function EditForm({
 }: EditFormProps) {
   const errorMessage = validationError ?? getMutationMessage(mutationError);
   const today = new Date().toISOString().slice(0, 10);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -575,8 +581,40 @@ function EditForm({
         </div>
         </div>
 
-        {/* Security stays compact; password editing happens in its own modal. */}
-        <div className="border-t border-border pt-4">
+        {/* Account security actions stay compact and open in dedicated dialogs. */}
+        <div className="space-y-3 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Mail className="size-4 shrink-0 text-muted-foreground" />
+                Email address
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {currentEmail}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEmailNotice(null);
+                setIsEmailDialogOpen(true);
+              }}
+              disabled={isSaving}
+              className="shrink-0"
+            >
+              Change
+            </Button>
+          </div>
+
+          {emailNotice && (
+            <p className="flex items-center gap-1.5 text-sm text-brand">
+              <Check className="size-3.5 shrink-0" />
+              {emailNotice}
+            </p>
+          )}
+
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3.5">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -584,7 +622,7 @@ function EditForm({
                 Password
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Manage your email and password sign-in security.
+                Manage your password and email/password sign-in.
               </p>
             </div>
             <Button
@@ -603,7 +641,7 @@ function EditForm({
           </div>
 
           {passwordNotice && (
-            <p className="mt-2 flex items-center gap-1.5 text-sm text-brand">
+            <p className="flex items-center gap-1.5 text-sm text-brand">
               <Check className="size-3.5 shrink-0" />
               {passwordNotice}
             </p>
@@ -670,6 +708,16 @@ function EditForm({
         </div>
       </form>
 
+      <EmailManagementDialog
+        isOpen={isEmailDialogOpen}
+        currentEmail={currentEmail}
+        onClose={() => setIsEmailDialogOpen(false)}
+        onRequested={(message) => {
+          setEmailNotice(message);
+          setIsEmailDialogOpen(false);
+        }}
+      />
+
       <PasswordManagementDialog
         isOpen={isPasswordDialogOpen}
         onClose={() => setIsPasswordDialogOpen(false)}
@@ -684,6 +732,230 @@ function EditForm({
         onClose={() => setIsDeleteDialogOpen(false)}
       />
     </>
+  );
+}
+
+interface EmailManagementDialogProps {
+  isOpen: boolean;
+  currentEmail: string;
+  onClose: () => void;
+  onRequested: (message: string) => void;
+}
+
+function EmailManagementDialog({
+  isOpen,
+  currentEmail,
+  onClose,
+  onRequested,
+}: EmailManagementDialogProps) {
+  const [newEmail, setNewEmail] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const emailMutation = useMutation({
+    mutationFn: requestEmailChange,
+  });
+
+  useEffect(() => {
+    if (isOpen) return;
+    setNewEmail("");
+    setConfirmEmail("");
+    setValidationError(null);
+    emailMutation.reset();
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isOpen) return null;
+
+  const mutationError = getMutationMessage(emailMutation.error ?? null);
+  const errorMessage = validationError ?? mutationError;
+
+  const clearFeedback = () => {
+    setValidationError(null);
+    emailMutation.reset();
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const next = newEmail.trim().toLowerCase();
+    const confirmation = confirmEmail.trim().toLowerCase();
+    const current = currentEmail.trim().toLowerCase();
+
+    if (!next) {
+      setValidationError("New email address is required.");
+      return;
+    }
+    if (next.length > 255) {
+      setValidationError("Email must be 255 characters or fewer.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
+      setValidationError("Enter a valid email address.");
+      return;
+    }
+    if (next === current) {
+      setValidationError("New email address must be different from your current email address.");
+      return;
+    }
+    if (!confirmation) {
+      setValidationError("Please confirm your new email address.");
+      return;
+    }
+    if (confirmation !== next) {
+      setValidationError("Email addresses do not match.");
+      return;
+    }
+
+    setValidationError(null);
+
+    try {
+      await emailMutation.mutateAsync({ newEmail: next });
+      onRequested(
+        `Email change requested. Check ${currentEmail} to approve the change, then verify ${next}.`,
+      );
+    } catch {
+      // Error is rendered below from emailMutation.error.
+    }
+  };
+
+  const inputClass = cn(
+    "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
+    errorMessage && "border-destructive",
+    emailMutation.isPending && "opacity-60",
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={emailMutation.isPending ? undefined : onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="email-dialog-title"
+        className="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <Mail className="size-5 text-primary" />
+              <h3 id="email-dialog-title" className="text-lg font-bold text-foreground">
+                Change Email Address
+              </h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              For security, you will approve the request from your current email first, then verify the new address.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            onClick={onClose}
+            disabled={emailMutation.isPending}
+            aria-label="Close email dialog"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-border bg-muted/20 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Current email
+          </p>
+          <p className="mt-1 break-all text-sm font-medium text-foreground">{currentEmail}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="new-email"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              New email
+            </label>
+            <input
+              id="new-email"
+              type="email"
+              value={newEmail}
+              onChange={(event) => {
+                setNewEmail(event.target.value);
+                clearFeedback();
+              }}
+              disabled={emailMutation.isPending}
+              autoComplete="email"
+              maxLength={255}
+              autoFocus
+              className={inputClass}
+              placeholder="name@example.com"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="confirm-new-email"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Confirm new email
+            </label>
+            <input
+              id="confirm-new-email"
+              type="email"
+              value={confirmEmail}
+              onChange={(event) => {
+                setConfirmEmail(event.target.value);
+                clearFeedback();
+              }}
+              disabled={emailMutation.isPending}
+              autoComplete="off"
+              maxLength={255}
+              className={inputClass}
+              placeholder="name@example.com"
+            />
+          </div>
+
+          {errorMessage && (
+            <p className="flex items-center gap-1.5 text-sm text-destructive">
+              <AlertCircle className="size-3.5 shrink-0" />
+              {errorMessage}
+            </p>
+          )}
+
+          <div className="rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+            Your account will continue using <strong className="text-foreground">{currentEmail}</strong> until both confirmation steps are complete.
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={emailMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <StatefulButton
+              type="submit"
+              disabled={emailMutation.isPending}
+              status={emailMutation.isPending ? "loading" : errorMessage ? "error" : "idle"}
+              loadingText="Sending…"
+              errorText="Try again"
+              className="gap-1.5"
+            >
+              {emailMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Mail className="size-4" />
+              )}
+              Send Confirmation
+            </StatefulButton>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

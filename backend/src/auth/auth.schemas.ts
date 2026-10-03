@@ -52,6 +52,15 @@ export const signInSchema = z.object({
 });
 export type SignInDto = z.infer<typeof signInSchema>;
 
+export const changeEmailSchema = z.object({
+  newEmail: z
+    .string()
+    .trim()
+    .email('Enter a valid email address.')
+    .max(255, 'Email must be 255 characters or fewer.'),
+});
+export type ChangeEmailDto = z.infer<typeof changeEmailSchema>;
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z

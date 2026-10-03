@@ -63,9 +63,55 @@ export async function sendVerificationEmail({
     subject: 'Verify your email address',
     htmlContent: `
       <p>Hi ${escapeHtml(name || 'Coach')},</p>
-      <p>Confirm your email address to finish setting up your Gaffer account.</p>
+      <p>Confirm this email address for your Gaffer account.</p>
       <p><a href="${url}">Verify email address</a></p>
-      <p>If you didn't create this account, you can safely ignore this email.</p>
+      <p>If you weren't expecting this message, you can safely ignore it.</p>
+    `,
+  });
+}
+
+export interface SendEmailChangeConfirmationInput {
+  to: string;
+  name: string;
+  newEmail: string;
+  url: string;
+}
+
+/**
+ * Confirms an email-address change with the account's current address before
+ * Better Auth sends its normal verification message to the new address.
+ */
+export async function sendEmailChangeConfirmationEmail({
+  to,
+  name,
+  newEmail,
+  url,
+}: SendEmailChangeConfirmationInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the email-change confirmation link instead of emailing it.\nTo: ${to}\nNew email: ${newEmail}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safeName = escapeHtml(name || 'User');
+  const safeNewEmail = escapeHtml(newEmail);
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to, name }],
+    subject: 'Confirm your Gaffer email change',
+    htmlContent: `
+      <p>Hi ${safeName},</p>
+      <p>We received a request to change the email address on your Gaffer account to <strong>${safeNewEmail}</strong>.</p>
+      <p><a href="${safeUrl}">Approve email change</a></p>
+      <p>After you approve this request, we will send a verification link to the new email address.</p>
+      <p>If you did not request this change, you can safely ignore this email and your current email will remain unchanged.</p>
     `,
   });
 }
