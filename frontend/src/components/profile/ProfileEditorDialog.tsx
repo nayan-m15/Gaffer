@@ -174,10 +174,10 @@ export function ProfileEditorDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
-        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl"
+        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
       >
-        {/* Header */}
-        <div className="mb-5 flex items-center justify-between">
+        {/* Header stays fixed while only the content area scrolls when needed. */}
+        <div className="flex shrink-0 items-center justify-between px-6 pb-4 pt-6">
           <h2
             id="profile-title"
             className="text-lg font-bold text-foreground"
@@ -195,8 +195,9 @@ export function ProfileEditorDialog({
           </Button>
         </div>
 
-        {/* Success banner */}
-        {showSuccess && (
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Success banner */}
+          {showSuccess && (
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2.5 text-sm text-brand">
             <Check className="size-4 shrink-0" />
             Profile updated successfully.
@@ -248,6 +249,7 @@ export function ProfileEditorDialog({
             onSave={handleSave}
           />
         ) : null}
+        </div>
       </div>
     </div>
   );
@@ -306,15 +308,15 @@ function ProfileBody({
   return (
     <>
       {/* Avatar + identity */}
-      <div className="mb-5 flex flex-col items-center gap-3 text-center">
+      <div className={cn("flex flex-col items-center text-center", isEditing ? "mb-4 gap-2" : "mb-5 gap-3")}>
         {profile.image ? (
           <img
             src={profile.image}
             alt=""
-            className="size-20 shrink-0 rounded-full object-cover"
+            className={cn("shrink-0 rounded-full object-cover", isEditing ? "size-16" : "size-20")}
           />
         ) : (
-          <div className="flex size-20 shrink-0 items-center justify-center rounded-full bg-primary/20 text-2xl font-bold text-primary">
+          <div className={cn("flex shrink-0 items-center justify-center rounded-full bg-primary/20 font-bold text-primary", isEditing ? "size-16 text-xl" : "size-20 text-2xl")}>
             {initials || <UserCircle className="size-10" />}
           </div>
         )}
@@ -478,119 +480,8 @@ function EditForm({
 }: EditFormProps) {
   const errorMessage = validationError ?? getMutationMessage(mutationError);
   const today = new Date().toISOString().slice(0, 10);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordValidationError, setPasswordValidationError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-
-  const passwordStatusQuery = useQuery({
-    queryKey: ["password-status"],
-    queryFn: getPasswordStatus,
-    enabled: isChangingPassword,
-  });
-  const hasPassword = passwordStatusQuery.data?.hasPassword ?? true;
-
-  const passwordMutation = useMutation({
-    mutationFn: async () => {
-      if (hasPassword) {
-        return changePassword({ currentPassword, newPassword });
-      }
-      return setPassword({ newPassword });
-    },
-  });
-
-  const resetPasswordForm = () => {
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowCurrentPassword(false);
-    setShowNewPassword(false);
-    setShowConfirmPassword(false);
-    setPasswordValidationError(null);
-    setPasswordSuccess(null);
-    passwordMutation.reset();
-  };
-
-  const handleTogglePassword = () => {
-    if (isChangingPassword) {
-      resetPasswordForm();
-    }
-    setIsChangingPassword((value) => !value);
-  };
-
-  const clearPasswordFeedback = () => {
-    setPasswordValidationError(null);
-    setPasswordSuccess(null);
-    passwordMutation.reset();
-  };
-
-  const handlePasswordSubmit = async () => {
-    if (passwordStatusQuery.isPending) {
-      setPasswordValidationError("Checking your sign-in methods. Please try again in a moment.");
-      return;
-    }
-    if (passwordStatusQuery.isError) {
-      setPasswordValidationError("Could not determine whether this account already has a password.");
-      return;
-    }
-
-    if (hasPassword) {
-      if (!currentPassword) {
-        setPasswordValidationError("Current password is required.");
-        return;
-      }
-      if (currentPassword.length > 128) {
-        setPasswordValidationError("Current password must be 128 characters or fewer.");
-        return;
-      }
-    }
-
-    const newPasswordError = getNewPasswordValidationError(newPassword);
-    if (newPasswordError) {
-      setPasswordValidationError(newPasswordError.replace(/^Password/, "New password"));
-      return;
-    }
-    if (hasPassword && newPassword === currentPassword) {
-      setPasswordValidationError("New password must be different from your current password.");
-      return;
-    }
-    if (!confirmPassword) {
-      setPasswordValidationError("Please confirm your new password.");
-      return;
-    }
-    if (confirmPassword !== newPassword) {
-      setPasswordValidationError("Passwords do not match.");
-      return;
-    }
-
-    setPasswordValidationError(null);
-    setPasswordSuccess(null);
-
-    try {
-      await passwordMutation.mutateAsync();
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setPasswordSuccess(
-        hasPassword
-          ? "Password changed successfully. Other signed-in sessions have been revoked."
-          : "Password set successfully. You can now sign in with your email and password.",
-      );
-      if (!hasPassword) {
-        await passwordStatusQuery.refetch();
-      }
-    } catch {
-      // Error surfaced via passwordMutation.error below.
-    }
-  };
-
-  const passwordError =
-    passwordValidationError ?? getPasswordMutationMessage(passwordMutation.error ?? null);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -606,105 +497,342 @@ function EditForm({
     "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Name */}
-      <div>
-        <label className={labelClass} htmlFor="edit-name">
-          Name
-        </label>
-        <input
-          id="edit-name"
-          type="text"
-          value={editName}
-          onChange={(event) => onNameChange(event.target.value)}
-          disabled={isSaving}
-          autoFocus
-          maxLength={100}
-          className={inputClass}
-        />
-      </div>
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+        {/* Name */}
+        <div>
+          <label className={labelClass} htmlFor="edit-name">
+            Name
+          </label>
+          <input
+            id="edit-name"
+            type="text"
+            value={editName}
+            onChange={(event) => onNameChange(event.target.value)}
+            disabled={isSaving}
+            autoFocus
+            maxLength={100}
+            className={inputClass}
+          />
+        </div>
 
-      {/* Phone number */}
-      <div>
-        <label className={labelClass} htmlFor="edit-phone">
-          Phone Number
-        </label>
-        <input
-          id="edit-phone"
-          type="tel"
-          value={editPhoneNumber}
-          onChange={(event) => onPhoneNumberChange(event.target.value)}
-          disabled={isSaving}
-          placeholder="e.g. 07123 456789"
-          maxLength={30}
-          className={inputClass}
-        />
-      </div>
+        {/* Phone number */}
+        <div>
+          <label className={labelClass} htmlFor="edit-phone">
+            Phone Number
+          </label>
+          <input
+            id="edit-phone"
+            type="tel"
+            value={editPhoneNumber}
+            onChange={(event) => onPhoneNumberChange(event.target.value)}
+            disabled={isSaving}
+            placeholder="e.g. 07123 456789"
+            maxLength={30}
+            className={inputClass}
+          />
+        </div>
 
-      {/* Sex */}
-      <div>
-        <label className={labelClass} htmlFor="edit-sex">
-          Sex
-        </label>
-        <select
-          id="edit-sex"
-          value={editSex}
-          onChange={(event) =>
-            onSexChange(event.target.value as Sex | "")
-          }
-          disabled={isSaving}
-          className={inputClass}
-        >
-          <option value="">—</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="prefer_not_to_say">Prefer not to say</option>
-        </select>
-      </div>
+        {/* Sex */}
+        <div>
+          <label className={labelClass} htmlFor="edit-sex">
+            Sex
+          </label>
+          <select
+            id="edit-sex"
+            value={editSex}
+            onChange={(event) =>
+              onSexChange(event.target.value as Sex | "")
+            }
+            disabled={isSaving}
+            className={inputClass}
+          >
+            <option value="">—</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
+        </div>
 
-      {/* Date of birth */}
-      <div>
-        <label className={labelClass} htmlFor="edit-dob">
-          Date of Birth
-        </label>
-        <input
-          id="edit-dob"
-          type="date"
-          value={editDateOfBirth}
-          onChange={(event) => onDateOfBirthChange(event.target.value)}
-          disabled={isSaving}
-          max={today}
-          className={inputClass}
-        />
-      </div>
+        {/* Date of birth */}
+        <div>
+          <label className={labelClass} htmlFor="edit-dob">
+            Date of Birth
+          </label>
+          <input
+            id="edit-dob"
+            type="date"
+            value={editDateOfBirth}
+            onChange={(event) => onDateOfBirthChange(event.target.value)}
+            disabled={isSaving}
+            max={today}
+            className={inputClass}
+          />
+        </div>
+        </div>
 
-      <div className="border-t border-border pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleTogglePassword}
-          disabled={isSaving || passwordMutation.isPending}
-          className="w-full justify-between"
-        >
-          <span className="flex items-center gap-2">
-            <KeyRound className="size-4" />
-            {hasPassword ? "Change Password" : "Set Password"}
-          </span>
-          <span className="text-xs font-normal text-muted-foreground">
-            {isChangingPassword ? "Hide" : "Security"}
-          </span>
-        </Button>
+        {/* Security stays compact; password editing happens in its own modal. */}
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <KeyRound className="size-4 shrink-0 text-muted-foreground" />
+                Password
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Manage your email and password sign-in security.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPasswordNotice(null);
+                setIsPasswordDialogOpen(true);
+              }}
+              disabled={isSaving}
+              className="shrink-0"
+            >
+              Manage
+            </Button>
+          </div>
 
-        {isChangingPassword && (
-          <div className="mt-4 space-y-4 rounded-xl border border-border bg-muted/20 p-4">
-            <p className="text-xs text-muted-foreground">
+          {passwordNotice && (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-brand">
+              <Check className="size-3.5 shrink-0" />
+              {passwordNotice}
+            </p>
+          )}
+        </div>
+
+        {errorMessage && (
+          <p className="flex items-center gap-1.5 text-sm text-destructive">
+            <AlertCircle className="size-3.5" />
+            {errorMessage}
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            disabled={isSaving}
+          >
+            <X className="size-4" />
+            Cancel
+          </Button>
+          <StatefulButton
+            type="submit"
+            disabled={isSaving}
+            className="gap-1.5"
+            status={isSaving ? "loading" : errorMessage ? "error" : "idle"}
+            loadingText="Saving..."
+            errorText="Try again"
+          >
+            {isSaving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            {isSaving ? "Saving…" : "Save Profile"}
+          </StatefulButton>
+        </div>
+      </form>
+
+      <PasswordManagementDialog
+        isOpen={isPasswordDialogOpen}
+        onClose={() => setIsPasswordDialogOpen(false)}
+        onSuccess={(message) => {
+          setPasswordNotice(message);
+          setIsPasswordDialogOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+interface PasswordManagementDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (message: string) => void;
+}
+
+function PasswordManagementDialog({
+  isOpen,
+  onClose,
+  onSuccess,
+}: PasswordManagementDialogProps) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const passwordStatusQuery = useQuery({
+    queryKey: ["password-status"],
+    queryFn: getPasswordStatus,
+    enabled: isOpen,
+  });
+  const hasPassword = passwordStatusQuery.data?.hasPassword ?? true;
+
+  const passwordMutation = useMutation({
+    mutationFn: async () => {
+      if (hasPassword) {
+        return changePassword({ currentPassword, newPassword });
+      }
+      return setPassword({ newPassword });
+    },
+  });
+
+  useEffect(() => {
+    if (isOpen) return;
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setValidationError(null);
+    passwordMutation.reset();
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clearFeedback = () => {
+    setValidationError(null);
+    passwordMutation.reset();
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (passwordStatusQuery.isPending) {
+      setValidationError("Checking your sign-in methods. Please try again in a moment.");
+      return;
+    }
+    if (passwordStatusQuery.isError) {
+      setValidationError("Could not determine whether this account already has a password.");
+      return;
+    }
+
+    if (hasPassword) {
+      if (!currentPassword) {
+        setValidationError("Current password is required.");
+        return;
+      }
+      if (currentPassword.length > 128) {
+        setValidationError("Current password must be 128 characters or fewer.");
+        return;
+      }
+    }
+
+    const newPasswordError = getNewPasswordValidationError(newPassword);
+    if (newPasswordError) {
+      setValidationError(newPasswordError.replace(/^Password/, "New password"));
+      return;
+    }
+    if (hasPassword && newPassword === currentPassword) {
+      setValidationError("New password must be different from your current password.");
+      return;
+    }
+    if (!confirmPassword) {
+      setValidationError("Please confirm your new password.");
+      return;
+    }
+    if (confirmPassword !== newPassword) {
+      setValidationError("Passwords do not match.");
+      return;
+    }
+
+    setValidationError(null);
+
+    try {
+      await passwordMutation.mutateAsync();
+      if (!hasPassword) {
+        await passwordStatusQuery.refetch();
+      }
+      onSuccess(
+        hasPassword
+          ? "Password changed successfully. Other signed-in sessions have been revoked."
+          : "Password set successfully. You can now sign in with your email and password.",
+      );
+    } catch {
+      // Error surfaced below via passwordMutation.error.
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const passwordError =
+    validationError ?? getPasswordMutationMessage(passwordMutation.error ?? null);
+  const title = passwordStatusQuery.isPending
+    ? "Password Security"
+    : hasPassword
+      ? "Change Password"
+      : "Set Password";
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={passwordMutation.isPending ? undefined : onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="password-dialog-title"
+        className="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <KeyRound className="size-5 text-primary" />
+              <h3 id="password-dialog-title" className="text-lg font-bold text-foreground">
+                {title}
+              </h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
               {passwordStatusQuery.isPending
                 ? "Checking your account security settings…"
                 : hasPassword
-                  ? "Enter your current password, then choose a new password that meets every requirement below."
-                  : "You currently sign in without a password. Set one here to also enable email and password sign-in."}
+                  ? "Enter your current password, then choose a secure new password."
+                  : "Create a password to enable email and password sign-in alongside your existing sign-in method."}
             </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            onClick={onClose}
+            disabled={passwordMutation.isPending}
+            aria-label="Close password dialog"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
 
+        {passwordStatusQuery.isError ? (
+          <div className="space-y-4">
+            <p className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              Could not load your password settings. Please try again.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void passwordStatusQuery.refetch()}>
+                Try again
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
             {hasPassword && !passwordStatusQuery.isPending && (
               <PasswordField
                 id="current-password"
@@ -712,7 +840,7 @@ function EditForm({
                 value={currentPassword}
                 onChange={(value) => {
                   setCurrentPassword(value);
-                  clearPasswordFeedback();
+                  clearFeedback();
                 }}
                 visible={showCurrentPassword}
                 onToggle={() => setShowCurrentPassword((value) => !value)}
@@ -720,33 +848,40 @@ function EditForm({
                 disabled={passwordMutation.isPending}
               />
             )}
-            <PasswordField
-              id="new-password"
-              label="New Password"
-              value={newPassword}
-              onChange={(value) => {
-                setNewPassword(value);
-                clearPasswordFeedback();
-              }}
-              visible={showNewPassword}
-              onToggle={() => setShowNewPassword((value) => !value)}
-              autoComplete="new-password"
-              disabled={passwordMutation.isPending}
-            />
-            <PasswordRequirements password={newPassword} />
-            <PasswordField
-              id="confirm-new-password"
-              label="Confirm New Password"
-              value={confirmPassword}
-              onChange={(value) => {
-                setConfirmPassword(value);
-                clearPasswordFeedback();
-              }}
-              visible={showConfirmPassword}
-              onToggle={() => setShowConfirmPassword((value) => !value)}
-              autoComplete="new-password"
-              disabled={passwordMutation.isPending}
-            />
+
+            {!passwordStatusQuery.isPending && (
+              <>
+                <PasswordField
+                  id="new-password"
+                  label="New Password"
+                  value={newPassword}
+                  onChange={(value) => {
+                    setNewPassword(value);
+                    clearFeedback();
+                  }}
+                  visible={showNewPassword}
+                  onToggle={() => setShowNewPassword((value) => !value)}
+                  autoComplete="new-password"
+                  disabled={passwordMutation.isPending}
+                />
+
+                <PasswordRequirements password={newPassword} />
+
+                <PasswordField
+                  id="confirm-new-password"
+                  label="Confirm New Password"
+                  value={confirmPassword}
+                  onChange={(value) => {
+                    setConfirmPassword(value);
+                    clearFeedback();
+                  }}
+                  visible={showConfirmPassword}
+                  onToggle={() => setShowConfirmPassword((value) => !value)}
+                  autoComplete="new-password"
+                  disabled={passwordMutation.isPending}
+                />
+              </>
+            )}
 
             {passwordError && (
               <p className="flex items-center gap-1.5 text-sm text-destructive">
@@ -754,17 +889,18 @@ function EditForm({
                 {passwordError}
               </p>
             )}
-            {passwordSuccess && (
-              <p className="flex items-center gap-1.5 text-sm text-brand">
-                <Check className="size-3.5 shrink-0" />
-                {passwordSuccess}
-              </p>
-            )}
 
-            <div className="flex justify-end">
-              <StatefulButton
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
                 type="button"
-                onClick={() => void handlePasswordSubmit()}
+                variant="ghost"
+                onClick={onClose}
+                disabled={passwordMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <StatefulButton
+                type="submit"
                 disabled={
                   passwordMutation.isPending ||
                   passwordStatusQuery.isPending ||
@@ -779,53 +915,13 @@ function EditForm({
                 ) : (
                   <KeyRound className="size-4" />
                 )}
-                {passwordMutation.isPending
-                  ? hasPassword
-                    ? "Changing…"
-                    : "Setting…"
-                  : hasPassword
-                    ? "Update Password"
-                    : "Set Password"}
+                {hasPassword ? "Update Password" : "Set Password"}
               </StatefulButton>
             </div>
-          </div>
+          </form>
         )}
       </div>
-
-      {errorMessage && (
-        <p className="flex items-center gap-1.5 text-sm text-destructive">
-          <AlertCircle className="size-3.5" />
-          {errorMessage}
-        </p>
-      )}
-
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={isSaving}
-        >
-          <X className="size-4" />
-          Cancel
-        </Button>
-        <StatefulButton
-          type="submit"
-          disabled={isSaving}
-          className="gap-1.5"
-          status={isSaving ? "loading" : errorMessage ? "error" : "idle"}
-          loadingText="Saving..."
-          errorText="Try again"
-        >
-          {isSaving ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Check className="size-4" />
-          )}
-          {isSaving ? "Saving…" : "Save Profile"}
-        </StatefulButton>
-      </div>
-    </form>
+    </div>
   );
 }
 
