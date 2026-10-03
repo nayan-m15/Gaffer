@@ -220,15 +220,20 @@ Product decisions are settled for implementation:
 
 - [x] Step 1 — Two-account generated-fixture regression test added using the real fixture materializer and two coach accounts. It covers a sheet started with the flag off and retried after activation.
 - [x] Step 2 — Existing sheets safely attach to the fixture's ensured session; conflicting session links return 409. No migration was needed: the existing unique constraints cover `matches.event_id`, fixture session links, and fixture participants.
-- [ ] Step 3 — Canonical home/away identity (exact next step; not started in this session).
-- [ ] Steps 4–7 — Not started.
+- [x] Step 3 — Canonical generated-fixture home/away identity is derived from fixture/session participants; existing sheets are normalized when attached to the shared session.
+- [x] Step 6 — Generated standings publish one completed fixture result using fixture-owned participants and scores. Legacy unlinked generated results remain supported through `linked_match_id`.
+- [ ] Step 4 — Not started; opponent lineup UI remains the next implementation step.
+- [ ] Step 5 and Step 7 — Not started.
 - [x] Step 8 — Authenticated event-link diagnostic and runbook instructions added; current participants can inspect IDs, nonparticipants receive 404.
 - [ ] Step 9 — Release gate and rollout not started.
 
 Verification and remaining expected failures:
 
-- The Step 1 session-link assertions pass after Step 2. Two explicit `it.todo` checks track expected failures until Steps 5–6: shared canonical report/timeline/result, and one fixture-oriented standings row. Per-sheet reports and per-sheet completed-result emission are still outside this session's scope.
+- The Step 1 session-link assertions pass after Step 2. The explicit `it.todo` for shared canonical report/timeline/result remains expected until Step 5. The Step 6 standings check is now an active assertion in the two-account generated-fixture test and verifies one result with fixture-owned IDs and scores.
 - The regression was replayed with the old existing-sheet return behavior: the two-account generated-fixture e2e failed at the shared-link assertion (`Expected: Any<String>; Received: null`). With the repair restored, the focused session-link test passed.
 - Backend e2e files run: `competitions.e2e-spec.ts` (focused generated-fixture case) and `team-isolation.e2e-spec.ts` (focused diagnostic case). The first pre-migration competitions run was blocked by the dedicated test database missing `shared_session_id`; `npm run db:migrate:test` applied 57 additive migrations before rerun. The first full team-isolation attempt had four passing tests and one test-setup failure (the new diagnostic fixture's test rows omitted required `opponent_name`); after correction, its focused diagnostic case passed. The complete e2e files were not rerun.
 - Browser e2e was not run; it is optional for this session. The required backend e2e command was used from `backend/` without `--experimental-vm-modules`.
 - Repair work was not started. No fixture/session rows were changed outside isolated e2e test data.
+- Step 3 and Step 6 implementation: `events.service.ts` derives generated and friendly orientation from fixture/session participant sides, including normalizing an existing sheet on session attach; `matches.service.ts` and timed-out finalisation translate results using fixture/session orientation; both competition standings readers consume one completed generated fixture row using `competition_fixtures` participants and stored final score. Older unlinked generated results remain eligible when referenced by `competition_fixtures.linked_match_id`; friendlies and standalone manual events are excluded.
+- Focused verification run after these changes: `node node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand test/competitions.e2e-spec.ts -t "starts both generated fixture sheets"` from `backend/`. It passed. Full `competitions.e2e-spec.ts`, Step 5 report/timeline coverage, reverse-orientation double-leg coverage, and Step 4 lineup coverage were not run/implemented in this session.
+- Stopped after Step 6 because Step 4 requires coordinated backend/API/UI privacy and kickoff-state work; it did not fit safely into the remaining focused scope. Exact next step: write the Step 4 focused e2e assertions first, then implement the allowlisted read-only lineup view for generated fixtures and accepted friendlies.

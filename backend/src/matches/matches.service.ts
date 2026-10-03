@@ -15,6 +15,7 @@ import {
   athleteMatchStats,
   athletes,
   competitions,
+  competitionFixtures,
   competitionTeams,
   events,
   matchEvents,
@@ -1505,7 +1506,7 @@ export class MatchesService {
   } | null> {
     if (!match.competitionId || !match.opponentCompetitionTeamId) return null;
 
-    const [[ownParticipant], [score]] = await Promise.all([
+    const [[ownParticipant], [score], [fixture]] = await Promise.all([
       this.databaseService.database
         .select({ id: competitionTeams.id })
         .from(competitionTeams)
@@ -1523,22 +1524,37 @@ export class MatchesService {
         })
         .from(matchEvents)
         .where(eq(matchEvents.matchId, match.id)),
+      match.sharedMatchId
+        ? this.databaseService.database
+            .select({
+              homeCompetitionTeamId:
+                competitionFixtures.homeCompetitionTeamId,
+              awayCompetitionTeamId:
+                competitionFixtures.awayCompetitionTeamId,
+            })
+            .from(competitionFixtures)
+            .where(eq(competitionFixtures.sharedSessionId, match.sharedMatchId))
+            .limit(1)
+        : Promise.resolve([]),
     ]);
     if (!ownParticipant) return null;
 
     const teamScore = score?.teamScore ?? 0;
     const opponentScore = score?.opponentScore ?? 0;
+    const ownTeamIsHome = fixture
+      ? fixture.homeCompetitionTeamId === ownParticipant.id
+      : match.isHome;
     return {
       competitionId: match.competitionId,
       result: {
-        homeCompetitionTeamId: match.isHome
-          ? ownParticipant.id
-          : match.opponentCompetitionTeamId,
-        awayCompetitionTeamId: match.isHome
-          ? match.opponentCompetitionTeamId
-          : ownParticipant.id,
-        homeScore: match.isHome ? teamScore : opponentScore,
-        awayScore: match.isHome ? opponentScore : teamScore,
+        homeCompetitionTeamId:
+          fixture?.homeCompetitionTeamId ??
+          (ownTeamIsHome ? ownParticipant.id : match.opponentCompetitionTeamId),
+        awayCompetitionTeamId:
+          fixture?.awayCompetitionTeamId ??
+          (ownTeamIsHome ? match.opponentCompetitionTeamId : ownParticipant.id),
+        homeScore: ownTeamIsHome ? teamScore : opponentScore,
+        awayScore: ownTeamIsHome ? opponentScore : teamScore,
       },
     };
   }

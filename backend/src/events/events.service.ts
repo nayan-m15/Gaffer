@@ -34,6 +34,7 @@ import {
   events,
   friendlyFixtures,
   gamePlans,
+  matchSessionParticipants,
   matches,
   opponentMatchPlayers,
   teams,
@@ -1069,7 +1070,12 @@ export class EventsService {
       opponentName,
       opponentCompetitionTeamId: competitionOpponent?.id ?? null,
       opponentTeamId: friendlyFixtureOpponent?.id ?? null,
-      isHome: dto.isHome,
+      // Fixture orientation is authoritative for generated and accepted
+      // friendlies. Keep client orientation only for standalone manual events.
+      isHome:
+        generatedFixtureOpponent?.isHome ??
+        friendlyFixtureOpponent?.isHome ??
+        dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
       gamePlanSnapshot: gamePlan
         ? {
@@ -1231,7 +1237,12 @@ export class EventsService {
         'The opponent is fixed by this generated competition fixture.',
       );
     }
-    return opponent;
+    return {
+      ...opponent,
+      isHome:
+        fixtureContext.ownCompetitionTeamId ===
+        fixtureContext.homeCompetitionTeamId,
+    };
   }
 
   private async getAcceptedFriendlyOpponent(teamId: string, fixtureId: string) {
@@ -1259,7 +1270,10 @@ export class EventsService {
     if (!opponentTeam) {
       throw new BadRequestException('Opponent team not found on Gaffer.');
     }
-    return opponentTeam;
+    return {
+      ...opponentTeam,
+      isHome: fixture.requesterTeamId === teamId,
+    };
   }
 
   private async replaceOpponentSquad(matchId: string, dto: StartMatchDto) {
@@ -1331,6 +1345,8 @@ export class EventsService {
     eventCompetitionId: string | null,
   ): Promise<{
     scheduleConfirmedAt: Date | null;
+    ownCompetitionTeamId: string;
+    homeCompetitionTeamId: string | null;
     opponent: { id: string; displayName: string } | null;
   }> {
     const [fixture] = await this.databaseService.database
@@ -1380,6 +1396,8 @@ export class EventsService {
     if (!opponentId) {
       return {
         scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+        ownCompetitionTeamId: ownParticipant.id,
+        homeCompetitionTeamId: fixture.homeCompetitionTeamId,
         opponent: null,
       };
     }
@@ -1400,6 +1418,8 @@ export class EventsService {
 
     return {
       scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+      ownCompetitionTeamId: ownParticipant.id,
+      homeCompetitionTeamId: fixture.homeCompetitionTeamId,
       opponent: opponent ?? null,
     };
   }
@@ -1607,11 +1627,47 @@ export class EventsService {
         'This match sheet is linked to a different shared session and needs review.',
       );
     }
-    if (match.sharedMatchId || !sharedSessionId) return match;
+    if (!sharedSessionId) return match;
+
+    const [event] = await this.databaseService.database
+      .select({ teamId: events.teamId })
+      .from(events)
+      .where(eq(events.id, match.eventId))
+      .limit(1);
+    const [participant] = event
+      ? await this.databaseService.database
+          .select({ side: matchSessionParticipants.side })
+          .from(matchSessionParticipants)
+          .where(
+            and(
+              eq(matchSessionParticipants.sessionId, sharedSessionId),
+              eq(matchSessionParticipants.teamId, event.teamId),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (!participant) {
+      throw new ConflictException(
+        'The fixture participant side could not be resolved safely.',
+      );
+    }
+    if (match.sharedMatchId === sharedSessionId) {
+      if (match.isHome === (participant.side === 'home')) return match;
+      const [normalized] = await this.databaseService.database
+        .update(matches)
+        .set({ isHome: participant.side === 'home', updatedAt: new Date() })
+        .where(eq(matches.id, match.id))
+        .returning();
+      return normalized ?? match;
+    }
 
     const [attached] = await this.databaseService.database
       .update(matches)
-      .set({ sharedMatchId: sharedSessionId, updatedAt: new Date() })
+      .set({
+        sharedMatchId: sharedSessionId,
+        isHome: participant.side === 'home',
+        updatedAt: new Date(),
+      })
       .where(and(eq(matches.id, match.id), isNull(matches.sharedMatchId)))
       .returning();
     if (attached) return attached;

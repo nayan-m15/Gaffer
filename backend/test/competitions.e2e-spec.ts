@@ -77,9 +77,6 @@ describe('Shared competitions (e2e)', () => {
   it.todo(
     'EXPECTED FAIL until Step 5: both generated-fixture reports expose the same canonical session timeline and result',
   );
-  it.todo(
-    'EXPECTED FAIL until Step 6: two completed sheets publish one fixture-oriented standings result',
-  );
 
   async function createCompetition(
     agent: ReturnType<typeof request.agent>,
@@ -459,11 +456,11 @@ describe('Shared competitions (e2e)', () => {
         awayEvent.id,
         awayAthletes.map((row) => row.id),
         fixture.homeCompetitionTeamId,
-        fixture.homeCompetitionTeamId !== homeParticipant.id,
+        fixture.homeCompetitionTeamId === homeParticipant.id,
       );
       const homeSheet = await homeCoach.agent
         .post(`/events/${homeEvent.id}/start-match`)
-        .send(homeStart)
+        .send({ ...homeStart, isHome: !homeStart.isHome })
         .expect(201)
         .then((response) => response.body as typeof homeSheetBeforeActivation);
 
@@ -487,20 +484,35 @@ describe('Shared competitions (e2e)', () => {
         bothSessionIdsPresent: true,
         sameSessionId: true,
       });
+      const persistedSides = await Promise.all(
+        [homeEvent.id, awayEvent.id].map(async (eventId) => {
+          const [row] = await database
+            .select({ eventId: matches.eventId, isHome: matches.isHome })
+            .from(matches)
+            .where(eq(matches.eventId, eventId));
+          return row;
+        }),
+      );
+      expect(persistedSides).toEqual(
+        expect.arrayContaining([
+          { eventId: homeEvent.id, isHome: true },
+          { eventId: awayEvent.id, isHome: false },
+        ]),
+      );
       const [homeRetry, awayRetry] = await Promise.all([
         start(
           homeCoach.agent,
           homeEvent.id,
           homeAthletes.map((row) => row.id),
           fixture.awayCompetitionTeamId,
-          fixture.homeCompetitionTeamId === homeParticipant.id,
+          fixture.homeCompetitionTeamId !== homeParticipant.id,
         ),
         start(
           awayCoach.agent,
           awayEvent.id,
           awayAthletes.map((row) => row.id),
           fixture.homeCompetitionTeamId,
-          fixture.homeCompetitionTeamId !== homeParticipant.id,
+          fixture.homeCompetitionTeamId === homeParticipant.id,
         ),
       ]);
       expect([homeRetry.id, awayRetry.id]).toEqual([
@@ -511,6 +523,36 @@ describe('Shared competitions (e2e)', () => {
         homeSheet.sharedMatchId,
         homeSheet.sharedMatchId,
       ]);
+      await database
+        .update(events)
+        .set({ status: 'completed' })
+        .where(eq(events.competitionFixtureId, fixture.id));
+      await database
+        .update(competitionFixtures)
+        .set({ status: 'completed', homeScore: 3, awayScore: 1 })
+        .where(eq(competitionFixtures.id, fixture.id));
+      const standingsDetail = (await homeCoach.agent
+        .get(`/competitions/${competition.id}`)
+        .expect(200)).body as {
+        results: Array<{
+          homeCompetitionTeamId: string;
+          awayCompetitionTeamId: string;
+          homeScore: number;
+          awayScore: number;
+        }>;
+        standings: Array<{ played: number }>;
+      };
+      expect(standingsDetail.results).toEqual([
+        expect.objectContaining({
+          homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+          awayCompetitionTeamId: fixture.awayCompetitionTeamId,
+          homeScore: 3,
+          awayScore: 1,
+        }),
+      ]);
+      expect(
+        standingsDetail.standings.reduce((played, row) => played + row.played, 0),
+      ).toBe(2);
     } finally {
       if (previousFlag === undefined) {
         delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
