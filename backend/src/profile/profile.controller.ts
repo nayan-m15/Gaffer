@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, UseGuards } from '@nestjs/common';
 import { AuthGuard, type SessionUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { zodValidate } from '../common/zod-validate';
@@ -8,9 +8,8 @@ import { ProfileService } from './profile.service';
 /**
  * Profile endpoints scoped to the authenticated user.
  *
- * Both routes are protected by `AuthGuard` so `CurrentUser` is always
- * available. The backend derives the target user from the session — the
- * frontend never sends a user ID.
+ * Every route is protected by `AuthGuard`, so the backend always derives the
+ * target user from the active session. The frontend never supplies a user ID.
  */
 @Controller('profile')
 @UseGuards(AuthGuard)
@@ -26,5 +25,10 @@ export class ProfileController {
   async updateProfile(@CurrentUser() user: SessionUser, @Body() body: unknown) {
     const input = zodValidate(updateProfileSchema, body);
     return this.profileService.updateProfile(user.id, input);
+  }
+
+  @Delete()
+  async deleteProfile(@CurrentUser() user: SessionUser) {
+    return this.profileService.deleteProfile(user.id);
   }
 }

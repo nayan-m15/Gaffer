@@ -203,9 +203,6 @@ export const playerClaimInvites = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
     usedByUserId: text('used_by_user_id').references(() => user.id),
-    proposedName: text('proposed_name'),
-    proposedTeamId: uuid('proposed_team_id').references(() => teams.id),
-    requestedByUserId: text('requested_by_user_id').references(() => user.id),
     ...timestamps,
   },
   (table) => [

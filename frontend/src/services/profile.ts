@@ -87,3 +87,11 @@ export async function setPassword(
     body: JSON.stringify(input),
   });
 }
+
+
+/** Permanently removes sign-in access and personal profile data for the current account. */
+export async function deleteProfile(): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>(PROFILE_PATH, {
+    method: "DELETE",
+  });
+}

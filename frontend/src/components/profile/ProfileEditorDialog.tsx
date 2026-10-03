@@ -12,6 +12,7 @@ import {
   Pencil,
   Phone,
   Shield,
+  Trash2,
   UserCircle,
   Users,
   X,
@@ -25,6 +26,7 @@ import { getNewPasswordValidationError } from "@/lib/password-policy";
 import { cn } from "@/lib/utils";
 import {
   changePassword,
+  deleteProfile,
   getPasswordStatus,
   getProfile,
   setPassword,
@@ -481,6 +483,7 @@ function EditForm({
   const errorMessage = validationError ?? getMutationMessage(mutationError);
   const today = new Date().toISOString().slice(0, 10);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -607,6 +610,31 @@ function EditForm({
           )}
         </div>
 
+        {/* Destructive account actions are deliberately separated from normal profile controls. */}
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                <Trash2 className="size-4 shrink-0" />
+                Delete account
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Permanently remove your sign-in access and personal profile data.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isSaving}
+              className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+
         {errorMessage && (
           <p className="flex items-center gap-1.5 text-sm text-destructive">
             <AlertCircle className="size-3.5" />
@@ -650,7 +678,159 @@ function EditForm({
           setIsPasswordDialogOpen(false);
         }}
       />
+
+      <DeleteAccountDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+      />
     </>
+  );
+}
+
+interface DeleteAccountDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function DeleteAccountDialog({ isOpen, onClose }: DeleteAccountDialogProps) {
+  const { user, signOut } = useAuth();
+  const [confirmation, setConfirmation] = useState("");
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProfile,
+  });
+
+  useEffect(() => {
+    if (isOpen) return;
+    setConfirmation("");
+    deleteMutation.reset();
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isOpen) return null;
+
+  const canDelete = confirmation.trim().toUpperCase() === "DELETE";
+  const errorMessage = getMutationMessage(deleteMutation.error ?? null);
+
+  const handleDelete = async () => {
+    if (!canDelete || deleteMutation.isPending) return;
+
+    try {
+      await deleteMutation.mutateAsync();
+      // The backend has already removed every auth session/account. Clear all
+      // cached/offline client state as well, then fully leave the protected app.
+      await signOut({ pendingData: "discard" });
+      window.location.assign("/login?accountDeleted=1");
+    } catch {
+      // Error is rendered below from deleteMutation.error.
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+        onClick={deleteMutation.isPending ? undefined : onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-title"
+        aria-describedby="delete-account-description"
+        className="relative w-full max-w-md rounded-2xl border border-destructive/30 bg-card p-6 shadow-2xl"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <Trash2 className="size-5 text-destructive" />
+              <h3 id="delete-account-title" className="text-lg font-bold text-foreground">
+                Delete account
+              </h3>
+            </div>
+            <p id="delete-account-description" className="text-sm text-muted-foreground">
+              This permanently removes your sign-in access and personal profile data.
+              Historical team and match records may retain an anonymous “Deleted User”
+              reference so shared sporting records are not destroyed.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            onClick={onClose}
+            disabled={deleteMutation.isPending}
+            aria-label="Close delete account dialog"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-sm">
+          <p className="font-semibold text-foreground">This action cannot be undone.</p>
+          {user?.email && (
+            <p className="mt-1 break-all text-xs text-muted-foreground">
+              Account: {user.email}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <label
+            htmlFor="delete-account-confirmation"
+            className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+          >
+            Type DELETE to confirm
+          </label>
+          <input
+            id="delete-account-confirmation"
+            type="text"
+            value={confirmation}
+            onChange={(event) => {
+              setConfirmation(event.target.value);
+              deleteMutation.reset();
+            }}
+            disabled={deleteMutation.isPending}
+            autoComplete="off"
+            autoFocus
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-destructive focus:ring-2 focus:ring-destructive/20"
+            placeholder="DELETE"
+          />
+        </div>
+
+        {errorMessage && (
+          <p className="mt-3 flex items-center gap-1.5 text-sm text-destructive">
+            <AlertCircle className="size-3.5 shrink-0" />
+            {errorMessage}
+          </p>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={deleteMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void handleDelete()}
+            disabled={!canDelete || deleteMutation.isPending}
+            className="gap-1.5"
+          >
+            {deleteMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            {deleteMutation.isPending ? "Deleting…" : "Delete account"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
