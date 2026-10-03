@@ -8,6 +8,8 @@ import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import {
   competitionTeams,
+  competitionFixtures,
+  athletes,
   events,
   matches,
   matchSessions,
@@ -71,6 +73,13 @@ describe('Shared competitions (e2e)', () => {
   function uniqueName(base: string): string {
     return `${base} ${randomUUID().slice(0, 8)}`;
   }
+
+  it.todo(
+    'EXPECTED FAIL until Step 5: both generated-fixture reports expose the same canonical session timeline and result',
+  );
+  it.todo(
+    'EXPECTED FAIL until Step 6: two completed sheets publish one fixture-oriented standings result',
+  );
 
   async function createCompetition(
     agent: ReturnType<typeof request.agent>,
@@ -305,6 +314,203 @@ describe('Shared competitions (e2e)', () => {
           awayConfirmedByUserId: null,
         })
         .where(eq(matchSessions.id, fixture.sharedSessionId!));
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      } else {
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+      }
+    }
+  });
+
+  it('starts both generated fixture sheets from separate coaches and records their session identity', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+    try {
+      const homeCoach = await newCoach('s3-two-account-home');
+      const awayCoach = await newCoach('s3-two-account-away');
+      const competition = (
+        await homeCoach.agent
+          .post('/competitions')
+          .send({
+            name: uniqueName('Two Account Generated Fixture'),
+            type: 'league',
+            format: 'league',
+            configuredTeamCount: 2,
+            startDate: '2027-01-01',
+            allowedPlayingDays: [6],
+          })
+          .expect(201)
+      ).body as CompetitionBody;
+      const added = (
+        await homeCoach.agent
+          .post(`/competitions/${competition.id}/teams`)
+          .send({ displayName: awayCoach.team.name })
+          .expect(201)
+      ).body as CompetitionTeamBody;
+      const database = app.get(DatabaseService).database;
+      await database
+        .update(competitionTeams)
+        .set({ teamId: awayCoach.team.id })
+        .where(eq(competitionTeams.id, added.id));
+
+      const fixtures = (
+        await homeCoach.agent
+          .post(`/competitions/${competition.id}/fixtures/generate`)
+          .send({})
+          .expect(201)
+      ).body as Array<{
+        id: string;
+        homeCompetitionTeamId: string;
+        awayCompetitionTeamId: string;
+      }>;
+      expect(fixtures).toHaveLength(1);
+      const fixture = fixtures[0];
+      const homeParticipant = competition.participants!.find(
+        (participant) => participant.teamId === homeCoach.team.id,
+      )!;
+      await database
+        .update(competitionFixtures)
+        .set({ scheduledAt: new Date(Date.now() - 24 * 60 * 60 * 1000) })
+        .where(eq(competitionFixtures.id, fixture.id));
+      await database
+        .update(competitionFixtures)
+        .set({
+          scheduleConfirmedAt: new Date(),
+          homeScheduleResponse: 'external_confirmed',
+          awayScheduleResponse: 'external_confirmed',
+        })
+        .where(eq(competitionFixtures.id, fixture.id));
+
+      const fixtureEvents = await database
+        .select({ id: events.id, teamId: events.teamId })
+        .from(events)
+        .where(eq(events.competitionFixtureId, fixture.id));
+      expect(fixtureEvents.map((row) => row.teamId).sort()).toEqual(
+        [homeCoach.team.id, awayCoach.team.id].sort(),
+      );
+      const now = new Date();
+      await database
+        .update(events)
+        .set({ scheduledAt: new Date(now.getTime() - 24 * 60 * 60 * 1000) })
+        .where(eq(events.competitionFixtureId, fixture.id));
+      const [homeEvent] = fixtureEvents.filter(
+        (event) => event.teamId === homeCoach.team.id,
+      );
+      const [awayEvent] = fixtureEvents.filter(
+        (event) => event.teamId === awayCoach.team.id,
+      );
+      const homeAthletes = await database
+        .insert(athletes)
+        .values(
+          Array.from({ length: 11 }, (_, index) => ({
+            teamId: homeCoach.team.id,
+            firstName: `Home${index}`,
+            lastName: 'Fixture Player',
+          })),
+        )
+        .returning({ id: athletes.id });
+      const awayAthletes = await database
+        .insert(athletes)
+        .values(
+          Array.from({ length: 11 }, (_, index) => ({
+            teamId: awayCoach.team.id,
+            firstName: `Away${index}`,
+            lastName: 'Fixture Player',
+          })),
+        )
+        .returning({ id: athletes.id });
+      const start = async (
+        agent: ReturnType<typeof request.agent>,
+        eventId: string,
+        athleteIds: string[],
+        opponentCompetitionTeamId: string,
+        isHome: boolean,
+      ) => {
+        const response = await agent
+          .post(`/events/${eventId}/start-match`)
+          .send({
+            opponentName: 'generated opponent',
+            opponentCompetitionTeamId,
+            isHome,
+            startingAthleteIds: athleteIds,
+          })
+          .expect(201);
+        return response.body as { id: string; sharedMatchId: string | null };
+      };
+      const homeStart = {
+        opponentName: 'generated opponent',
+        opponentCompetitionTeamId: fixture.awayCompetitionTeamId,
+        isHome: fixture.homeCompetitionTeamId === homeParticipant.id,
+        startingAthleteIds: homeAthletes.map((row) => row.id),
+      };
+      const homeStartedBeforeActivation = await homeCoach.agent
+        .post(`/events/${homeEvent.id}/start-match`)
+        .send(homeStart)
+        .expect(201);
+      const homeSheetBeforeActivation = homeStartedBeforeActivation.body as {
+        id: string;
+        sharedMatchId: string | null;
+      };
+      expect(homeSheetBeforeActivation.sharedMatchId).toBeNull();
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+      const awaySheet = await start(
+        awayCoach.agent,
+        awayEvent.id,
+        awayAthletes.map((row) => row.id),
+        fixture.homeCompetitionTeamId,
+        fixture.homeCompetitionTeamId !== homeParticipant.id,
+      );
+      const homeSheet = await homeCoach.agent
+        .post(`/events/${homeEvent.id}/start-match`)
+        .send(homeStart)
+        .expect(201)
+        .then((response) => response.body as typeof homeSheetBeforeActivation);
+
+      const identity = {
+        fixtureId: fixture.id,
+        eventIds: [homeEvent.id, awayEvent.id],
+        sheetIds: [homeSheet.id, awaySheet.id],
+        sessionIds: [homeSheet.sharedMatchId, awaySheet.sharedMatchId],
+      };
+      expect({
+        ...identity,
+        distinctSheetIds: homeSheet.id !== awaySheet.id,
+        bothSessionIdsPresent: identity.sessionIds.every(Boolean),
+        sameSessionId: identity.sessionIds[0] === identity.sessionIds[1],
+      }).toMatchObject({
+        fixtureId: fixture.id,
+        eventIds: [homeEvent.id, awayEvent.id],
+        sheetIds: [homeSheet.id, awaySheet.id],
+        sessionIds: [expect.any(String), expect.any(String)],
+        distinctSheetIds: true,
+        bothSessionIdsPresent: true,
+        sameSessionId: true,
+      });
+      const [homeRetry, awayRetry] = await Promise.all([
+        start(
+          homeCoach.agent,
+          homeEvent.id,
+          homeAthletes.map((row) => row.id),
+          fixture.awayCompetitionTeamId,
+          fixture.homeCompetitionTeamId === homeParticipant.id,
+        ),
+        start(
+          awayCoach.agent,
+          awayEvent.id,
+          awayAthletes.map((row) => row.id),
+          fixture.homeCompetitionTeamId,
+          fixture.homeCompetitionTeamId !== homeParticipant.id,
+        ),
+      ]);
+      expect([homeRetry.id, awayRetry.id]).toEqual([
+        homeSheet.id,
+        awaySheet.id,
+      ]);
+      expect([homeRetry.sharedMatchId, awayRetry.sharedMatchId]).toEqual([
+        homeSheet.sharedMatchId,
+        homeSheet.sharedMatchId,
+      ]);
     } finally {
       if (previousFlag === undefined) {
         delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;

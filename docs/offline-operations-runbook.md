@@ -29,6 +29,19 @@ contain match-event payloads.
 - Start with one internal match, then a small field-test group, then remove the
   allowlist after the physical-device checklist passes.
 
+## Two-sided fixture link check
+
+An authenticated current member of either participating team can inspect a
+fixture link with `GET /events/{eventId}/link-diagnostic`. Use the event ID from
+either team's generated fixture event or accepted friendly. The response
+contains fixture/session IDs, participant team IDs and home/away sides, and
+linked match-sheet IDs. For an unlinked or manual event it returns null fixture
+and session IDs with `status: "unlinked"` and a warning. Names, lineups, notes,
+and tactics are not returned; unrelated teams receive 404.
+
+Run the check from both coach accounts after starting each sheet and compare
+the fixture and session IDs. Do not use this endpoint to relink or repair rows.
+
 Never disable or remove `/sync/upload` while devices may contain queued work.
 Rollback the UI independently and leave schema, receipts and upload contracts
 compatible with the previous release.

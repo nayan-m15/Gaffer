@@ -62,6 +62,14 @@ export class EventsController {
     return this.eventsService.list(user.id);
   }
 
+  @Get(':eventId/link-diagnostic')
+  async linkDiagnostic(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.eventsService.getEventLinkDiagnostic(user.id, eventId);
+  }
+
   @Post(':eventId/start-match')
   @ApiBody({ type: StartMatchBodyDto })
   async startMatch(

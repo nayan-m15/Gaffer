@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import {
   events,
+  friendlyFixtures,
   matchSessionParticipants,
   matchSessions,
   matches,
@@ -211,5 +212,121 @@ describe('Team isolation (e2e)', () => {
         process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
       }
     }
+  });
+
+  it('returns a narrow authenticated fixture link diagnostic to participants only', async () => {
+    const database = app.get(DatabaseService).database;
+    const coachA = await newCoach('Diagnostic Home');
+    const coachB = await newCoach('Diagnostic Away');
+    const outsider = await newCoach('Diagnostic Outsider');
+    const [session] = await database
+      .insert(matchSessions)
+      .values({})
+      .returning({ id: matchSessions.id });
+    sessionIds.push(session.id);
+    const [fixture] = await database
+      .insert(friendlyFixtures)
+      .values({
+        requesterTeamId: coachA.team.id,
+        opponentTeamId: coachB.team.id,
+        status: 'accepted',
+        createdByUserId: coachA.user.id,
+        sharedSessionId: session.id,
+      })
+      .returning({ id: friendlyFixtures.id });
+    const [eventA, eventB] = await database
+      .insert(events)
+      .values([
+        {
+          teamId: coachA.team.id,
+          title: 'Diagnostic fixture',
+          type: 'match',
+          scheduledAt: new Date(),
+          location: '',
+          friendlyFixtureId: fixture.id,
+          notes: 'private tactical note',
+        },
+        {
+          teamId: coachB.team.id,
+          title: 'Diagnostic fixture',
+          type: 'match',
+          scheduledAt: new Date(),
+          location: '',
+          friendlyFixtureId: fixture.id,
+          notes: 'other private tactical note',
+        },
+      ])
+      .returning({ id: events.id });
+    await database.insert(matchSessionParticipants).values([
+      { sessionId: session.id, teamId: coachA.team.id, side: 'home' },
+      { sessionId: session.id, teamId: coachB.team.id, side: 'away' },
+    ]);
+    const [matchA, matchB] = await database
+      .insert(matches)
+      .values([
+        {
+          eventId: eventA.id,
+          sharedMatchId: session.id,
+          opponentName: coachB.team.name,
+        },
+        {
+          eventId: eventB.id,
+          sharedMatchId: session.id,
+          opponentName: coachA.team.name,
+          isHome: false,
+        },
+      ])
+      .returning({ id: matches.id });
+
+    const diagnosticA = await coachA.agent
+      .get(`/events/${eventA.id}/link-diagnostic`)
+      .expect(200);
+    const diagnosticB = await coachB.agent
+      .get(`/events/${eventA.id}/link-diagnostic`)
+      .expect(200);
+    expect(diagnosticA.body).toEqual(diagnosticB.body);
+    expect(diagnosticA.body).toMatchObject({
+      eventId: eventA.id,
+      fixtureId: fixture.id,
+      sharedSessionId: session.id,
+      status: 'linked',
+      participants: [
+        { teamId: coachA.team.id, side: 'home' },
+        { teamId: coachB.team.id, side: 'away' },
+      ],
+      matchSheets: expect.arrayContaining([
+        { teamId: coachA.team.id, side: 'home', matchId: matchA.id },
+        { teamId: coachB.team.id, side: 'away', matchId: matchB.id },
+      ]),
+    });
+    expect(JSON.stringify(diagnosticA.body)).not.toMatch(
+      /private tactical note|lineup|tactics|injury/i,
+    );
+    await outsider.agent
+      .get(`/events/${eventA.id}/link-diagnostic`)
+      .expect(404);
+
+    const [manualEvent] = await database
+      .insert(events)
+      .values({
+        teamId: coachA.team.id,
+        title: 'Unlinked event',
+        type: 'match',
+        scheduledAt: new Date(),
+        location: '',
+      })
+      .returning({ id: events.id });
+    const manualDiagnostic = await coachA.agent
+      .get(`/events/${manualEvent.id}/link-diagnostic`)
+      .expect(200);
+    expect(manualDiagnostic.body).toMatchObject({
+      eventId: manualEvent.id,
+      fixtureId: null,
+      sharedSessionId: null,
+      participants: [],
+      matchSheets: [],
+      status: 'unlinked',
+      warning: expect.any(String),
+    });
   });
 });

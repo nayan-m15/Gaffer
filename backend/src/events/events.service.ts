@@ -373,6 +373,131 @@ export class EventsService {
     };
   }
 
+  async getEventLinkDiagnostic(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    const [event] = await this.databaseService.database
+      .select()
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    if (!event) throw new NotFoundException('Event not found.');
+
+    let fixtureId: string | null = null;
+    let sharedSessionId: string | null = null;
+    let participants: Array<{ teamId: string | null; side: 'home' | 'away' }> =
+      [];
+    let matchSheets: Array<{
+      teamId: string | null;
+      side: 'home' | 'away';
+      matchId: string | null;
+    }> = [];
+    if (event.competitionFixtureId) {
+      const [fixture] = await this.databaseService.database
+        .select()
+        .from(competitionFixtures)
+        .where(eq(competitionFixtures.id, event.competitionFixtureId))
+        .limit(1);
+      if (fixture) {
+        fixtureId = fixture.id;
+        sharedSessionId = fixture.sharedSessionId;
+        const participantIds = [
+          fixture.homeCompetitionTeamId,
+          fixture.awayCompetitionTeamId,
+        ].filter((id): id is string => Boolean(id));
+        const participantRows = participantIds.length
+          ? await this.databaseService.database
+              .select({
+                id: competitionTeams.id,
+                teamId: competitionTeams.teamId,
+              })
+              .from(competitionTeams)
+              .where(
+                and(
+                  eq(competitionTeams.competitionId, fixture.competitionId),
+                  inArray(competitionTeams.id, participantIds),
+                ),
+              )
+          : [];
+        const teamsByParticipant = new Map(
+          participantRows.map((row) => [row.id, row.teamId]),
+        );
+        participants = [
+          ...(fixture.homeCompetitionTeamId
+            ? [
+                {
+                  teamId:
+                    teamsByParticipant.get(fixture.homeCompetitionTeamId) ??
+                    null,
+                  side: 'home' as const,
+                },
+              ]
+            : []),
+          ...(fixture.awayCompetitionTeamId
+            ? [
+                {
+                  teamId:
+                    teamsByParticipant.get(fixture.awayCompetitionTeamId) ??
+                    null,
+                  side: 'away' as const,
+                },
+              ]
+            : []),
+        ];
+      }
+    } else if (event.friendlyFixtureId) {
+      const [fixture] = await this.databaseService.database
+        .select()
+        .from(friendlyFixtures)
+        .where(eq(friendlyFixtures.id, event.friendlyFixtureId))
+        .limit(1);
+      if (fixture) {
+        fixtureId = fixture.id;
+        sharedSessionId = fixture.sharedSessionId;
+        participants = [
+          { teamId: fixture.requesterTeamId, side: 'home' },
+          { teamId: fixture.opponentTeamId, side: 'away' },
+        ];
+      }
+    }
+
+    if (fixtureId) {
+      if (!participants.some((participant) => participant.teamId === team.id)) {
+        throw new NotFoundException('Event not found.');
+      }
+      const sheetRows = await this.databaseService.database
+        .select({ teamId: events.teamId, matchId: matches.id })
+        .from(events)
+        .innerJoin(matches, eq(matches.eventId, events.id))
+        .where(
+          event.competitionFixtureId
+            ? eq(events.competitionFixtureId, fixtureId)
+            : eq(events.friendlyFixtureId, fixtureId),
+        );
+      matchSheets = participants.map((participant) => ({
+        teamId: participant.teamId,
+        side: participant.side,
+        matchId:
+          sheetRows.find((row) => row.teamId === participant.teamId)?.matchId ??
+          null,
+      }));
+    } else if (event.teamId !== team.id) {
+      throw new NotFoundException('Event not found.');
+    }
+
+    const status = fixtureId && sharedSessionId ? 'linked' : 'unlinked';
+    return {
+      eventId: event.id,
+      fixtureId,
+      sharedSessionId,
+      participants,
+      matchSheets,
+      status,
+      ...(status === 'unlinked'
+        ? { warning: 'Event is not linked to a shared fixture session.' }
+        : {}),
+    };
+  }
+
   /**
    * The opposing Gaffer team's confirmed match lineup for an accepted
    * friendly fixture on this event, so coaches never have to re-enter the
@@ -859,11 +984,21 @@ export class EventsService {
         this.databaseService,
         event.friendlyFixtureId,
       );
+      if (!sharedMatchId) {
+        throw new ConflictException(
+          'The friendly fixture session could not be resolved safely.',
+        );
+      }
     } else if (twoSidedLiveLoggingEnabled() && event.competitionFixtureId) {
       sharedMatchId = await ensureCompetitionFixtureSession(
         this.databaseService,
         event.competitionFixtureId,
       );
+      if (!sharedMatchId) {
+        throw new ConflictException(
+          'The generated fixture session could not be resolved safely.',
+        );
+      }
     }
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {
@@ -970,11 +1105,15 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
+      const resolvedMatch = await this.attachMatchToSession(
+        existingMatch,
+        sharedMatchId,
+      );
       // The live match squad supersedes any pre-match lineup record.
       await this.databaseService.database
         .delete(eventLineups)
         .where(eq(eventLineups.eventId, event.id));
-      return existingMatch;
+      return resolvedMatch;
     }
 
     const [match] = await this.databaseService.database
@@ -1002,7 +1141,9 @@ export class EventsService {
         .from(matches)
         .where(eq(matches.eventId, event.id))
         .limit(1);
-      if (concurrentMatch) return concurrentMatch;
+      if (concurrentMatch) {
+        return this.attachMatchToSession(concurrentMatch, sharedMatchId);
+      }
       throw new ConflictException('This match could not be started safely.');
     }
 
@@ -1451,6 +1592,41 @@ export class EventsService {
     }
 
     return event;
+  }
+
+  private async attachMatchToSession(
+    match: typeof matches.$inferSelect,
+    sharedSessionId: string | null,
+  ) {
+    if (
+      sharedSessionId &&
+      match.sharedMatchId &&
+      match.sharedMatchId !== sharedSessionId
+    ) {
+      throw new ConflictException(
+        'This match sheet is linked to a different shared session and needs review.',
+      );
+    }
+    if (match.sharedMatchId || !sharedSessionId) return match;
+
+    const [attached] = await this.databaseService.database
+      .update(matches)
+      .set({ sharedMatchId: sharedSessionId, updatedAt: new Date() })
+      .where(and(eq(matches.id, match.id), isNull(matches.sharedMatchId)))
+      .returning();
+    if (attached) return attached;
+
+    const [current] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.id, match.id))
+      .limit(1);
+    if (!current || current.sharedMatchId !== sharedSessionId) {
+      throw new ConflictException(
+        'This match sheet changed to a different shared session and needs review.',
+      );
+    }
+    return current;
   }
 
   private isBeforeMatchDay(scheduledAt: Date) {
