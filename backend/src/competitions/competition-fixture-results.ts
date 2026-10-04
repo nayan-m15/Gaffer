@@ -1,3 +1,8 @@
+import {
+  resolveMatchSessionIdentity,
+  assertMatchSessionIdentity,
+  sharedMatchConflict,
+} from '../matches/match-session-integrity';
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { and, asc, eq, gte, or, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
@@ -52,6 +57,17 @@ export async function finaliseTimedOutSession(
     )
     .where(eq(matches.sharedMatchId, sessionId))
     .limit(1);
+  if (row) {
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(databaseService, row.event, row.match),
+    );
+    const blocked = await databaseService.database.execute<{
+      blocked: boolean;
+    }>(
+      sql`select exists(select 1 from match_event_reviews where session_id = ${sessionId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
+    );
+    if (blocked.rows[0]?.blocked) return false;
+  }
   const actorId =
     session.homeConfirmedByUserId ?? session.awayConfirmedByUserId;
   if (
@@ -280,6 +296,14 @@ export async function validateFixtureResult(
     );
   }
 
+  if (fixture.sharedSessionId && (source.kind !== 'live' || !source.sessionId))
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+  if (
+    fixture.sharedSessionId &&
+    source.kind === 'live' &&
+    source.sessionId !== fixture.sharedSessionId
+  )
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
   if (hasActivity(fixture) && !sourceMatches(fixture, source)) {
     throw new ConflictException('This fixture already has a recorded result.');
   }
@@ -516,6 +540,50 @@ export async function syncFixtureResult(
     input,
   );
   if (!fixture) return;
+  if (fixture.sharedSessionId) {
+    if (source.kind !== 'live' || !source.sessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+    if (source.sessionId !== fixture.sharedSessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    const [row] = await databaseService.database
+      .select({ match: matches, event: events })
+      .from(matches)
+      .innerJoin(events, eq(events.id, matches.eventId))
+      .where(eq(matches.id, source.id))
+      .limit(1);
+    if (!row || row.event.competitionFixtureId !== fixture.id)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    if (!row.match.sharedMatchId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+    if (row.match.sharedMatchId !== source.sessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(databaseService, row.event, row.match, {
+        ignoreFeatureFlag: true,
+      }),
+    );
+    const [session] = await databaseService.database
+      .select()
+      .from(matchSessions)
+      .where(eq(matchSessions.id, source.sessionId))
+      .limit(1);
+    const first = session?.homeConfirmedAt ?? session?.awayConfirmedAt;
+    const confirmed =
+      (session?.homeConfirmedAt && session?.awayConfirmedAt) ||
+      (first && Date.now() - first.getTime() >= 86400000);
+    const reviews = await databaseService.database.execute<{
+      blocked: boolean;
+    }>(
+      sql`select exists(select 1 from match_event_reviews where session_id = ${source.sessionId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
+    );
+    if (
+      !session?.finalisedAt ||
+      !confirmed ||
+      reviews.rows[0]?.blocked ||
+      row.event.status !== 'completed'
+    )
+      throw sharedMatchConflict('SHARED_MATCH_RESULT_NOT_FINALISED');
+  }
   if (
     source.kind === 'live' &&
     source.sessionId &&
@@ -572,6 +640,8 @@ export async function resetManualFixtureResult(
   const fixtures = await listFixtureRows(databaseService, competitionId);
   const fixture = fixtures.find((row) => row.legacyResultId === resultId);
   if (!fixture) return;
+  if (fixture.sharedSessionId)
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
 
   await assertCanChangeFixtureResult(
     databaseService,

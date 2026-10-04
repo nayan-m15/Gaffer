@@ -1,4 +1,9 @@
 import {
+  assertMatchSessionIdentity,
+  resolveMatchSessionIdentity,
+  sharedMatchConflict,
+} from './match-session-integrity';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -475,6 +480,9 @@ export class MatchesService {
   ) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     this.assertEditable(event.status);
 
     if (dto.athleteId) {
@@ -538,7 +546,13 @@ export class MatchesService {
         await validateFixtureResult(
           this.databaseService,
           current.competitionId,
-          { kind: 'live', id: match.id },
+          {
+            kind: 'live',
+            id: match.id,
+            sessionId: twoSidedLiveLoggingEnabled()
+              ? (match.sharedMatchId ?? undefined)
+              : undefined,
+          },
           projected,
         );
       }
@@ -709,6 +723,9 @@ export class MatchesService {
       team.id,
       reviewMatchId,
     );
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     const previousResult = await this.getIdempotentReviewResult(
       userId,
       reviewMatchId,
@@ -784,7 +801,10 @@ export class MatchesService {
 
   async disputeEventReview(userId: string, matchId: string, reviewId: string) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    const { match } = await this.requireSharedMatch(team.id, matchId);
+    const { match, event } = await this.requireSharedMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     const [review] = await this.databaseService.database
       .select()
       .from(matchEventReviews)
@@ -965,7 +985,13 @@ export class MatchesService {
     await validateFixtureResult(
       this.databaseService,
       current.competitionId,
-      { kind: 'live', id: match.id },
+      {
+        kind: 'live',
+        id: match.id,
+        sessionId: twoSidedLiveLoggingEnabled()
+          ? (match.sharedMatchId ?? undefined)
+          : undefined,
+      },
       projected,
     );
   }
@@ -1013,6 +1039,9 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     const previous = await this.findOperation(operationId);
     if (previous) {
       this.assertSameOperation(previous, userId, matchId, eventId, 'correct', {
@@ -1082,7 +1111,13 @@ export class MatchesService {
           await validateFixtureResult(
             this.databaseService,
             current.competitionId,
-            { kind: 'live', id: match.id },
+            {
+              kind: 'live',
+              id: match.id,
+              sessionId: twoSidedLiveLoggingEnabled()
+                ? (match.sharedMatchId ?? undefined)
+                : undefined,
+            },
             projected,
           );
         }
@@ -1149,7 +1184,10 @@ export class MatchesService {
         causalParentIds,
       );
     }
-    const { event } = await this.requireMatch(team.id, matchId);
+    const { event, match } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     this.assertEditable(event.status);
     const canonical = await this.requireMatchEvent(matchId, eventId);
     await this.applyEventMutation({
@@ -1174,6 +1212,9 @@ export class MatchesService {
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     const previous = await this.findOperation(operationId);
     if (previous) {
       this.assertSameOperation(previous, userId, matchId, eventId, 'void', {
@@ -1201,7 +1242,13 @@ export class MatchesService {
         await validateFixtureResult(
           this.databaseService,
           current.competitionId,
-          { kind: 'live', id: match.id },
+          {
+            kind: 'live',
+            id: match.id,
+            sessionId: twoSidedLiveLoggingEnabled()
+              ? (match.sharedMatchId ?? undefined)
+              : undefined,
+          },
           projected,
         );
       }
@@ -1230,6 +1277,9 @@ export class MatchesService {
   async finish(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     this.assertLive(event.status);
 
     const [finishedMatch] = await this.databaseService.database
@@ -1269,6 +1319,9 @@ export class MatchesService {
   async updateClock(userId: string, matchId: string, dto: UpdateMatchClockDto) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     this.assertLive(event.status);
     const operationId = dto.operationId ?? randomUUID();
     const clientCreatedAt = dto.clientCreatedAt ?? new Date().toISOString();
@@ -1318,7 +1371,23 @@ export class MatchesService {
     expectedRevision: number,
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    const { event } = await this.requireMatch(team.id, matchId);
+    const { event, match } = await this.requireMatch(team.id, matchId);
+    if (!twoSidedLiveLoggingEnabled() && event.competitionFixtureId) {
+      const publicationIdentity = await resolveMatchSessionIdentity(
+        this.databaseService,
+        event,
+        match,
+        { ignoreFeatureFlag: true },
+      );
+      if (publicationIdentity.fixtureSharedSessionId)
+        throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+    }
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      match,
+    );
+    assertMatchSessionIdentity(identity);
     if (event.status !== 'completed') {
       throw new BadRequestException(
         'Finish the match before finalising the result.',
@@ -1335,7 +1404,6 @@ export class MatchesService {
         'Resolve all event reviews before finalising the result.',
       );
     }
-    const { match } = await this.requireMatch(team.id, matchId);
     if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) {
       return this.confirmSessionResult(
         userId,
@@ -1429,6 +1497,13 @@ export class MatchesService {
       )
       .limit(1);
     if (!participant) throw new NotFoundException('Match session not found.');
+    const blocked = await this.databaseService.database.execute<{
+      blocked: boolean;
+    }>(
+      sql`select exists(select 1 from match_event_reviews where session_id = ${match.sharedMatchId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
+    );
+    if (blocked.rows[0]?.blocked)
+      throw sharedMatchConflict('SHARED_MATCH_RESULT_NOT_FINALISED');
     const now = new Date();
     await this.databaseService.database
       .update(matchSessionParticipants)
@@ -1493,7 +1568,10 @@ export class MatchesService {
 
   async reopenProjection(userId: string, matchId: string, reason: string) {
     const team = await this.teamsService.requireCoachTeam(userId);
-    const { match } = await this.requireMatch(team.id, matchId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
     if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) {
       const [session] = await this.databaseService.database
         .select()
@@ -1816,7 +1894,13 @@ export class MatchesService {
     await syncFixtureResult(
       this.databaseService,
       fixtureContext.competitionId,
-      { kind: 'live', id: match.id },
+      {
+        kind: 'live',
+        id: match.id,
+        sessionId: twoSidedLiveLoggingEnabled()
+          ? (match.sharedMatchId ?? undefined)
+          : undefined,
+      },
       fixtureContext.result,
     );
   }

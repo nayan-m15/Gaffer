@@ -1,0 +1,125 @@
+{
+  "identity": {
+    "branch": "br-misty-moon-b2be9vmt",
+    "endpoint": "ep-royal-star-b253pvlk"
+  },
+  "readOnly": true,
+  "freshSheets": [
+    {
+      "id": "10e0721d-e7a1-4cf9-98d2-0bb95df7b0c4",
+      "event_id": "48ef0b52-5f2e-47c5-9ff9-39ea8c458827",
+      "shared_match_id": "c17f12e1-6b0d-4893-99fc-bc66a303130c",
+      "is_home": true,
+      "clock_period": "full_time",
+      "clock_revision": 0
+    },
+    {
+      "id": "1e4d5926-43eb-456b-a7a3-5f3a3d2c05fe",
+      "event_id": "a16be5eb-0a3d-4d6c-8e66-b18b2fb3081b",
+      "shared_match_id": null,
+      "is_home": false,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "3fdc506c-eacb-4646-8e9d-3f7c47494c0d",
+      "event_id": "fe225366-d9dd-4e51-b654-82ff989878a5",
+      "shared_match_id": "bf97c64d-4c28-4be3-a8f8-8f260b6fb7bb",
+      "is_home": false,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "4cc75dea-3fe9-4f1b-9703-161577d6c4a2",
+      "event_id": "b07545af-1e08-4327-b48f-1a5c3d522a45",
+      "shared_match_id": null,
+      "is_home": true,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "83b9f3f2-c8dc-492a-b795-d9cebeac10e4",
+      "event_id": "c01332f8-d607-46ed-9924-e660ee571bdb",
+      "shared_match_id": "2e20a46b-0525-4d6a-85ab-483b3039ce67",
+      "is_home": true,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "9c13d3f2-f351-440d-b33f-c6a5fec4c3e9",
+      "event_id": "dafaea63-b73f-483f-81c1-cd634ccd5d94",
+      "shared_match_id": "7dc8eae6-3f02-4ae5-8a7b-78213a4d45fc",
+      "is_home": true,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "e52a1a8c-4d63-4a19-80f7-363a607a1b8e",
+      "event_id": "d35be9ea-4b9b-4f0f-8246-d3a622e2aabe",
+      "shared_match_id": "7dc8eae6-3f02-4ae5-8a7b-78213a4d45fc",
+      "is_home": false,
+      "clock_period": "not_started",
+      "clock_revision": 0
+    },
+    {
+      "id": "fe33cf3d-8315-451e-9ad0-843c12681271",
+      "event_id": "ca9cfbb8-b499-420d-a580-7cd36f1d8212",
+      "shared_match_id": "c17f12e1-6b0d-4893-99fc-bc66a303130c",
+      "is_home": false,
+      "clock_period": "full_time",
+      "clock_revision": 0
+    }
+  ],
+  "forensicPresence": [
+    {
+      "forensic_sheets": 0,
+      "forensic_friendlies": 0,
+      "forensic_competitions": 0
+    }
+  ],
+  "safeAttachmentEvidenceCounts": [
+    {
+      "observations": 0,
+      "canonical_events": 0,
+      "operations": 0,
+      "reviews": 0,
+      "clock_operations": 0,
+      "projections": 0
+    }
+  ],
+  "projections": [
+    {
+      "match_id": "10e0721d-e7a1-4cf9-98d2-0bb95df7b0c4",
+      "session_id": "c17f12e1-6b0d-4893-99fc-bc66a303130c",
+      "finalisation_state": "open",
+      "revision": 2
+    },
+    {
+      "match_id": "1e4d5926-43eb-456b-a7a3-5f3a3d2c05fe",
+      "session_id": null,
+      "finalisation_state": "open",
+      "revision": 1
+    },
+    {
+      "match_id": "83b9f3f2-c8dc-492a-b795-d9cebeac10e4",
+      "session_id": "2e20a46b-0525-4d6a-85ab-483b3039ce67",
+      "finalisation_state": "open",
+      "revision": 2
+    },
+    {
+      "match_id": "fe33cf3d-8315-451e-9ad0-843c12681271",
+      "session_id": "c17f12e1-6b0d-4893-99fc-bc66a303130c",
+      "finalisation_state": "finalised",
+      "revision": 1
+    }
+  ],
+  "validFixture": [
+    {
+      "shared_session_id": "c17f12e1-6b0d-4893-99fc-bc66a303130c",
+      "status": "completed",
+      "home_score": 2,
+      "away_score": 1,
+      "linked_match_id": "fe33cf3d-8315-451e-9ad0-843c12681271"
+    }
+  ]
+}

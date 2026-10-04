@@ -1,4 +1,10 @@
 import {
+  assertMatchSessionIdentity,
+  resolveMatchSessionIdentity,
+  sharedMatchConflict,
+  SharedMatchErrorCode,
+} from '../matches/match-session-integrity';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -18,11 +24,7 @@ import {
 import { alias } from 'drizzle-orm/pg-core';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
-import {
-  ensureCompetitionFixtureSession,
-  ensureFriendlyFixtureSession,
-  twoSidedLiveLoggingEnabled,
-} from '../matches/match-sessions';
+import { twoSidedLiveLoggingEnabled } from '../matches/match-sessions';
 import {
   athleteMatchStats,
   athletes,
@@ -34,7 +36,6 @@ import {
   events,
   friendlyFixtures,
   gamePlans,
-  matchSessionParticipants,
   matches,
   opponentMatchPlayers,
   teams,
@@ -383,119 +384,65 @@ export class EventsService {
       .limit(1);
     if (!event) throw new NotFoundException('Event not found.');
 
-    let fixtureId: string | null = null;
-    let sharedSessionId: string | null = null;
-    let participants: Array<{ teamId: string | null; side: 'home' | 'away' }> =
-      [];
-    let matchSheets: Array<{
-      teamId: string | null;
-      side: 'home' | 'away';
-      matchId: string | null;
-    }> = [];
-    if (event.competitionFixtureId) {
-      const [fixture] = await this.databaseService.database
-        .select()
-        .from(competitionFixtures)
-        .where(eq(competitionFixtures.id, event.competitionFixtureId))
-        .limit(1);
-      if (fixture) {
-        fixtureId = fixture.id;
-        sharedSessionId = fixture.sharedSessionId;
-        const participantIds = [
-          fixture.homeCompetitionTeamId,
-          fixture.awayCompetitionTeamId,
-        ].filter((id): id is string => Boolean(id));
-        const participantRows = participantIds.length
-          ? await this.databaseService.database
-              .select({
-                id: competitionTeams.id,
-                teamId: competitionTeams.teamId,
-              })
-              .from(competitionTeams)
-              .where(
-                and(
-                  eq(competitionTeams.competitionId, fixture.competitionId),
-                  inArray(competitionTeams.id, participantIds),
-                ),
-              )
-          : [];
-        const teamsByParticipant = new Map(
-          participantRows.map((row) => [row.id, row.teamId]),
-        );
-        participants = [
-          ...(fixture.homeCompetitionTeamId
-            ? [
-                {
-                  teamId:
-                    teamsByParticipant.get(fixture.homeCompetitionTeamId) ??
-                    null,
-                  side: 'home' as const,
-                },
-              ]
-            : []),
-          ...(fixture.awayCompetitionTeamId
-            ? [
-                {
-                  teamId:
-                    teamsByParticipant.get(fixture.awayCompetitionTeamId) ??
-                    null,
-                  side: 'away' as const,
-                },
-              ]
-            : []),
-        ];
-      }
-    } else if (event.friendlyFixtureId) {
-      const [fixture] = await this.databaseService.database
-        .select()
-        .from(friendlyFixtures)
-        .where(eq(friendlyFixtures.id, event.friendlyFixtureId))
-        .limit(1);
-      if (fixture) {
-        fixtureId = fixture.id;
-        sharedSessionId = fixture.sharedSessionId;
-        participants = [
-          { teamId: fixture.requesterTeamId, side: 'home' },
-          { teamId: fixture.opponentTeamId, side: 'away' },
-        ];
-      }
-    }
-
-    if (fixtureId) {
-      if (!participants.some((participant) => participant.teamId === team.id)) {
-        throw new NotFoundException('Event not found.');
-      }
-      const sheetRows = await this.databaseService.database
-        .select({ teamId: events.teamId, matchId: matches.id })
-        .from(events)
-        .innerJoin(matches, eq(matches.eventId, events.id))
-        .where(
-          event.competitionFixtureId
-            ? eq(events.competitionFixtureId, fixtureId)
-            : eq(events.friendlyFixtureId, fixtureId),
-        );
-      matchSheets = participants.map((participant) => ({
-        teamId: participant.teamId,
-        side: participant.side,
-        matchId:
-          sheetRows.find((row) => row.teamId === participant.teamId)?.matchId ??
-          null,
-      }));
-    } else if (event.teamId !== team.id) {
+    const [owningMatch] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      owningMatch,
+      { ignoreFeatureFlag: true },
+    );
+    if (
+      event.teamId !== team.id &&
+      !identity.participants.some((p) => p.teamId === team.id)
+    )
       throw new NotFoundException('Event not found.');
-    }
-
-    const status = fixtureId && sharedSessionId ? 'linked' : 'unlinked';
+    const sheets = identity.fixtureId
+      ? await this.databaseService.database
+          .select({ teamId: events.teamId, matchId: matches.id })
+          .from(events)
+          .innerJoin(matches, eq(matches.eventId, events.id))
+          .where(
+            event.competitionFixtureId
+              ? eq(events.competitionFixtureId, identity.fixtureId)
+              : eq(events.friendlyFixtureId, identity.fixtureId),
+          )
+      : [];
+    const matchSheets = identity.participants.map((p) => ({
+      ...p,
+      matchId:
+        sheets.find((sheet) => sheet.teamId === p.teamId)?.matchId ?? null,
+    }));
+    const sheetSessionMatchesFixture = identity.state === 'shared_valid';
+    const status =
+      identity.state === 'legacy_allowed'
+        ? 'legacy'
+        : !identity.fixtureSharedSessionId
+          ? 'missing_fixture_session'
+          : identity.state === 'shared_conflict'
+            ? 'conflicting_sheet_link'
+            : sheetSessionMatchesFixture
+              ? 'correctly_linked'
+              : 'missing_sheet_link';
     return {
       eventId: event.id,
-      fixtureId,
-      sharedSessionId,
-      participants,
-      matchSheets,
+      teamId: event.teamId,
+      fixtureType: identity.fixtureType,
+      fixtureId: identity.fixtureId,
+      fixtureSharedSessionId: identity.fixtureSharedSessionId,
+      sharedSessionId: identity.fixtureSharedSessionId,
+      owningMatchId: owningMatch?.id ?? null,
+      owningMatchSharedSessionId: owningMatch?.sharedMatchId ?? null,
+      participantTeamId: identity.participantTeamId,
+      participantSide: identity.participantSide,
+      expectedSessionId: identity.fixtureSharedSessionId,
+      sheetSessionMatchesFixture,
       status,
-      ...(status === 'unlinked'
-        ? { warning: 'Event is not linked to a shared fixture session.' }
-        : {}),
+      participants: identity.participants,
+      matchSheets,
     };
   }
 
@@ -968,6 +915,26 @@ export class EventsService {
       throw new NotFoundException('Event not found.');
     }
 
+    const [retryMatch] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+    if (retryMatch && twoSidedLiveLoggingEnabled()) {
+      const retryIdentity = await resolveMatchSessionIdentity(
+        this.databaseService,
+        event,
+        retryMatch,
+        { ensureSession: true },
+      );
+      if (retryIdentity.state !== 'legacy_allowed') {
+        assertMatchSessionIdentity(retryIdentity, true);
+        return this.attachMatchToSession(
+          retryMatch,
+          retryIdentity.fixtureSharedSessionId,
+        );
+      }
+    }
     if (event.status !== 'scheduled') {
       throw new BadRequestException('Only scheduled matches can be started.');
     }
@@ -979,28 +946,17 @@ export class EventsService {
       ? await this.getAcceptedFriendlyOpponent(team.id, event.friendlyFixtureId)
       : null;
 
-    let sharedMatchId: string | null = null;
-    if (twoSidedLiveLoggingEnabled() && event.friendlyFixtureId) {
-      sharedMatchId = await ensureFriendlyFixtureSession(
-        this.databaseService,
-        event.friendlyFixtureId,
-      );
-      if (!sharedMatchId) {
-        throw new ConflictException(
-          'The friendly fixture session could not be resolved safely.',
-        );
-      }
-    } else if (twoSidedLiveLoggingEnabled() && event.competitionFixtureId) {
-      sharedMatchId = await ensureCompetitionFixtureSession(
-        this.databaseService,
-        event.competitionFixtureId,
-      );
-      if (!sharedMatchId) {
-        throw new ConflictException(
-          'The generated fixture session could not be resolved safely.',
-        );
-      }
-    }
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      undefined,
+      { ensureSession: true },
+    );
+    assertMatchSessionIdentity(identity, true);
+    const sharedMatchId =
+      identity.state === 'legacy_allowed'
+        ? null
+        : identity.fixtureSharedSessionId;
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
@@ -1616,71 +1572,36 @@ export class EventsService {
     match: typeof matches.$inferSelect,
     sharedSessionId: string | null,
   ) {
-    if (
-      sharedSessionId &&
-      match.sharedMatchId &&
-      match.sharedMatchId !== sharedSessionId
-    ) {
-      throw new ConflictException(
-        'This match sheet is linked to a different shared session and needs review.',
-      );
-    }
     if (!sharedSessionId) return match;
-
     const [event] = await this.databaseService.database
-      .select({ teamId: events.teamId })
+      .select()
       .from(events)
       .where(eq(events.id, match.eventId))
       .limit(1);
-    const [participant] = event
-      ? await this.databaseService.database
-          .select({ side: matchSessionParticipants.side })
-          .from(matchSessionParticipants)
-          .where(
-            and(
-              eq(matchSessionParticipants.sessionId, sharedSessionId),
-              eq(matchSessionParticipants.teamId, event.teamId),
-            ),
-          )
-          .limit(1)
-      : [];
-    if (!participant) {
-      throw new ConflictException(
-        'The fixture participant side could not be resolved safely.',
+    if (!event) throw new NotFoundException('Event not found.');
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      match,
+    );
+    assertMatchSessionIdentity(identity, true);
+    if (identity.state === 'shared_valid') return match;
+    const result = await this.databaseService.database.execute<{
+      result: string;
+    }>(
+      sql`select attach_match_session_if_safe(${match.id}::uuid, ${sharedSessionId}::uuid, ${identity.participantSide === 'home'}::boolean) as result`,
+    );
+    const outcome = result.rows[0]?.result;
+    if (outcome !== 'attached' && outcome !== 'already_linked')
+      throw sharedMatchConflict(
+        (outcome ?? 'SHARED_MATCH_SESSION_CONFLICT') as SharedMatchErrorCode,
       );
-    }
-    if (match.sharedMatchId === sharedSessionId) {
-      if (match.isHome === (participant.side === 'home')) return match;
-      const [normalized] = await this.databaseService.database
-        .update(matches)
-        .set({ isHome: participant.side === 'home', updatedAt: new Date() })
-        .where(eq(matches.id, match.id))
-        .returning();
-      return normalized ?? match;
-    }
-
     const [attached] = await this.databaseService.database
-      .update(matches)
-      .set({
-        sharedMatchId: sharedSessionId,
-        isHome: participant.side === 'home',
-        updatedAt: new Date(),
-      })
-      .where(and(eq(matches.id, match.id), isNull(matches.sharedMatchId)))
-      .returning();
-    if (attached) return attached;
-
-    const [current] = await this.databaseService.database
       .select()
       .from(matches)
       .where(eq(matches.id, match.id))
       .limit(1);
-    if (!current || current.sharedMatchId !== sharedSessionId) {
-      throw new ConflictException(
-        'This match sheet changed to a different shared session and needs review.',
-      );
-    }
-    return current;
+    return attached;
   }
 
   private isBeforeMatchDay(scheduledAt: Date) {

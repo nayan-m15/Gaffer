@@ -371,10 +371,23 @@ export class SyncController {
     error: HttpException,
     startedAt: number,
   ) {
+    const response = error.getResponse();
+    const code =
+      typeof response === 'object' && response !== null && 'code' in response
+        ? String(response.code)
+        : null;
     const safeErrorCode =
-      error instanceof ForbiddenException
-        ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
-        : 'INVALID_OR_UNAUTHORISED';
+      code &&
+      [
+        'SHARED_MATCH_SESSION_REQUIRED',
+        'SHARED_MATCH_SESSION_CONFLICT',
+        'SHARED_MATCH_RECONCILIATION_REQUIRED',
+        'SHARED_MATCH_RESULT_NOT_FINALISED',
+      ].includes(code)
+        ? code
+        : error instanceof ForbiddenException
+          ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
+          : 'INVALID_OR_UNAUTHORISED';
     const fallback = { id, outcome: 'rejected', safeErrorCode };
     try {
       const [committed] = await this.databaseService.database

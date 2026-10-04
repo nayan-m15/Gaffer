@@ -1,0 +1,29 @@
+{
+  "host": "ep-royal-star-b253pvlk-pooler.c-6.eu-central-1.aws.neon.tech",
+  "database": "neondb",
+  "branch": "br-misty-moon-b2be9vmt",
+  "endpoint": "ep-royal-star-b253pvlk",
+  "confirmedDisposable": true,
+  "confirmation": "Explicit user authorization for this exact Neon branch",
+  "gitBranch": "feat/matches-two-sided-live-logging",
+  "sha": "e01fe3d18be0c47edc8a56ebcd70d7d83c9a7dec",
+  "workingDiffExpected": true,
+  "files": [
+    "backend/drizzle/meta/_journal.json",
+    "backend/src/competitions/competition-fixture-results.ts",
+    "backend/src/competitions/competition-fixtures.spec.ts",
+    "backend/src/events/events.service.ts",
+    "backend/src/matches/matches.service.ts",
+    "backend/src/sync/sync.controller.ts",
+    "backend/test/team-isolation.e2e-spec.ts",
+    "backend/drizzle/0052_shared_session_integrity.sql",
+    "backend/scripts/validate-phase15.mjs",
+    "backend/src/matches/match-session-integrity.ts",
+    "backend/src/matches/shared-session-integrity.spec.ts",
+    "backend/test/phase15-integrity.e2e-spec.ts",
+    "docs/phase1-shared-session-integrity-verification.md",
+    "docs/phase15-real-environment-validation.md",
+    "docs/phase15-validation/"
+  ],
+  "flag": "true"
+}

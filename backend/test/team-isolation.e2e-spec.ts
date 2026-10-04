@@ -291,7 +291,7 @@ describe('Team isolation (e2e)', () => {
       eventId: eventA.id,
       fixtureId: fixture.id,
       sharedSessionId: session.id,
-      status: 'linked',
+      status: 'correctly_linked',
       participants: [
         { teamId: coachA.team.id, side: 'home' },
         { teamId: coachB.team.id, side: 'away' },
@@ -327,8 +327,7 @@ describe('Team isolation (e2e)', () => {
       sharedSessionId: null,
       participants: [],
       matchSheets: [],
-      status: 'unlinked',
-      warning: expect.any(String) as unknown,
+      status: 'legacy',
     });
   });
 });
