@@ -842,9 +842,10 @@ export default function MatchReportPage() {
           ) : null}
         </div>
       </header>
-      {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+      {(sessionReport || (match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available)) && <div className="px-4 pt-3">
         <SessionReportStatus report={sessionReport} />
-        <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
+        {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available &&
+          <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />}
       </div>}
 
       <div className="w-full px-4 pb-12 pt-4 sm:px-6 sm:pt-5 lg:px-8">

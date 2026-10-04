@@ -187,7 +187,7 @@ Implementation split: **5(a)** adds backend session report reads and an owning-s
 - **Done when:**
   - [ ] The full failing scenario from Step 1 passes in CI and manually in two browsers.
   - [ ] One result per fixture and correct orientation are visible in standings.
-  - [ ] Rollback disables new session flow without deleting or hiding existing sessions.
+  - [ ] Rollback disables shared processing while preserving all existing session data and legacy sheet access; shared report endpoints intentionally return 404 while disabled.
   - [ ] Release telemetry and production environment flag status are verified outside this workspace.
 
 ## 4. Session handoff checklist
@@ -204,7 +204,7 @@ Implementation split: **5(a)** adds backend session report reads and an owning-s
 
 ## 5. Rollout note
 
-The current rollout doc records PowerSync Cloud validation/deployment and a passing backend unit suite, but says the four release e2e suites, two-account browser gate, staging rollback, backup restore, production migrations/flag, and production telemetry are unverified. Keep the feature disabled until the new session-link/report/standings release gates pass. Verify the effective backend process flag directly in each environment; repository `.env` files are not authoritative for deployed processes. The flag is global: enabling it affects every eligible newly started fixture, with no team cohort or separate friendly/competition toggle.
+The latest Step 9 handoff records all four release e2e suites and backend units passing locally. CI, the two-account browser gate, staging rollback, backup restore, current PowerSync Cloud deployment, production migrations/flag and production telemetry still require environment evidence. Earlier handoffs and the initial findings describe historical behavior and are superseded by later implementation notes. Keep production disabled until the release gates pass. Verify the effective backend process flag directly in each environment; repository `.env` files are not authoritative for deployed processes. The flag is global: enabling it affects every eligible fixture, including safe attachment on existing-sheet retries, with no team cohort or separate friendly/competition toggle.
 
 Deploy only additive schema/code while disabled, verify migrations and sync streams in staging, run the exact two-account automated fixture scenario and accepted-friendly scenario, review the dry-run repair report, then enable only when the global scope is acceptable. Monitor unlinked eligible sheets, multiple sessions per fixture, cross-side sync/upload errors, report disagreement, unresolved review disputes, and fixture/session result disagreement. Rollback by turning the flag off and retaining schema/session data; reconcile already-created sessions before re-enabling. No historical production data is automatically linked, deleted, or repaired.
 
@@ -279,3 +279,11 @@ Verification and remaining expected failures:
 - **Other checks actually run:** from `frontend/`, `node --test --test-isolation=none src/features/matches/session-report.node-test.mjs src/features/events/opponent-confirmed-lineup.node-test.mjs` **8/8 passed**; `git diff --check` passed. No builds or browser tests were run in this Step 9 session.
 - **Runbook:** rollout/rollback now requires actual process flags in dev/staging/production, prerequisites and migrations 0046 through current latest 0051, exact-release PowerSync validation/publication checks, authenticated link diagnostics, dry-run repair review, staging backup restore, telemetry ownership and two-browser evidence. Enabling the global flag has no cohort filter and requires readiness for all eligible fixtures unless externally isolated.
 - **Still manual/unverified:** CI, effective deployed flags, migration journals, latest PowerSync Cloud deployment/source checks and token revocation, environment repair findings, database backup/restore, production telemetry and the complete two-browser gate in `docs/testing.md`. Keep production disabled until those pass. The Step 9 handoff tick records implementation completion, not production release approval; the external acceptance checkboxes remain unchecked.
+
+### 2026-10-04 release verification follow-up
+
+Completed local builds, backend units, all four required e2e suites, frontend model tests, desktop/mobile offline and production PWA browser checks. Added real independent-account friendly/competition browser coverage and enabled it in both CI UI shards. Fixed shared status visibility before the opponent publishes a lineup. See [the current verification record](two-sided-release-verification.md) for exact outcomes and configured-source migration/link blockers. Earlier handoffs remain historical; deployment, complete Cloud/offline release gate and operator dashboard sign-off remain pending. No migrations or historical repairs were applied.
+
+The browser follow-up also reproduced incorrect final competition publication when the away coach confirmed a goal logged by home: live shared 1–0 became published 0–0. Shared publication now counts the session's canonical home/away goals when enabled, retaining the private-sheet query when disabled. Regression coverage is the real competition browser case, with required backend suites rerun after this fix.
+
+Final follow-up outcomes: post-fix backend 40/41 passed in the combined run; the friendly rematch timeout passed once on focused rerun. Units 775/775 and backend build passed. Browser single connection-failure rerun: friendly passed, competition failed loading the final report with a logged Neon timeout. Keep the production/manual acceptance boxes unchecked. Operator will perform dashboard checks; competition browser/Cloud sign-off is still required.

@@ -1769,9 +1769,10 @@ export default function LiveMatchPage() {
           </button>
         </div>
       </header>
-      {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+      {(sessionReport || (match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available)) && <div className="px-4 pt-3">
         <SessionReportStatus report={sessionReport} />
-        <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
+        {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available &&
+          <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />}
       </div>}
 
       {reviewOpen && matchId ? (

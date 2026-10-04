@@ -1607,6 +1607,7 @@ export class MatchesService {
     };
   } | null> {
     if (!match.competitionId || !match.opponentCompetitionTeamId) return null;
+    const sharedResult = Boolean(match.sharedMatchId && twoSidedLiveLoggingEnabled());
 
     const [[ownParticipant], [score], [fixture]] = await Promise.all([
       this.databaseService.database
@@ -1621,11 +1622,15 @@ export class MatchesService {
         .limit(1),
       this.databaseService.database
         .select({
-          teamScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
-          opponentScore: sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          teamScore: sharedResult
+            ? sql<number>`count(*) filter (where ${matchEvents.side} = 'home' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`
+            : sql<number>`count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
+          opponentScore: sharedResult
+            ? sql<number>`count(*) filter (where ${matchEvents.side} = 'away' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`
+            : sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
         })
         .from(matchEvents)
-        .where(eq(matchEvents.matchId, match.id)),
+        .where(sharedResult ? eq(matchEvents.sessionId, match.sharedMatchId!) : eq(matchEvents.matchId, match.id)),
       match.sharedMatchId
         ? this.databaseService.database
             .select({
@@ -1655,8 +1660,8 @@ export class MatchesService {
         awayCompetitionTeamId:
           fixture?.awayCompetitionTeamId ??
           (ownTeamIsHome ? match.opponentCompetitionTeamId : ownParticipant.id),
-        homeScore: ownTeamIsHome ? teamScore : opponentScore,
-        awayScore: ownTeamIsHome ? opponentScore : teamScore,
+        homeScore: sharedResult || ownTeamIsHome ? teamScore : opponentScore,
+        awayScore: sharedResult || ownTeamIsHome ? opponentScore : teamScore,
       },
     };
   }
