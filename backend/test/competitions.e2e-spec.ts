@@ -331,6 +331,56 @@ describe('Shared competitions (e2e)', () => {
     }
   });
 
+  it('keeps double round-robin legs as separate sessions and standings results', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const coach = await newCoach('release-double-leg');
+      const competition = (await coach.agent.post('/competitions').send({
+        name: uniqueName('Release Double Leg'), type: 'league', format: 'league',
+        configuredTeamCount: 2, fixturesPerOpponent: 2,
+        startDate: '2027-01-01', allowedPlayingDays: [6],
+      }).expect(201)).body;
+      await coach.agent.post(`/competitions/${competition.id}/teams`)
+        .send({ displayName: uniqueName('Return Opponent') }).expect(201);
+      const fixtures = (await coach.agent.post(`/competitions/${competition.id}/fixtures/generate`)
+        .send({}).expect(201)).body;
+      expect(fixtures).toHaveLength(2);
+      expect(new Set(fixtures.map((fixture: any) => fixture.id)).size).toBe(2);
+      expect(new Set(fixtures.map((fixture: any) => fixture.sharedSessionId)).size).toBe(2);
+      expect(fixtures.every((fixture: any) => Boolean(fixture.sharedSessionId))).toBe(true);
+      expect(fixtures[1].homeCompetitionTeamId).toBe(fixtures[0].awayCompetitionTeamId);
+      expect(fixtures[1].awayCompetitionTeamId).toBe(fixtures[0].homeCompetitionTeamId);
+      const database = app.get(DatabaseService).database;
+      for (const fixture of fixtures) {
+        const fixtureEvents = await database.select({ id: events.id, teamId: events.teamId })
+          .from(events).where(eq(events.competitionFixtureId, fixture.id));
+        const ownParticipant = competition.participants.find((row: any) => row.teamId === coach.team.id);
+        for (const event of fixtureEvents) {
+          await database.update(events).set({ status: 'completed' }).where(eq(events.id, event.id));
+          await database.insert(matches).values({ eventId: event.id, competitionId: competition.id,
+            sharedMatchId: fixture.sharedSessionId, opponentName: 'Return Opponent',
+            isHome: fixture.homeCompetitionTeamId === ownParticipant.id,
+          });
+        }
+        await database.update(competitionFixtures).set({ status: 'completed', homeScore: 2, awayScore: 1 })
+          .where(eq(competitionFixtures.id, fixture.id));
+      }
+      const detail = (await coach.agent.get(`/competitions/${competition.id}`).expect(200)).body;
+      expect(detail.results).toHaveLength(2);
+      for (const fixture of fixtures) {
+        expect(detail.results).toContainEqual(expect.objectContaining({
+          homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+          awayCompetitionTeamId: fixture.awayCompetitionTeamId, homeScore: 2, awayScore: 1,
+        }));
+      }
+      expect(detail.standings.map((row: any) => row.played)).toEqual([2, 2]);
+    } finally {
+      if (previousFlag === undefined) delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+    }
+  }, 120_000);
+
   it('starts both generated fixture sheets from separate coaches and records their session identity', async () => {
     const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';

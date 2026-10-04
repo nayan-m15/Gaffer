@@ -282,6 +282,32 @@ describe('Friendly fixtures (e2e)', () => {
       const accepted = acceptedResponse!.body as AcceptedBody;
       expect(accepted.fixture.sharedSessionId).toEqual(expect.any(String));
 
+      const sheets = [];
+      for (const [coach, eventId] of [[coachA, event.id], [coachB, accepted.event.id]] as const) {
+        const squad = await createSquad(coach.agent, 'Friendly', 11);
+        const started = await coach.agent.post(`/events/${eventId}/start-match`)
+          .send({ opponentName: 'Friendly opponent', isHome: coach === coachB,
+            startingAthleteIds: squad.map((player) => player.id) }).expect(201);
+        sheets.push(started.body);
+      }
+      expect(sheets[0].id).not.toBe(sheets[1].id);
+      expect(sheets.map((sheet) => sheet.sharedMatchId)).toEqual([
+        accepted.fixture.sharedSessionId, accepted.fixture.sharedSessionId,
+      ]);
+      await coachA.agent.post(`/matches/${sheets[0].id}/events`)
+        .send({ clientRequestId: randomUUID(), team: 'own', eventType: 'goal',
+          minute: 7, period: 'first_half', matchElapsedMs: 420000 }).expect(201);
+      const reportUrl = `/matches/sessions/${accepted.fixture.sharedSessionId}/report`;
+      const homeReport = await coachA.agent.get(reportUrl).expect(200);
+      const awayReport = await coachB.agent.get(reportUrl).expect(200);
+      expect(homeReport.body).toEqual(awayReport.body);
+      expect(homeReport.body.score).toEqual({ home: 1, away: 0 });
+      expect(homeReport.body.timeline).toHaveLength(1);
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+      await coachA.agent.get(reportUrl).expect(404);
+      await coachA.agent.get(`/matches/${sheets[0].id}`).expect(200);
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+
       const participants = await database
         .select({
           teamId: matchSessionParticipants.teamId,

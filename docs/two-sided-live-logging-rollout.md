@@ -1,27 +1,29 @@
-# Two-sided live logging rollout
+﻿# Two-sided live logging rollout
+
+## Release gate — 4 October 2026
+
+Step 9 adds automated release coverage and this runbook. Production release remains blocked until the operator records the deployed checks and two-browser results below. Local test results are recorded in the Step 9 handoff in [the phase 2 plan](two-sided-phase2-plan.md); earlier handoffs are historical, not current deployment evidence.
 
 ## Production checklist
 
-1. Take and verify a restorable database backup.
-2. Deploy the additive migrations and application code with `TWO_SIDED_LIVE_LOGGING_ENABLED=false`.
-3. Verify the new schema and migration journal in staging; run the friendly two-account scenarios and inspect result/review telemetry.
-4. Enable the feature for a small cohort using accepted friendlies first. Check shared access, disputes, timeout finalisation, and cancellation/rematch behavior.
-5. After the friendly cohort is stable, enable it for generated competition fixtures. Verify each fixture has one session and one completed result in standings.
-6. Expand the cohort while monitoring duplicate-session warnings, rejected-upload warnings, open-dispute warnings, and fixture/session result disagreement errors.
+1. Record the release SHA and effective `TWO_SIDED_LIVE_LOGGING_ENABLED` value in **dev, staging and production**, on every running backend replica and background finalisation worker. Inspect the actual process/deployment environment after restart, not the workspace `.env`. Only the case-insensitive literal `true` enables it; absent or other values disable it. In a controlled authenticated request, verify `/sync/token` carries the corresponding `two_sided_live_logging` claim and refresh both clients' tokens after a change. Keep production false until the gate passes.
+2. Take a database backup, record its timestamp/location and recovery procedure, and restore it into an isolated staging database. Check migration journal, fixture/session links and representative report reads there. Record restore duration and recovery point. A backup existing alone does not verify restoration.
+3. Deploy code while disabled. Verify the deployed migration journal includes every prerequisite and **0046_match_session_event_identity through the latest journaled migration, currently 0051_match_clock_session_identity**: 0047_session_event_reconciliation, 0048_shared_review_disputes, 0049_session_result_confirmation and 0050_session_confirmation_actors. Check the release journal again if newer migrations are added. Use the normal migration runner; never skip prerequisites or drop old schema. Step 9 adds no migration.
+4. Validate the exact release's `powersync/sync-config.yaml` in PowerSync Cloud and deploy it to each intended environment. Record the configuration revision and successful validation. Verify source SELECT grants/publication for `match_sessions`, `competition_fixtures` and the existing event/review/observation/membership/operation/clock tables. Use `npm run db:diagnose:powersync` and `npm run health:offline` from `backend/` against the intended environment and review output. Validate all shared streams, especially `shared_session_report_state`, `shared_session_report_sheets` and `shared_session_report_fixture_scores`; an older deployment does not verify these additions. Test current-member access, opposite-sheet privacy and revocation with an already-issued token.
+5. Review [the read-only dry-run repair report](two-sided-test-data-repair.md). Two team sheets per fixture are expected; compare duplicate-result candidates against the single published fixture result. Record findings and operator decisions. Do not automatically relink, merge or delete historical data. Any reviewed recent dev repair uses that document's backup, transaction and rollback procedure.
+6. Enable in controlled staging and pass the **two-browser release gate** in [testing.md](testing.md#step-5b-manual-two-browser-retest). Use independent coach accounts/browser profiles for a generated fixture and an accepted friendly. Record each diagnostic `GET /events/:eventId/link-diagnostic`: same fixture and non-null session, different sheet/event IDs, correct fixture sides. Verify lineup privacy/update, matching timeline/clock/reviews/report, confirmations and final score, one standings result, separate reversed round-robin legs, warmed offline reload/replay, third-team rejection, revoked access and flag-off legacy behavior. Include a fixture created and one sheet started before activation, then retry after activation. Save evidence and sign-off; backend tests alone do not pass this gate.
+7. Enable production only after all evidence is reviewed. The flag is **global, with no cohort filter or separate friendly/competition switch**. Enabling affects all eligible friendly and generated fixtures, including safe attachment when existing sheets are retried. A small pilot requires external traffic/environment isolation; without that isolation, enabling means readiness for all eligible fixtures. Restart/refresh affected processes and sync tokens, verify effective values again, and repeat diagnostic smoke checks.
 
-## Recorded status — 2 October 2026
+## Telemetry to watch
 
-- PowerSync Cloud Sync Streams configuration has been validated and deployed by the operator.
-- The full backend unit suite passed locally: 67 suites and 775 tests.
-- The four release e2e suites and the two-account browser gate remain unverified. In the current Windows environment, Jest worker creation fails with `spawn EPERM`; a serial retry stalled before reporting results.
-- Staging rollback, restorable-backup verification, production migration status, production flag status, and production telemetry require confirmation in the respective environment. This workspace's `.env` is not a reliable indicator of either staging or production.
-
-The feature flag is one global `TWO_SIDED_LIVE_LOGGING_ENABLED` switch. It does not enforce a small team cohort or separate friendly and competition rollouts. Once enabled, all eligible newly started fixtures can create shared sessions; use external traffic controls for a limited pilot, or enable only when ready for all eligible fixtures.
+Compare with the pre-enable baseline: eligible unlinked sheets, competing sessions per fixture, diagnostic link conflicts, duplicate published fixture results, fixture/session score or report disagreement, rejected uploads and cross-side sync errors, pending queue age/replay duplicates, open reviews/disputes, confirmation and 24-hour timeout finalisation failures, and unexpected authorization failures. Check that third-team or revoked-member access never succeeds. Record dashboards/log queries, owner and observation window in the release record; this workspace has not verified production telemetry or thresholds. Stop rollout and disable on identity, privacy or result disagreement.
 
 ## Rollback
 
-Turn `TWO_SIDED_LIVE_LOGGING_ENABLED` off. Keep the additive schema in place so existing records remain readable. Do not delete sessions, reviews, operations, or observations. Continue to use the legacy single-sided path while investigating; resolve or reconcile existing shared sessions before re-enabling the flag.
+Set the global flag to `false` on all backend replicas/workers, restart as required and verify actual process values and newly issued sync-token claims. Refresh/reconnect clients and smoke-test the legacy sheet/timeline/clock/lineup paths. Shared session report endpoints intentionally return 404 while disabled; document this to operators with existing shared matches. Retain all additive schema, fixture links, sessions, confirmations, reviews, operations and observations. Disabling stops shared processing; it does not undo already-published fixture scores or reconcile existing sessions.
 
-## Minimal test-data repair report
+Capture affected IDs with the diagnostic/dry-run checks and reconcile existing shared sessions before re-enabling. Do not roll back by dropping migrations, deleting sessions or automatically unlinking sheets. For database corruption, stop writes and follow the tested backup/restore recovery procedure, including review of writes since the backup and verification in isolation before cutover. A full restore is a separate reviewed recovery action, not routine flag rollback.
 
-Use [the read-only dry-run SQL and manual repair procedure](two-sided-test-data-repair.md) for recent dev fixtures. It reports null-linked sheets, competing linked sessions and duplicate completed result candidates. No script, migration, automatic repair or deletion is involved.
+## Manual checks still required
+
+Effective deployed flags; migration journals; current PowerSync validation/deployment and source checks; dry-run findings for each environment; staging backup/restore; production telemetry; CI run; and the complete two-browser gate. No deployment, repair, backup or restore was performed during Step 9.

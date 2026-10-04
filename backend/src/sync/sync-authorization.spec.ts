@@ -77,7 +77,11 @@ describe('PowerSync shared session authorization', () => {
 
   it('associates new clock operations with their linked session sheet', () => {
     const query = streamQuery('shared_session_match_clock_operations');
-    expect(query).toMatch(/match_clock_operations\.session_id AS match_id/);
+    // Offline reconciliation compares revisions per sheet before combining
+    // the shared clock. Preserve both identities rather than aliasing them.
+    expect(query).toMatch(/match_clock_operations\.match_id,/);
+    expect(query).toMatch(/match_clock_operations\.session_id,/);
+    expect(query).not.toMatch(/session_id AS match_id/);
     expect(query).toMatch(/match_clock_operations\.match_id IN/);
     expect(query).toMatch(/match_session_participants/);
     expect(query).toMatch(/team_members/);
