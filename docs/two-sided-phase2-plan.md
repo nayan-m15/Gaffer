@@ -117,9 +117,9 @@ Keep the feature off outside controlled test environments until the release gate
 - **Tests first:** In the exact two-account test, start each side with deliberately conflicting client `isHome` values. Assert the generated fixture's home team stays home, away stays away, and the reverse-home second leg remains its own fixture with reversed orientation.
 - **Change:** Resolve side from fixture participants at session attach/start, reject/ignore conflicting `isHome`, and use normalized actual side for event ingestion and all result translation.
 - **Done when:**
-  - [ ] Client input cannot change a generated fixture's home/away sides.
-  - [ ] Both viewers render the same actual home/away score.
-  - [ ] Two round-robin legs remain two fixtures with independently correct orientations.
+  - [x] Client input cannot change a generated fixture's home/away sides.
+  - [x] Both viewers render the same actual home/away score.
+  - [x] Two round-robin legs remain two fixtures with independently correct orientations.
 
 ### Step 4 — Share only confirmed pre-match lineup fields
 
@@ -141,9 +141,9 @@ Implementation split: **5(a)** adds backend session report reads and an owning-s
 - **Tests first:** Extend Step 1 to assert both coach routes show one shared score, timeline, clock, report, final status and review decisions while their own squad, tactics and notes remain private. Check online and synced/offline reads use one session key. Check peer membership and unrelated team authorization.
 - **Change:** Treat route match ID as an access handle to the caller's sheet, resolve its shared session, then serve shared report data by session ID. Keep sheet-specific private panels and editing scoped to the owning sheet. Do not imply that both deep links must have the same `matches.id`.
 - **Done when:**
-  - [ ] Both teams receive the same shared report and timeline for one session.
-  - [ ] Shared query/cache invalidation is session-keyed; private data remains sheet/team-keyed.
-  - [ ] Third teams and nonparticipants receive no shared session data.
+  - [x] Both teams receive the same shared report and timeline for one session.
+  - [x] Shared query/cache invalidation is session-keyed; private data remains sheet/team-keyed.
+  - [x] Third teams and nonparticipants receive no shared session data.
 
 ### Step 6 — Publish standings once from the fixture's final session result
 
@@ -152,9 +152,9 @@ Implementation split: **5(a)** adds backend session report reads and an owning-s
 - **Tests first:** Assert two started/completed sheets for one session produce exactly one table result. Assert source score is the final session result, home and away IDs are the fixture IDs, and home/away score do not change with the submitting sheet. Assert another fixture in the double round robin produces its own result with reversed fixture sides. Assert accepted friendlies and standalone/manual games do not enter generated standings.
 - **Change:** Make fixture/session the standings source of truth. Remove per-sheet result emission for linked shared sessions; aggregate one row per generated fixture and use fixture participants for orientation. Preserve a documented compatibility path for older unlinked generated results.
 - **Done when:**
-  - [ ] One generated fixture/session contributes exactly one result and one table update.
-  - [ ] Home/away always comes from `competition_fixtures`, not `matches.is_home`.
-  - [ ] Distinct double round-robin fixture IDs each count once.
+  - [x] One generated fixture/session contributes exactly one result and one table update.
+  - [x] Home/away always comes from `competition_fixtures`, not `matches.is_home`.
+  - [x] Distinct double round-robin fixture IDs each count once.
 
 ### Step 7 — Add reviewable test-data repair reports and procedure
 
@@ -163,9 +163,9 @@ Implementation split: **5(a)** adds backend session report reads and an owning-s
 - **Tests first:** Fixture test data with (a) fixture session and one null-linked match, (b) two candidate sessions, (c) duplicate completed fixture results. Assert the report flags each class, proposes candidates, and does not mutate/delete anything.
 - **Change:** Produce a dry-run report with fixture/event/team/match/session IDs and suggested action. Document a manual transaction workflow: backup, inspect both coaches' rows, verify participant teams/sides and observations, obtain operator review, relink only unambiguous test records, preserve competing sessions/observations for explicit reconciliation, verify standings afterward. Include rollback guidance. No production history auto-linking/deletion.
 - **Done when:**
-  - [ ] Dry run is read-only and reviewable before action.
-  - [ ] Manual relink steps check for conflicting sessions and preserve audit data.
-  - [ ] Production historical records are never changed automatically.
+  - [x] Dry run is read-only and reviewable before action.
+  - [x] Manual relink steps check for conflicting sessions and preserve audit data.
+  - [x] Production historical records are never changed automatically.
 
 ### Step 8 — Add authenticated event-link diagnostic
 
@@ -226,8 +226,8 @@ Product decisions are settled for implementation:
 - [x] Step 6 — Generated standings publish one completed fixture result using fixture-owned participants and scores. Legacy unlinked generated results remain supported through `linked_match_id`.
 - [x] Step 4 — Implemented: flag-enabled allowlisted opponent lineup API and read-only cards on setup, live and report pages; confirmed snapshots survive kickoff and full time. Flag-off legacy payload, squad autofill and snapshot retirement remain intact.
 - [x] Step 5(a) — Backend session report reads implemented; integration verification is recorded below.
-- [ ] Step 5(b) — Frontend session report/live-page reads, shared cache keys/invalidation and synced/offline integration remain outstanding.
-- [ ] Step 7 — Not started.
+- [x] Step 5(b) - Frontend live/report pages resolve shared report state by session; private panels/writes retain owning sheet IDs. Offline reconstruction and focused verification are recorded below.
+- [x] Step 7 - Minimal read-only SQL report and reviewed manual repair/backup/rollback procedure documented; no repair script or automatic mutation.
 - [x] Step 8 — Authenticated event-link diagnostic and runbook instructions added; current participants can inspect IDs, nonparticipants receive 404.
 - [ ] Step 9 — Release gate and rollout not started.
 
@@ -253,3 +253,19 @@ Verification and remaining expected failures:
 - **Backend e2e commands:** all runs used `node node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand <file>` from `backend/`, without experimental VM modules. Focused friendly/generated lineup and session-report cases were run; the post-implementation generated case exceeded the old 60-second timeout. The full friendly file finished with **15 passed / 2 failed**, with Neon fetch failures, an `ECONNRESET`, and a database cleanup failure. Its new allowlist case passed in that run; the subsequently added full-time/revocation assertions have not yet been rerun. Full competitions outcome is recorded below after its required final run.
 - **Not run:** browser e2e/manual two-account browser checks, offline-sync and team-isolation suites, backend unit suite, and the broader frontend suite. No migration, deployment, repair or production-data mutation was performed. All four temporary `.phase2-*` files created for local editing were deleted.
 - **Required final full competitions run:** `node node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand test/competitions.e2e-spec.ts` from `backend/` passed: **12 passed, 1 todo**, 159.879 seconds. The expanded generated-fixture case verifies the allowlisted lineup/formation after kickoff, equal session-ID and owning-sheet-resolved reports for both coaches, canonical score/timeline, clock, shared resolved review decision, full-time and final status, published fixture score, third-team rejection, revoked-membership rejection, and flag-off session endpoint isolation. The sole todo is Step 5(b).
+
+### 2026-10-04 implementation handoff - Step 5(b) and minimal Step 7
+
+- **Completed scope:** Step 5(b) shared report/live reads, session-keyed query/cache/invalidation, shared result/review card and offline reconstruction; Step 7 minimal SQL/procedure. Step 9 was not started. No migrations, deployment, historical relinking or deletion occurred; all existing IDs remain intact.
+- **Frontend:** both pages use `useMatchView`. Route IDs continue to authorize/read the private sheet; `sharedSessionId` selects `GET /matches/sessions/:sessionId/report`. Shared cache keys are `["match-sessions", sessionId, "report"]` and `session-report:sessionId`. Event, finish, clock, finalise/reopen mutations and sync/queue updates invalidate the resolved session. Owning squad, tactics, notes, identities and pending queue remain sheet-keyed. The shared timeline takes only allowlisted player labels; private athlete identities support own-team stats without changing shared text. Private substitutions use the owning sheet timeline. The published session score takes precedence over counting timeline goals. A shared result card shows canonical confirmations, final status and review decisions on both pages. Legacy private insights remain available with the flag off; linked shared reports do not display a divergent sheet-generated narrative.
+- **Offline choices:** a previously fetched canonical DTO is required; a cold offline route fails visibly instead of substituting a private report. HTTP 4xx responses never fall back to the shared cached DTO. Once synced, session state, both sheets' narrow clock fields, canonical events/reviews and fixture scores reconstruct the shared report. Pending local events remain a separate sheet-owned overlay until canonical IDs/memberships acknowledge them. This requires the three new allowlisted PowerSync streams, plus source SELECT/publication access for `match_sessions` and `competition_fixtures`. The existing source configuration helper includes those tables but was not executed. Cloud validation/deployment and real browser offline checks remain unverified.
+- **Build investigation:** the three nullable-score errors were introduced by Step 6 (`0e6a3842`), not present before it. Comparing `c15539dd` shows the change from numeric SQL score expressions to nullable fixture columns. Temporarily substituting only those two pre-Step-6 standings source files and running `tsc --noEmit -p tsconfig.build.json` passed (exit 0); current files were restored in a finally block. The fix excludes incomplete/null fixture scores before emitting standings results; it does not coerce missing scores to zero.
+- **Tests-first evidence:** new frontend session-model tests first failed with the missing model module. The former Step 5(b) todo is now active: it applies the actual frontend model to both real coaches' HTTP-fetched final reports/private sheets and checks shared key/orientation/timeline/clock/final state and private-field preservation. Jest initially rejected the frontend ESM transform; the test now transpiles only the pure frontend model to CommonJS without altering backend Jest configuration or using experimental VM modules.
+- **Step 7:** `docs/two-sided-test-data-repair.md` contains the read-only SQL and manual transaction/backup/rollback procedure. The exact query passed in a READ ONLY transaction against the isolated test database (zero findings); a second READ ONLY query used synthetic VALUES CTEs and returned exactly null-link, competing-session and duplicate-completed-result findings. No persistent data was seeded or changed. Two completed sheets are expected in the healthy flow, so the third finding is explicitly a duplicate-result candidate requiring comparison with the single fixture result/API standings. Unlinked orphan sessions are preserved for separate inspection, not assigned by team-pair similarity.
+- **Verification:** full `friendly-fixtures.e2e-spec.ts` passed **17/17** in 357.317 seconds; the earlier two connection/cleanup failures did not recur. Relevant frontend Node tests passed **14/14** (session report, allowlisted lineup, match report model and live report/PDF model). Backend build passed after the score fix. Final frontend build and full competitions results are recorded below. An earlier root build attempt failed resolving a Tailwind native dependency; a subsequent frontend build caught an ANSI-encoded newly created status component and it was converted to UTF-8. A later typecheck caught a missing synced-clock `match_id` type/selection; that was corrected.
+- **Browser limitation:** `node node_modules/@playwright/test/cli.js test --config playwright.offline.config.ts --project desktop-chromium` failed before tests ran with `spawn EPERM`. The precise two-browser retest checklist is under `docs/testing.md`, including generated/friendly orientation, shared clock/report/reviews, full time/confirmation rules, warmed offline reload/replay, privacy, revoked access and flag-off behavior.
+- **Not run:** backend unit, offline-sync and team-isolation suites; broad frontend suite; browser execution/manual browser checks; PowerSync Cloud validation/deployment; source configuration helper or repair updates. Backend e2e runs used the requested serial Jest command from `backend/` without experimental VM modules. No unrelated refactor was performed.
+- **Changed files:** backend standings service/result helper, competitions e2e and existing PowerSync source configuration helper; frontend match API/hooks/types, session report model/status/Node tests, report label models, live/report pages and offline store; PowerSync sync config; plan, testing, rollout and new repair documentation.
+- **Exact stopping point:** implementation of 5(b) and minimal 7. Keep the feature off outside controlled tests; browser and deployed-sync validation remain outstanding. Step 9 remains untouched.
+
+- **Final verification results:** `npm.cmd run build` passed from both `frontend/` and `backend/`. The final full `node node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand test/competitions.e2e-spec.ts` from `backend/` passed **13/13**, no todo, in 171.503 seconds. The earlier parse-only competitions attempt executed zero tests; no completed competitions run preceded the required final full run. The final frontend check covered TypeScript, production bundle and PWA generation. `git diff --check` passed. Source configuration, stream deployment and real browser checks were not performed.

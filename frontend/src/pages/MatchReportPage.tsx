@@ -1,3 +1,5 @@
+import { sessionPlayerLabel } from "@/features/matches/session-report-model";
+import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
 import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -31,8 +33,7 @@ import {
   useDeleteMatchEvent,
   useFinaliseMatchProjection,
   useLogMatchEvent,
-  useMatch,
-  useMatchEvents,
+  useMatchView,
   useMatchInsight,
   useMatchSquad,
   useReopenMatchProjection,
@@ -132,6 +133,8 @@ function shirtLabel(athlete: MatchSquadAthlete) {
 }
 
 function whoLabel(event: MatchLogEvent, squad: MatchSquadAthlete[]) {
+  const sharedLabel = sessionPlayerLabel(event);
+  if (sharedLabel) return sharedLabel;
   if (event.athlete) {
     return shirtLabel(event.athlete);
   }
@@ -321,11 +324,10 @@ export default function MatchReportPage() {
   const navigate = useNavigate();
   const { team } = useAuth();
 
-  const matchQuery = useMatch(matchId);
+  const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
   const squadQuery = useMatchSquad(matchId);
-  const eventsQuery = useMatchEvents(matchId);
   const insightQuery = useMatchInsight(
-    matchId,
+    sessionReport ? undefined : matchId,
     matchQuery.data?.projection?.finalisationState !== undefined &&
       matchQuery.data.projection.finalisationState !== "open",
   );
@@ -378,7 +380,7 @@ export default function MatchReportPage() {
   const oppColor = resolveOppColor(match?.opponentColor);
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = eventsQuery.isSuccess
+  const teamScore = sessionReport ? (isHome ? sessionReport.score.home : sessionReport.score.away) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "own" &&
@@ -386,7 +388,7 @@ export default function MatchReportPage() {
           event.lifecycleStatus !== "voided",
       ).length
     : (match?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
+  const oppScore = sessionReport ? (isHome ? sessionReport.score.away : sessionReport.score.home) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "opponent" &&
@@ -410,8 +412,8 @@ export default function MatchReportPage() {
   const oppAbbrev = teamAbbrev(oppName);
 
   const ownState = useMemo(
-    () => ownPitchState(squad, timeline),
-    [squad, timeline],
+    () => ownPitchState(squad, privateEventsQuery.data ?? timeline),
+    [squad, timeline, privateEventsQuery.data],
   );
   const matchPlayerCount: FormationPlayerCount = gamePlan
     ? getFormationPlayerCount(gamePlan.formationId)
@@ -502,7 +504,7 @@ export default function MatchReportPage() {
         ).length,
       };
     });
-  }, [squad, timeline]);
+  }, [squad, timeline, privateEventsQuery.data]);
 
   const topPerformers = useMemo(
     () =>
@@ -618,7 +620,7 @@ export default function MatchReportPage() {
       squad,
       opponentSquad,
       ownOnPitchIds: new Set(
-        ownPitchState(squad, timeline).onPitch.map((athlete) => athlete.id),
+        ownPitchState(squad, privateEventsQuery.data ?? timeline).onPitch.map((athlete) => athlete.id),
       ),
       opponentOnPitchIds: new Set(
         opponentPitchState(opponentSquad, timeline).onPitch.map(
@@ -841,6 +843,7 @@ export default function MatchReportPage() {
         </div>
       </header>
       {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+        <SessionReportStatus report={sessionReport} />
         <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
       </div>}
 

@@ -1,3 +1,5 @@
+import { sessionPlayerLabel } from "@/features/matches/session-report-model";
+import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
 import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import {
   Fragment,
@@ -44,8 +46,7 @@ import {
   useFinishMatch,
   useFinaliseMatchProjection,
   useLogMatchEvent,
-  useMatch,
-  useMatchEvents,
+  useMatchView,
   useMatchSquad,
   useUpdateMatchEvent,
   useUpdateMatchClock,
@@ -399,11 +400,10 @@ export default function LiveMatchPage() {
   const navigate = useNavigate();
   const { team } = useAuth();
 
-  const matchQuery = useMatch(matchId);
+  const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
   const clockAuthorityRevision = matchQuery.data?.clockRevision ?? 0;
   const refetchMatch = matchQuery.refetch;
   const squadQuery = useMatchSquad(matchId);
-  const eventsQuery = useMatchEvents(matchId);
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
   const gamePlanQuery = useGamePlan(
     gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
@@ -609,8 +609,8 @@ export default function LiveMatchPage() {
   }
 
   const ownState = useMemo(
-    () => ownPitchState(squad, timeline),
-    [squad, timeline],
+    () => ownPitchState(squad, privateEventsQuery.data ?? timeline),
+    [squad, timeline, privateEventsQuery.data],
   );
   const matchPlayerCount: FormationPlayerCount = gamePlan
     ? getFormationPlayerCount(gamePlan.formationId)
@@ -650,7 +650,7 @@ export default function LiveMatchPage() {
   const oppHalf = isHome ? "right" : "left";
   // Once the timeline is loaded, its effective rows determine the displayed
   // score. A cached match total may be from a different projection revision.
-  const teamScore = eventsQuery.isSuccess
+  const teamScore = sessionReport ? (isHome ? sessionReport.score.home : sessionReport.score.away) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "own" &&
@@ -658,7 +658,7 @@ export default function LiveMatchPage() {
           event.lifecycleStatus !== "voided",
       ).length
     : (matchQuery.data?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
+  const oppScore = sessionReport ? (isHome ? sessionReport.score.away : sessionReport.score.home) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "opponent" &&
@@ -1770,6 +1770,7 @@ export default function LiveMatchPage() {
         </div>
       </header>
       {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+        <SessionReportStatus report={sessionReport} />
         <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
       </div>}
 
@@ -2541,6 +2542,8 @@ function timelinePersonLabel(
   event: MatchLogEvent,
   visibility: OpponentSquadVisibility,
 ) {
+  const sharedLabel = sessionPlayerLabel(event);
+  if (sharedLabel) return sharedLabel;
   if (event.athlete) return shirtLabel(event.athlete);
   if (event.opponentPlayer) return opponentShirtLabel(event.opponentPlayer, visibility);
   return event.opponentLabel ?? "Unassigned";

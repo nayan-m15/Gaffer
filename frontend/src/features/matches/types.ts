@@ -113,6 +113,8 @@ export interface FriendlyOpponentLineup {
 }
 
 export interface MatchLogEvent {
+  /** Allowlisted canonical player label, identical for both session viewers. */
+  player?: { name: string | null; shirtNumber: number | null } | null;
   id: string;
   matchId: string;
   athleteId: string | null;
@@ -192,3 +194,50 @@ export interface ConfirmedOpponentLineup {
   bench: Array<{ name: string; shirtNumber: number | null }>;
 }
 export type OpponentLineupView = FriendlyOpponentLineup | ConfirmedOpponentLineup;
+
+export interface SessionReport {
+  sessionId: string;
+  participants: Array<{
+    side: MatchSessionSide;
+    teamId: string | null;
+    competitionTeamId: string | null;
+  }>;
+  score: { home: number; away: number };
+  clock: {
+    period: MatchClockPeriod;
+    elapsedMs: number;
+    startedAt: string | null;
+    running: boolean;
+    revision: number;
+  };
+  finalStatus:
+    "open" | "awaiting_confirmation" | "finalised" | "amendment_required";
+  finalisedAt: string | null;
+  confirmations: { home: string | null; away: string | null };
+  timeline: Array<
+    Pick<
+      MatchLogEvent,
+      | "id"
+      | "side"
+      | "eventType"
+      | "minute"
+      | "period"
+      | "matchElapsedMs"
+      | "lifecycleStatus"
+      | "manuallyAdjusted"
+      | "createdAt"
+      | "updatedAt"
+    > & { player: { name: string | null; shirtNumber: number | null } | null }
+  >;
+  reviews: Array<{
+    id: string;
+    canonicalEventId: string | null;
+    reason: string;
+    status: string;
+    resolution: string | null;
+    resolvedAt: string | null;
+    resolvedByUserId: string | null;
+    disputedAt: string | null;
+    disputedByUserId: string | null;
+  }>;
+}

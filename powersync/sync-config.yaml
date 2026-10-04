@@ -524,7 +524,7 @@ streams:
     auto_subscribe: true
     query: |
       SELECT match_clock_operations.id,
-             match_clock_operations.session_id AS match_id,
+             match_clock_operations.match_id,
              match_clock_operations.session_id,
              match_clock_operations.actor_user_id,
              match_clock_operations.period,
@@ -564,5 +564,59 @@ streams:
                   FROM team_members
                   WHERE team_members.user_id = auth.parameter('user_id')
                 )
+            )
+        )
+
+  shared_session_report_state:
+    auto_subscribe: true
+    query: |
+      SELECT match_sessions.id,
+             match_sessions.home_confirmed_at,
+             match_sessions.away_confirmed_at,
+             match_sessions.finalised_at
+      FROM match_sessions
+      WHERE auth.parameter('two_sided_live_logging') = 'true'
+        AND match_sessions.id IN (
+          SELECT match_session_participants.session_id
+          FROM match_session_participants
+          WHERE match_session_participants.team_id = auth.parameter('team_id')
+            AND match_session_participants.team_id IN (
+              SELECT team_members.team_id
+              FROM team_members
+              WHERE team_members.user_id = auth.parameter('user_id')
+            )
+        )
+
+  shared_session_report_sheets:
+    auto_subscribe: true
+    query: |
+      SELECT session_report_sheets.id, session_report_sheets.shared_match_id AS session_id, session_report_sheets.clock_period, session_report_sheets.clock_elapsed_ms, session_report_sheets.clock_started_at, session_report_sheets.clock_revision, session_report_sheets.updated_at
+      FROM matches AS session_report_sheets
+      WHERE auth.parameter('two_sided_live_logging') = 'true'
+        AND session_report_sheets.shared_match_id IN (
+          SELECT match_session_participants.session_id
+          FROM match_session_participants
+          WHERE match_session_participants.team_id = auth.parameter('team_id')
+            AND match_session_participants.team_id IN (
+              SELECT team_members.team_id
+              FROM team_members
+              WHERE team_members.user_id = auth.parameter('user_id')
+            )
+        )
+
+  shared_session_report_fixture_scores:
+    auto_subscribe: true
+    query: |
+      SELECT competition_fixtures.id, competition_fixtures.shared_session_id, competition_fixtures.home_score, competition_fixtures.away_score, competition_fixtures.status
+      FROM competition_fixtures
+      WHERE auth.parameter('two_sided_live_logging') = 'true'
+        AND competition_fixtures.shared_session_id IN (
+          SELECT match_session_participants.session_id
+          FROM match_session_participants
+          WHERE match_session_participants.team_id = auth.parameter('team_id')
+            AND match_session_participants.team_id IN (
+              SELECT team_members.team_id
+              FROM team_members
+              WHERE team_members.user_id = auth.parameter('user_id')
             )
         )

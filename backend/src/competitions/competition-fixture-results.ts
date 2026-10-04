@@ -421,7 +421,7 @@ async function ensureHybridKnockoutStage(
     }
   }
   const liveResults = [...liveByFixture.values()].flatMap((row) =>
-    row.fixtureId && row.homeCompetitionTeamId && row.awayCompetitionTeamId
+    row.fixtureId && row.homeCompetitionTeamId && row.awayCompetitionTeamId && row.homeScore !== null && row.awayScore !== null
       ? [{
           homeCompetitionTeamId: row.homeCompetitionTeamId,
           awayCompetitionTeamId: row.awayCompetitionTeamId,

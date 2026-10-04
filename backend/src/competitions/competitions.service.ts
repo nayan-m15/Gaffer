@@ -863,7 +863,7 @@ export class CompetitionsService {
       }
     }
     const live = [...liveByFixture.values()].flatMap((row) =>
-      row.fixtureId && row.fixtureHomeId && row.fixtureAwayId
+      row.fixtureId && row.fixtureHomeId && row.fixtureAwayId && row.fixtureHomeScore !== null && row.fixtureAwayScore !== null
         ? [{
             id: `fixture:${row.fixtureId}`,
             homeCompetitionTeamId: row.fixtureHomeId,

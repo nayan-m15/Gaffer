@@ -1,3 +1,17 @@
+import {
+  listQueuedEvents,
+  queuedEventAsTimelineRow,
+  readSyncedObservationMemberships,
+} from "@/offline/match-store";
+import {
+  sessionReportKey,
+  applySessionReport,
+  sessionTimeline,
+} from "./session-report-model";
+import {
+  subscribeToSyncedSessionReportChanges,
+  subscribeToOfflineQueueChanges,
+} from "@/offline/match-store";
 import { useEffect } from "react";
 import {
   useMutation,
@@ -6,6 +20,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import {
+  fetchSessionReport,
   createMatchLogEvent,
   deleteMatchLogEvent,
   fetchMatch,
@@ -346,6 +361,7 @@ export function useLogMatchEvent(matchId: string) {
       }
     },
     onSuccess: (created, input, context) => {
+      invalidateSheetSession(queryClient, matchId);
       queryClient.setQueryData<MatchLogEvent[]>(
         eventsKey(matchId),
         (current) => {
@@ -458,6 +474,7 @@ export function useUpdateMatchEvent(matchId: string) {
       }
     },
     onSuccess: (updated, { eventId, input }, context) => {
+      invalidateSheetSession(queryClient, matchId);
       queryClient.setQueryData<MatchLogEvent[]>(
         eventsKey(matchId),
         (current) => {
@@ -535,6 +552,7 @@ export function useDeleteMatchEvent(matchId: string) {
       }
     },
     onSuccess: (_deleted, _eventId, context) => {
+      invalidateSheetSession(queryClient, matchId);
       if (context?.scoreTeam) {
         void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
       }
@@ -550,6 +568,7 @@ export function useFinishMatch(matchId: string) {
   return useMutation({
     mutationFn: () => finishMatch(matchId),
     onSuccess: () => {
+      invalidateSheetSession(queryClient, matchId);
       void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
@@ -559,7 +578,9 @@ export function useFinishMatch(matchId: string) {
 }
 
 export function useUpdateMatchClock(matchId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
+    onSuccess: () => invalidateSheetSession(queryClient, matchId),
     scope: { id: `match-clock-${matchId}` },
     networkMode: "always",
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
@@ -573,6 +594,7 @@ export function useFinaliseMatchProjection(matchId: string) {
     mutationFn: (expectedRevision: number) =>
       finaliseMatchProjection(matchId, expectedRevision),
     onSuccess: () => {
+      invalidateSheetSession(queryClient, matchId);
       void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
       // Insight generation runs fire-and-forget on the backend; refetching
       // now (and via useMatchInsight's poll while unavailable/pending) picks
@@ -588,7 +610,123 @@ export function useReopenMatchProjection(matchId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (reason: string) => reopenMatchProjection(matchId, reason),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) }),
+    onSuccess: () => {
+      invalidateSheetSession(queryClient, matchId);
+      return queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
+    },
   });
+}
+
+/** Both pages keep their route sheet for private reads and writes. */
+export function useMatchView(matchId: string | undefined) {
+  const sheetQuery = useMatch(matchId);
+  const sessionId = sheetQuery.data?.sharedSessionId;
+  const legacyEvents = useMatchEvents(matchId);
+  const queryClient = useQueryClient();
+  const reportQuery = useQuery({
+    queryKey: sessionReportKey(sessionId ?? ""),
+    queryFn: () => fetchSessionReport(sessionId!, matchId!),
+    enabled: Boolean(sessionId && matchId),
+    networkMode: "always",
+    staleTime: MATCH_QUERY_STALE_MS,
+    refetchInterval: 1_000,
+  });
+  useEffect(() => {
+    if (!sessionId) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const refresh = () => {
+      void queryClient.invalidateQueries({
+        queryKey: sessionReportKey(sessionId),
+      });
+    };
+    void subscribeToSyncedSessionReportChanges(refresh)
+      .then((dispose) => {
+        if (disposed) dispose();
+        else stop = dispose;
+      })
+      .catch((error) => console.warn("Could not watch shared report.", error));
+    const stopQueue = subscribeToOfflineQueueChanges(refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      disposed = true;
+      stop?.();
+      stopQueue();
+      window.removeEventListener("online", refresh);
+    };
+  }, [sessionId, queryClient]);
+  const pendingQuery = useQuery({
+    queryKey: ["matches", matchId, "pending-session-events"],
+    enabled: Boolean(sessionId && matchId),
+    networkMode: "always",
+    refetchInterval: 1_000,
+    queryFn: async () => {
+      const [queue, memberships] = await Promise.all([
+        listQueuedEvents(matchId!),
+        readSyncedObservationMemberships(matchId!),
+      ]);
+      const ids = new Set(reportQuery.data?.timeline.map((row) => row.id));
+      return queue
+        .filter(
+          (row) =>
+            (row.kind ?? "observation") === "observation" &&
+            !memberships.has(row.id) &&
+            !ids.has(row.canonical_event_id ?? ""),
+        )
+        .map(queuedEventAsTimelineRow);
+    },
+  });
+  const sheet = sheetQuery.data;
+  const report = reportQuery.data;
+  const matchQuery = sessionId
+    ? {
+        ...sheetQuery,
+        data: sheet && report ? applySessionReport(sheet, report) : undefined,
+        isPending: sheetQuery.isPending || reportQuery.isPending,
+        isError: sheetQuery.isError || reportQuery.isError,
+        error: sheetQuery.error ?? reportQuery.error,
+        refetch: async () => {
+          await reportQuery.refetch();
+          return sheetQuery.refetch();
+        },
+      }
+    : sheetQuery;
+  const eventsQuery = sessionId
+    ? {
+        ...reportQuery,
+        data:
+          sheet && report
+            ? [
+                ...(pendingQuery.data ?? []),
+                ...sessionTimeline(report, sheet).map((row) => {
+                  // Only the owning sheet supplies private athlete identity; shared text stays allowlisted.
+                  const own =
+                    row.team === "own"
+                      ? legacyEvents.data?.find(
+                          (event) =>
+                            event.id === row.id && event.team === "own",
+                        )
+                      : undefined;
+                  return own
+                    ? { ...row, athleteId: own.athleteId, athlete: own.athlete }
+                    : row;
+                }),
+              ]
+            : undefined,
+      }
+    : legacyEvents;
+  return {
+    matchQuery,
+    eventsQuery,
+    sessionReport: report,
+    privateEventsQuery: legacyEvents,
+  };
+}
+
+function invalidateSheetSession(client: QueryClient, matchId: string) {
+  const sessionId = client.getQueryData<MatchRecord>(
+    matchQueryKey(matchId),
+  )?.sharedSessionId;
+  if (sessionId)
+    void client.invalidateQueries({ queryKey: sessionReportKey(sessionId) });
 }

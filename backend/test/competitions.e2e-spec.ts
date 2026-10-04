@@ -1,3 +1,15 @@
+import type { SessionReport } from '../../frontend/src/features/matches/session-report-model';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import ts from 'typescript';
+// Frontend has an ESM tsconfig; load its pure model as CommonJS without changing Jest's backend transform.
+const frontendModel: typeof import('../../frontend/src/features/matches/session-report-model') = {} as typeof import('../../frontend/src/features/matches/session-report-model');
+new Function('exports', ts.transpileModule(
+  readFileSync(resolve(__dirname, '../../frontend/src/features/matches/session-report-model.ts'), 'utf8'),
+  {compilerOptions: {module: ts.ModuleKind.CommonJS}},
+).outputText)(frontendModel);
+const { applySessionReport, sessionTimeline, sessionReportKey } = frontendModel;
+import type { MatchRecord } from '../../frontend/src/features/matches/types';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -75,9 +87,7 @@ describe('Shared competitions (e2e)', () => {
     return `${base} ${randomUUID().slice(0, 8)}`;
   }
 
-  it.todo(
-    'Step 5(b): frontend reports and synced cache keys use the canonical session report',
-  );
+  let frontendReportCase: {home: MatchRecord; away: MatchRecord; report: SessionReport} | undefined;
 
   async function createCompetition(
     agent: ReturnType<typeof request.agent>,
@@ -648,6 +658,11 @@ describe('Shared competitions (e2e)', () => {
         homeCoach.agent.get(reportUrl).expect(200), awayCoach.agent.get(reportUrl).expect(200),
       ]);
       expect(homeFinal.body).toEqual(awayFinal.body);
+      const [homePrivate, awayPrivate] = await Promise.all([
+        homeCoach.agent.get(`/matches/${homeSheet.id}`).expect(200),
+        awayCoach.agent.get(`/matches/${awaySheet.id}`).expect(200),
+      ]);
+      frontendReportCase = {home: homePrivate.body, away: awayPrivate.body, report: homeFinal.body};
       expect(homeFinal.body).toMatchObject({ finalStatus: 'finalised', score: { home: 3, away: 1 } });
       await database.delete(teamMembers).where(eq(teamMembers.userId, awayCoach.user.id));
       await awayCoach.agent.get(reportUrl).expect(403);
@@ -803,4 +818,23 @@ describe('Shared competitions (e2e)', () => {
     await agent.delete(`/competitions/${competition.id}`).expect(200);
     await agent.get(`/competitions/${competition.id}`).expect(404);
   });
+  it('Step 5(b): frontend reports and synced cache keys use the canonical session report', () => {
+    expect(frontendReportCase).toBeDefined();
+    const {home, away, report} = frontendReportCase!;
+    const homeView = applySessionReport(home, report);
+    const awayView = applySessionReport(away, report);
+    expect(home.id).not.toBe(away.id);
+    expect(sessionReportKey(home.sharedSessionId!)).toEqual(sessionReportKey(away.sharedSessionId!));
+    expect(homeView.teamScore).toBe(awayView.opponentScore);
+    expect(homeView.opponentScore).toBe(awayView.teamScore);
+    expect(homeView.clockPeriod).toBe(awayView.clockPeriod);
+    expect(homeView.projection?.finalisationState).toBe('finalised');
+    expect(awayView.projection?.finalisationState).toBe('finalised');
+    expect(sessionTimeline(report, home).map(row => [row.id, row.side, row.minute])).toEqual(
+      sessionTimeline(report, away).map(row => [row.id, row.side, row.minute]));
+    expect(homeView.gamePlanSnapshot).toEqual(home.gamePlanSnapshot);
+    expect(awayView.eventNotes).toEqual(away.eventNotes);
+    expect(sessionTimeline(report, home).every(row => row.detail === null)).toBe(true);
+  });
+
 });

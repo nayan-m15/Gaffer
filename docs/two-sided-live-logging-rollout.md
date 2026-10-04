@@ -21,3 +21,7 @@ The feature flag is one global `TWO_SIDED_LIVE_LOGGING_ENABLED` switch. It does 
 ## Rollback
 
 Turn `TWO_SIDED_LIVE_LOGGING_ENABLED` off. Keep the additive schema in place so existing records remain readable. Do not delete sessions, reviews, operations, or observations. Continue to use the legacy single-sided path while investigating; resolve or reconcile existing shared sessions before re-enabling the flag.
+
+## Minimal test-data repair report
+
+Use [the read-only dry-run SQL and manual repair procedure](two-sided-test-data-repair.md) for recent dev fixtures. It reports null-linked sheets, competing linked sessions and duplicate completed result candidates. No script, migration, automatic repair or deletion is involved.

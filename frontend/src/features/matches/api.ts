@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { ApiError } from "@/lib/api";
 import {
+  readSyncedSessionReport,
   cacheResponse,
   completeQueuedEvent,
   enqueueEvent,
@@ -443,4 +444,25 @@ export function reopenMatchProjection(matchId: string, reason: string) {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+}
+
+/** Shared session DTO, cached once per session; authorization failures never use stale data. */
+export async function fetchSessionReport(sessionId: string, matchId: string) {
+  const key = `session-report:${sessionId}`;
+  try {
+    const report = await apiFetch<
+      import("./session-report-model").SessionReport
+    >(`/matches/sessions/${sessionId}/report`, { cache: "no-store" });
+    await cacheResponse(key, report);
+    return report;
+  } catch (error) {
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500)
+      throw error;
+    const cached =
+      await readCachedResponse<import("./session-report-model").SessionReport>(
+        key,
+      );
+    if (!cached) throw error;
+    return readSyncedSessionReport(sessionId, matchId, cached);
+  }
 }
