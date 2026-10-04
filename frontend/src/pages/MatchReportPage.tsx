@@ -1,4 +1,5 @@
-﻿import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
@@ -839,6 +840,9 @@ export default function MatchReportPage() {
           ) : null}
         </div>
       </header>
+      {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+        <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
+      </div>}
 
       <div className="w-full px-4 pb-12 pt-4 sm:px-6 sm:pt-5 lg:px-8">
         <div className="mb-5 flex w-full max-w-md justify-center rounded-xl border border-[#2a2e31] bg-[#111315] p-1 shadow-inner">

@@ -6,7 +6,7 @@ import { App } from 'supertest/types';
 import { eq } from 'drizzle-orm';
 import { AppModule } from '../src/app.module';
 import { createDatabaseClient } from '../src/database/drizzle';
-import { matchSessionParticipants } from '../src/database/schema';
+import { matchSessionParticipants, teamMembers } from '../src/database/schema';
 import { registerCoach } from './utils/auth-helpers';
 import {
   cleanupUser,
@@ -931,6 +931,93 @@ describe('Friendly fixtures (e2e)', () => {
         players: [],
       },
     );
+  }, 120_000);
+
+  it('returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff', async () => {
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+    const coachA = await newCoach();
+    const coachB = await newCoach();
+    const squadB = await createSquad(coachB.agent, 'Lineup', 12);
+    const created = await coachA.agent
+      .post('/events')
+      .send({
+        title: coachB.team.name,
+        type: 'match',
+        scheduledAt: futureIso(0),
+        location: 'Alpha Park',
+        friendlyOpponentTeamId: coachB.team.id,
+      })
+      .expect(201);
+    const eventA = created.body as EventBody;
+    const accepted = await coachB.agent
+      .post(`/friendly-fixtures/${eventA.friendlyFixtureId}/accept`)
+      .expect(201);
+    const eventB = (accepted.body as AcceptedBody).event;
+    const starters = squadB.slice(0, 11).map((athlete) => athlete.id);
+    const bench = squadB.slice(11).map((athlete) => athlete.id);
+
+    const unconfirmed = await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(200);
+    expect(unconfirmed.body).toEqual({ available: false, formation: null, starters: [], bench: [] });
+    const outsider = await newCoach();
+    await outsider.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(404);
+
+    await coachB.agent
+      .put(`/events/${eventB.id}/lineup`)
+      .send({ startingAthleteIds: starters, benchAthleteIds: bench, formationId: '4-3-3' })
+      .expect(200);
+    const firstRead = await coachA.agent
+      .get(`/events/${eventA.id}/opponent-lineup`)
+      .expect(200);
+    expect(firstRead.body).toEqual({
+      available: true,
+      formation: '4-3-3',
+      starters: expect.arrayContaining([
+        { name: 'Lineup1 Player', shirtNumber: 1 },
+      ]),
+      bench: [{ name: 'Lineup12 Player', shirtNumber: 12 }],
+    });
+    expect(Object.keys(firstRead.body).sort()).toEqual(
+      ['available', 'bench', 'formation', 'starters'].sort(),
+    );
+    expect(JSON.stringify(firstRead.body)).not.toMatch(
+      /tactic|game.?plan|notes|injur|draft|position|athlete.?id/i,
+    );
+
+    const rotatedStarters = [squadB[11].id, ...starters.slice(1)];
+    await coachB.agent
+      .put(`/events/${eventB.id}/lineup`)
+      .send({ startingAthleteIds: rotatedStarters, benchAthleteIds: [squadB[0].id], formationId: '3-5-2' })
+      .expect(200);
+    const updatedRead = await coachA.agent
+      .get(`/events/${eventA.id}/opponent-lineup`)
+      .expect(200);
+    expect(updatedRead.body).toMatchObject({
+      formation: '3-5-2',
+      starters: expect.arrayContaining([
+        { name: 'Lineup12 Player', shirtNumber: 12 },
+      ]),
+      bench: [{ name: 'Lineup1 Player', shirtNumber: 1 }],
+    });
+
+    const started = await coachB.agent
+      .post(`/events/${eventB.id}/start-match`)
+      .send({ opponentName: coachA.team.name, isHome: false, startingAthleteIds: rotatedStarters, benchAthleteIds: [squadB[0].id] })
+      .expect(201);
+    const afterKickoff = await coachA.agent
+      .get(`/events/${eventA.id}/opponent-lineup`)
+      .expect(200);
+    expect(afterKickoff.body).toEqual(updatedRead.body);
+    await coachB.agent.post(`/matches/${started.body.id}/finish`).expect(201);
+    const afterFullTime = await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(200);
+    expect(afterFullTime.body).toEqual(updatedRead.body);
+    await database.delete(teamMembers).where(eq(teamMembers.userId, coachA.user.id));
+    await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(403);
+    } finally {
+      if (previousFlag === undefined) delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+    }
   }, 120_000);
 
   it('never falls back to a different match of the opponent team', async () => {

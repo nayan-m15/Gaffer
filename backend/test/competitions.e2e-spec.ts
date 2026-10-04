@@ -13,6 +13,7 @@ import {
   events,
   matches,
   matchSessions,
+  teamMembers,
 } from '../src/database/schema';
 import { syncFixtureResult } from '../src/competitions/competition-fixture-results';
 import { registerCoach } from './utils/auth-helpers';
@@ -75,7 +76,7 @@ describe('Shared competitions (e2e)', () => {
   }
 
   it.todo(
-    'EXPECTED FAIL until Step 5: both generated-fixture reports expose the same canonical session timeline and result',
+    'Step 5(b): frontend reports and synced cache keys use the canonical session report',
   );
 
   async function createCompetition(
@@ -417,6 +418,20 @@ describe('Shared competitions (e2e)', () => {
           })),
         )
         .returning({ id: athletes.id });
+      await homeCoach.agent
+        .put(`/events/${homeEvent.id}/lineup`)
+        .send({
+          startingAthleteIds: homeAthletes.map((row) => row.id),
+          formationId: '4-3-3',
+        })
+        .expect(200);
+      await awayCoach.agent
+        .put(`/events/${awayEvent.id}/lineup`)
+        .send({
+          startingAthleteIds: awayAthletes.map((row) => row.id),
+          formationId: '4-4-2',
+        })
+        .expect(200);
       const start = async (
         agent: ReturnType<typeof request.agent>,
         eventId: string,
@@ -464,6 +479,21 @@ describe('Shared competitions (e2e)', () => {
         .expect(201)
         .then((response) => response.body as typeof homeSheetBeforeActivation);
 
+      const opponentLineup = await homeCoach.agent
+        .get(`/events/${homeEvent.id}/opponent-lineup`)
+        .expect(200);
+      expect(opponentLineup.body).toMatchObject({
+        available: true,
+        formation: '4-4-2',
+        starters: expect.arrayContaining([
+          { name: 'Away0 Fixture Player', shirtNumber: null },
+        ]),
+        bench: [],
+      });
+      expect(Object.keys(opponentLineup.body).sort()).toEqual(
+        ['available', 'bench', 'formation', 'starters'].sort(),
+      );
+
       const identity = {
         fixtureId: fixture.id,
         eventIds: [homeEvent.id, awayEvent.id],
@@ -499,6 +529,40 @@ describe('Shared competitions (e2e)', () => {
           { eventId: awayEvent.id, isHome: false },
         ]),
       );
+      await homeCoach.agent
+        .post(`/matches/${homeSheet.id}/events`)
+        .send({
+          clientRequestId: randomUUID(),
+          team: 'own',
+          eventType: 'goal',
+          athleteId: homeAthletes[0].id,
+          minute: 7,
+          period: 'first_half',
+          matchElapsedMs: 7 * 60_000,
+        })
+        .expect(201);
+      const reportUrl = `/matches/sessions/${homeSheet.sharedMatchId}/report`;
+      await homeCoach.agent.patch(`/matches/${homeSheet.id}/clock`)
+        .send({ operationId: randomUUID(), baseRevision: 0, clientCreatedAt: new Date().toISOString(),
+          period: 'first_half', running: false, elapsedMs: 7 * 60_000 }).expect(200);
+      const [homeReport, awayReport] = await Promise.all([
+        homeCoach.agent.get(reportUrl).expect(200),
+        awayCoach.agent.get(reportUrl).expect(200),
+      ]);
+      expect(homeReport.body).toEqual(awayReport.body);
+      expect(homeReport.body).toMatchObject({ sessionId: homeSheet.sharedMatchId,
+        score: { home: 1, away: 0 }, clock: { period: 'first_half', elapsedMs: 7 * 60_000, running: false },
+        finalStatus: 'open', timeline: expect.arrayContaining([expect.objectContaining({ side: 'home', eventType: 'goal' })]) });
+      expect(Object.keys(homeReport.body).sort()).toEqual(
+        ['sessionId', 'participants', 'score', 'clock', 'finalStatus', 'finalisedAt', 'confirmations', 'timeline', 'reviews'].sort(),
+      );
+      expect(JSON.stringify(homeReport.body)).not.toMatch(/gamePlan|eventNotes|squad|position|payload|athleteId|injuryNotes/);
+      const outsider = await newCoach('s5-outsider');
+      await outsider.agent.get(reportUrl).expect(404);
+      await outsider.agent.get(`/matches/${homeSheet.id}/session-report`).expect(404);
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+      await homeCoach.agent.get(reportUrl).expect(404);
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
       const [homeRetry, awayRetry] = await Promise.all([
         start(
           homeCoach.agent,
@@ -523,6 +587,31 @@ describe('Shared competitions (e2e)', () => {
         homeSheet.sharedMatchId,
         homeSheet.sharedMatchId,
       ]);
+      const [homeAlias, awayAlias] = await Promise.all([
+        homeCoach.agent.get(`/matches/${homeSheet.id}/session-report`).expect(200),
+        awayCoach.agent.get(`/matches/${awaySheet.id}/session-report`).expect(200),
+      ]);
+      expect(homeAlias.body).toEqual(awayAlias.body);
+      await awayCoach.agent.post(`/matches/${awaySheet.id}/events`)
+        .send({ clientRequestId: randomUUID(), team: 'opponent', eventType: 'goal',
+          opponentLabel: 'Home scorer', minute: 7, period: 'first_half', matchElapsedMs: 7 * 60_000 })
+        .expect(201);
+      const openReviewReport = await homeCoach.agent.get(reportUrl).expect(200);
+      expect(openReviewReport.body.reviews).toHaveLength(1);
+      expect(openReviewReport.body.reviews[0].status).toBe('open');
+      await homeCoach.agent
+        .post(`/matches/${homeSheet.id}/event-reviews/${openReviewReport.body.reviews[0].id}/resolve`)
+        .send({ resolution: 'same_event' }).expect(201);
+      const [homeResolved, awayResolved] = await Promise.all([
+        homeCoach.agent.get(reportUrl).expect(200), awayCoach.agent.get(reportUrl).expect(200),
+      ]);
+      expect(homeResolved.body).toEqual(awayResolved.body);
+      expect(homeResolved.body.timeline).toHaveLength(1);
+      expect(homeResolved.body.reviews[0]).toMatchObject({ status: 'resolved', resolution: 'same_event' });
+      expect(homeResolved.body.score).toEqual({ home: 1, away: 0 });
+      await homeCoach.agent.post(`/matches/${homeSheet.id}/finish`).expect(201);
+      const finishedReport = await awayCoach.agent.get(reportUrl).expect(200);
+      expect(finishedReport.body).toMatchObject({ clock: { period: 'full_time', running: false }, finalStatus: 'awaiting_confirmation' });
       await database
         .update(events)
         .set({ status: 'completed' })
@@ -553,6 +642,16 @@ describe('Shared competitions (e2e)', () => {
       expect(
         standingsDetail.standings.reduce((played, row) => played + row.played, 0),
       ).toBe(2);
+      await database.update(matchSessions).set({ homeConfirmedAt: new Date(), awayConfirmedAt: new Date(), finalisedAt: new Date() })
+        .where(eq(matchSessions.id, homeSheet.sharedMatchId!));
+      const [homeFinal, awayFinal] = await Promise.all([
+        homeCoach.agent.get(reportUrl).expect(200), awayCoach.agent.get(reportUrl).expect(200),
+      ]);
+      expect(homeFinal.body).toEqual(awayFinal.body);
+      expect(homeFinal.body).toMatchObject({ finalStatus: 'finalised', score: { home: 3, away: 1 } });
+      await database.delete(teamMembers).where(eq(teamMembers.userId, awayCoach.user.id));
+      await awayCoach.agent.get(reportUrl).expect(403);
+      await awayCoach.agent.get(`/matches/${awaySheet.id}/session-report`).expect(403);
     } finally {
       if (previousFlag === undefined) {
         delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
@@ -560,7 +659,7 @@ describe('Shared competitions (e2e)', () => {
         process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
       }
     }
-  });
+  }, 180_000);
 
   it('rejects a duplicate participant display name case-insensitively', async () => {
     const { agent } = await newCoach();

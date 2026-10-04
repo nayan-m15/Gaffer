@@ -27,6 +27,22 @@ import { MatchesService } from './matches.service';
 export class MatchesController {
   constructor(private readonly matchesService: MatchesService) {}
 
+  @Get('sessions/:sessionId/report')
+  async sessionReport(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    return this.matchesService.getSessionReport(user.id, sessionId);
+  }
+
+  @Get(':matchId/session-report')
+  async sessionReportForSheet(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.getSessionReportForSheet(user.id, matchId);
+  }
+
   @Get(':matchId/squad')
   async getSquad(
     @CurrentUser() user: AuthenticatedRequest['user'],

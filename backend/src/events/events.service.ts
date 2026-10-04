@@ -529,7 +529,7 @@ export class EventsService {
    * squad is on record before kickoff — in particular for accepted friendly
    * fixtures, where the opponent sees it through the friendly-opponent
    * lookup. Open to every team member, mirroring the start-match access
-   * model; once the match starts, its own squad supersedes this record.
+   * model; once the match starts, this confirmed snapshot becomes read-only.
    */
   async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
     const team = await this.requireTeam(userId);
@@ -1111,15 +1111,12 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
-      const resolvedMatch = await this.attachMatchToSession(
-        existingMatch,
-        sharedMatchId,
-      );
-      // The live match squad supersedes any pre-match lineup record.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
-      return resolvedMatch;
+      if (!twoSidedLiveLoggingEnabled()) {
+        await this.databaseService.database
+          .delete(eventLineups)
+          .where(eq(eventLineups.eventId, event.id));
+      }
+      return this.attachMatchToSession(existingMatch, sharedMatchId);
     }
 
     const [match] = await this.databaseService.database
@@ -1190,12 +1187,13 @@ export class EventsService {
 
       await this.replaceOpponentSquad(match.id, dto);
 
-      // The match's own squad (athlete_match_stats) is now the source of
-      // truth; the pre-match lineup record is retired so the lineup
-      // endpoint and event details stop reporting a stale pre-kickoff XI.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
+      // Keep the confirmed lineup snapshot for the opponent's read-only view.
+      // confirmLineup rejects changes once this match row exists.
+      if (!twoSidedLiveLoggingEnabled()) {
+        await this.databaseService.database
+          .delete(eventLineups)
+          .where(eq(eventLineups.eventId, event.id));
+      }
     } catch (error) {
       // Compensate for Neon HTTP's lack of interactive transactions so a
       // partially-created match can be retried from the confirmation screen.

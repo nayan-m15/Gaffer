@@ -69,7 +69,7 @@ export interface MatchRecord {
   competitionSeason?: string | null;
   opponentSquad: OpponentMatchPlayer[];
   /** Present on GET /matches/:id for linked Gaffer friendlies and competition fixtures. */
-  friendlyOpponentLineup?: FriendlyOpponentLineup;
+  friendlyOpponentLineup?: OpponentLineupView;
   projection?: {
     revision: number;
     confirmedTeamScore: number;
@@ -184,3 +184,11 @@ export interface UpdateMatchClockInput {
   elapsedMs: number;
 }
 import type { GamePlanSnapshot } from "@/services/gamePlans";
+
+export interface ConfirmedOpponentLineup {
+  available: boolean;
+  formation: string | null;
+  starters: Array<{ name: string; shirtNumber: number | null }>;
+  bench: Array<{ name: string; shirtNumber: number | null }>;
+}
+export type OpponentLineupView = FriendlyOpponentLineup | ConfirmedOpponentLineup;

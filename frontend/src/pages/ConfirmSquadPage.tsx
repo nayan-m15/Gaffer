@@ -34,6 +34,7 @@ import {
   useFriendlyOpponentLineup,
   useStartMatch,
 } from "@/features/events/hooks";
+import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import type { OpponentSquadVisibility } from "@/features/events/types";
 import {
   contrastText,
@@ -690,6 +691,7 @@ function OpponentSquadSummary({
   opponentColor,
   error,
   onEdit,
+  showSharedLineupMessage = true,
 }: {
   event: OpponentFieldEvent;
   lineup: { available: boolean; teamId?: string | null; teamName?: string | null } | undefined;
@@ -705,6 +707,7 @@ function OpponentSquadSummary({
   opponentColor: string;
   error: string | null;
   onEdit: () => void;
+  showSharedLineupMessage?: boolean;
 }) {
   return (
     <section className={cardClassName}>
@@ -720,7 +723,7 @@ function OpponentSquadSummary({
           Edit opponent squad
         </button>
       </div>
-      {(event.friendlyFixtureId || event.competitionFixtureId) && (
+      {showSharedLineupMessage && (event.friendlyFixtureId || event.competitionFixtureId) && (
         <p className="mt-3 text-xs text-muted-foreground">
           {friendlyOpponentLineupMessage(event, lineup)}
         </p>
@@ -1482,7 +1485,7 @@ export default function ConfirmSquadPage() {
   // other team. Manual edits via the setup page take precedence permanently.
   useEffect(() => {
     const lineup = friendlyLineupQuery.data;
-    if (!lineup?.available || opponentSquadTouched) {
+    if (!lineup?.available || !("players" in lineup) || opponentSquadTouched) {
       return;
     }
     // The published snapshot maps actual athlete IDs to their confirmed slots.
@@ -1628,7 +1631,7 @@ export default function ConfirmSquadPage() {
     : eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent";
   const sharingWithOpponent =
     (friendlyFixtureLinked && friendlyFixtureAccepted) ||
-    Boolean(eventQuery.data?.competitionFixtureId && friendlyLineupQuery.data?.teamId);
+    Boolean(eventQuery.data?.competitionFixtureId && (friendlyLineupQuery.data && "teamId" in friendlyLineupQuery.data ? friendlyLineupQuery.data.teamId : friendlyLineupQuery.data?.available));
   const lineupStatusMessage = getLineupStatusMessage({
     fixtureDateConfirmed,
     lineupReady,
@@ -2035,7 +2038,8 @@ export default function ConfirmSquadPage() {
 
         <OpponentSquadSummary
           event={event}
-          lineup={friendlyLineupQuery.data}
+          showSharedLineupMessage={!(friendlyLineupQuery.data && "starters" in friendlyLineupQuery.data)}
+          lineup={friendlyLineupQuery.data && "players" in friendlyLineupQuery.data ? friendlyLineupQuery.data : undefined}
           visibility={opponentSquadVisibility}
           formationId={opponentFormationId}
           summary={opponentSummary}
@@ -2043,6 +2047,7 @@ export default function ConfirmSquadPage() {
           error={opponentSquadError}
           onEdit={() => navigate(`/events/${eventId}/confirm-squad/opponent`)}
         />
+        <OpponentConfirmedLineupCard lineup={friendlyLineupQuery.data} opponentName={friendlyOpponentLabel} />
 
       </div>
 

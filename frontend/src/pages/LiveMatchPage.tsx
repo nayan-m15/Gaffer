@@ -1,3 +1,4 @@
+import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import {
   Fragment,
   useCallback,
@@ -1768,6 +1769,9 @@ export default function LiveMatchPage() {
           </button>
         </div>
       </header>
+      {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available && <div className="px-4 pt-3">
+        <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />
+      </div>}
 
       {reviewOpen && matchId ? (
         <EventReviewPanel

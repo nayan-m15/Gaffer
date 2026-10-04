@@ -11,7 +11,7 @@ import type { BackendGamePlan, GamePlanSnapshot } from "@/services/gamePlans";
 import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals.ts";
 import type {
-  FriendlyOpponentLineup,
+  OpponentLineupView,
   MatchLogEvent,
   MatchSquadAthlete,
   OpponentMatchPlayer,
@@ -263,9 +263,9 @@ function hasRecordedPosition(player: OpponentMatchPlayer) {
  * number cannot be placed as shirts, and duplicate shirt numbers collapse.
  */
 export function friendlyLineupPlayers(
-  lineup: FriendlyOpponentLineup | null | undefined,
+  lineup: OpponentLineupView | null | undefined,
 ): OpponentMatchPlayer[] {
-  if (!lineup?.available) {
+  if (!lineup?.available || !("players" in lineup)) {
     return [];
   }
   const seenNumbers = new Set<number>();
@@ -287,9 +287,9 @@ export function friendlyLineupPlayers(
 
 /** The opponent's actual confirmed starters, for pitch/bench selection. */
 export function friendlyLineupStarterIds(
-  lineup: FriendlyOpponentLineup | null | undefined,
+  lineup: OpponentLineupView | null | undefined,
 ): ReadonlySet<string> {
-  if (!lineup?.available) {
+  if (!lineup?.available || !("players" in lineup)) {
     return new Set<string>();
   }
   return new Set(
