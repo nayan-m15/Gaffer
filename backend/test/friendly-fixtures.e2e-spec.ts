@@ -51,20 +51,11 @@ interface TeamSearchBody {
   name: string;
 }
 
-interface FriendlyLineupPlayerBody {
-  id: string;
-  firstName: string;
-  lastName: string;
-  squadNumber: number | null;
-  position: string | null;
-  started: boolean;
-}
-
 interface FriendlyLineupBody {
   available: boolean;
-  teamId: string | null;
-  teamName: string | null;
-  players: FriendlyLineupPlayerBody[];
+  formation: string | null;
+  starters: Array<{ name: string; shirtNumber: number | null }>;
+  bench: Array<{ name: string; shirtNumber: number | null }>;
 }
 
 interface LineupBody {
@@ -93,10 +84,36 @@ function startMatchBody() {
   };
 }
 
+const unavailableLineup: FriendlyLineupBody = {
+  available: false,
+  formation: null,
+  starters: [],
+  bench: [],
+};
+
+function expectedPlayers(prefix: string, first: number, last: number) {
+  return Array.from({ length: last - first + 1 }, (_, index) => ({
+    name: `${prefix}${first + index} Player`,
+    shirtNumber: first + index,
+  }));
+}
+
 describe('Friendly fixtures (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
   const database = createDatabaseClient();
+  let previousFlag: string | undefined;
+
+  beforeEach(() => {
+    previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+  });
+
+  afterEach(() => {
+    if (previousFlag === undefined)
+      delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+  });
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -783,13 +800,7 @@ describe('Friendly fixtures (e2e)', () => {
     const pending = await coachA.agent
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
-    expect(pending.body).toMatchObject({
-      available: false,
-      teamId: coachB.team.id,
-      teamName: coachB.team.name,
-      players: [],
-    });
-
+    expect(pending.body).toEqual(unavailableLineup);
     await coachB.agent
       .post(`/friendly-fixtures/${event.friendlyFixtureId}/decline`)
       .expect(201);
@@ -798,13 +809,7 @@ describe('Friendly fixtures (e2e)', () => {
     const declined = await coachA.agent
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
-    expect(declined.body).toMatchObject({
-      available: false,
-      teamId: coachB.team.id,
-      teamName: coachB.team.name,
-      players: [],
-    });
-
+    expect(declined.body).toEqual(unavailableLineup);
     // An unrelated coach is refused outright — the event is not theirs.
     const outsider = await newCoach();
     await outsider.agent
@@ -840,13 +845,7 @@ describe('Friendly fixtures (e2e)', () => {
     const beforeSquad = await coachA.agent
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
-    expect(beforeSquad.body).toMatchObject({
-      available: false,
-      teamId: coachB.team.id,
-      teamName: coachB.team.name,
-      players: [],
-    });
-
+    expect(beforeSquad.body).toEqual(unavailableLineup);
     // B confirms their squad: 11 starters plus a two-player bench.
     const startedB = await coachB.agent
       .post(`/events/${mirrored.id}/start-match`)
@@ -864,29 +863,11 @@ describe('Friendly fixtures (e2e)', () => {
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
     const lineup = shared.body as FriendlyLineupBody;
-    expect(lineup.available).toBe(true);
-    expect(lineup.teamId).toBe(coachB.team.id);
-    expect(lineup.teamName).toBe(coachB.team.name);
-    expect(lineup.players).toHaveLength(13);
-    expect(lineup.players.map((player) => player.id).sort()).toEqual(
-      squadB.map((athlete) => athlete.id).sort(),
-    );
-    expect(
-      lineup.players
-        .filter((player) => player.started)
-        .map((player) => player.id)
-        .sort(),
-    ).toEqual(
-      squadB
-        .slice(0, 11)
-        .map((athlete) => athlete.id)
-        .sort(),
-    );
-    expect(lineup.players[0]).toMatchObject({
-      firstName: 'Bravo1',
-      lastName: 'Player',
-      squadNumber: 1,
-      started: true,
+    expect(lineup).toEqual({
+      available: true,
+      formation: null,
+      starters: expectedPlayers('Bravo', 1, 11),
+      bench: expectedPlayers('Bravo', 12, 13),
     });
 
     // A confirms their own squad too, then both match records serve the
@@ -906,31 +887,26 @@ describe('Friendly fixtures (e2e)', () => {
       .expect(200);
     const matchBodyA = matchReadA.body as MatchReadBody;
     expect(matchBodyA.opponentTeamId).toBe(coachB.team.id);
-    expect(matchBodyA.friendlyOpponentLineup).toMatchObject({
-      available: true,
-      teamId: coachB.team.id,
-      teamName: coachB.team.name,
-    });
-    expect(matchBodyA.friendlyOpponentLineup.players).toHaveLength(13);
+    expect(matchBodyA.friendlyOpponentLineup).toEqual(lineup);
 
     // Symmetric: B reads A's lineup on both read paths.
     const sharedForB = await coachB.agent
       .get(`/events/${mirrored.id}/friendly-opponent-lineup`)
       .expect(200);
     const lineupForB = sharedForB.body as FriendlyLineupBody;
-    expect(lineupForB.available).toBe(true);
-    expect(lineupForB.teamId).toBe(coachA.team.id);
-    expect(lineupForB.players.map((player) => player.id).sort()).toEqual(
-      squadA.map((athlete) => athlete.id).sort(),
-    );
-    expect(lineupForB.players.every((player) => player.started)).toBe(true);
+    expect(lineupForB).toEqual({
+      available: true,
+      formation: null,
+      starters: expectedPlayers('Alpha', 1, 11),
+      bench: [],
+    });
 
     const matchReadB = await coachB.agent
       .get(`/matches/${matchB.id}`)
       .expect(200);
-    expect(
-      (matchReadB.body as MatchReadBody).friendlyOpponentLineup,
-    ).toMatchObject({ available: true, teamId: coachA.team.id });
+    expect((matchReadB.body as MatchReadBody).friendlyOpponentLineup).toEqual(
+      lineupForB,
+    );
 
     // An unrelated coach is refused on both read paths.
     const outsider = await newCoach();
@@ -953,13 +929,7 @@ describe('Friendly fixtures (e2e)', () => {
     const neutral = await coachA.agent
       .get(`/events/${freeTextEvent.id}/friendly-opponent-lineup`)
       .expect(200);
-    expect(neutral.body).toEqual({
-      available: false,
-      teamId: null,
-      teamName: null,
-      players: [],
-    });
-
+    expect(neutral.body).toEqual(unavailableLineup);
     const startedFreeText = await coachA.agent
       .post(`/events/${freeTextEvent.id}/start-match`)
       .send({
@@ -973,12 +943,7 @@ describe('Friendly fixtures (e2e)', () => {
       .get(`/matches/${freeTextMatch.id}`)
       .expect(200);
     expect((freeTextRead.body as MatchReadBody).friendlyOpponentLineup).toEqual(
-      {
-        available: false,
-        teamId: null,
-        teamName: null,
-        players: [],
-      },
+      unavailableLineup,
     );
   }, 120_000);
 
@@ -1144,12 +1109,7 @@ describe('Friendly fixtures (e2e)', () => {
     const shared = await coachA.agent
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
-    expect(shared.body).toMatchObject({
-      available: false,
-      teamId: coachB.team.id,
-      teamName: coachB.team.name,
-      players: [],
-    });
+    expect(shared.body).toEqual(unavailableLineup);
   }, 120_000);
 
   it('shares each confirmed pre-kickoff lineup across an accepted friendly fixture', async () => {
@@ -1215,17 +1175,12 @@ describe('Friendly fixtures (e2e)', () => {
       .get(`/events/${mirrored.id}/friendly-opponent-lineup`)
       .expect(200);
     const lineupForB = sharedForB.body as FriendlyLineupBody;
-    expect(lineupForB.available).toBe(true);
-    expect(lineupForB.teamId).toBe(coachA.team.id);
-    expect(lineupForB.players.map((player) => player.id).sort()).toEqual(
-      startingA.concat(benchA).sort(),
-    );
-    expect(
-      lineupForB.players
-        .filter((player) => player.started)
-        .map((player) => player.id)
-        .sort(),
-    ).toEqual(startingA.slice().sort());
+    expect(lineupForB).toEqual({
+      available: true,
+      formation: null,
+      starters: expectedPlayers('Alpha', 1, 11),
+      bench: expectedPlayers('Alpha', 12, 13),
+    });
 
     // Symmetry: B confirms their own lineup and A sees it pre-kickoff too.
     const startingB = squadB.slice(0, 11).map((athlete) => athlete.id);
@@ -1237,11 +1192,12 @@ describe('Friendly fixtures (e2e)', () => {
       .get(`/events/${event.id}/friendly-opponent-lineup`)
       .expect(200);
     const lineupForA = sharedForA.body as FriendlyLineupBody;
-    expect(lineupForA.available).toBe(true);
-    expect(lineupForA.teamId).toBe(coachB.team.id);
-    expect(lineupForA.players.map((player) => player.id).sort()).toEqual(
-      startingB.slice().sort(),
-    );
+    expect(lineupForA).toEqual({
+      available: true,
+      formation: null,
+      starters: expectedPlayers('Bravo', 1, 11),
+      bench: [],
+    });
 
     // Confirming a lineup enforces the same rules as starting a match:
     // exactly 11 unique starters, only the team's own active athletes.
@@ -1251,7 +1207,10 @@ describe('Friendly fixtures (e2e)', () => {
       .expect(400);
     await coachA.agent
       .put(`/events/${event.id}/lineup`)
-      .send({ startingAthleteIds: startingA, benchAthleteIds: [squadB[0].id] })
+      .send({
+        startingAthleteIds: startingA,
+        benchAthleteIds: [squadB[0].id],
+      })
       .expect(400);
     const outsider = await newCoach();
     await outsider.agent
@@ -1259,7 +1218,7 @@ describe('Friendly fixtures (e2e)', () => {
       .send({ startingAthleteIds: startingA })
       .expect(404);
 
-    // A starts the match: the live squad supersedes the pre-match record.
+    // Enabled start retains the confirmed snapshot for opponent reads.
     const startedA = await coachA.agent
       .post(`/events/${event.id}/start-match`)
       .send({
@@ -1271,18 +1230,17 @@ describe('Friendly fixtures (e2e)', () => {
       .expect(201);
     expect((startedA.body as { id: string }).id).toEqual(expect.any(String));
 
-    const retired = await coachA.agent
+    const retained = await coachA.agent
       .get(`/events/${event.id}/lineup`)
       .expect(200);
-    expect(retired.text).toBe('');
+    expect(retained.body).toEqual(ownLineup.body);
 
-    // ...while B keeps seeing the shared squad, now served from the match.
+    // B keeps seeing the same confirmed snapshot after start.
     const afterStart = await coachB.agent
       .get(`/events/${mirrored.id}/friendly-opponent-lineup`)
       .expect(200);
     const lineupAfterStart = afterStart.body as FriendlyLineupBody;
-    expect(lineupAfterStart.available).toBe(true);
-    expect(lineupAfterStart.players).toHaveLength(13);
+    expect(lineupAfterStart).toEqual(lineupForB);
 
     // Confirming a lineup stays a pre-kickoff action.
     await coachA.agent

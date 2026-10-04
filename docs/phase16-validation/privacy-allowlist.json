@@ -1,0 +1,431 @@
+{
+  "auditedResponses": 69,
+  "passed": true,
+  "lineupKeys": [
+    "available",
+    "formation",
+    "starters",
+    "bench"
+  ],
+  "playerKeys": [
+    "name",
+    "shirtNumber"
+  ],
+  "scope": "Only feature-enabled successful opponent-lineup response objects; excludes owner lineup and owner match DTO fields",
+  "responses": [
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/43eb74c5-158d-471f-9f4d-18ef8b75ee28/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/43eb74c5-158d-471f-9f4d-18ef8b75ee28/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/db5a4527-c835-47fb-bf63-e20cafbbbb3a/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/db5a4527-c835-47fb-bf63-e20cafbbbb3a/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/11aa77f5-47f8-47e8-b7a5-d52c599af8df",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/f8ab93d1-f94d-4984-8a1b-7e7479adf00a/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/5473fba1-f110-4876-bdbf-83c1d149a771",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/3e0cdb75-ef7c-4dfb-8ed3-b354fd6161eb/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/d0d9a773-9255-42a8-95e1-7b1fae73c976",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) never falls back to a different match of the opponent team",
+      "endpoint": "/events/f25883b5-48d1-4d4f-855a-c657da51676c/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/12295c5f-7030-4071-a46b-d89a9aade946/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/e90eaef7-8576-49ce-9dd8-984d9c3295a7/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "affected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/12295c5f-7030-4071-a46b-d89a9aade946/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/3c28fad8-300d-421f-9450-0b6c898f8639/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/3c28fad8-300d-421f-9450-0b6c898f8639/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/24052583-001f-4bca-a9c8-1961abccba40/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/24052583-001f-4bca-a9c8-1961abccba40/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/3ee0f2e5-6ed9-479b-8385-0f4f6bfac895",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/1d5a99f8-e9eb-478c-a83e-0ae30833f492/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/6b677a44-51ae-419f-85f1-b615192ebf74",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/d83302d3-c167-4fd5-bf7e-d9a4ff005979/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/ee934103-5c6c-44dc-8dc3-4d9c79d8cc99",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) never falls back to a different match of the opponent team",
+      "endpoint": "/events/9697f8ea-e58c-4db9-89f0-de53fcf99777/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/780b95f1-a908-4907-9175-4f36078d7c4c/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/b1664b86-a5fe-4219-a288-a77dc77a3828/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-corrected-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/780b95f1-a908-4907-9175-4f36078d7c4c/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "base-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/9d684d22-233b-4557-9fed-2acf063d0bf5/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/f7ac2a54-ef1a-4231-b119-09027447f2aa/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-http.jsonl",
+      "test": "Friendly fixtures (e2e) never falls back to a different match of the opponent team",
+      "endpoint": "/events/abf728fd-8c48-4a7e-a3c2-cf7425523356/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "base-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/90ea6bfc-efca-4a8a-bd9c-e0cdc56b2621/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/5ac4f34e-8969-4357-a905-4b0a27914e1d/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/5ac4f34e-8969-4357-a905-4b0a27914e1d/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/matches/6829e898-691d-4e7d-873c-d0e87be57198",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/5ac4f34e-8969-4357-a905-4b0a27914e1d/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence uses the same snapshot allowlist on generated competition event and match reads",
+      "endpoint": "/events/dc52016e-9adf-4a88-b941-8b78d344bccf/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-corrected-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence uses the same snapshot allowlist on generated competition event and match reads",
+      "endpoint": "/matches/d6eaadba-86f4-4829-bd56-a5c50fe4689c",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/e1b1d02a-7cfb-4f31-ae4e-b0aaacc203f3/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/e1b1d02a-7cfb-4f31-ae4e-b0aaacc203f3/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/matches/9aa663b7-7c9f-40a9-915e-ff473d74280b",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/e1b1d02a-7cfb-4f31-ae4e-b0aaacc203f3/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence uses the same snapshot allowlist on generated competition event and match reads",
+      "endpoint": "/events/e3c3ca1b-5d14-4173-968e-c0b4d7709eec/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-final-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence uses the same snapshot allowlist on generated competition event and match reads",
+      "endpoint": "/matches/4782bfae-e2ee-4f7b-be03-52223b31920b",
+      "available": true
+    },
+    {
+      "file": "contracts-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/cbb8f9de-bc10-41d2-8b70-09d8975ced56/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/cbb8f9de-bc10-41d2-8b70-09d8975ced56/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/matches/afe22893-955d-40a6-b243-bfc3388bf0dd",
+      "available": true
+    },
+    {
+      "file": "contracts-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence captures flag-off snapshot deletion and enabled post-start fallback without private fields",
+      "endpoint": "/events/cbb8f9de-bc10-41d2-8b70-09d8975ced56/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "contracts-http.jsonl",
+      "test": "Phase 1.6 lineup contract HTTP evidence uses the same snapshot allowlist on generated competition event and match reads",
+      "endpoint": "/events/3dbf0f74-f41a-49b2-8d94-c1094d5b0047/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "current-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/c6ade7d1-7db8-416e-984c-b01d8e55b520/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "current-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/1813e82d-3a4d-479a-8cf7-46376d280aba/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "current-http.jsonl",
+      "test": "Friendly fixtures (e2e) never falls back to a different match of the opponent team",
+      "endpoint": "/events/2aab6c56-f4ad-455d-a37b-b075ac75789d/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "current-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/974a5cb5-eef6-480b-9e2d-0097101d473d/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/bc93a5aa-ed0d-42e9-8d78-22c801b2562c/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) keeps the opponent lineup unavailable while the fixture is pending or declined",
+      "endpoint": "/events/bc93a5aa-ed0d-42e9-8d78-22c801b2562c/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/5964ea42-d919-4050-90df-02c07127b383/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/5964ea42-d919-4050-90df-02c07127b383/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/3bb686e5-6e9b-4aee-9e23-a5ba1b4a5f09",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/2f4d8a47-f964-4041-bf9a-e2e0ad9b8ee7/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/4ed501a9-1bd2-4258-9717-2aae2f09808c",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/events/fbc00c3b-6d5d-4871-bcfd-bf8ef38c4e21/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares the opponent’s confirmed lineup for an accepted friendly fixture",
+      "endpoint": "/matches/d845efaf-eda9-4459-8da5-f097c961d666",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff",
+      "endpoint": "/events/f96ad035-2dcd-4ee9-9fd3-acffcc0c82cd/opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff",
+      "endpoint": "/events/f96ad035-2dcd-4ee9-9fd3-acffcc0c82cd/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff",
+      "endpoint": "/events/f96ad035-2dcd-4ee9-9fd3-acffcc0c82cd/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff",
+      "endpoint": "/events/f96ad035-2dcd-4ee9-9fd3-acffcc0c82cd/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) returns only the confirmed friendly lineup allowlist and keeps it readable after kickoff",
+      "endpoint": "/events/f96ad035-2dcd-4ee9-9fd3-acffcc0c82cd/opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) never falls back to a different match of the opponent team",
+      "endpoint": "/events/89e581de-4fca-48bc-952f-ec017f9859f8/friendly-opponent-lineup",
+      "available": false
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/b5870470-ce59-4d88-a226-73294a15af30/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/5cdd1596-c6bb-406b-bc9b-5587f8c137b6/friendly-opponent-lineup",
+      "available": true
+    },
+    {
+      "file": "final-http.jsonl",
+      "test": "Friendly fixtures (e2e) shares each confirmed pre-kickoff lineup across an accepted friendly fixture",
+      "endpoint": "/events/b5870470-ce59-4d88-a226-73294a15af30/friendly-opponent-lineup",
+      "available": true
+    }
+  ]
+}

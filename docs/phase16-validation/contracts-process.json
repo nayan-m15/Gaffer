@@ -1,0 +1,27 @@
+{
+  "identity": {
+    "database": "neondb",
+    "branch": "br-misty-moon-b2be9vmt",
+    "endpoint": "ep-royal-star-b253pvlk"
+  },
+  "mode": "contracts",
+  "sourceSha": "25aec5931f9069957ce819c31981892796a15ddc",
+  "correctedAssertions": false,
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\backend\\node_modules\\jest\\bin\\jest.js",
+    "--config",
+    "./test/jest-e2e.json",
+    "--runInBand",
+    "test/phase16-lineup-contract.e2e-spec.ts",
+    "--setupFilesAfterEnv",
+    "C:\\Users\\hpars\\AppData\\Local\\Temp\\sport-phase16-ChTG3x\\capture.cjs",
+    "--json",
+    "--outputFile",
+    "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase16-validation\\contracts-jest.json"
+  ],
+  "cwd": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\backend",
+  "exitCode": 1,
+  "durationSeconds": 83.096,
+  "schema": "Existing migrated disposable branch including 0052; no migration or schema reset performed"
+}
