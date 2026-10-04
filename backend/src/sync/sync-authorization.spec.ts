@@ -10,7 +10,7 @@ describe('PowerSync shared session authorization', () => {
   function streamQuery(name: string) {
     const start = config.indexOf(`  ${name}:`);
     if (start < 0) throw new Error(`Missing PowerSync stream ${name}`);
-    const nextMatch = /\n  [a-z][a-z0-9_]*:/g;
+    const nextMatch = /\n {2}[a-z][a-z0-9_]*:/g;
     nextMatch.lastIndex = start + 3;
     const next = nextMatch.exec(config)?.index ?? -1;
     const block = config.slice(start, next < 0 ? undefined : next);
@@ -92,7 +92,9 @@ describe('PowerSync shared session authorization', () => {
     expect(config).not.toMatch(/\b(?:LEFT|RIGHT|FULL)\s+JOIN\b/i);
     expect(config).not.toMatch(/\bJOIN\b/i);
     expect(config).not.toMatch(/\bNOT\s+EXISTS\b/i);
-    expect(config).not.toMatch(/\b(?:COALESCE|CONCAT_WS|JSONB_BUILD_OBJECT)\s*\(/i);
+    expect(config).not.toMatch(
+      /\b(?:COALESCE|CONCAT_WS|JSONB_BUILD_OBJECT)\s*\(/i,
+    );
     expect(config).not.toMatch(/\b(?:jsonb\s*-|->|->>)\s*/i);
   });
 });

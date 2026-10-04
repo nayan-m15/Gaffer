@@ -193,7 +193,9 @@ describe('Team isolation (e2e)', () => {
       const ownSheet = await coachB.agent
         .get(`/matches/${matchB.id}`)
         .expect(200);
-      expect(ownSheet.body.eventNotes).toBe('away private notes');
+      expect((ownSheet.body as { eventNotes: string }).eventNotes).toBe(
+        'away private notes',
+      );
 
       // Current membership is checked on each request, not cached in session.
       await database
@@ -297,7 +299,7 @@ describe('Team isolation (e2e)', () => {
       matchSheets: expect.arrayContaining([
         { teamId: coachA.team.id, side: 'home', matchId: matchA.id },
         { teamId: coachB.team.id, side: 'away', matchId: matchB.id },
-      ]),
+      ]) as unknown,
     });
     expect(JSON.stringify(diagnosticA.body)).not.toMatch(
       /private tactical note|lineup|tactics|injury/i,
@@ -326,7 +328,7 @@ describe('Team isolation (e2e)', () => {
       participants: [],
       matchSheets: [],
       status: 'unlinked',
-      warning: expect.any(String),
+      warning: expect.any(String) as unknown,
     });
   });
 });

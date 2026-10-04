@@ -17,7 +17,10 @@ import {
   teams,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
-import { twoSidedLiveLoggingEnabled, ensureFriendlyFixtureSession } from '../matches/match-sessions';
+import {
+  twoSidedLiveLoggingEnabled,
+  ensureFriendlyFixtureSession,
+} from '../matches/match-sessions';
 
 export interface IncomingFriendlyFixture {
   id: string;
@@ -66,8 +69,10 @@ export interface FriendlyOpponentLineup {
 }
 
 /** The neutral result for lookups where no shared lineup can exist. */
-export function unavailableFriendlyOpponentLineup(): FriendlyOpponentLineup | ConfirmedOpponentLineup {
-  if (twoSidedLiveLoggingEnabled()) return { available: false, formation: null, starters: [], bench: [] };
+export function unavailableFriendlyOpponentLineup():
+  FriendlyOpponentLineup | ConfirmedOpponentLineup {
+  if (twoSidedLiveLoggingEnabled())
+    return { available: false, formation: null, starters: [], bench: [] };
   return { available: false, teamId: null, teamName: null, players: [] };
 }
 
@@ -272,7 +277,8 @@ export class FriendlyFixturesService {
     }
 
     if (fixture.status !== 'accepted') {
-      if (twoSidedLiveLoggingEnabled()) return unavailableFriendlyOpponentLineup();
+      if (twoSidedLiveLoggingEnabled())
+        return unavailableFriendlyOpponentLineup();
       const [opponentTeam] = await this.databaseService.database
         .select({ name: teams.name })
         .from(teams)
@@ -469,29 +475,66 @@ export class FriendlyFixturesService {
     fixtureId: string,
     competition = false,
   ): Promise<FriendlyOpponentLineup | ConfirmedOpponentLineup> {
-    const legacy = await this.resolveLegacyOpponentEvent(opponentTeamId, fixtureId, competition);
+    const legacy = await this.resolveLegacyOpponentEvent(
+      opponentTeamId,
+      fixtureId,
+      competition,
+    );
     if (!twoSidedLiveLoggingEnabled()) return legacy;
     const [event] = await this.databaseService.database
-      .select({ id: events.id }).from(events)
-      .where(and(eq(events.teamId, opponentTeamId), competition
-        ? eq(events.competitionFixtureId, fixtureId)
-        : eq(events.friendlyFixtureId, fixtureId))).limit(1);
-    const [lineup] = event ? await this.databaseService.database
-      .select().from(eventLineups).where(eq(eventLineups.eventId, event.id)).limit(1) : [];
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.teamId, opponentTeamId),
+          competition
+            ? eq(events.competitionFixtureId, fixtureId)
+            : eq(events.friendlyFixtureId, fixtureId),
+        ),
+      )
+      .limit(1);
+    const [lineup] = event
+      ? await this.databaseService.database
+          .select()
+          .from(eventLineups)
+          .where(eq(eventLineups.eventId, event.id))
+          .limit(1)
+      : [];
     let players = legacy.players;
     if (lineup) {
       const ids = [...lineup.startingAthleteIds, ...lineup.benchAthleteIds];
-      const roster = ids.length ? await this.databaseService.database
-        .select({ id: athletes.id, firstName: athletes.firstName, lastName: athletes.lastName,
-          squadNumber: athletes.squadNumber, position: athletes.position })
-        .from(athletes).where(and(eq(athletes.teamId, opponentTeamId), inArray(athletes.id, ids))) : [];
-      players = roster.map((athlete) => ({ ...athlete, started: lineup.startingAthleteIds.includes(athlete.id) }));
+      const roster = ids.length
+        ? await this.databaseService.database
+            .select({
+              id: athletes.id,
+              firstName: athletes.firstName,
+              lastName: athletes.lastName,
+              squadNumber: athletes.squadNumber,
+              position: athletes.position,
+            })
+            .from(athletes)
+            .where(
+              and(
+                eq(athletes.teamId, opponentTeamId),
+                inArray(athletes.id, ids),
+              ),
+            )
+        : [];
+      players = roster.map((athlete) => ({
+        ...athlete,
+        started: lineup.startingAthleteIds.includes(athlete.id),
+      }));
     }
     const toPlayer = (player: FriendlyOpponentLineupPlayer) => ({
       name: (player.firstName + ' ' + player.lastName).trim(),
       shirtNumber: player.squadNumber,
     });
-    players.sort((a, b) => (a.squadNumber ?? 999) - (b.squadNumber ?? 999) || a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+    players.sort(
+      (a, b) =>
+        (a.squadNumber ?? 999) - (b.squadNumber ?? 999) ||
+        a.lastName.localeCompare(b.lastName) ||
+        a.firstName.localeCompare(b.firstName),
+    );
     return {
       available: Boolean(lineup) || legacy.available,
       formation: lineup?.formationId ?? null,

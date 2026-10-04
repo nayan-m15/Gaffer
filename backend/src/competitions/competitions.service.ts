@@ -6,7 +6,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, eq, gte, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { finaliseTimedOutCompetitionSessions } from './competition-fixture-results';
 import { DatabaseService } from '../database/database.service';
@@ -21,8 +32,6 @@ import {
   competitions,
   competitionTeams,
   events,
-  matchEvents,
-  matchProjectionState,
   matches,
   standings,
   teams,
@@ -863,18 +872,24 @@ export class CompetitionsService {
       }
     }
     const live = [...liveByFixture.values()].flatMap((row) =>
-      row.fixtureId && row.fixtureHomeId && row.fixtureAwayId && row.fixtureHomeScore !== null && row.fixtureAwayScore !== null
-        ? [{
-            id: `fixture:${row.fixtureId}`,
-            homeCompetitionTeamId: row.fixtureHomeId,
-            awayCompetitionTeamId: row.fixtureAwayId,
-            homeScore: row.fixtureHomeScore,
-            awayScore: row.fixtureAwayScore,
-            playedAt: row.playedAt,
-            source: 'live_logged' as const,
-            linkedMatchId: row.fixtureLinkedMatchId ?? row.matchId,
-            createdAt: row.createdAt,
-          }]
+      row.fixtureId &&
+      row.fixtureHomeId &&
+      row.fixtureAwayId &&
+      row.fixtureHomeScore !== null &&
+      row.fixtureAwayScore !== null
+        ? [
+            {
+              id: `fixture:${row.fixtureId}`,
+              homeCompetitionTeamId: row.fixtureHomeId,
+              awayCompetitionTeamId: row.fixtureAwayId,
+              homeScore: row.fixtureHomeScore,
+              awayScore: row.fixtureAwayScore,
+              playedAt: row.playedAt,
+              source: 'live_logged' as const,
+              linkedMatchId: row.fixtureLinkedMatchId ?? row.matchId,
+              createdAt: row.createdAt,
+            },
+          ]
         : [],
     );
 

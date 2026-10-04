@@ -2,6 +2,15 @@ import { FriendlyFixturesService } from './friendly-fixtures.service';
 
 /** Fixture access must be established before any opposing lineup is fetched. */
 describe('generated competition opponent lineup access', () => {
+  let previousTwoSidedFlag: string | undefined;
+
+  afterEach(() => {
+    if (previousTwoSidedFlag === undefined) {
+      delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    } else {
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousTwoSidedFlag;
+    }
+  });
   const databaseService = { database: { select: jest.fn() } };
   const teamsService = {};
   const service = new FriendlyFixturesService(
@@ -21,6 +30,8 @@ describe('generated competition opponent lineup access', () => {
   }
 
   beforeEach(() => {
+    previousTwoSidedFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     jest.clearAllMocks();
   });
 

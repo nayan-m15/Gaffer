@@ -90,85 +90,191 @@ export class MatchesService {
     const [participant] = await this.databaseService.database
       .select({ id: matchSessionParticipants.id })
       .from(matchSessionParticipants)
-      .where(and(eq(matchSessionParticipants.sessionId, sessionId), eq(matchSessionParticipants.teamId, team.id)))
+      .where(
+        and(
+          eq(matchSessionParticipants.sessionId, sessionId),
+          eq(matchSessionParticipants.teamId, team.id),
+        ),
+      )
       .limit(1);
     if (!participant) throw new NotFoundException('Match session not found.');
     await finaliseTimedOutSession(this.databaseService, sessionId);
-    const [session] = await this.databaseService.database.select()
-      .from(matchSessions).where(eq(matchSessions.id, sessionId)).limit(1);
+    const [session] = await this.databaseService.database
+      .select()
+      .from(matchSessions)
+      .where(eq(matchSessions.id, sessionId))
+      .limit(1);
     if (!session) throw new NotFoundException('Match session not found.');
 
     const participants = await this.databaseService.database
-      .select({ side: matchSessionParticipants.side, teamId: matchSessionParticipants.teamId,
-        competitionTeamId: matchSessionParticipants.competitionTeamId })
-      .from(matchSessionParticipants).where(eq(matchSessionParticipants.sessionId, sessionId))
+      .select({
+        side: matchSessionParticipants.side,
+        teamId: matchSessionParticipants.teamId,
+        competitionTeamId: matchSessionParticipants.competitionTeamId,
+      })
+      .from(matchSessionParticipants)
+      .where(eq(matchSessionParticipants.sessionId, sessionId))
       .orderBy(desc(matchSessionParticipants.side));
     const timelineRows = await this.databaseService.database
-      .select({ id: matchEvents.id, side: matchEvents.side, eventType: matchEvents.eventType,
-        minute: matchEvents.minute, period: matchEvents.period, matchElapsedMs: matchEvents.matchElapsedMs,
-        lifecycleStatus: matchEvents.lifecycleStatus, manuallyAdjusted: matchEvents.manuallyAdjusted,
-        createdAt: matchEvents.createdAt, updatedAt: matchEvents.updatedAt,
-        firstName: athletes.firstName, lastName: athletes.lastName, shirtNumber: athletes.squadNumber,
-        opponentName: opponentMatchPlayers.name, opponentNumber: opponentMatchPlayers.shirtNumber })
-      .from(matchEvents).leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
-      .leftJoin(opponentMatchPlayers, eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id))
-      .where(and(eq(matchEvents.sessionId, sessionId), sql`${matchEvents.lifecycleStatus} <> 'voided'`))
-      .orderBy(desc(matchEvents.minute), desc(matchEvents.createdAt), asc(matchEvents.id));
-    const timeline = timelineRows.map(({ firstName, lastName, shirtNumber, opponentName, opponentNumber, ...row }) => ({
-      ...row,
-      player: firstName && lastName
-        ? { name: `${firstName} ${lastName}`.trim(), shirtNumber }
-        : opponentName || opponentNumber !== null
-          ? { name: opponentName, shirtNumber: opponentNumber }
-          : null,
-    }));
+      .select({
+        id: matchEvents.id,
+        side: matchEvents.side,
+        eventType: matchEvents.eventType,
+        minute: matchEvents.minute,
+        period: matchEvents.period,
+        matchElapsedMs: matchEvents.matchElapsedMs,
+        lifecycleStatus: matchEvents.lifecycleStatus,
+        manuallyAdjusted: matchEvents.manuallyAdjusted,
+        createdAt: matchEvents.createdAt,
+        updatedAt: matchEvents.updatedAt,
+        firstName: athletes.firstName,
+        lastName: athletes.lastName,
+        shirtNumber: athletes.squadNumber,
+        opponentName: opponentMatchPlayers.name,
+        opponentNumber: opponentMatchPlayers.shirtNumber,
+      })
+      .from(matchEvents)
+      .leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
+      .leftJoin(
+        opponentMatchPlayers,
+        eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
+      )
+      .where(
+        and(
+          eq(matchEvents.sessionId, sessionId),
+          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+        ),
+      )
+      .orderBy(
+        desc(matchEvents.minute),
+        desc(matchEvents.createdAt),
+        asc(matchEvents.id),
+      );
+    const timeline = timelineRows.map(
+      ({
+        firstName,
+        lastName,
+        shirtNumber,
+        opponentName,
+        opponentNumber,
+        ...row
+      }) => ({
+        ...row,
+        player:
+          firstName && lastName
+            ? { name: `${firstName} ${lastName}`.trim(), shirtNumber }
+            : opponentName || opponentNumber !== null
+              ? { name: opponentName, shirtNumber: opponentNumber }
+              : null,
+      }),
+    );
     const reviews = await this.databaseService.database
-      .select({ id: matchEventReviews.id, canonicalEventId: matchEventReviews.canonicalEventId,
-        reason: matchEventReviews.reason, status: matchEventReviews.status, resolution: matchEventReviews.resolution,
-        resolvedAt: matchEventReviews.resolvedAt, resolvedByUserId: matchEventReviews.resolvedByUserId,
-        disputedAt: matchEventReviews.disputedAt, disputedByUserId: matchEventReviews.disputedByUserId })
-      .from(matchEventReviews).where(eq(matchEventReviews.sessionId, sessionId))
+      .select({
+        id: matchEventReviews.id,
+        canonicalEventId: matchEventReviews.canonicalEventId,
+        reason: matchEventReviews.reason,
+        status: matchEventReviews.status,
+        resolution: matchEventReviews.resolution,
+        resolvedAt: matchEventReviews.resolvedAt,
+        resolvedByUserId: matchEventReviews.resolvedByUserId,
+        disputedAt: matchEventReviews.disputedAt,
+        disputedByUserId: matchEventReviews.disputedByUserId,
+      })
+      .from(matchEventReviews)
+      .where(eq(matchEventReviews.sessionId, sessionId))
       .orderBy(asc(matchEventReviews.createdAt), asc(matchEventReviews.id));
-    const unresolved = reviews.some((review) => review.status === 'open' || review.disputedAt !== null);
+    const unresolved = reviews.some(
+      (review) => review.status === 'open' || review.disputedAt !== null,
+    );
     const sheets = await this.databaseService.database
-      .select({ period: matches.clockPeriod, elapsedMs: matches.clockElapsedMs,
-        startedAt: matches.clockStartedAt, revision: matches.clockRevision, status: events.status })
-      .from(matches).innerJoin(events, eq(matches.eventId, events.id))
+      .select({
+        period: matches.clockPeriod,
+        elapsedMs: matches.clockElapsedMs,
+        startedAt: matches.clockStartedAt,
+        revision: matches.clockRevision,
+        status: events.status,
+      })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
       .where(eq(matches.sharedMatchId, sessionId))
-      .orderBy(desc(matches.clockRevision), desc(matches.updatedAt), asc(matches.id));
+      .orderBy(
+        desc(matches.clockRevision),
+        desc(matches.updatedAt),
+        asc(matches.id),
+      );
     const [clockOperation] = await this.databaseService.database
-      .select({ period: matches.clockPeriod, elapsedMs: matches.clockElapsedMs,
-        startedAt: matches.clockStartedAt, revision: matches.clockRevision })
-      .from(matchClockOperations).innerJoin(matches, eq(matchClockOperations.matchId, matches.id))
-      .where(and(eq(matchClockOperations.sessionId, sessionId), sql`${matchClockOperations.outcome} like 'applied%'`))
-      .orderBy(desc(matchClockOperations.createdAt), asc(matchClockOperations.id)).limit(1);
-    const finished = sheets.some((sheet) => sheet.period === 'full_time' || sheet.status === 'completed');
+      .select({
+        period: matches.clockPeriod,
+        elapsedMs: matches.clockElapsedMs,
+        startedAt: matches.clockStartedAt,
+        revision: matches.clockRevision,
+      })
+      .from(matchClockOperations)
+      .innerJoin(matches, eq(matchClockOperations.matchId, matches.id))
+      .where(
+        and(
+          eq(matchClockOperations.sessionId, sessionId),
+          sql`${matchClockOperations.outcome} like 'applied%'`,
+        ),
+      )
+      .orderBy(
+        desc(matchClockOperations.createdAt),
+        asc(matchClockOperations.id),
+      )
+      .limit(1);
+    const finished = sheets.some(
+      (sheet) => sheet.period === 'full_time' || sheet.status === 'completed',
+    );
     const anchor = clockOperation ?? sheets[0];
     const clock = {
       period: finished ? 'full_time' : (anchor?.period ?? 'not_started'),
-      elapsedMs: finished ? Math.max(0, ...sheets.map((sheet) => sheet.elapsedMs)) : (anchor?.elapsedMs ?? 0),
+      elapsedMs: finished
+        ? Math.max(0, ...sheets.map((sheet) => sheet.elapsedMs))
+        : (anchor?.elapsedMs ?? 0),
       startedAt: finished ? null : (anchor?.startedAt ?? null),
       running: !finished && Boolean(anchor?.startedAt),
       revision: anchor?.revision ?? 0,
     };
     const goals = timeline.filter((event) => event.eventType === 'goal');
     const [fixture] = await this.databaseService.database
-      .select({ homeScore: competitionFixtures.homeScore, awayScore: competitionFixtures.awayScore,
-        status: competitionFixtures.status })
-      .from(competitionFixtures).where(eq(competitionFixtures.sharedSessionId, sessionId)).limit(1);
-    const published = session.finalisedAt && !unresolved && fixture?.status === 'completed'
-      && fixture.homeScore !== null && fixture.awayScore !== null;
+      .select({
+        homeScore: competitionFixtures.homeScore,
+        awayScore: competitionFixtures.awayScore,
+        status: competitionFixtures.status,
+      })
+      .from(competitionFixtures)
+      .where(eq(competitionFixtures.sharedSessionId, sessionId))
+      .limit(1);
+    const published =
+      session.finalisedAt &&
+      !unresolved &&
+      fixture?.status === 'completed' &&
+      fixture.homeScore !== null &&
+      fixture.awayScore !== null;
     return {
       sessionId,
       participants,
       score: {
-        home: published ? fixture.homeScore : goals.filter((event) => event.side === 'home').length,
-        away: published ? fixture.awayScore : goals.filter((event) => event.side === 'away').length,
+        home: published
+          ? fixture.homeScore
+          : goals.filter((event) => event.side === 'home').length,
+        away: published
+          ? fixture.awayScore
+          : goals.filter((event) => event.side === 'away').length,
       },
       clock,
-      finalStatus: session.finalisedAt ? (unresolved ? 'amendment_required' : 'finalised') : (finished ? 'awaiting_confirmation' : 'open'),
+      finalStatus: session.finalisedAt
+        ? unresolved
+          ? 'amendment_required'
+          : 'finalised'
+        : finished
+          ? 'awaiting_confirmation'
+          : 'open',
       finalisedAt: session.finalisedAt,
-      confirmations: { home: session.homeConfirmedAt, away: session.awayConfirmedAt },
+      confirmations: {
+        home: session.homeConfirmedAt,
+        away: session.awayConfirmedAt,
+      },
       timeline,
       reviews,
     };
@@ -1607,7 +1713,9 @@ export class MatchesService {
     };
   } | null> {
     if (!match.competitionId || !match.opponentCompetitionTeamId) return null;
-    const sharedResult = Boolean(match.sharedMatchId && twoSidedLiveLoggingEnabled());
+    const sharedResult = Boolean(
+      match.sharedMatchId && twoSidedLiveLoggingEnabled(),
+    );
 
     const [[ownParticipant], [score], [fixture]] = await Promise.all([
       this.databaseService.database
@@ -1630,14 +1738,16 @@ export class MatchesService {
             : sql<number>`count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int`,
         })
         .from(matchEvents)
-        .where(sharedResult ? eq(matchEvents.sessionId, match.sharedMatchId!) : eq(matchEvents.matchId, match.id)),
+        .where(
+          sharedResult
+            ? eq(matchEvents.sessionId, match.sharedMatchId!)
+            : eq(matchEvents.matchId, match.id),
+        ),
       match.sharedMatchId
         ? this.databaseService.database
             .select({
-              homeCompetitionTeamId:
-                competitionFixtures.homeCompetitionTeamId,
-              awayCompetitionTeamId:
-                competitionFixtures.awayCompetitionTeamId,
+              homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+              awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
             })
             .from(competitionFixtures)
             .where(eq(competitionFixtures.sharedSessionId, match.sharedMatchId))

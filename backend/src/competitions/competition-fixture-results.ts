@@ -12,7 +12,6 @@ import {
   competitions,
   competitionTeams,
   events,
-  matchEvents,
   matchProjectionState,
   matchSessionParticipants,
   matchSessions,
@@ -421,13 +420,19 @@ async function ensureHybridKnockoutStage(
     }
   }
   const liveResults = [...liveByFixture.values()].flatMap((row) =>
-    row.fixtureId && row.homeCompetitionTeamId && row.awayCompetitionTeamId && row.homeScore !== null && row.awayScore !== null
-      ? [{
-          homeCompetitionTeamId: row.homeCompetitionTeamId,
-          awayCompetitionTeamId: row.awayCompetitionTeamId,
-          homeScore: row.homeScore,
-          awayScore: row.awayScore,
-        }]
+    row.fixtureId &&
+    row.homeCompetitionTeamId &&
+    row.awayCompetitionTeamId &&
+    row.homeScore !== null &&
+    row.awayScore !== null
+      ? [
+          {
+            homeCompetitionTeamId: row.homeCompetitionTeamId,
+            awayCompetitionTeamId: row.awayCompetitionTeamId,
+            homeScore: row.homeScore,
+            awayScore: row.awayScore,
+          },
+        ]
       : [],
   );
 

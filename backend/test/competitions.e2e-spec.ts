@@ -1,15 +1,39 @@
-import type { SessionReport } from '../../frontend/src/features/matches/session-report-model';
+import type {
+  SessionReport,
+  MatchRecord,
+  MatchLogEvent,
+} from '../../frontend/src/features/matches/types';
+import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 // Frontend has an ESM tsconfig; load its pure model as CommonJS without changing Jest's backend transform.
-const frontendModel: typeof import('../../frontend/src/features/matches/session-report-model') = {} as typeof import('../../frontend/src/features/matches/session-report-model');
-new Function('exports', ts.transpileModule(
-  readFileSync(resolve(__dirname, '../../frontend/src/features/matches/session-report-model.ts'), 'utf8'),
-  {compilerOptions: {module: ts.ModuleKind.CommonJS}},
-).outputText)(frontendModel);
-const { applySessionReport, sessionTimeline, sessionReportKey } = frontendModel;
-import type { MatchRecord } from '../../frontend/src/features/matches/types';
+const frontendModel = { exports: {} };
+runInNewContext(
+  ts.transpileModule(
+    readFileSync(
+      resolve(
+        __dirname,
+        '../../frontend/src/features/matches/session-report-model.ts',
+      ),
+      'utf8',
+    ),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+  ).outputText,
+  frontendModel,
+);
+const { applySessionReport, sessionTimeline, sessionReportKey } =
+  frontendModel.exports as {
+    applySessionReport: (
+      sheet: MatchRecord,
+      report: SessionReport,
+    ) => MatchRecord;
+    sessionTimeline: (
+      report: SessionReport,
+      sheet: MatchRecord,
+    ) => MatchLogEvent[];
+    sessionReportKey: (sessionId: string) => readonly string[];
+  };
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
@@ -50,6 +74,21 @@ interface CompetitionBody {
   participants?: CompetitionTeamBody[];
 }
 
+interface FixtureBody {
+  id: string;
+  sharedSessionId: string | null;
+  homeCompetitionTeamId: string;
+  awayCompetitionTeamId: string;
+}
+interface CompetitionResultBody {
+  results: Array<{
+    homeCompetitionTeamId: string;
+    awayCompetitionTeamId: string;
+    homeScore: number;
+    awayScore: number;
+  }>;
+  standings: Array<{ played: number }>;
+}
 interface CompetitionSummaryBody {
   id: string;
   name: string;
@@ -87,7 +126,8 @@ describe('Shared competitions (e2e)', () => {
     return `${base} ${randomUUID().slice(0, 8)}`;
   }
 
-  let frontendReportCase: {home: MatchRecord; away: MatchRecord; report: SessionReport} | undefined;
+  let frontendReportCase:
+    { home: MatchRecord; away: MatchRecord; report: SessionReport } | undefined;
 
   async function createCompetition(
     agent: ReturnType<typeof request.agent>,
@@ -264,16 +304,25 @@ describe('Shared competitions (e2e)', () => {
         })
         .where(eq(matchSessions.id, fixture.sharedSessionId!));
       const report = await agent.get(`/matches/${match.id}`).expect(200);
-      expect(report.body.projection.finalisationState).toBe('finalised');
+      const projection = (
+        report.body as {
+          projection: {
+            finalisationState: string;
+            confirmedTeamScore: number;
+            confirmedOpponentScore: number;
+          };
+        }
+      ).projection;
+      expect(projection.finalisationState).toBe('finalised');
       const input = {
         homeCompetitionTeamId: fixture.homeCompetitionTeamId,
         awayCompetitionTeamId: fixture.awayCompetitionTeamId,
         homeScore: isHome
-          ? report.body.projection.confirmedTeamScore
-          : report.body.projection.confirmedOpponentScore,
+          ? projection.confirmedTeamScore
+          : projection.confirmedOpponentScore,
         awayScore: isHome
-          ? report.body.projection.confirmedOpponentScore
-          : report.body.projection.confirmedTeamScore,
+          ? projection.confirmedOpponentScore
+          : projection.confirmedTeamScore,
       };
       await syncFixtureResult(
         app.get(DatabaseService),
@@ -336,47 +385,89 @@ describe('Shared competitions (e2e)', () => {
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     try {
       const coach = await newCoach('release-double-leg');
-      const competition = (await coach.agent.post('/competitions').send({
-        name: uniqueName('Release Double Leg'), type: 'league', format: 'league',
-        configuredTeamCount: 2, fixturesPerOpponent: 2,
-        startDate: '2027-01-01', allowedPlayingDays: [6],
-      }).expect(201)).body;
-      await coach.agent.post(`/competitions/${competition.id}/teams`)
-        .send({ displayName: uniqueName('Return Opponent') }).expect(201);
-      const fixtures = (await coach.agent.post(`/competitions/${competition.id}/fixtures/generate`)
-        .send({}).expect(201)).body;
+      const competition = (
+        await coach.agent
+          .post('/competitions')
+          .send({
+            name: uniqueName('Release Double Leg'),
+            type: 'league',
+            format: 'league',
+            configuredTeamCount: 2,
+            fixturesPerOpponent: 2,
+            startDate: '2027-01-01',
+            allowedPlayingDays: [6],
+          })
+          .expect(201)
+      ).body as CompetitionBody & { participants: CompetitionTeamBody[] };
+      await coach.agent
+        .post(`/competitions/${competition.id}/teams`)
+        .send({ displayName: uniqueName('Return Opponent') })
+        .expect(201);
+      const fixtures = (
+        await coach.agent
+          .post(`/competitions/${competition.id}/fixtures/generate`)
+          .send({})
+          .expect(201)
+      ).body as FixtureBody[];
       expect(fixtures).toHaveLength(2);
-      expect(new Set(fixtures.map((fixture: any) => fixture.id)).size).toBe(2);
-      expect(new Set(fixtures.map((fixture: any) => fixture.sharedSessionId)).size).toBe(2);
-      expect(fixtures.every((fixture: any) => Boolean(fixture.sharedSessionId))).toBe(true);
-      expect(fixtures[1].homeCompetitionTeamId).toBe(fixtures[0].awayCompetitionTeamId);
-      expect(fixtures[1].awayCompetitionTeamId).toBe(fixtures[0].homeCompetitionTeamId);
+      expect(new Set(fixtures.map((fixture) => fixture.id)).size).toBe(2);
+      expect(
+        new Set(fixtures.map((fixture) => fixture.sharedSessionId)).size,
+      ).toBe(2);
+      expect(
+        fixtures.every((fixture) => Boolean(fixture.sharedSessionId)),
+      ).toBe(true);
+      expect(fixtures[1].homeCompetitionTeamId).toBe(
+        fixtures[0].awayCompetitionTeamId,
+      );
+      expect(fixtures[1].awayCompetitionTeamId).toBe(
+        fixtures[0].homeCompetitionTeamId,
+      );
       const database = app.get(DatabaseService).database;
       for (const fixture of fixtures) {
-        const fixtureEvents = await database.select({ id: events.id, teamId: events.teamId })
-          .from(events).where(eq(events.competitionFixtureId, fixture.id));
-        const ownParticipant = competition.participants.find((row: any) => row.teamId === coach.team.id);
+        const fixtureEvents = await database
+          .select({ id: events.id, teamId: events.teamId })
+          .from(events)
+          .where(eq(events.competitionFixtureId, fixture.id));
+        const ownParticipant = competition.participants.find(
+          (row) => row.teamId === coach.team.id,
+        );
         for (const event of fixtureEvents) {
-          await database.update(events).set({ status: 'completed' }).where(eq(events.id, event.id));
-          await database.insert(matches).values({ eventId: event.id, competitionId: competition.id,
-            sharedMatchId: fixture.sharedSessionId, opponentName: 'Return Opponent',
-            isHome: fixture.homeCompetitionTeamId === ownParticipant.id,
+          await database
+            .update(events)
+            .set({ status: 'completed' })
+            .where(eq(events.id, event.id));
+          await database.insert(matches).values({
+            eventId: event.id,
+            competitionId: competition.id,
+            sharedMatchId: fixture.sharedSessionId,
+            opponentName: 'Return Opponent',
+            isHome: fixture.homeCompetitionTeamId === ownParticipant!.id,
           });
         }
-        await database.update(competitionFixtures).set({ status: 'completed', homeScore: 2, awayScore: 1 })
+        await database
+          .update(competitionFixtures)
+          .set({ status: 'completed', homeScore: 2, awayScore: 1 })
           .where(eq(competitionFixtures.id, fixture.id));
       }
-      const detail = (await coach.agent.get(`/competitions/${competition.id}`).expect(200)).body;
+      const detail = (
+        await coach.agent.get(`/competitions/${competition.id}`).expect(200)
+      ).body as CompetitionResultBody;
       expect(detail.results).toHaveLength(2);
       for (const fixture of fixtures) {
-        expect(detail.results).toContainEqual(expect.objectContaining({
-          homeCompetitionTeamId: fixture.homeCompetitionTeamId,
-          awayCompetitionTeamId: fixture.awayCompetitionTeamId, homeScore: 2, awayScore: 1,
-        }));
+        expect(detail.results).toContainEqual(
+          expect.objectContaining({
+            homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+            awayCompetitionTeamId: fixture.awayCompetitionTeamId,
+            homeScore: 2,
+            awayScore: 1,
+          }),
+        );
       }
-      expect(detail.standings.map((row: any) => row.played)).toEqual([2, 2]);
+      expect(detail.standings.map((row) => row.played)).toEqual([2, 2]);
     } finally {
-      if (previousFlag === undefined) delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      if (previousFlag === undefined)
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
       else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
     }
   }, 120_000);
@@ -547,10 +638,10 @@ describe('Shared competitions (e2e)', () => {
         formation: '4-4-2',
         starters: expect.arrayContaining([
           { name: 'Away0 Fixture Player', shirtNumber: null },
-        ]),
+        ]) as unknown,
         bench: [],
       });
-      expect(Object.keys(opponentLineup.body).sort()).toEqual(
+      expect(Object.keys(opponentLineup.body as object).sort()).toEqual(
         ['available', 'bench', 'formation', 'starters'].sort(),
       );
 
@@ -602,24 +693,52 @@ describe('Shared competitions (e2e)', () => {
         })
         .expect(201);
       const reportUrl = `/matches/sessions/${homeSheet.sharedMatchId}/report`;
-      await homeCoach.agent.patch(`/matches/${homeSheet.id}/clock`)
-        .send({ operationId: randomUUID(), baseRevision: 0, clientCreatedAt: new Date().toISOString(),
-          period: 'first_half', running: false, elapsedMs: 7 * 60_000 }).expect(200);
+      await homeCoach.agent
+        .patch(`/matches/${homeSheet.id}/clock`)
+        .send({
+          operationId: randomUUID(),
+          baseRevision: 0,
+          clientCreatedAt: new Date().toISOString(),
+          period: 'first_half',
+          running: false,
+          elapsedMs: 7 * 60_000,
+        })
+        .expect(200);
       const [homeReport, awayReport] = await Promise.all([
         homeCoach.agent.get(reportUrl).expect(200),
         awayCoach.agent.get(reportUrl).expect(200),
       ]);
       expect(homeReport.body).toEqual(awayReport.body);
-      expect(homeReport.body).toMatchObject({ sessionId: homeSheet.sharedMatchId,
-        score: { home: 1, away: 0 }, clock: { period: 'first_half', elapsedMs: 7 * 60_000, running: false },
-        finalStatus: 'open', timeline: expect.arrayContaining([expect.objectContaining({ side: 'home', eventType: 'goal' })]) });
-      expect(Object.keys(homeReport.body).sort()).toEqual(
-        ['sessionId', 'participants', 'score', 'clock', 'finalStatus', 'finalisedAt', 'confirmations', 'timeline', 'reviews'].sort(),
+      expect(homeReport.body).toMatchObject({
+        sessionId: homeSheet.sharedMatchId,
+        score: { home: 1, away: 0 },
+        clock: { period: 'first_half', elapsedMs: 7 * 60_000, running: false },
+        finalStatus: 'open',
+        timeline: expect.arrayContaining([
+          expect.objectContaining({ side: 'home', eventType: 'goal' }),
+        ]) as unknown,
+      });
+      expect(Object.keys(homeReport.body as object).sort()).toEqual(
+        [
+          'sessionId',
+          'participants',
+          'score',
+          'clock',
+          'finalStatus',
+          'finalisedAt',
+          'confirmations',
+          'timeline',
+          'reviews',
+        ].sort(),
       );
-      expect(JSON.stringify(homeReport.body)).not.toMatch(/gamePlan|eventNotes|squad|position|payload|athleteId|injuryNotes/);
+      expect(JSON.stringify(homeReport.body)).not.toMatch(
+        /gamePlan|eventNotes|squad|position|payload|athleteId|injuryNotes/,
+      );
       const outsider = await newCoach('s5-outsider');
       await outsider.agent.get(reportUrl).expect(404);
-      await outsider.agent.get(`/matches/${homeSheet.id}/session-report`).expect(404);
+      await outsider.agent
+        .get(`/matches/${homeSheet.id}/session-report`)
+        .expect(404);
       process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
       await homeCoach.agent.get(reportUrl).expect(404);
       process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
@@ -648,30 +767,57 @@ describe('Shared competitions (e2e)', () => {
         homeSheet.sharedMatchId,
       ]);
       const [homeAlias, awayAlias] = await Promise.all([
-        homeCoach.agent.get(`/matches/${homeSheet.id}/session-report`).expect(200),
-        awayCoach.agent.get(`/matches/${awaySheet.id}/session-report`).expect(200),
+        homeCoach.agent
+          .get(`/matches/${homeSheet.id}/session-report`)
+          .expect(200),
+        awayCoach.agent
+          .get(`/matches/${awaySheet.id}/session-report`)
+          .expect(200),
       ]);
       expect(homeAlias.body).toEqual(awayAlias.body);
-      await awayCoach.agent.post(`/matches/${awaySheet.id}/events`)
-        .send({ clientRequestId: randomUUID(), team: 'opponent', eventType: 'goal',
-          opponentLabel: 'Home scorer', minute: 7, period: 'first_half', matchElapsedMs: 7 * 60_000 })
+      await awayCoach.agent
+        .post(`/matches/${awaySheet.id}/events`)
+        .send({
+          clientRequestId: randomUUID(),
+          team: 'opponent',
+          eventType: 'goal',
+          opponentLabel: 'Home scorer',
+          minute: 7,
+          period: 'first_half',
+          matchElapsedMs: 7 * 60_000,
+        })
         .expect(201);
       const openReviewReport = await homeCoach.agent.get(reportUrl).expect(200);
-      expect(openReviewReport.body.reviews).toHaveLength(1);
-      expect(openReviewReport.body.reviews[0].status).toBe('open');
+      expect((openReviewReport.body as SessionReport).reviews).toHaveLength(1);
+      expect((openReviewReport.body as SessionReport).reviews[0].status).toBe(
+        'open',
+      );
       await homeCoach.agent
-        .post(`/matches/${homeSheet.id}/event-reviews/${openReviewReport.body.reviews[0].id}/resolve`)
-        .send({ resolution: 'same_event' }).expect(201);
+        .post(
+          `/matches/${homeSheet.id}/event-reviews/${(openReviewReport.body as SessionReport).reviews[0].id}/resolve`,
+        )
+        .send({ resolution: 'same_event' })
+        .expect(201);
       const [homeResolved, awayResolved] = await Promise.all([
-        homeCoach.agent.get(reportUrl).expect(200), awayCoach.agent.get(reportUrl).expect(200),
+        homeCoach.agent.get(reportUrl).expect(200),
+        awayCoach.agent.get(reportUrl).expect(200),
       ]);
       expect(homeResolved.body).toEqual(awayResolved.body);
-      expect(homeResolved.body.timeline).toHaveLength(1);
-      expect(homeResolved.body.reviews[0]).toMatchObject({ status: 'resolved', resolution: 'same_event' });
-      expect(homeResolved.body.score).toEqual({ home: 1, away: 0 });
+      expect((homeResolved.body as SessionReport).timeline).toHaveLength(1);
+      expect((homeResolved.body as SessionReport).reviews[0]).toMatchObject({
+        status: 'resolved',
+        resolution: 'same_event',
+      });
+      expect((homeResolved.body as SessionReport).score).toEqual({
+        home: 1,
+        away: 0,
+      });
       await homeCoach.agent.post(`/matches/${homeSheet.id}/finish`).expect(201);
       const finishedReport = await awayCoach.agent.get(reportUrl).expect(200);
-      expect(finishedReport.body).toMatchObject({ clock: { period: 'full_time', running: false }, finalStatus: 'awaiting_confirmation' });
+      expect(finishedReport.body).toMatchObject({
+        clock: { period: 'full_time', running: false },
+        finalStatus: 'awaiting_confirmation',
+      });
       await database
         .update(events)
         .set({ status: 'completed' })
@@ -680,9 +826,9 @@ describe('Shared competitions (e2e)', () => {
         .update(competitionFixtures)
         .set({ status: 'completed', homeScore: 3, awayScore: 1 })
         .where(eq(competitionFixtures.id, fixture.id));
-      const standingsDetail = (await homeCoach.agent
-        .get(`/competitions/${competition.id}`)
-        .expect(200)).body as {
+      const standingsDetail = (
+        await homeCoach.agent.get(`/competitions/${competition.id}`).expect(200)
+      ).body as {
         results: Array<{
           homeCompetitionTeamId: string;
           awayCompetitionTeamId: string;
@@ -700,23 +846,44 @@ describe('Shared competitions (e2e)', () => {
         }),
       ]);
       expect(
-        standingsDetail.standings.reduce((played, row) => played + row.played, 0),
+        standingsDetail.standings.reduce(
+          (played, row) => played + row.played,
+          0,
+        ),
       ).toBe(2);
-      await database.update(matchSessions).set({ homeConfirmedAt: new Date(), awayConfirmedAt: new Date(), finalisedAt: new Date() })
+      await database
+        .update(matchSessions)
+        .set({
+          homeConfirmedAt: new Date(),
+          awayConfirmedAt: new Date(),
+          finalisedAt: new Date(),
+        })
         .where(eq(matchSessions.id, homeSheet.sharedMatchId!));
       const [homeFinal, awayFinal] = await Promise.all([
-        homeCoach.agent.get(reportUrl).expect(200), awayCoach.agent.get(reportUrl).expect(200),
+        homeCoach.agent.get(reportUrl).expect(200),
+        awayCoach.agent.get(reportUrl).expect(200),
       ]);
       expect(homeFinal.body).toEqual(awayFinal.body);
       const [homePrivate, awayPrivate] = await Promise.all([
         homeCoach.agent.get(`/matches/${homeSheet.id}`).expect(200),
         awayCoach.agent.get(`/matches/${awaySheet.id}`).expect(200),
       ]);
-      frontendReportCase = {home: homePrivate.body, away: awayPrivate.body, report: homeFinal.body};
-      expect(homeFinal.body).toMatchObject({ finalStatus: 'finalised', score: { home: 3, away: 1 } });
-      await database.delete(teamMembers).where(eq(teamMembers.userId, awayCoach.user.id));
+      frontendReportCase = {
+        home: homePrivate.body as MatchRecord,
+        away: awayPrivate.body as MatchRecord,
+        report: homeFinal.body as SessionReport,
+      };
+      expect(homeFinal.body).toMatchObject({
+        finalStatus: 'finalised',
+        score: { home: 3, away: 1 },
+      });
+      await database
+        .delete(teamMembers)
+        .where(eq(teamMembers.userId, awayCoach.user.id));
       await awayCoach.agent.get(reportUrl).expect(403);
-      await awayCoach.agent.get(`/matches/${awaySheet.id}/session-report`).expect(403);
+      await awayCoach.agent
+        .get(`/matches/${awaySheet.id}/session-report`)
+        .expect(403);
     } finally {
       if (previousFlag === undefined) {
         delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
@@ -870,21 +1037,35 @@ describe('Shared competitions (e2e)', () => {
   });
   it('Step 5(b): frontend reports and synced cache keys use the canonical session report', () => {
     expect(frontendReportCase).toBeDefined();
-    const {home, away, report} = frontendReportCase!;
+    const { home, away, report } = frontendReportCase!;
     const homeView = applySessionReport(home, report);
     const awayView = applySessionReport(away, report);
     expect(home.id).not.toBe(away.id);
-    expect(sessionReportKey(home.sharedSessionId!)).toEqual(sessionReportKey(away.sharedSessionId!));
+    expect(sessionReportKey(home.sharedSessionId!)).toEqual(
+      sessionReportKey(away.sharedSessionId!),
+    );
     expect(homeView.teamScore).toBe(awayView.opponentScore);
     expect(homeView.opponentScore).toBe(awayView.teamScore);
     expect(homeView.clockPeriod).toBe(awayView.clockPeriod);
     expect(homeView.projection?.finalisationState).toBe('finalised');
     expect(awayView.projection?.finalisationState).toBe('finalised');
-    expect(sessionTimeline(report, home).map(row => [row.id, row.side, row.minute])).toEqual(
-      sessionTimeline(report, away).map(row => [row.id, row.side, row.minute]));
+    expect(
+      sessionTimeline(report, home).map((row) => [
+        row.id,
+        row.side,
+        row.minute,
+      ]),
+    ).toEqual(
+      sessionTimeline(report, away).map((row) => [
+        row.id,
+        row.side,
+        row.minute,
+      ]),
+    );
     expect(homeView.gamePlanSnapshot).toEqual(home.gamePlanSnapshot);
     expect(awayView.eventNotes).toEqual(away.eventNotes);
-    expect(sessionTimeline(report, home).every(row => row.detail === null)).toBe(true);
+    expect(
+      sessionTimeline(report, home).every((row) => row.detail === null),
+    ).toBe(true);
   });
-
 });

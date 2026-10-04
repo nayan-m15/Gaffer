@@ -282,27 +282,50 @@ describe('Friendly fixtures (e2e)', () => {
       const accepted = acceptedResponse!.body as AcceptedBody;
       expect(accepted.fixture.sharedSessionId).toEqual(expect.any(String));
 
-      const sheets = [];
-      for (const [coach, eventId] of [[coachA, event.id], [coachB, accepted.event.id]] as const) {
+      const sheets: Array<{ id: string; sharedMatchId: string | null }> = [];
+      for (const [coach, eventId] of [
+        [coachA, event.id],
+        [coachB, accepted.event.id],
+      ] as const) {
         const squad = await createSquad(coach.agent, 'Friendly', 11);
-        const started = await coach.agent.post(`/events/${eventId}/start-match`)
-          .send({ opponentName: 'Friendly opponent', isHome: coach === coachB,
-            startingAthleteIds: squad.map((player) => player.id) }).expect(201);
-        sheets.push(started.body);
+        const started = await coach.agent
+          .post(`/events/${eventId}/start-match`)
+          .send({
+            opponentName: 'Friendly opponent',
+            isHome: coach === coachB,
+            startingAthleteIds: squad.map((player) => player.id),
+          })
+          .expect(201);
+        sheets.push(
+          started.body as { id: string; sharedMatchId: string | null },
+        );
       }
       expect(sheets[0].id).not.toBe(sheets[1].id);
       expect(sheets.map((sheet) => sheet.sharedMatchId)).toEqual([
-        accepted.fixture.sharedSessionId, accepted.fixture.sharedSessionId,
+        accepted.fixture.sharedSessionId,
+        accepted.fixture.sharedSessionId,
       ]);
-      await coachA.agent.post(`/matches/${sheets[0].id}/events`)
-        .send({ clientRequestId: randomUUID(), team: 'own', eventType: 'goal',
-          minute: 7, period: 'first_half', matchElapsedMs: 420000 }).expect(201);
+      await coachA.agent
+        .post(`/matches/${sheets[0].id}/events`)
+        .send({
+          clientRequestId: randomUUID(),
+          team: 'own',
+          eventType: 'goal',
+          minute: 7,
+          period: 'first_half',
+          matchElapsedMs: 420000,
+        })
+        .expect(201);
       const reportUrl = `/matches/sessions/${accepted.fixture.sharedSessionId}/report`;
       const homeReport = await coachA.agent.get(reportUrl).expect(200);
       const awayReport = await coachB.agent.get(reportUrl).expect(200);
       expect(homeReport.body).toEqual(awayReport.body);
-      expect(homeReport.body.score).toEqual({ home: 1, away: 0 });
-      expect(homeReport.body.timeline).toHaveLength(1);
+      expect(
+        (homeReport.body as { score: { home: number; away: number } }).score,
+      ).toEqual({ home: 1, away: 0 });
+      expect(
+        (homeReport.body as { timeline: unknown[] }).timeline,
+      ).toHaveLength(1);
       process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
       await coachA.agent.get(reportUrl).expect(404);
       await coachA.agent.get(`/matches/${sheets[0].id}`).expect(200);
@@ -963,85 +986,116 @@ describe('Friendly fixtures (e2e)', () => {
     const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     try {
-    const coachA = await newCoach();
-    const coachB = await newCoach();
-    const squadB = await createSquad(coachB.agent, 'Lineup', 12);
-    const created = await coachA.agent
-      .post('/events')
-      .send({
-        title: coachB.team.name,
-        type: 'match',
-        scheduledAt: futureIso(0),
-        location: 'Alpha Park',
-        friendlyOpponentTeamId: coachB.team.id,
-      })
-      .expect(201);
-    const eventA = created.body as EventBody;
-    const accepted = await coachB.agent
-      .post(`/friendly-fixtures/${eventA.friendlyFixtureId}/accept`)
-      .expect(201);
-    const eventB = (accepted.body as AcceptedBody).event;
-    const starters = squadB.slice(0, 11).map((athlete) => athlete.id);
-    const bench = squadB.slice(11).map((athlete) => athlete.id);
+      const coachA = await newCoach();
+      const coachB = await newCoach();
+      const squadB = await createSquad(coachB.agent, 'Lineup', 12);
+      const created = await coachA.agent
+        .post('/events')
+        .send({
+          title: coachB.team.name,
+          type: 'match',
+          scheduledAt: futureIso(0),
+          location: 'Alpha Park',
+          friendlyOpponentTeamId: coachB.team.id,
+        })
+        .expect(201);
+      const eventA = created.body as EventBody;
+      const accepted = await coachB.agent
+        .post(`/friendly-fixtures/${eventA.friendlyFixtureId}/accept`)
+        .expect(201);
+      const eventB = (accepted.body as AcceptedBody).event;
+      const starters = squadB.slice(0, 11).map((athlete) => athlete.id);
+      const bench = squadB.slice(11).map((athlete) => athlete.id);
 
-    const unconfirmed = await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(200);
-    expect(unconfirmed.body).toEqual({ available: false, formation: null, starters: [], bench: [] });
-    const outsider = await newCoach();
-    await outsider.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(404);
+      const unconfirmed = await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(200);
+      expect(unconfirmed.body).toEqual({
+        available: false,
+        formation: null,
+        starters: [],
+        bench: [],
+      });
+      const outsider = await newCoach();
+      await outsider.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(404);
 
-    await coachB.agent
-      .put(`/events/${eventB.id}/lineup`)
-      .send({ startingAthleteIds: starters, benchAthleteIds: bench, formationId: '4-3-3' })
-      .expect(200);
-    const firstRead = await coachA.agent
-      .get(`/events/${eventA.id}/opponent-lineup`)
-      .expect(200);
-    expect(firstRead.body).toEqual({
-      available: true,
-      formation: '4-3-3',
-      starters: expect.arrayContaining([
-        { name: 'Lineup1 Player', shirtNumber: 1 },
-      ]),
-      bench: [{ name: 'Lineup12 Player', shirtNumber: 12 }],
-    });
-    expect(Object.keys(firstRead.body).sort()).toEqual(
-      ['available', 'bench', 'formation', 'starters'].sort(),
-    );
-    expect(JSON.stringify(firstRead.body)).not.toMatch(
-      /tactic|game.?plan|notes|injur|draft|position|athlete.?id/i,
-    );
+      await coachB.agent
+        .put(`/events/${eventB.id}/lineup`)
+        .send({
+          startingAthleteIds: starters,
+          benchAthleteIds: bench,
+          formationId: '4-3-3',
+        })
+        .expect(200);
+      const firstRead = await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(200);
+      expect(firstRead.body).toEqual({
+        available: true,
+        formation: '4-3-3',
+        starters: expect.arrayContaining([
+          { name: 'Lineup1 Player', shirtNumber: 1 },
+        ]) as unknown,
+        bench: [{ name: 'Lineup12 Player', shirtNumber: 12 }],
+      });
+      expect(Object.keys(firstRead.body as object).sort()).toEqual(
+        ['available', 'bench', 'formation', 'starters'].sort(),
+      );
+      expect(JSON.stringify(firstRead.body)).not.toMatch(
+        /tactic|game.?plan|notes|injur|draft|position|athlete.?id/i,
+      );
 
-    const rotatedStarters = [squadB[11].id, ...starters.slice(1)];
-    await coachB.agent
-      .put(`/events/${eventB.id}/lineup`)
-      .send({ startingAthleteIds: rotatedStarters, benchAthleteIds: [squadB[0].id], formationId: '3-5-2' })
-      .expect(200);
-    const updatedRead = await coachA.agent
-      .get(`/events/${eventA.id}/opponent-lineup`)
-      .expect(200);
-    expect(updatedRead.body).toMatchObject({
-      formation: '3-5-2',
-      starters: expect.arrayContaining([
-        { name: 'Lineup12 Player', shirtNumber: 12 },
-      ]),
-      bench: [{ name: 'Lineup1 Player', shirtNumber: 1 }],
-    });
+      const rotatedStarters = [squadB[11].id, ...starters.slice(1)];
+      await coachB.agent
+        .put(`/events/${eventB.id}/lineup`)
+        .send({
+          startingAthleteIds: rotatedStarters,
+          benchAthleteIds: [squadB[0].id],
+          formationId: '3-5-2',
+        })
+        .expect(200);
+      const updatedRead = await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(200);
+      expect(updatedRead.body).toMatchObject({
+        formation: '3-5-2',
+        starters: expect.arrayContaining([
+          { name: 'Lineup12 Player', shirtNumber: 12 },
+        ]) as unknown,
+        bench: [{ name: 'Lineup1 Player', shirtNumber: 1 }],
+      });
 
-    const started = await coachB.agent
-      .post(`/events/${eventB.id}/start-match`)
-      .send({ opponentName: coachA.team.name, isHome: false, startingAthleteIds: rotatedStarters, benchAthleteIds: [squadB[0].id] })
-      .expect(201);
-    const afterKickoff = await coachA.agent
-      .get(`/events/${eventA.id}/opponent-lineup`)
-      .expect(200);
-    expect(afterKickoff.body).toEqual(updatedRead.body);
-    await coachB.agent.post(`/matches/${started.body.id}/finish`).expect(201);
-    const afterFullTime = await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(200);
-    expect(afterFullTime.body).toEqual(updatedRead.body);
-    await database.delete(teamMembers).where(eq(teamMembers.userId, coachA.user.id));
-    await coachA.agent.get(`/events/${eventA.id}/opponent-lineup`).expect(403);
+      const started = await coachB.agent
+        .post(`/events/${eventB.id}/start-match`)
+        .send({
+          opponentName: coachA.team.name,
+          isHome: false,
+          startingAthleteIds: rotatedStarters,
+          benchAthleteIds: [squadB[0].id],
+        })
+        .expect(201);
+      const afterKickoff = await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(200);
+      expect(afterKickoff.body).toEqual(updatedRead.body);
+      await coachB.agent
+        .post(`/matches/${(started.body as { id: string }).id}/finish`)
+        .expect(201);
+      const afterFullTime = await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(200);
+      expect(afterFullTime.body).toEqual(updatedRead.body);
+      await database
+        .delete(teamMembers)
+        .where(eq(teamMembers.userId, coachA.user.id));
+      await coachA.agent
+        .get(`/events/${eventA.id}/opponent-lineup`)
+        .expect(403);
     } finally {
-      if (previousFlag === undefined) delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      if (previousFlag === undefined)
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
       else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
     }
   }, 120_000);

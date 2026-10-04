@@ -150,7 +150,7 @@ describe('Offline collaborative sync (e2e)', () => {
     );
     const streamSql = (name: string) => {
       const start = config.indexOf(`  ${name}:`);
-      const nextMatch = /\n  [a-z][a-z0-9_]*:/g;
+      const nextMatch = /\n {2}[a-z][a-z0-9_]*:/g;
       nextMatch.lastIndex = start + 3;
       const end = nextMatch.exec(config)?.index ?? config.length;
       return config
@@ -345,8 +345,14 @@ describe('Offline collaborative sync (e2e)', () => {
           .send({ items: [second] })
           .expect(201),
       ]);
-      expect(firstUpload.body.receipts[0].outcome).toBe('accepted');
-      expect(secondUpload.body.receipts[0].outcome).toBe('accepted');
+      expect(
+        (firstUpload.body as { receipts: Array<{ outcome: string }> })
+          .receipts[0].outcome,
+      ).toBe('accepted');
+      expect(
+        (secondUpload.body as { receipts: Array<{ outcome: string }> })
+          .receipts[0].outcome,
+      ).toBe('accepted');
       await agent
         .post('/sync/upload')
         .send({ items: [second] })
