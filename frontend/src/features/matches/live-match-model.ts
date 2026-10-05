@@ -1,3 +1,4 @@
+import { normalizeOpponentLineup } from "./opponent-lineup-model.ts";
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
@@ -255,50 +256,29 @@ function hasRecordedPosition(player: OpponentMatchPlayer) {
   return Boolean(player.position?.trim());
 }
 
-/**
- * Display-only view of the shared friendly-opponent lineup in the same shape
- * the pitch and bench panels already render. Used only when the coach has not
- * entered an opposition squad by hand — ids are the opponent's athlete ids,
- * so nothing here is offered for event attribution. Athletes without a squad
- * number cannot be placed as shirts, and duplicate shirt numbers collapse.
- */
+/** Public display rows; their keys never identify private roster rows. */
 export function friendlyLineupPlayers(
   lineup: OpponentLineupView | null | undefined,
 ): OpponentMatchPlayer[] {
-  if (!lineup?.available || !("players" in lineup)) {
-    return [];
-  }
-  const seenNumbers = new Set<number>();
-  const players: OpponentMatchPlayer[] = [];
-  for (const athlete of lineup.players) {
-    if (athlete.squadNumber == null || seenNumbers.has(athlete.squadNumber)) {
-      continue;
-    }
-    seenNumbers.add(athlete.squadNumber);
-    players.push({
-      id: athlete.id,
-      shirtNumber: athlete.squadNumber,
-      name: `${athlete.firstName} ${athlete.lastName}`.trim() || null,
-      position: null,
-    });
-  }
-  return players;
+  const view = normalizeOpponentLineup(lineup);
+  return [...view.starters, ...view.bench].map((player) => ({
+    id: player.id,
+    shirtNumber: player.shirtNumber,
+    name: player.name || null,
+    position: null,
+    publicLineup: {
+      slotId: player.slotId,
+      formation: view.formation,
+      customPositions: view.customPositions,
+    },
+  }));
 }
 
-/** The opponent's actual confirmed starters, for pitch/bench selection. */
 export function friendlyLineupStarterIds(
   lineup: OpponentLineupView | null | undefined,
 ): ReadonlySet<string> {
-  if (!lineup?.available || !("players" in lineup)) {
-    return new Set<string>();
-  }
-  return new Set(
-    lineup.players
-      .filter((athlete) => athlete.started)
-      .map((athlete) => athlete.id),
-  );
+  return new Set(normalizeOpponentLineup(lineup).starters.map((player) => player.id));
 }
-
 
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
@@ -316,16 +296,15 @@ export function opponentPitchState(
       ? preferredIds
       : starterLimitOrPreferred;
   const unique = uniqueOpponents(players);
-  const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
+  const sorted = [...unique].sort(
+    (a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999),
+  );
   const positioned = sorted.filter(hasRecordedPosition);
   const unpositioned = sorted.filter((player) => !hasRecordedPosition(player));
-  const starters = selectOpponentStarters(
-    sorted,
-    positioned,
-    unpositioned,
-    new Set(preferredStarterIds ?? []),
-    starterLimit,
-  );
+  const starters =
+    preferredStarterIds !== undefined
+      ? sorted.filter((player) => preferredStarterIds.has(player.id))
+      : selectOpponentStarters(sorted, positioned, unpositioned, starterLimit);
 
   const starterIds = new Set(starters.map((player) => player.id));
   const extras = unique.filter((player) => !starterIds.has(player.id));
@@ -344,21 +323,22 @@ function selectOpponentStarters(
   sorted: OpponentMatchPlayer[],
   positioned: OpponentMatchPlayer[],
   unpositioned: OpponentMatchPlayer[],
-  preferred: ReadonlySet<string>,
   starterLimit = 11,
 ): OpponentMatchPlayer[] {
   const starters: OpponentMatchPlayer[] = [];
   const seenNumbers = new Set<number>();
   const takeStarter = (player: OpponentMatchPlayer) => {
-    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) return;
-    seenNumbers.add(player.shirtNumber);
+    if (
+      (player.shirtNumber != null && seenNumbers.has(player.shirtNumber)) ||
+      starters.length >= starterLimit
+    ) return;
+    if (player.shirtNumber != null) seenNumbers.add(player.shirtNumber);
     starters.push(player);
   };
   if (positioned.length > 0) {
     [...positioned, ...unpositioned].forEach(takeStarter);
     return starters;
   }
-  sorted.filter((player) => preferred.has(player.id)).forEach(takeStarter);
   sorted.forEach(takeStarter);
   return starters;
 }
@@ -461,6 +441,17 @@ export function placeOppPlayers(
   formatPlayerCount?: FormationPlayerCount,
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
+  if (unique.some((player) => player.publicLineup)) {
+    return unique.flatMap((player) => {
+      const view = player.publicLineup;
+      if (!view?.formation || !view.slotId) return [];
+      const positions = view.formation.startsWith("custom-")
+        ? view.customPositions ?? []
+        : FORMATIONS[view.formation]?.positions ?? [];
+      const slot = positions.find((position) => position.id === view.slotId);
+      return slot ? [{ player, ...formationToHalf(slot.x, slot.y, half) }] : [];
+    });
+  }
   const byId = new Map(unique.map((player) => [player.id, player]));
   const hasPositions = unique.some(hasRecordedPosition);
   const formationId = hasPositions
@@ -551,7 +542,7 @@ function assignShirtOrderedOpponents(
   players: OpponentMatchPlayer[],
   assignments: Record<string, string | null>,
 ): void {
-  const ordered = [...players].sort((a, b) => a.shirtNumber - b.shirtNumber);
+  const ordered = [...players].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
   formation.positions.forEach((position, index) => {
     assignments[position.id] = ordered[index]?.id ?? null;
   });

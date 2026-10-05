@@ -1,6 +1,6 @@
 # Two-sided live logging: fix plan
 
-Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. This change consolidates documentation; the application fixes below still need implementation.
+Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. Step 1 is implemented in the working tree; steps 2–6 remain.
 
 The goal: two coaches open their own team setup, inspect the opponent's confirmed lineup, record into one shared match, review possible duplicates, and finish with one result everywhere. Implement the remaining fixes and hand the friendly and competition flows back for manual testing. A new validation environment is optional and does not hold up frontend work.
 
@@ -33,6 +33,8 @@ Retained historical facts: local HS256 / gaffer-dev tokens were rejected with PS
 The recording asks for the opponent's **confirmed match lineup**, formation and bench. Support that public view while keeping tactics, game plans, notes, injuries, drafts and the full roster private. Earlier plans disagree on lineup visibility; this plan follows the user's current request and the narrow API already implemented.
 
 ## Implementation order
+
+Step 1 implementation status (5 October): added a shared public-lineup adapter, public starter slots/custom coordinates, and a read-only opponent lineup route for linked friendly/competition opponents. Manual drafts remain for external opponents; linked lineups are no longer copied into them. Missing numbers, distinct starters/bench, unknown positions, waiting/error/retry states and the labelled exact-fixture squad fallback are covered. Backend build, 33 focused backend tests, 13 focused frontend tests and lint checks passed. Frontend build still fails on the previously documented landing-scene TypeScript errors. HTTP lineup expectations were updated; database-backed HTTP and paired-account browser verification have not been run for this change. No deployment or database repair was performed.
 
 ### 1. Fix opponent setup and lineup data
 

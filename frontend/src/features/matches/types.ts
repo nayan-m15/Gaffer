@@ -18,9 +18,15 @@ export type MatchClockPeriod =
 
 export interface OpponentMatchPlayer {
   id: string;
-  shirtNumber: number;
+  shirtNumber: number | null;
   name: string | null;
   position?: string | null;
+  /** Public display metadata; id is a display key when this is present. */
+  publicLineup?: {
+    slotId: string | null;
+    formation: string | null;
+    customPositions: Array<{ id: string; label: string; x: number; y: number }> | null;
+  };
 }
 
 export type MatchInsightStatus =
@@ -190,7 +196,13 @@ import type { GamePlanSnapshot } from "@/services/gamePlans";
 export interface ConfirmedOpponentLineup {
   available: boolean;
   formation: string | null;
-  starters: Array<{ name: string; shirtNumber: number | null }>;
+  source?: "confirmed" | "squad";
+  customPositions?: Array<{ id: string; label: string; x: number; y: number }> | null;
+  starters: Array<{
+    name: string;
+    shirtNumber: number | null;
+    slotId?: string | null;
+  }>;
   bench: Array<{ name: string; shirtNumber: number | null }>;
 }
 export type OpponentLineupView = FriendlyOpponentLineup | ConfirmedOpponentLineup;

@@ -73,12 +73,18 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
       'available',
       'bench',
       'formation',
+      'source',
       'starters',
     ]);
     const value = body as { starters: object[]; bench: object[] };
     expect(value.starters).toHaveLength(11);
     expect(value.bench).toHaveLength(1);
-    for (const player of [...value.starters, ...value.bench])
+    const confirmed = (body as { source: string }).source === 'confirmed';
+    for (const player of value.starters)
+      expect(Object.keys(player).sort()).toEqual(
+        confirmed ? ['name', 'shirtNumber', 'slotId'] : ['name', 'shirtNumber'],
+      );
+    for (const player of value.bench)
       expect(Object.keys(player).sort()).toEqual(['name', 'shirtNumber']);
   }
 
@@ -147,7 +153,11 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
       .expect(200);
     narrow(fallback.body, null);
     expect((fallback.body as { starters: unknown[] }).starters).toEqual(
-      (snapshot.body as { starters: unknown[] }).starters,
+      (
+        snapshot.body as {
+          starters: { name: string; shirtNumber: number | null }[];
+        }
+      ).starters.map(({ name, shirtNumber }) => ({ name, shirtNumber })),
     );
     const sheetA = (await start(a, event.id)).body as { id: string };
     const match = await a.agent.get(`/matches/${sheetA.id}`).expect(200);

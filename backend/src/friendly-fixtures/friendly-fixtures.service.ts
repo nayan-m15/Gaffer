@@ -53,7 +53,13 @@ export interface FriendlyOpponentLineupPlayer {
 export interface ConfirmedOpponentLineup {
   available: boolean;
   formation: string | null;
-  starters: Array<{ name: string; shirtNumber: number | null }>;
+  source?: 'confirmed' | 'squad';
+  customPositions?: Array<{ id: string; label: string; x: number; y: number }>;
+  starters: Array<{
+    name: string;
+    shirtNumber: number | null;
+    slotId?: string | null;
+  }>;
   bench: Array<{ name: string; shirtNumber: number | null }>;
 }
 
@@ -539,7 +545,29 @@ export class FriendlyFixturesService {
     return {
       available: Boolean(lineup) || legacy.available,
       formation: lineup?.formationId ?? null,
-      starters: players.filter((player) => player.started).map(toPlayer),
+      ...(lineup || legacy.available
+        ? { source: lineup ? ('confirmed' as const) : ('squad' as const) }
+        : {}),
+      ...(lineup?.formationId?.startsWith('custom-') && lineup.customPositions
+        ? {
+            customPositions: lineup.customPositions.map(
+              ({ id, label, x, y }) => ({ id, label, x, y }),
+            ),
+          }
+        : {}),
+      starters: players
+        .filter((player) => player.started)
+        .map((player) => ({
+          ...toPlayer(player),
+          ...(lineup
+            ? {
+                slotId:
+                  Object.entries(lineup.pitchAssignments ?? {}).find(
+                    ([, athleteId]) => athleteId === player.id,
+                  )?.[0] ?? null,
+              }
+            : {}),
+        })),
       bench: players.filter((player) => !player.started).map(toPlayer),
     };
   }

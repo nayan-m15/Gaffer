@@ -17,6 +17,12 @@ export interface DraftOpponentPlayer {
 }
 
 export interface OpponentSquadSetupContext {
+  linkedOpponent?: boolean;
+  lineup?: import("./types").OpponentLineupView;
+  lineupLoading?: boolean;
+  lineupError?: boolean;
+  onRetryLineup?: () => void;
+  opponentName?: string;
   visibility: OpponentSquadVisibility;
   players: DraftOpponentPlayer[];
   formationId: string;

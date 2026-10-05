@@ -54,7 +54,12 @@ interface TeamSearchBody {
 interface FriendlyLineupBody {
   available: boolean;
   formation: string | null;
-  starters: Array<{ name: string; shirtNumber: number | null }>;
+  source?: 'confirmed' | 'squad';
+  starters: Array<{
+    name: string;
+    shirtNumber: number | null;
+    slotId?: string | null;
+  }>;
   bench: Array<{ name: string; shirtNumber: number | null }>;
 }
 
@@ -866,6 +871,7 @@ describe('Friendly fixtures (e2e)', () => {
     expect(lineup).toEqual({
       available: true,
       formation: null,
+      source: 'squad',
       starters: expectedPlayers('Bravo', 1, 11),
       bench: expectedPlayers('Bravo', 12, 13),
     });
@@ -897,6 +903,7 @@ describe('Friendly fixtures (e2e)', () => {
     expect(lineupForB).toEqual({
       available: true,
       formation: null,
+      source: 'squad',
       starters: expectedPlayers('Alpha', 1, 11),
       bench: [],
     });
@@ -992,6 +999,7 @@ describe('Friendly fixtures (e2e)', () => {
           startingAthleteIds: starters,
           benchAthleteIds: bench,
           formationId: '4-3-3',
+          pitchAssignments: { '433-gk': squadB[0].id },
         })
         .expect(200);
       const firstRead = await coachA.agent
@@ -1000,18 +1008,26 @@ describe('Friendly fixtures (e2e)', () => {
       expect(firstRead.body).toEqual({
         available: true,
         formation: '4-3-3',
+        source: 'confirmed',
         starters: expect.arrayContaining([
-          { name: 'Lineup1 Player', shirtNumber: 1 },
+          { name: 'Lineup1 Player', shirtNumber: 1, slotId: '433-gk' },
         ]) as unknown,
         bench: [{ name: 'Lineup12 Player', shirtNumber: 12 }],
       });
       expect(Object.keys(firstRead.body as object).sort()).toEqual(
-        ['available', 'bench', 'formation', 'starters'].sort(),
+        ['available', 'bench', 'formation', 'source', 'starters'].sort(),
       );
       expect(JSON.stringify(firstRead.body)).not.toMatch(
         /tactic|game.?plan|notes|injur|draft|position|athlete.?id/i,
       );
 
+      for (const player of (firstRead.body as FriendlyLineupBody).starters) {
+        expect(Object.keys(player).sort()).toEqual([
+          'name',
+          'shirtNumber',
+          'slotId',
+        ]);
+      }
       const rotatedStarters = [squadB[11].id, ...starters.slice(1)];
       await coachB.agent
         .put(`/events/${eventB.id}/lineup`)
@@ -1019,6 +1035,7 @@ describe('Friendly fixtures (e2e)', () => {
           startingAthleteIds: rotatedStarters,
           benchAthleteIds: [squadB[0].id],
           formationId: '3-5-2',
+          pitchAssignments: { '352-gk': squadB[11].id },
         })
         .expect(200);
       const updatedRead = await coachA.agent
@@ -1027,7 +1044,7 @@ describe('Friendly fixtures (e2e)', () => {
       expect(updatedRead.body).toMatchObject({
         formation: '3-5-2',
         starters: expect.arrayContaining([
-          { name: 'Lineup12 Player', shirtNumber: 12 },
+          { name: 'Lineup12 Player', shirtNumber: 12, slotId: '352-gk' },
         ]) as unknown,
         bench: [{ name: 'Lineup1 Player', shirtNumber: 1 }],
       });
@@ -1178,7 +1195,11 @@ describe('Friendly fixtures (e2e)', () => {
     expect(lineupForB).toEqual({
       available: true,
       formation: null,
-      starters: expectedPlayers('Alpha', 1, 11),
+      starters: expectedPlayers('Alpha', 1, 11).map((player) => ({
+        ...player,
+        slotId: null,
+      })),
+      source: 'confirmed',
       bench: expectedPlayers('Alpha', 12, 13),
     });
 
@@ -1195,7 +1216,11 @@ describe('Friendly fixtures (e2e)', () => {
     expect(lineupForA).toEqual({
       available: true,
       formation: null,
-      starters: expectedPlayers('Bravo', 1, 11),
+      starters: expectedPlayers('Bravo', 1, 11).map((player) => ({
+        ...player,
+        slotId: null,
+      })),
+      source: 'confirmed',
       bench: [],
     });
 

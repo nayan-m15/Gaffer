@@ -34,7 +34,6 @@ import {
   useFriendlyOpponentLineup,
   useStartMatch,
 } from "@/features/events/hooks";
-import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import type { OpponentSquadVisibility } from "@/features/events/types";
 import {
   contrastText,
@@ -44,7 +43,6 @@ import {
 } from "@/features/matches/live-match-model";
 import {
   assignmentsFromPlayers,
-  MAX_OPPONENT_PLAYERS,
   type DraftOpponentPlayer,
   type OpponentSquadSetupContext,
 } from "@/features/matches/opponent-squad-draft";
@@ -1296,9 +1294,6 @@ export default function ConfirmSquadPage() {
   const [opponentSquadError, setOpponentSquadError] = useState<string | null>(
     null,
   );
-  // Set once the coach saves the setup page: manual entries always win over
-  // the shared friendly-opponent autofill.
-  const [opponentSquadTouched, setOpponentSquadTouched] = useState(false);
   const [teamColor, setTeamColor] = useState<string | null>(null);
   const [opponentColor, setOpponentColor] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1480,48 +1475,6 @@ export default function ConfirmSquadPage() {
     opponentCompetitionTeamId,
   ]);
 
-  // Auto-populate the opposition squad from the opponent's confirmed lineup
-  // once it exists, so a Gaffer friendly never needs manual re-entry of the
-  // other team. Manual edits via the setup page take precedence permanently.
-  useEffect(() => {
-    const lineup = friendlyLineupQuery.data;
-    if (!lineup?.available || !("players" in lineup) || opponentSquadTouched) {
-      return;
-    }
-    // The published snapshot maps actual athlete IDs to their confirmed slots.
-    // Never infer the opponent’s starting XI from registered position labels.
-    const slotByAthlete = new Map(Object.entries(lineup.pitchAssignments ?? {})
-      .filter((entry): entry is [string, string] => Boolean(entry[1]))
-      .map(([slot, athleteId]) => [athleteId, slot]));
-    const seenNumbers = new Set<number>();
-    const players: DraftOpponentPlayer[] = [];
-    for (const athlete of lineup.players) {
-      if (athlete.squadNumber == null || seenNumbers.has(athlete.squadNumber)) {
-        continue;
-      }
-      seenNumbers.add(athlete.squadNumber);
-      players.push({
-        shirtNumber: athlete.squadNumber,
-        name: `${athlete.firstName} ${athlete.lastName}`.trim() || undefined,
-        position: athlete.position ?? undefined,
-        slotId: athlete.started ? slotByAthlete.get(athlete.id) ?? null : null,
-      });
-      if (players.length >= MAX_OPPONENT_PLAYERS) {
-        break;
-      }
-    }
-    if (players.length === 0) {
-      return;
-    }
-    setOpponentPlayers(players);
-    if (lineup.formationId && FORMATIONS[lineup.formationId]) {
-      setOpponentFormationId(lineup.formationId);
-      setOpponentCustomPositions(lineup.customPositions ?? null);
-    }
-    setOpponentSquadVisibility("full");
-    setOpponentSquadError(null);
-  }, [friendlyLineupQuery.data, opponentSquadTouched]);
-
   const startingCount = startingIds.size;
   const benchCount = Math.max(selectableAthletes.length - startingCount, 0);
   const opponentReady = isOpponentReadyForSetup({
@@ -1629,9 +1582,22 @@ export default function ConfirmSquadPage() {
   const friendlyOpponentLabel = eventQuery.data?.competitionFixtureId
     ? eventQuery.data.fixtureOpponentName?.trim() || "the opponent"
     : eventQuery.data?.friendlyOpponentTeamName?.trim() || "the opponent";
+  const linkedOpponent =
+    Boolean(eventQuery.data?.friendlyOpponentTeamId) ||
+    Boolean(
+      eventQuery.data?.competitionFixtureId &&
+      competitionParticipants.find(
+        (participant) => participant.id === generatedFixtureOpponentId,
+      )?.teamId,
+    ) ||
+    Boolean(
+      friendlyLineupQuery.data &&
+      ("players" in friendlyLineupQuery.data
+        ? friendlyLineupQuery.data.teamId
+        : friendlyLineupQuery.data.available),
+    );
   const sharingWithOpponent =
-    (friendlyFixtureLinked && friendlyFixtureAccepted) ||
-    Boolean(eventQuery.data?.competitionFixtureId && (friendlyLineupQuery.data && "teamId" in friendlyLineupQuery.data ? friendlyLineupQuery.data.teamId : friendlyLineupQuery.data?.available));
+    linkedOpponent && (!friendlyFixtureLinked || friendlyFixtureAccepted);
   const lineupStatusMessage = getLineupStatusMessage({
     fixtureDateConfirmed,
     lineupReady,
@@ -1772,7 +1738,9 @@ export default function ConfirmSquadPage() {
     if (!eventId || !canSubmit) {
       return;
     }
-    const squadError = getOpponentSquadError(opponentSquadVisibility, opponentPlayers);
+    const squadError = linkedOpponent
+      ? null
+      : getOpponentSquadError(opponentSquadVisibility, opponentPlayers);
     if (squadError) {
       setOpponentSquadError(squadError);
       return;
@@ -1798,10 +1766,10 @@ export default function ConfirmSquadPage() {
           startingIds,
           gamePlanQuery.data,
         ),
-        opponentSquadVisibility,
+        opponentSquadVisibility: linkedOpponent ? "none" : opponentSquadVisibility,
         teamColor: ownColor,
         opponentColor: oppColor,
-        ...(opponentSquadVisibility === "none"
+        ...(linkedOpponent || opponentSquadVisibility === "none"
           ? {}
           : {
               opponentSquad: opponentPlayers.map((player) => ({
@@ -1839,30 +1807,12 @@ export default function ConfirmSquadPage() {
       appliedGamePlanIdRef.current = planId;
     }
   };
-  if (opponentOutlet) {
-    const setupContext: OpponentSquadSetupContext = {
-      visibility: opponentSquadVisibility,
-      players: opponentPlayers,
-      formationId: opponentFormationId,
-      customPositions: opponentCustomPositions,
-      playerCount: startingTarget,
-      opponentColor: oppColor,
-      onSave: (next) => {
-        setOpponentSquadTouched(true);
-        setOpponentSquadVisibility(next.visibility);
-        setOpponentPlayers(next.players);
-        setOpponentFormationId(next.formationId);
-        if (next.formationId !== opponentFormationId) setOpponentCustomPositions(null);
-        setOpponentSquadError(null);
-      },
-    };
-    return <Outlet context={setupContext} />;
-  }
 
   if (
     eventQuery.isLoading ||
     athletesQuery.isLoading ||
-    gamePlansQuery.isLoading
+    gamePlansQuery.isLoading ||
+    Boolean(eventQuery.data?.competitionFixtureId && competitionQuery.isLoading)
   ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1874,9 +1824,15 @@ export default function ConfirmSquadPage() {
     );
   }
 
-  if (eventQuery.isError || athletesQuery.isError || gamePlansQuery.isError) {
+  if (
+    eventQuery.isError ||
+    athletesQuery.isError ||
+    gamePlansQuery.isError ||
+    (eventQuery.data?.competitionFixtureId && competitionQuery.isError)
+  ) {
     const error =
-      eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error;
+      eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error ??
+      competitionQuery.error;
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
@@ -1896,6 +1852,7 @@ export default function ConfirmSquadPage() {
               void eventQuery.refetch();
               void athletesQuery.refetch();
               void gamePlansQuery.refetch();
+              if (eventQuery.data?.competitionFixtureId) void competitionQuery.refetch();
             }}
           >
             Retry
@@ -1923,6 +1880,33 @@ export default function ConfirmSquadPage() {
         </div>
       </div>
     );
+  }
+
+  if (opponentOutlet && (linkedOpponent || !event.matchId)) {
+    const setupContext: OpponentSquadSetupContext = {
+      visibility: opponentSquadVisibility,
+      players: opponentPlayers,
+      formationId: opponentFormationId,
+      customPositions: opponentCustomPositions,
+      playerCount: startingTarget,
+      opponentColor: oppColor,
+      linkedOpponent,
+      lineup: friendlyLineupQuery.data,
+      lineupLoading: friendlyLineupQuery.isLoading,
+      lineupError: friendlyLineupQuery.isError,
+      onRetryLineup: () => {
+        void friendlyLineupQuery.refetch();
+      },
+      opponentName: friendlyOpponentLabel,
+      onSave: (next) => {
+        setOpponentSquadVisibility(next.visibility);
+        setOpponentPlayers(next.players);
+        setOpponentFormationId(next.formationId);
+        if (next.formationId !== opponentFormationId) setOpponentCustomPositions(null);
+        setOpponentSquadError(null);
+      },
+    };
+    return <Outlet context={setupContext} />;
   }
 
   if (event.matchId) {
@@ -2036,18 +2020,37 @@ export default function ConfirmSquadPage() {
           onVenueChange={setVenue}
         />
 
-        <OpponentSquadSummary
-          event={event}
-          showSharedLineupMessage={!(friendlyLineupQuery.data && "starters" in friendlyLineupQuery.data)}
-          lineup={friendlyLineupQuery.data && "players" in friendlyLineupQuery.data ? friendlyLineupQuery.data : undefined}
-          visibility={opponentSquadVisibility}
-          formationId={opponentFormationId}
-          summary={opponentSummary}
-          opponentColor={oppColor}
-          error={opponentSquadError}
-          onEdit={() => navigate(`/events/${eventId}/confirm-squad/opponent`)}
-        />
-        <OpponentConfirmedLineupCard lineup={friendlyLineupQuery.data} opponentName={friendlyOpponentLabel} />
+        {linkedOpponent ? (
+          <section className={cardClassName}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className={sectionLabelClassName}>Opponent lineup</h2>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(`/events/${eventId}/confirm-squad/opponent`)}
+              >
+                View opponent lineup
+              </Button>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {friendlyLineupQuery.isError ? "Could not load the opponent lineup. Open the view to retry."
+                : friendlyLineupQuery.isLoading ? "Loading opponent lineup..."
+                : friendlyLineupQuery.data?.available ? "View the shared lineup, formation and bench. Read only."
+                : "Waiting for the opponent to accept the fixture and confirm their lineup."}
+            </p>
+          </section>
+        ) : (
+          <OpponentSquadSummary
+            event={event}
+            lineup={friendlyLineupQuery.data && "players" in friendlyLineupQuery.data ? friendlyLineupQuery.data : undefined}
+            visibility={opponentSquadVisibility}
+            formationId={opponentFormationId}
+            summary={opponentSummary}
+            opponentColor={oppColor}
+            error={opponentSquadError}
+            onEdit={() => navigate(`/events/${eventId}/confirm-squad/opponent`)}
+          />
+        )}
 
       </div>
 
