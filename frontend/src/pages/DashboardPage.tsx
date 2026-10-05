@@ -1,5 +1,4 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,12 +13,10 @@ import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
 import { UnlockGateCard, UnlockRoad } from "@/features/onboarding/UnlockGateCard";
+import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
-import {
-  BACKDROP_OUT_MS,
-  REVEAL_STAGGER_MS,
-} from "@/features/onboarding/celebrations/timings";
+import { useDashboardShell } from "@/features/onboarding/dashboardShellContext";
 import {
   usePageCelebrated,
   useUnlockRequirements,
@@ -172,38 +169,13 @@ function DashboardFrame({
   return (
     <div
       data-gate-fill={fillVisible ? "" : undefined}
-      className={cn("relative", fillVisible ? "min-h-0 flex-1" : "min-h-full")}
+      className={cn(
+        "relative",
+        fillVisible ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden" : "min-h-full",
+      )}
     >
       {children}
     </div>
-  );
-}
-
-function DashboardStadiumOverlay({
-  fading,
-  fadeMs,
-}: {
-  fading: boolean;
-  fadeMs: number;
-}) {
-  const host =
-    typeof document === "undefined"
-      ? null
-      : document.querySelector("main.app-shell-main");
-  if (!host) return null;
-
-  return createPortal(
-    <div
-      aria-hidden="true"
-      className={cn(
-        "absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
-        "transition-opacity ease-out motion-reduce:transition-none",
-        fading && "opacity-0",
-        fading && "will-change-[opacity]",
-      )}
-      style={{ transitionDuration: `${fadeMs}ms` }}
-    />,
-    host,
   );
 }
 
@@ -871,15 +843,21 @@ function DashboardUnlockLayer({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
-  const { user, team, accountKind } = useAuth();
+  const { user, team, accountKind, status } = useAuth();
   const navigate = useNavigate();
-  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const dashboardShell = useDashboardShell();
+  const roadActive = useOnboardingRoadActive(user?.id);
+  // Team creation sets the tour flag before the onboarding key is written.
+  // Treat that as active on this render so the gate does not wait for an effect.
+  const tourArming =
+    Boolean(user?.id && team) &&
+    sessionStorage.getItem(START_TOUR_STORAGE_KEY) === "1";
+  const onboardingActive = roadActive || tourArming;
   const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const [unlockCelebrating, setUnlockCelebrating] = useState(false);
-  const [unlockOverlayFading, setUnlockOverlayFading] = useState(false);
   const [dashPageRevealed, setDashPageRevealed] = useState(false);
   const [dashUnlocked, setDashUnlocked] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
@@ -893,35 +871,14 @@ export default function DashboardPage() {
     ? null
     : getPendingTeamInviteToken();
   const hasPendingInvite = !team && pendingInviteToken !== null;
-  const isFirstTime = !team && !hasPendingInvite;
+  // Session sets user and team together before this page can mount. Treat a
+  // missing team as "no team" only once that session has settled, so a loading
+  // team never paints the first-time card.
+  const teamKnown = status === "authenticated" || status === "offline";
+  const isFirstTime = teamKnown && !team && !hasPendingInvite;
   const pendingInviteUrl = pendingInviteToken
     ? `/join-team/${pendingInviteToken}`
     : null;
-  const prevTeamIdRef = useRef<string | null>(team?.id ?? null);
-  const [overlayPhase, setOverlayPhase] = useState<"shown" | "fading" | "hidden">(
-    () => (!team && getPendingTeamInviteToken() === null ? "shown" : "hidden"),
-  );
-
-  useEffect(() => {
-    const prevId = prevTeamIdRef.current;
-    const nextId = team?.id ?? null;
-    prevTeamIdRef.current = nextId;
-
-    if (prevId === null && nextId !== null) {
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (reduceMotion) {
-        setOverlayPhase("hidden");
-        return;
-      }
-      setOverlayPhase("fading");
-      const timeoutId = window.setTimeout(() => setOverlayPhase("hidden"), 800);
-      return () => window.clearTimeout(timeoutId);
-    }
-
-    if (nextId === null && !hasPendingInvite) {
-      setOverlayPhase("shown");
-    }
-  }, [team, hasPendingInvite]);
 
   const {
     data,
@@ -949,30 +906,13 @@ export default function DashboardPage() {
     isFirstTime ||
       ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed),
   );
-  const showUnlockOverlay =
-    overlayPhase !== "hidden" ||
-    dashGateLayout ||
-    unlockOverlayFading;
   const concealDashboardMain =
     (unlockGateApplies || unlockCelebrating) &&
     dashUnlocked &&
     !dashPageRevealed;
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
-  const overlayFadeTimeoutRef = useRef<number | null>(null);
-  const overlayStaggerTimeoutRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
-
-  const clearOverlayTimers = () => {
-    if (overlayFadeTimeoutRef.current != null) {
-      window.clearTimeout(overlayFadeTimeoutRef.current);
-      overlayFadeTimeoutRef.current = null;
-    }
-    if (overlayStaggerTimeoutRef.current != null) {
-      window.clearTimeout(overlayStaggerTimeoutRef.current);
-      overlayStaggerTimeoutRef.current = null;
-    }
-  };
 
   const handleDashboardUnlocked = () => {
     if (!mountedRef.current) return;
@@ -981,30 +921,19 @@ export default function DashboardPage() {
     ).matches;
     if (reduceMotion) return;
     setUnlockCelebrating(true);
+    dashboardShell.hold();
   };
 
   const handleDashboardRevealed = () => {
     if (!mountedRef.current) return;
     setDashPageRevealed(true);
-    clearOverlayTimers();
-    overlayStaggerTimeoutRef.current = window.setTimeout(() => {
-      overlayStaggerTimeoutRef.current = null;
-      if (!mountedRef.current) return;
-      setUnlockOverlayFading(true);
-      overlayFadeTimeoutRef.current = window.setTimeout(() => {
-        overlayFadeTimeoutRef.current = null;
-        if (!mountedRef.current) return;
-        setUnlockOverlayFading(false);
-      }, BACKDROP_OUT_MS);
-    }, REVEAL_STAGGER_MS);
+    dashboardShell.reveal();
   };
 
   const handleDashboardCelebrationComplete = () => {
     if (!mountedRef.current) return;
-    clearOverlayTimers();
     setUnlockCelebrating(false);
     setDashPageRevealed(false);
-    setUnlockOverlayFading(false);
   };
 
   useEffect(() => {
@@ -1012,33 +941,8 @@ export default function DashboardPage() {
     return () => {
       mountedRef.current = false;
       cancelGoalUnlockCelebration();
-      if (overlayFadeTimeoutRef.current != null) {
-        window.clearTimeout(overlayFadeTimeoutRef.current);
-      }
-      if (overlayStaggerTimeoutRef.current != null) {
-        window.clearTimeout(overlayStaggerTimeoutRef.current);
-      }
     };
   }, []);
-
-  useEffect(() => {
-    const main = document.querySelector("main.app-shell-main");
-    if (!(main instanceof HTMLElement) || !dashGateLayout) return;
-    const previous = main.style.overflow;
-    main.style.overflow = "hidden";
-    return () => {
-      main.style.overflow = previous;
-    };
-  }, [dashGateLayout]);
-
-  useEffect(() => {
-    const content = document.querySelector("div.app-shell-content");
-    if (!(content instanceof HTMLElement) || !dashGateLayout) return;
-    content.classList.add("relative", "flex", "min-h-0", "flex-col");
-    return () => {
-      content.classList.remove("relative", "flex", "min-h-0", "flex-col");
-    };
-  }, [dashGateLayout]);
 
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
@@ -1046,7 +950,7 @@ export default function DashboardPage() {
   }
 
   /* ── Error state ──────────────────────────────────────────────────────── */
-  if (isError && !showUnlockOverlay) {
+  if (isError && !dashGateLayout) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -1082,7 +986,7 @@ export default function DashboardPage() {
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
-  if (isLoading && !showUnlockOverlay) {
+  if (isLoading && !dashGateLayout) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -1136,17 +1040,6 @@ export default function DashboardPage() {
 
   return (
     <DashboardFrame fillVisible={dashGateLayout}>
-      {(overlayPhase !== "hidden" || showUnlockOverlay) && (
-        <DashboardStadiumOverlay
-          fading={
-            unlockOverlayFading ||
-            (overlayPhase === "fading" &&
-              !unlockGateApplies &&
-              !unlockCelebrating)
-          }
-          fadeMs={unlockOverlayFading ? BACKDROP_OUT_MS : 800}
-        />
-      )}
       <DashboardHeader
         userName={user?.name ?? null}
         teamName={team?.name ?? null}
@@ -1179,6 +1072,7 @@ export default function DashboardPage() {
       )}
 
       {!isFirstTime && !hideMainForUnlock && (
+      <div className={concealDashboardMain ? "min-h-0 flex-1 overflow-hidden" : undefined}>
       <div
         data-unlock-page=""
         className={cn(
@@ -1308,6 +1202,7 @@ export default function DashboardPage() {
           <SeasonSummaryCard summary={seasonSummary ?? null} />
           <RecentStatsCard stats={recentStats ?? []} />
         </BentoGrid>
+      </div>
       </div>
       )}
       <EventDetailDialog

@@ -165,9 +165,14 @@ export function useUnlockRequirements(): {
 } {
   const athletesQuery = useAthletes();
   const gamePlansQuery = useGamePlans();
+  // `isPending` stays true until the first response. `isLoading` is false
+  // for that same window when a fetch has not started, which made the gate
+  // treat "still loading" as "no players / no game plan".
+  const athletesPending = athletesQuery.isPending;
+  const gamePlansPending = gamePlansQuery.isPending;
   return {
-    hasPlayers: (athletesQuery.data?.length ?? 0) > 0,
-    hasGamePlan: (gamePlansQuery.data?.length ?? 0) > 0,
-    isLoading: athletesQuery.isLoading || gamePlansQuery.isLoading,
+    hasPlayers: !athletesPending && (athletesQuery.data?.length ?? 0) > 0,
+    hasGamePlan: !gamePlansPending && (gamePlansQuery.data?.length ?? 0) > 0,
+    isLoading: athletesPending || gamePlansPending,
   };
 }

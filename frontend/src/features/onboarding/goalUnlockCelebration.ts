@@ -489,6 +489,10 @@ function revealUnlockPage(): void {
       "isolate",
       "[transform:translate(0)]",
     );
+    const slot = node.parentElement;
+    if (slot instanceof HTMLElement) {
+      slot.classList.remove("min-h-0", "flex-1", "overflow-hidden");
+    }
   }
 
   const main = document.querySelector("main.app-shell-main");
@@ -500,7 +504,14 @@ function revealUnlockPage(): void {
 
   const content = document.querySelector("div.app-shell-content");
   if (content instanceof HTMLElement) {
-    content.classList.remove("relative", "flex", "min-h-0", "flex-col", "z-20");
+    content.classList.remove(
+      "relative",
+      "flex",
+      "min-h-0",
+      "flex-col",
+      "overflow-hidden",
+      "z-20",
+    );
     if (isEventsPage) {
       content.classList.add("min-h-0");
     }
@@ -513,7 +524,7 @@ function revealUnlockPage(): void {
 
   for (const frame of document.querySelectorAll("[data-gate-fill]")) {
     if (!(frame instanceof HTMLElement)) continue;
-    frame.classList.remove("min-h-0", "flex-1");
+    frame.classList.remove("min-h-0", "flex-1", "flex", "flex-col", "overflow-hidden");
     frame.classList.add("min-h-full");
   }
 }
