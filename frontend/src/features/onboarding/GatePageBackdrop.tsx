@@ -14,25 +14,44 @@ export function GatePageBackdrop({
   pageKey,
   fading,
   fadeMs,
+  sidebarExpanded,
 }: {
   pageKey: UnlockPageKey;
   fading: boolean;
   fadeMs: number;
+  sidebarExpanded: boolean;
 }) {
   if (!GATED_PAGE_KEYS.has(pageKey)) return null;
 
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        "pointer-events-none absolute inset-0 z-10",
-        "transition-opacity ease-out motion-reduce:transition-none",
-        fading && "opacity-0",
-        fading && "will-change-[opacity]",
-      )}
-      style={{ transitionDuration: `${fadeMs}ms` }}
+      data-sidebar={sidebarExpanded ? "expanded" : "collapsed"}
+      className={cn("unlock-gate-page-bg no-print", fading && "opacity-0 will-change-[opacity]")}
+      style={{ transitionDuration: `${fadeMs}ms, 300ms` }}
     >
       <div className="unlock-gate-page-photo" data-page={pageKey} />
+      <div className="unlock-gate-page-dim" />
+    </div>
+  );
+}
+
+export function DashboardGateTint({
+  fading,
+  fadeMs,
+  sidebarExpanded,
+}: {
+  fading: boolean;
+  fadeMs: number;
+  sidebarExpanded: boolean;
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      data-sidebar={sidebarExpanded ? "expanded" : "collapsed"}
+      className={cn("unlock-gate-page-bg no-print", fading && "opacity-0 will-change-[opacity]")}
+      style={{ transitionDuration: `${fadeMs}ms, 300ms` }}
+    >
       <div className="unlock-gate-page-dim" />
     </div>
   );

@@ -171,7 +171,7 @@ function DashboardFrame({
       data-gate-fill={fillVisible ? "" : undefined}
       className={cn(
         "relative",
-        fillVisible ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden" : "min-h-full",
+        fillVisible ? "flex h-full min-h-0 flex-1 flex-col" : "min-h-full",
       )}
     >
       {children}

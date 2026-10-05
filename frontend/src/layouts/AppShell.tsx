@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
 import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
-import { GatePageBackdrop } from "@/features/onboarding/GatePageBackdrop";
+import { DashboardGateTint, GatePageBackdrop } from "@/features/onboarding/GatePageBackdrop";
 import { PageTourProvider } from "@/features/onboarding/pageTourContext";
 import { DashboardShellProvider } from "@/features/onboarding/dashboardShell";
 import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
@@ -98,7 +98,7 @@ function GatedPageBody({
       data-gate-body=""
       className={
         showingGate && !pageRevealed
-          ? "relative min-h-0 flex-1 overflow-hidden"
+          ? "relative min-h-0 flex-1"
           : undefined
       }
     >
@@ -310,7 +310,8 @@ function AppShellContent() {
     dashboardFirstTime ||
     ((dashboardUnlockGate || dashboardHeld) && !dashboardRevealed);
   const showDashboardBlur =
-    dashboardLocked || (isDashboardPage && dashboardBlurPhase === "fading");
+    isDashboardPage &&
+    (dashboardLocked || (dashboardRevealed && dashboardBlurPhase !== "gone"));
 
   const handleUnlocked = () => {
     if (!mountedRef.current) return;
@@ -376,8 +377,39 @@ function AppShellContent() {
       />
       {showDashboardScene && (
         <Suspense fallback={null}>
-          <StadiumScene />
+          <div
+            className={
+              showDashboardBlur
+                ? cn(
+                    "dashboard-gate-blur",
+                    dashboardBlurPhase === "fading" && "dashboard-gate-blur--out",
+                  )
+                : "contents"
+            }
+            style={
+              showDashboardBlur && dashboardBlurPhase === "fading"
+                ? { transitionDuration: `${BACKDROP_OUT_MS}ms` }
+                : undefined
+            }
+          >
+            <StadiumScene />
+          </div>
         </Suspense>
+      )}
+      {showDashboardBlur && (
+        <DashboardGateTint
+          fading={dashboardBlurPhase === "fading"}
+          fadeMs={BACKDROP_OUT_MS}
+          sidebarExpanded={expanded}
+        />
+      )}
+      {showingGate && pageKey && !gateBgRemoved && (
+        <GatePageBackdrop
+          pageKey={pageKey}
+          fading={gateBgFading}
+          fadeMs={BACKDROP_OUT_MS}
+          sidebarExpanded={expanded}
+        />
       )}
 
       <Sidebar />
@@ -392,24 +424,6 @@ function AppShellContent() {
           expanded ? "lg:pl-72" : "lg:pl-24",
         )}
       >
-        {showingGate && pageKey && !gateBgRemoved && (
-          <GatePageBackdrop
-            pageKey={pageKey}
-            fading={gateBgFading}
-            fadeMs={BACKDROP_OUT_MS}
-          />
-        )}
-        {showDashboardBlur && (
-          <div
-            aria-hidden="true"
-            className={cn(
-              "pointer-events-none absolute inset-0 z-10 bg-black/30 backdrop-blur-md motion-reduce:backdrop-blur-none",
-              "transition-opacity ease-out motion-reduce:transition-none",
-              dashboardBlurPhase === "fading" && "opacity-0 will-change-[opacity]",
-            )}
-            style={{ transitionDuration: `${BACKDROP_OUT_MS}ms` }}
-          />
-        )}
         <div className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border/60 bg-background/75 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-2">
             <SportLogo size={26} className="rounded-md" />
@@ -423,7 +437,7 @@ function AppShellContent() {
             "app-shell-content flex-1",
             isEventsPage && "min-h-0",
             (showingGate && !pageRevealed) || dashboardLocked
-              ? "relative flex min-h-0 flex-col overflow-hidden"
+              ? "relative flex min-h-0 flex-col"
               : undefined,
           )}
         >
