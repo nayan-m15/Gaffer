@@ -164,3 +164,28 @@
     background-image: url("/statsBGDark.png");
   }
 }
+
+@media (max-width: 1023px) {
+  .unlock-gate-page-photo {
+    inset: -24px;
+    filter: blur(6px);
+  }
+
+  .unlock-gate-page-bg.unlock-gate-page-bg {
+    will-change: auto;
+  }
+
+  .dashboard-gate-blur,
+  .dashboard-gate-blur--out {
+    filter: blur(6px);
+    transition-property: none;
+  }
+}
+
+@media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
+  .unlock-gate-page-photo,
+  .dashboard-gate-blur,
+  .dashboard-gate-blur--out {
+    filter: none;
+  }
+}

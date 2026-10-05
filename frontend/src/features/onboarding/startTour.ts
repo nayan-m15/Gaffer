@@ -74,6 +74,21 @@ const NAV_STEPS: Array<{
   },
 ];
 
+const MOBILE_NAV_TARGET: Record<string, string> = {
+  "nav-dashboard": "mobile-nav-dashboard",
+  "nav-roster": "mobile-nav-menu",
+  "nav-events": "mobile-nav-events",
+  "nav-live-logger": "mobile-nav-live-logger",
+  "nav-injuries": "mobile-nav-menu",
+  "nav-stats": "mobile-nav-stats",
+  "nav-competitions": "mobile-nav-menu",
+  "nav-team": "mobile-nav-menu",
+  "account-section": "mobile-nav-menu",
+  "show-tour": "mobile-nav-menu",
+};
+
+const MENU_HINT = " Find it in the Menu.";
+
 const PITCH_DOTS: Array<{ cx: number; cy: number }> = [
   { cx: 35, cy: 88 },
   { cx: 14, cy: 72 },
@@ -109,6 +124,26 @@ function isElementVisible(element: Element): element is HTMLElement {
   if (style.display === "none" || style.visibility === "hidden") return false;
   const rect = element.getBoundingClientRect();
   return rect.width >= 1 && rect.height >= 1;
+}
+
+function clampMobileTourPopover(popover: PopoverDOM) {
+  const found = popover.wrapper.closest(".driver-popover");
+  const box = found instanceof HTMLElement ? found : popover.wrapper;
+  requestAnimationFrame(() => {
+    const rect = box.getBoundingClientRect();
+    const topLimit = 64 + 8;
+    const bottomLimit = window.innerHeight - 76 - 8;
+    let top = rect.top;
+    if (rect.bottom > bottomLimit) top -= rect.bottom - bottomLimit;
+    if (top < topLimit) top = topLimit;
+    const maxWidth = window.innerWidth - 24;
+    const width = Math.min(rect.width, maxWidth);
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) left = window.innerWidth - 12 - width;
+    if (left < 12) left = 12;
+    box.style.top = `${Math.round(top)}px`;
+    box.style.left = `${Math.round(left)}px`;
+  });
 }
 
 function findVisibleTourTarget(attr: string): HTMLElement | undefined {
@@ -222,7 +257,7 @@ function focusTourPrimaryButton(popover: PopoverDOM) {
   });
 }
 
-function buildSteps(options: StartCoachTourOptions): DriveStep[] {
+function buildSteps(options: StartCoachTourOptions, mobile: boolean): DriveStep[] {
   const team = escapeHtml(options.teamName);
   const first = escapeHtml(options.firstName);
   const showCelebration = !options.replay;
@@ -242,15 +277,19 @@ function buildSteps(options: StartCoachTourOptions): DriveStep[] {
   };
 
   const navSteps: DriveStep[] = NAV_STEPS.map((step, index) => {
-    const target = findVisibleTourTarget(step.attr);
+    const attr = mobile ? (MOBILE_NAV_TARGET[step.attr] ?? step.attr) : step.attr;
+    const target = findVisibleTourTarget(attr);
     const stepConfig: DriveStep = {
       popover: {
         title: step.title,
-        description: step.description,
+        description:
+          mobile && attr === "mobile-nav-menu"
+            ? `${step.description}${MENU_HINT}`
+            : step.description,
         showButtons: ["next", "previous"],
         nextBtnText: "Next",
         prevBtnText: "Back",
-        side: "right",
+        side: mobile && target ? "top" : "right",
         align: "center",
       },
       data: {
@@ -262,17 +301,19 @@ function buildSteps(options: StartCoachTourOptions): DriveStep[] {
     return stepConfig;
   });
 
-  const accountTarget = findVisibleTourTarget("account-section");
+  const accountAttr = mobile ? "mobile-nav-menu" : "account-section";
+  const accountTarget = findVisibleTourTarget(accountAttr);
+  const accountCopy =
+    "Click your name to edit your details: name, phone number, sex, and date of birth. You can also switch between light and dark mode, replay this tour, or sign out here.";
   const accountStep: DriveStep = {
     ...(accountTarget ? { element: accountTarget } : {}),
     popover: {
       title: "Your account",
-      description:
-        "Click your name to edit your details: name, phone number, sex, and date of birth. You can also switch between light and dark mode, replay this tour, or sign out here.",
+      description: mobile ? `${accountCopy}${MENU_HINT}` : accountCopy,
       showButtons: ["next", "previous"],
       nextBtnText: "Next",
       prevBtnText: "Back",
-      side: "right",
+      side: mobile && accountTarget ? "top" : "right",
       align: "center",
     },
     data: {
@@ -312,8 +353,9 @@ export function startCoachTour(options: StartCoachTourOptions) {
   setCoachTourActive(true);
 
   const reduceMotion = prefersReducedMotion();
+  const mobile = window.matchMedia("(max-width: 1023px)").matches;
   const tour = driver({
-    steps: buildSteps(options),
+    steps: buildSteps(options, mobile),
     animate: !reduceMotion,
     duration: reduceMotion ? 0 : 400,
     allowClose: true,
@@ -333,6 +375,7 @@ export function startCoachTour(options: StartCoachTourOptions) {
       const stepNumber = data?.stepNumber ?? (opts.index ?? 0) + 1;
       decoratePopover(popover, stepNumber, data, tour);
       focusTourPrimaryButton(popover);
+      if (mobile) clampMobileTourPopover(popover);
     },
     onDestroyed: () => {
       setCoachTourActive(false);

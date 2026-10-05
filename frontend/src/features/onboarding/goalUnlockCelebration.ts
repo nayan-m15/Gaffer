@@ -70,6 +70,7 @@ type ClockStep = {
 };
 
 let activeCleanup: (() => void) | null = null;
+let mobileCost = false;
 
 export function cancelGoalUnlockCelebration(): void {
   activeCleanup?.();
@@ -91,6 +92,8 @@ export function startGoalUnlockCelebration(
     options.onComplete?.();
     return () => {};
   }
+
+  mobileCost = window.matchMedia("(max-width: 1023px)").matches;
 
   const startedAt = performance.now();
   let clockFrame = 0;
@@ -149,6 +152,7 @@ export function startGoalUnlockCelebration(
   function finishCleanup(completed: boolean) {
     if (cleaned) return;
     cleaned = true;
+    mobileCost = false;
     if (clockFrame) cancelAnimationFrame(clockFrame);
     clockFrame = 0;
     if (onResize) window.removeEventListener("resize", onResize);
@@ -474,6 +478,19 @@ export function startGoalUnlockCelebration(
   return cancel;
 }
 
+/** Drops the inline reveal styles so the next gate's classes can hide the page. */
+export function clearUnlockPageReveal(): void {
+  for (const node of document.querySelectorAll("[data-unlock-page]")) {
+    if (!(node instanceof HTMLElement)) continue;
+    node.style.removeProperty("opacity");
+    node.style.removeProperty("pointer-events");
+  }
+  const main = document.querySelector("main.app-shell-main");
+  if (main instanceof HTMLElement) {
+    main.style.removeProperty("overflow");
+  }
+}
+
 function revealUnlockPage(): void {
   const isEventsPage = Boolean(document.querySelector(".events-page"));
 
@@ -552,7 +569,8 @@ function contentCenterOrigin(stage: HTMLElement): { x: number; y: number } {
 }
 
 function sizeCanvas(canvas: HTMLCanvasElement): void {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const raw = Math.max(1, window.devicePixelRatio || 1);
+  const dpr = mobileCost ? Math.min(1.5, raw) : raw;
   const w = window.innerWidth;
   const h = window.innerHeight;
   canvas.width = Math.round(w * dpr);
@@ -576,8 +594,10 @@ function spawnBurst(
   forceBall = false,
 ): void {
   const now = performance.now();
-  for (let i = 0; i < count; i += 1) {
-    if (particles.length >= MAX_PIECES) return;
+  const total = mobileCost ? Math.round(count * 0.6) : count;
+  const limit = mobileCost ? Math.round(MAX_PIECES * 0.6) : MAX_PIECES;
+  for (let i = 0; i < total; i += 1) {
+    if (particles.length >= limit) return;
     const angle = angleMin + Math.random() * (angleMax - angleMin);
     const speed = speedMin + Math.random() * (speedMax - speedMin);
     particles.push({

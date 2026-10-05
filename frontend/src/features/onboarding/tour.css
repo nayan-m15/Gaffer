@@ -272,6 +272,68 @@
   }
 }
 
+@media (max-width: 1023px) {
+  .driver-popover.gaffer-tour {
+    width: calc(100vw - 24px);
+    min-width: 0;
+    max-width: min(400px, calc(100vw - 24px));
+    max-height: calc(100dvh - 64px - 76px - 16px - env(safe-area-inset-bottom, 0px));
+    overflow: auto;
+    padding: 0.75rem 0.85rem 0.65rem;
+  }
+
+  .gaffer-tour-progress {
+    margin: 0 2.5rem 0.2rem 0;
+    font-size: 11px;
+  }
+
+  .driver-popover.gaffer-tour .driver-popover-title {
+    margin: 0 2.5rem 0 0;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  .driver-popover.gaffer-tour .driver-popover-description {
+    margin-top: 0.35rem;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .gaffer-tour-pitch {
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 42px;
+  }
+
+  .gaffer-tour-keys {
+    margin-top: 0.45rem;
+    gap: 0.25rem 0.4rem;
+    font-size: 11px;
+  }
+
+  .gaffer-tour-key {
+    min-width: 1.5rem;
+    padding: 0.1rem 0.3rem;
+    font-size: 11px;
+  }
+
+  .driver-popover.gaffer-tour .driver-popover-footer {
+    margin-top: 0.55rem;
+    gap: 0.4rem;
+  }
+
+  .driver-popover.gaffer-tour .driver-popover-footer-btn {
+    min-height: 2.75rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 14px;
+  }
+
+  .gaffer-tour-skip {
+    font-size: 13px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gaffer-tour-burst,
   .gaffer-tour-burst-dot {

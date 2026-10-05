@@ -81,7 +81,7 @@ export function UnlockRoad({
     <ol
       aria-label="Road to kick-off"
       className={cn(
-        "mt-8 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-0",
+        "unlock-road mt-8 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-0",
         steps.length === 2 && "sm:mx-auto sm:max-w-[22rem]",
         HERO_ENTER,
         "[animation-delay:540ms]",
@@ -101,11 +101,11 @@ export function UnlockRoad({
             aria-label={stepAriaLabel(stepNumber, state, step.label)}
             aria-current={state === "current" ? "step" : undefined}
           >
-            <div className="flex items-center sm:w-full">
-              <span className={roadLineClass(leftLine)} aria-hidden="true" />
+            <div className="unlock-road-track flex items-center sm:w-full">
+              <span className={cn(roadLineClass(leftLine), "unlock-road-line")} aria-hidden="true" />
               <span
                 className={cn(
-                  "relative flex size-[42px] shrink-0 items-center justify-center rounded-full",
+                  "unlock-road-icon relative flex size-[42px] shrink-0 items-center justify-center rounded-full",
                   state === "done" && "bg-primary",
                   state === "current" && "border-2 border-primary bg-transparent",
                   state === "locked" &&
@@ -138,11 +138,11 @@ export function UnlockRoad({
                   </span>
                 )}
               </span>
-              <span className={roadLineClass(rightLine)} aria-hidden="true" />
+              <span className={cn(roadLineClass(rightLine), "unlock-road-line")} aria-hidden="true" />
             </div>
             <span
               className={cn(
-                "text-sm sm:mt-2 sm:px-1 sm:text-center",
+                "unlock-road-label text-sm sm:mt-2 sm:px-1 sm:text-center",
                 state === "locked"
                   ? "text-muted-foreground"
                   : "font-medium text-foreground",
@@ -266,7 +266,7 @@ export function UnlockGateCard({
     <div
       key={unlocked ? "unlocked" : "locked"}
       className={cn(
-        "relative mx-auto w-full max-w-[600px] overflow-visible",
+        "unlock-gate-shell relative mx-auto w-full max-w-[600px] overflow-visible",
         !exiting && "animate-fade-in-scale motion-reduce:animate-none",
         unlocked && !exiting && "unlock-gate-glow motion-reduce:animate-none",
         exiting && "unlock-gate-exit motion-reduce:animate-none",
@@ -278,12 +278,12 @@ export function UnlockGateCard({
       />
       <Card
         aria-labelledby="unlock-gate-heading"
-        className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/95 px-8 py-10 text-center backdrop-blur-md sm:px-10 sm:py-12"
+        className="unlock-gate-card relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/95 px-8 py-10 text-center backdrop-blur-md sm:px-10 sm:py-12"
       >
         {unlocked && <UnlockMomentMark needsGamePlan={page.needsGamePlan} />}
         <p
           className={cn(
-            "text-lg font-medium uppercase tracking-[0.2em] text-primary",
+            "unlock-gate-eyebrow text-lg font-medium uppercase tracking-[0.2em] text-primary",
             HERO_ENTER,
             "animation-delay-150",
           )}
@@ -293,7 +293,7 @@ export function UnlockGateCard({
         <h2
           id="unlock-gate-heading"
           className={cn(
-            "mt-4 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.75rem]",
+            "unlock-gate-heading mt-4 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.75rem]",
             HERO_ENTER,
             "[animation-delay:280ms]",
           )}
@@ -302,7 +302,7 @@ export function UnlockGateCard({
         </h2>
         <p
           className={cn(
-            "mx-auto mt-4 max-w-[420px] text-[15px] leading-relaxed text-muted-foreground sm:text-base",
+            "unlock-gate-body mx-auto mt-4 max-w-[420px] text-[15px] leading-relaxed text-muted-foreground sm:text-base",
             HERO_ENTER,
             "[animation-delay:410ms]",
           )}
@@ -320,7 +320,7 @@ export function UnlockGateCard({
 
         <div
           className={cn(
-            "mx-auto mt-8 max-w-[420px]",
+            "unlock-gate-checklist mx-auto mt-8 max-w-[420px]",
             HERO_ENTER,
             unlocked ? "[animation-delay:540ms]" : "[animation-delay:600ms]",
           )}
@@ -382,7 +382,7 @@ export function UnlockGateCard({
             type="button"
             size="lg"
             className={cn(
-              "mt-8 h-12 w-full px-6 text-base sm:w-auto",
+              "unlock-gate-action mt-8 h-12 w-full px-6 text-base sm:w-auto",
               HERO_ENTER,
               "[animation-delay:670ms]",
             )}
@@ -399,7 +399,7 @@ export function UnlockGateCard({
             to={primaryLockedTo}
             className={cn(
               buttonVariants({ size: "lg" }),
-              "mt-8 h-12 w-full px-6 text-base sm:w-auto",
+              "unlock-gate-action mt-8 h-12 w-full px-6 text-base sm:w-auto",
               HERO_ENTER,
               "[animation-delay:670ms]",
             )}

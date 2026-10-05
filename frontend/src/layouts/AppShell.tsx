@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -11,7 +11,10 @@ import { DashboardShellProvider } from "@/features/onboarding/dashboardShell";
 import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
-import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
+import {
+  cancelGoalUnlockCelebration,
+  clearUnlockPageReveal,
+} from "@/features/onboarding/goalUnlockCelebration";
 import {
   BACKDROP_OUT_MS,
   REVEAL_STAGGER_MS,
@@ -104,6 +107,7 @@ function GatedPageBody({
     >
       {showOutlet && (
         <div
+          key={pageKey}
           data-unlock-page=""
           className={cn(
             pageHidden &&
@@ -127,7 +131,7 @@ function GatedPageBody({
       {showCard && (
         <div
           className={cn(
-            "absolute inset-0 z-20 flex items-center justify-center px-6 py-8",
+            "unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8",
             celebrating && "pointer-events-none",
           )}
         >
@@ -209,6 +213,11 @@ function AppShellContent() {
     setDashboardRevealed(false);
     setDashboardBlurPhase("shown");
     clearDashboardBlurTimers();
+    setCelebrating(false);
+    setCelebrationActive(false);
+    setPageRevealed(false);
+    setGateBgFading(false);
+    setGateBgRemoved(false);
   }
 
   const holdDashboardShell = useCallback(() => {
@@ -255,13 +264,14 @@ function AppShellContent() {
     setGateBgRemoved(false);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setCelebrating(false);
     setCelebrationActive(false);
     setPageRevealed(false);
     resetGateBackground();
     cancelGoalUnlockCelebration();
-  }, [pageKey]);
+    clearUnlockPageReveal();
+  }, [pathname]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -366,7 +376,10 @@ function AppShellContent() {
       showingGate={showingGate || dashboardTourBlocked}
       celebrationActive={celebrationActive}
     >
-    <div className="app-shell app-shell--coach relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className={cn(
+      "app-shell app-shell--coach relative isolate flex h-dvh overflow-hidden bg-background text-foreground",
+      ((showingGate && !pageRevealed) || dashboardLocked) && "app-shell--page-concealed",
+    )}>
       <div
         className="no-print pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
         aria-hidden="true"

@@ -47,9 +47,33 @@ function isCssHidden(element: Element): boolean {
   return false;
 }
 
-function resolveTourTarget(attr: string): HTMLElement | "fallback" | undefined {
+function isInMobileViewport(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const topLimit = 64;
+  const bottomLimit = window.innerHeight - 76;
+  return (
+    rect.bottom > topLimit &&
+    rect.top < bottomLimit &&
+    rect.right > 0 &&
+    rect.left < window.innerWidth
+  );
+}
+
+function resolveTourTarget(
+  attr: string,
+  mobile: boolean,
+): HTMLElement | "fallback" | undefined {
   const matches = document.querySelectorAll(`[data-tour="${attr}"]`);
   if (matches.length === 0) return undefined;
+
+  if (mobile) {
+    for (const node of matches) {
+      if (node instanceof HTMLElement && isElementVisible(node) && isInMobileViewport(node)) {
+        return node;
+      }
+    }
+    return "fallback";
+  }
 
   for (const node of matches) {
     if (isElementVisible(node)) return node;
@@ -60,6 +84,25 @@ function resolveTourTarget(attr: string): HTMLElement | "fallback" | undefined {
   }
 
   return undefined;
+}
+
+function clampMobileTourPopover(popover: PopoverDOM) {
+  const found = popover.wrapper.closest(".driver-popover");
+  const box = found instanceof HTMLElement ? found : popover.wrapper;
+  requestAnimationFrame(() => {
+    const rect = box.getBoundingClientRect();
+    const topLimit = 64 + 8;
+    const bottomLimit = window.innerHeight - 76 - 8;
+    let top = rect.top;
+    if (rect.bottom > bottomLimit) top -= rect.bottom - bottomLimit;
+    if (top < topLimit) top = topLimit;
+    const width = Math.min(rect.width, window.innerWidth - 24);
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) left = window.innerWidth - 12 - width;
+    if (left < 12) left = 12;
+    box.style.top = `${Math.round(top)}px`;
+    box.style.left = `${Math.round(left)}px`;
+  });
 }
 
 function focusTourPrimaryButton(popover: PopoverDOM) {
@@ -102,8 +145,9 @@ function decoratePagePopover(
 function pushResolvedStep(
   resolved: DriveStep[],
   def: { attr: string; title: string; description: string },
+  mobile: boolean,
 ) {
-  const target = resolveTourTarget(def.attr);
+  const target = resolveTourTarget(def.attr, mobile);
   if (!target) return;
 
   const step: DriveStep = {
@@ -120,28 +164,28 @@ function pushResolvedStep(
   resolved.push(step);
 }
 
-function buildPageSteps(pageKey: PageTourKey): DriveStep[] {
+function buildPageSteps(pageKey: PageTourKey, mobile: boolean): DriveStep[] {
   const pageLabel = PAGE_TOUR_LABELS[pageKey];
   const resolved: DriveStep[] = [];
 
   for (const def of PAGE_TOURS[pageKey]) {
-    pushResolvedStep(resolved, def);
+    pushResolvedStep(resolved, def, mobile);
   }
 
-  const assistantTarget = resolveTourTarget("ai-assistant");
-  if (assistantTarget && assistantTarget !== "fallback") {
+  const assistantTarget = resolveTourTarget("ai-assistant", mobile);
+  if (assistantTarget && (assistantTarget !== "fallback" || mobile)) {
     pushResolvedStep(resolved, {
       attr: "ai-assistant",
       title: "Your assistant",
       description: PAGE_TOUR_ASSISTANT_TEXT[pageKey],
-    });
+    }, mobile);
   }
 
   pushResolvedStep(resolved, {
     attr: "page-help",
     title: "Need a refresher?",
     description: "Press ? any time to see these tips again.",
-  });
+  }, mobile);
 
   const stepTotal = resolved.length;
   resolved.forEach((step, index) => {
@@ -189,7 +233,8 @@ export function startPageTour(options: {
 
   destroyPageTour({ persistSeen: false });
 
-  const steps = buildPageSteps(options.pageKey);
+  const mobile = window.matchMedia("(max-width: 1023px)").matches;
+  const steps = buildPageSteps(options.pageKey, mobile);
   if (steps.length === 0) return false;
 
   persistSeen = true;
@@ -217,6 +262,7 @@ export function startPageTour(options: {
       const data = opts.state.activeStep?.data as PageTourStepData | undefined;
       if (data) decoratePagePopover(popover, data, tour);
       focusTourPrimaryButton(popover);
+      if (mobile) clampMobileTourPopover(popover);
     },
     onDestroyed: () => {
       unmountFutbolMark();

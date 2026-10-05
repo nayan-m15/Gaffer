@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -15,7 +15,10 @@ import { AddTeamModal } from "@/components/AddTeamModal";
 import { UnlockGateCard, UnlockRoad } from "@/features/onboarding/UnlockGateCard";
 import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
 import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
-import { cancelGoalUnlockCelebration } from "@/features/onboarding/goalUnlockCelebration";
+import {
+  cancelGoalUnlockCelebration,
+  clearUnlockPageReveal,
+} from "@/features/onboarding/goalUnlockCelebration";
 import { useDashboardShell } from "@/features/onboarding/dashboardShellContext";
 import {
   usePageCelebrated,
@@ -702,7 +705,7 @@ function CreateTeamHero({
   return (
     <div
       className={cn(
-        "relative mx-auto w-full max-w-[600px] overflow-visible",
+        "unlock-gate-shell relative mx-auto w-full max-w-[600px] overflow-visible",
         "animate-fade-in-scale motion-reduce:animate-none",
       )}
     >
@@ -712,11 +715,11 @@ function CreateTeamHero({
       />
       <Card
         aria-labelledby="create-team-heading"
-        className="relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
+        className="unlock-gate-card relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
       >
         <p
           className={cn(
-            "text-lg font-medium uppercase tracking-[0.2em] text-primary",
+            "unlock-gate-eyebrow text-lg font-medium uppercase tracking-[0.2em] text-primary",
             HERO_ENTER,
             "animation-delay-150",
           )}
@@ -728,7 +731,7 @@ function CreateTeamHero({
         <h2
           id="create-team-heading"
           className={cn(
-            "mt-4 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.75rem]",
+            "unlock-gate-heading mt-4 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.75rem]",
             HERO_ENTER,
             "[animation-delay:280ms]",
           )}
@@ -737,7 +740,7 @@ function CreateTeamHero({
         </h2>
         <p
           className={cn(
-            "mx-auto mt-4 max-w-[420px] text-[15px] leading-relaxed text-muted-foreground sm:text-base",
+            "unlock-gate-body mx-auto mt-4 max-w-[420px] text-[15px] leading-relaxed text-muted-foreground sm:text-base",
             HERO_ENTER,
             "[animation-delay:410ms]",
           )}
@@ -754,7 +757,7 @@ function CreateTeamHero({
         <Button
           size="lg"
           className={cn(
-            "mt-8 h-12 w-full px-6 text-base sm:w-auto",
+            "unlock-gate-action mt-8 h-12 w-full px-6 text-base sm:w-auto",
             HERO_ENTER,
             "[animation-delay:670ms]",
           )}
@@ -807,7 +810,7 @@ function DashboardUnlockLayer({
   return (
     <div
       className={cn(
-        "absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10",
+        "unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10",
         fading && "pointer-events-none",
       )}
     >
@@ -944,6 +947,11 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (!dashGateLayout && !concealDashboardMain) return;
+    clearUnlockPageReveal();
+  }, [dashGateLayout, concealDashboardMain]);
+
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
     return <Navigate to="/player/dashboard" replace />;
@@ -1040,18 +1048,27 @@ export default function DashboardPage() {
 
   return (
     <DashboardFrame fillVisible={dashGateLayout}>
-      <DashboardHeader
-        userName={user?.name ?? null}
-        teamName={team?.name ?? null}
-        hasTeam={!!team}
-        pendingInvite={hasPendingInvite}
-        firstTime={isFirstTime}
-        hideAddTeam={unlockGateApplies || unlockCelebrating}
-        onAddTeam={() => setAddTeamOpen(true)}
-      />
+      <div
+        className={cn(
+          dashGateLayout &&
+            "pointer-events-none opacity-0 isolate [transform:translate(0)]",
+        )}
+        aria-hidden={dashGateLayout || undefined}
+        inert={dashGateLayout || undefined}
+      >
+        <DashboardHeader
+          userName={user?.name ?? null}
+          teamName={team?.name ?? null}
+          hasTeam={!!team}
+          pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
+          hideAddTeam={unlockGateApplies || unlockCelebrating}
+          onAddTeam={() => setAddTeamOpen(true)}
+        />
+      </div>
 
       {isFirstTime && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10">
+        <div className="unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10">
           <CreateTeamHero
             userName={user?.name ?? null}
             onCreateTeam={() => setAddTeamOpen(true)}
