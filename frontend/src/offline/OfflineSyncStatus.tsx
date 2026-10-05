@@ -4,6 +4,7 @@ import { flushOfflineMatchEvents } from "@/features/matches/api";
 import { apiFetch } from "@/lib/api";
 import {
   getOfflineDeviceId,
+  getPeerSyncStatus,
   listQueuedEvents,
   subscribeToOfflineQueueChanges,
 } from "./match-store";
@@ -20,10 +21,10 @@ function getSyncLabel(input: {
 }) {
   if (input.quarantined) return `${input.quarantined} access blocked`;
   if (input.rejected) return `${input.rejected} rejected`;
-  if (input.syncing) return `Syncing ${input.pending}`;
+  if (input.syncing) return `Uploading ${input.pending}`;
   if (input.pending) return `${input.pending} waiting`;
   if (input.accepted) return `${input.accepted} accepted`;
-  return input.online ? "Synced" : "Offline";
+  return input.online ? "No pending uploads" : "Offline";
 }
 
 function getSyncIndicatorClass(hasIssue: boolean, online: boolean) {
@@ -39,6 +40,9 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   const [accepted, setAccepted] = useState(0);
   const [quarantined, setQuarantined] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [peerSync, setPeerSync] = useState<
+    Awaited<ReturnType<typeof getPeerSyncStatus>>
+  >("connecting");
   const telemetrySentAt = useRef(0);
   const [lastSync, setLastSync] = useState<string | null>(() =>
     localStorage.getItem("gaffer-last-successful-sync"),
@@ -47,8 +51,12 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
   useEffect(() => {
     let active = true;
     const refresh = async () => {
-      const rows = await listQueuedEvents(matchId);
+      const [rows, peerStatus] = await Promise.all([
+        listQueuedEvents(matchId),
+        getPeerSyncStatus().catch(() => "unavailable" as const),
+      ]);
       if (!active) return;
+      setPeerSync(peerStatus);
       const pendingRows = rows.filter((row) =>
         PENDING_STATES.includes(row.state),
       );
@@ -124,19 +132,25 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     };
   }, [matchId, queryClient]);
 
-  const label = getSyncLabel({ quarantined, rejected, syncing, pending, accepted, online });
+  const uploadLabel = getSyncLabel({ quarantined, rejected, syncing, pending, accepted, online });
+  const peerLabel = !online ? "Live updates offline"
+    : peerSync === "connected" ? "Live updates connected"
+    : peerSync === "connecting" ? "Live updates connecting"
+    : peerSync === "disabled" ? "Live updates disabled"
+    : "Live updates unavailable";
+  const label = `${uploadLabel} · ${peerLabel}`;
 
   return (
     <span
       role="status"
-      title="Offline event synchronisation status"
+      title="Upload acceptance and live update connection status"
       aria-label={`${label}${lastSync ? `; last successful sync ${new Date(lastSync).toLocaleString()}` : ""}`}
       className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-surface-elevated px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-secondary-foreground shadow-sm"
     >
       <span
         className={`size-1.5 rounded-full ${getSyncIndicatorClass(
-          Boolean(rejected || quarantined),
-          online,
+          Boolean(rejected || quarantined || (online && peerSync === "unavailable")),
+          online && peerSync === "connected",
         )}`}
 
       />

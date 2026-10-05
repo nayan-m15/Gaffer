@@ -18,6 +18,7 @@ import {
   competitionTeams,
   events,
   matchProjectionState,
+  matchEvents,
   matchSessionParticipants,
   matchSessions,
   matches,
@@ -113,13 +114,19 @@ export async function finaliseTimedOutSession(
       )
       .limit(1);
     if (!participant) return false;
-    const ownTeamIsHome = participant.side === 'home';
-    const homeScore = ownTeamIsHome
-      ? row.projection.confirmedTeamScore
-      : row.projection.confirmedOpponentScore;
-    const awayScore = ownTeamIsHome
-      ? row.projection.confirmedOpponentScore
-      : row.projection.confirmedTeamScore;
+    const [score] = await databaseService.database
+      .select({
+        homeScore: sql<number>`count(*) filter (where ${matchEvents.side} = 'home')::int`,
+        awayScore: sql<number>`count(*) filter (where ${matchEvents.side} = 'away')::int`,
+      })
+      .from(matchEvents)
+      .where(
+        and(
+          eq(matchEvents.sessionId, sessionId),
+          eq(matchEvents.eventType, 'goal'),
+          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+        ),
+      );
     await syncFixtureResult(
       databaseService,
       fixture.competitionId,
@@ -127,8 +134,8 @@ export async function finaliseTimedOutSession(
       {
         homeCompetitionTeamId: fixture.homeCompetitionTeamId,
         awayCompetitionTeamId: fixture.awayCompetitionTeamId,
-        homeScore,
-        awayScore,
+        homeScore: score.homeScore,
+        awayScore: score.awayScore,
       },
     );
   }

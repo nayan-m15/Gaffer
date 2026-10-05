@@ -387,6 +387,15 @@ async function database() {
   return databasePromise;
 }
 
+export async function getPeerSyncStatus() {
+  if (!import.meta.env.VITE_POWERSYNC_URL) return "disabled" as const;
+  const status = (await database()).currentStatus;
+  if (status.downloadError) return "unavailable" as const;
+  if (status.connected) return "connected" as const;
+  if (status.connecting) return "connecting" as const;
+  return "unavailable" as const;
+}
+
 export function getOfflineDeviceId(): string {
   const key = "gaffer-offline-device-id";
   const existing = localStorage.getItem(key);

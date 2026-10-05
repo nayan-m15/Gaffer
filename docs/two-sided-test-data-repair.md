@@ -73,6 +73,8 @@ Validation recipe (no mutation by this document): in an isolated fixture dataset
 
 ## Latest dry-run review
 
+The 5 October canonical result follow-up adds migration 0053 for future pending-confirmation invalidation. It performs no historical backfill, relinking or session reconciliation. Disposable tests prove both confirmation orders count one result per fixture and preserve reverse legs; they do not resolve the historical findings below. The configured blue-hill journal still lacks prerequisite 0052. Select the actual intended test source before migrations or any repair.
+
 The 4 October configured-source audit found competing sessions with existing observations and published scores; these are outside the safe repair procedure. The original audit remains in Git history; current work is described in [the implementation plan](two-sided-live-logging-plan.md). Preserve these rows for explicit reconciliation review. Run `node scripts/check-two-sided-release.mjs dev` from backend for a read-only migration/source/link audit; use `test` for TEST_DATABASE_URL.
 
 Follow-up on 5 October: rerunning `node scripts/check-two-sided-release.mjs dev` remains a failed read-only audit. It identifies three competition fixtures with competing session candidates and two null-linked sheets, plus completed-sheet result candidates. Migration 0052 is absent from the configured source journal. No relinking, reconciliation, deletion or migration was performed; these findings still require the exact-fixture procedure and deployment checks above.

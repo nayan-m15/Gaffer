@@ -82,7 +82,10 @@ describe('Phase 1 shared-session integrity', () => {
       .returning();
     return { id, team, athletes };
   }
-  async function fixture(kind: 'friendly' | 'competition' = 'friendly') {
+  async function fixture(
+    kind: 'friendly' | 'competition' = 'friendly',
+    fixturesPerOpponent: 1 | 2 = 1,
+  ) {
     const home = await coach();
     const away = await coach();
     const scheduledAt = new Date(Date.now() - 86400000);
@@ -111,6 +114,7 @@ describe('Phase 1 shared-session integrity', () => {
         type: 'league',
         format: 'league',
         configuredTeamCount: 2,
+        fixturesPerOpponent,
         startDate: '2027-01-01',
         allowedPlayingDays: [6],
       });
@@ -397,38 +401,329 @@ describe('Phase 1 shared-session integrity', () => {
       'SHARED_MATCH_SESSION_CONFLICT',
     );
   });
-  it('valid bilateral confirmation publishes exactly one correctly oriented fixture result', async () => {
-    const f = await fixture('competition');
+  it.each(['home', 'away'] as const)(
+    'publishes one canonical 2-1 fixture result with %s confirming first',
+    async (firstSide) => {
+      const f = await fixture('competition');
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        minute: 20,
+        team: 'own',
+        athleteId: f.home.athletes[1].id,
+      });
+      await matches.logEvent(f.away.id, b.id, {
+        ...goal(),
+        minute: 40,
+        team: 'own',
+        athleteId: f.away.athletes[0].id,
+      });
+      await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      const revision = async (id: string) =>
+        (
+          await db
+            .select()
+            .from(schema.matchProjectionState)
+            .where(eq(schema.matchProjectionState.matchId, id))
+        )[0].revision;
+      const order =
+        firstSide === 'home'
+          ? ([
+              [f.home, a],
+              [f.away, b],
+            ] as const)
+          : ([
+              [f.away, b],
+              [f.home, a],
+            ] as const);
+      await matches.finaliseProjection(
+        order[0][0].id,
+        order[0][1].id,
+        await revision(order[0][1].id),
+      );
+      const pending = await matches.getSessionReport(
+        f.home.id,
+        a.sharedMatchId!,
+      );
+      expect(pending.score).toEqual({ home: 2, away: 1 });
+      expect(pending.finalStatus).toBe('awaiting_confirmation');
+      expect(pending.confirmations[firstSide]).not.toBeNull();
+      expect(
+        pending.confirmations[firstSide === 'home' ? 'away' : 'home'],
+      ).toBeNull();
+      expect(
+        (await competitions.findOne(f.home.id, f.competitionId!)).results,
+      ).toHaveLength(0);
+      expect(
+        (
+          await db
+            .select()
+            .from(schema.competitionFixtures)
+            .where(eq(schema.competitionFixtures.id, f.fixtureId))
+        )[0].status,
+      ).toBe('scheduled');
+      await matches.finaliseProjection(
+        order[1][0].id,
+        order[1][1].id,
+        await revision(order[1][1].id),
+      );
+      for (const side of [f.home, f.away, f.home]) {
+        const report = await matches.getSessionReport(
+          side.id,
+          a.sharedMatchId!,
+        );
+        expect(report.score).toEqual({ home: 2, away: 1 });
+        expect(report.finalStatus).toBe('finalised');
+        const detail = await competitions.findOne(side.id, f.competitionId!);
+        expect(detail.results).toHaveLength(1);
+        expect(detail.results[0]).toMatchObject({
+          id: `fixture:${f.fixtureId}`,
+          homeScore: 2,
+          awayScore: 1,
+        });
+        expect(detail.standings.map((row) => row.played)).toEqual([1, 1]);
+        expect(
+          detail.standings.find((row) => row.teamName === f.home.team.name),
+        ).toMatchObject({ goalsFor: 2, goalsAgainst: 1, points: 3 });
+        expect(
+          detail.standings.find((row) => row.teamName === f.away.team.name),
+        ).toMatchObject({ goalsFor: 1, goalsAgainst: 2, points: 0 });
+      }
+    },
+  );
+  it.each(['home', 'away'] as const)(
+    'clears %s-first confirmation when the canonical score changes',
+    async (firstSide) => {
+      const f = await fixture('competition');
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      const revision = async (id: string) =>
+        (
+          await db
+            .select()
+            .from(schema.matchProjectionState)
+            .where(eq(schema.matchProjectionState.matchId, id))
+        )[0].revision;
+      const first =
+        firstSide === 'home' ? ([f.home, a] as const) : ([f.away, b] as const);
+      const second =
+        firstSide === 'home' ? ([f.away, b] as const) : ([f.home, a] as const);
+      await matches.finaliseProjection(
+        first[0].id,
+        first[1].id,
+        await revision(first[1].id),
+      );
+      await matches.logEvent(f.away.id, b.id, {
+        ...goal(),
+        minute: 40,
+        team: 'own',
+        athleteId: f.away.athletes[0].id,
+      });
+      const changed = await matches.getSessionReport(
+        f.home.id,
+        a.sharedMatchId!,
+      );
+      expect(changed.score).toEqual({ home: 1, away: 1 });
+      expect(changed.confirmations).toEqual({ home: null, away: null });
+      await matches.finaliseProjection(
+        second[0].id,
+        second[1].id,
+        await revision(second[1].id),
+      );
+      expect(
+        (await competitions.findOne(f.home.id, f.competitionId!)).results,
+      ).toHaveLength(0);
+      await matches.finaliseProjection(
+        first[0].id,
+        first[1].id,
+        await revision(first[1].id),
+      );
+      const detail = await competitions.findOne(f.home.id, f.competitionId!);
+      expect(detail.results).toHaveLength(1);
+      expect(detail.results[0]).toMatchObject({ homeScore: 1, awayScore: 1 });
+    },
+  );
+  it.each(['home', 'away'] as const)(
+    'publishes canonical goals after the %s confirmation times out',
+    async (firstSide) => {
+      const f = await fixture('competition');
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        minute: 20,
+        team: 'own',
+        athleteId: f.home.athletes[1].id,
+      });
+      await matches.logEvent(f.away.id, b.id, {
+        ...goal(),
+        minute: 40,
+        team: 'own',
+        athleteId: f.away.athletes[0].id,
+      });
+      await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      const side = firstSide === 'home' ? f.home : f.away;
+      const sheet = firstSide === 'home' ? a : b;
+      const [projection] = await db
+        .select()
+        .from(schema.matchProjectionState)
+        .where(eq(schema.matchProjectionState.matchId, sheet.id));
+      await matches.finaliseProjection(side.id, sheet.id, projection.revision);
+      await db
+        .update(schema.matchSessions)
+        .set(
+          firstSide === 'home'
+            ? { homeConfirmedAt: new Date(Date.now() - 86400001) }
+            : { awayConfirmedAt: new Date(Date.now() - 86400001) },
+        )
+        .where(eq(schema.matchSessions.id, a.sharedMatchId!));
+      for (const viewer of [f.home, f.away]) {
+        const report = await matches.getSessionReport(
+          viewer.id,
+          a.sharedMatchId!,
+        );
+        expect(report.score).toEqual({ home: 2, away: 1 });
+        expect(report.finalStatus).toBe('finalised');
+        const detail = await competitions.findOne(viewer.id, f.competitionId!);
+        expect(detail.results).toHaveLength(1);
+        expect(detail.results[0]).toMatchObject({ homeScore: 2, awayScore: 1 });
+        expect(detail.standings.map((row) => row.played)).toEqual([1, 1]);
+      }
+    },
+  );
+  it('counts reverse round-robin legs as two distinct fixture results', async () => {
+    const f = await fixture('competition', 2);
+    const fixtures = await db
+      .select()
+      .from(schema.competitionFixtures)
+      .where(eq(schema.competitionFixtures.competitionId, f.competitionId!));
+    expect(fixtures).toHaveLength(2);
+    expect(fixtures[0].homeCompetitionTeamId).toBe(
+      fixtures[1].awayCompetitionTeamId,
+    );
+    const sessionIds = new Set<string>();
+    for (const fixtureRow of fixtures) {
+      await db
+        .update(schema.competitionFixtures)
+        .set({ scheduledAt: new Date(Date.now() - 86400000) })
+        .where(eq(schema.competitionFixtures.id, fixtureRow.id));
+      await db
+        .update(schema.competitionFixtures)
+        .set({
+          scheduleConfirmedAt: new Date(),
+          homeScheduleResponse: 'external_confirmed',
+          awayScheduleResponse: 'external_confirmed',
+        })
+        .where(eq(schema.competitionFixtures.id, fixtureRow.id));
+      const rows = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.competitionFixtureId, fixtureRow.id));
+      const a = await f.start(
+        f.home,
+        rows.find((row) => row.teamId === f.home.team.id)!.id,
+      );
+      const b = await f.start(
+        f.away,
+        rows.find((row) => row.teamId === f.away.team.id)!.id,
+      );
+      expect(a.sharedMatchId).toBe(b.sharedMatchId);
+      sessionIds.add(a.sharedMatchId!);
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      for (const [side, sheet] of [
+        [f.away, b],
+        [f.home, a],
+      ] as const) {
+        const [projection] = await db
+          .select()
+          .from(schema.matchProjectionState)
+          .where(eq(schema.matchProjectionState.matchId, sheet.id));
+        await matches.finaliseProjection(
+          side.id,
+          sheet.id,
+          projection.revision,
+        );
+      }
+    }
+    expect(sessionIds.size).toBe(2);
+    const detail = await competitions.findOne(f.home.id, f.competitionId!);
+    expect(detail.results).toHaveLength(2);
+    expect(new Set(detail.results.map((row) => row.id)).size).toBe(2);
+    expect(detail.standings.map((row) => row.played)).toEqual([2, 2]);
+    expect(
+      detail.standings.find((row) => row.teamName === f.home.team.name),
+    ).toMatchObject({ goalsFor: 2, goalsAgainst: 0, points: 6 });
+  });
+  it('review changes clear pending confirmations while private injuries and retries retain them', async () => {
+    const f = await fixture();
     const a = await f.start(f.home, f.homeEvent);
-    const b = await f.start(f.away, f.awayEvent);
+    await f.start(f.away, f.awayEvent);
+    const input = {
+      ...goal(),
+      team: 'own' as const,
+      athleteId: f.home.athletes[0].id,
+    };
+    const canonical = await matches.logEvent(f.home.id, a.id, input);
+    await matches.finish(f.home.id, a.id);
+    const [projection] = await db
+      .select()
+      .from(schema.matchProjectionState)
+      .where(eq(schema.matchProjectionState.matchId, a.id));
+    await matches.finaliseProjection(f.home.id, a.id, projection.revision);
+    await matches.logEvent(f.home.id, a.id, input);
     await matches.logEvent(f.home.id, a.id, {
       ...goal(),
       team: 'own',
+      eventType: 'injury',
       athleteId: f.home.athletes[0].id,
     });
-    await matches.finish(f.home.id, a.id);
-    await matches.finish(f.away.id, b.id);
-    const revision = async (id: string) =>
-      (
-        await db
-          .select()
-          .from(schema.matchProjectionState)
-          .where(eq(schema.matchProjectionState.matchId, id))
-      )[0].revision;
-    await matches.finaliseProjection(f.home.id, a.id, await revision(a.id));
     expect(
-      (
-        await db
-          .select()
-          .from(schema.competitionFixtures)
-          .where(eq(schema.competitionFixtures.id, f.fixtureId))
-      )[0].status,
-    ).toBe('scheduled');
-    await matches.finaliseProjection(f.away.id, b.id, await revision(b.id));
-    const detail = await competitions.findOne(f.home.id, f.competitionId!);
-    expect(detail.results).toHaveLength(1);
-    expect(detail.results[0]).toMatchObject({ homeScore: 1, awayScore: 0 });
-    expect(detail.standings.map((row) => row.played)).toEqual([1, 1]);
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+        .confirmations.home,
+    ).not.toBeNull();
+    await db.insert(schema.matchEventReviews).values({
+      matchId: a.id,
+      sessionId: a.sharedMatchId!,
+      canonicalEventId: canonical.id,
+      reason: 'possible_duplicate',
+    });
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+        .confirmations,
+    ).toEqual({ home: null, away: null });
+    const participants = await db
+      .select()
+      .from(schema.matchSessionParticipants)
+      .where(eq(schema.matchSessionParticipants.sessionId, a.sharedMatchId!));
+    expect(
+      participants.every((row) => row.confirmationState === 'pending'),
+    ).toBe(true);
   });
   it('projection INSERT and unchanged-digest refresh UPDATE track sheet session, leaving legacy NULL', async () => {
     const f = await fixture();
