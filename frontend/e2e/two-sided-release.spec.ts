@@ -19,8 +19,11 @@ async function body(request: APIRequestContext, method: 'get' | 'post' | 'put' |
   return response.json();
 }
 
-for (const kind of ['friendly', 'competition'] as const) {
-  test(`two coaches see the same ${kind} session in real browsers`, async ({ browser }, testInfo) => {
+const scenarios = (['friendly', 'competition'] as const).flatMap((kind) =>
+  (['home', 'away'] as const).map((firstConfirmation) => ({ kind, firstConfirmation })),
+);
+for (const { kind, firstConfirmation } of scenarios) {
+  test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     test.skip(process.env.TWO_SIDED_LIVE_LOGGING_ENABLED !== 'true', 'Run with the controlled backend flag enabled.');
     const identities: TestIdentity[] = [];
@@ -41,7 +44,7 @@ for (const kind of ['friendly', 'competition'] as const) {
         expect(verified, 'API registration must use the dedicated test database').toEqual({ emailVerified: true });
         await body(context.request, 'post', '/auth/sign-in', { email: identity.email, password: 'password123' });
         const { team } = await body(context.request, 'post', '/teams', { name: identity.teamName });
-        const squad = await database.insert(athletes).values(Array.from({ length: 11 }, (_, i) => ({
+        const squad = await database.insert(athletes).values(Array.from({ length: 12 }, (_, i) => ({
           teamId: team.id, firstName: `${side}${i}`, lastName: 'Release Player', squadNumber: i + 1,
         }))).returning({ id: athletes.id });
         coaches.push({ context, team, squad, page: await context.newPage() });
@@ -83,15 +86,34 @@ for (const kind of ['friendly', 'competition'] as const) {
         homeEventId = fixtureEvents.find((event) => event.teamId === home.team.id)!.id;
         awayEventId = fixtureEvents.find((event) => event.teamId === away.team.id)!.id;
       }
+      for (const [coach, eventId, opponent] of [[home, homeEventId, away], [away, awayEventId, home]] as const) {
+        await body(coach.context.request, 'put', `/events/${eventId}/lineup`, {
+          startingAthleteIds: coach.squad.slice(0, 11).map((player) => player.id),
+          benchAthleteIds: [coach.squad[11].id], formationId: '4-3-3',
+        });
+        const publicLineup = await body(opponent.context.request, 'get',
+          `/events/${opponent === home ? homeEventId : awayEventId}/opponent-lineup`);
+        expect(publicLineup).toMatchObject({ available: true, source: 'confirmed', formation: '4-3-3' });
+        expect(publicLineup.starters).toHaveLength(11);
+        expect(publicLineup.bench).toHaveLength(1);
+        expect(Object.keys(publicLineup).sort()).toEqual(['available', 'bench', 'formation', 'source', 'starters']);
+      }
+      for (const [coach, eventId] of [[home, homeEventId], [away, awayEventId]] as const) {
+        await coach.page.goto(`/events/${eventId}/confirm-squad/opponent`);
+        await expect(coach.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(coach.page.getByText('Confirmed lineup · read only')).toBeVisible({ timeout: 20000 });
+      }
       const homeSheet = await body(home.context.request, 'post', `/events/${homeEventId}/start-match`, {
-        opponentName: away.team.name, isHome: false, startingAthleteIds: home.squad.map((player) => player.id),
+        opponentName: away.team.name, isHome: false, startingAthleteIds: home.squad.slice(0, 11).map((player) => player.id),
+        benchAthleteIds: [home.squad[11].id], formationId: '4-3-3',
       });
       sessionIds.push(homeSheet.sharedMatchId);
       await home.page.goto(`/matches/${homeSheet.id}/live`);
-      // Session status is required even before the opponent publishes a lineup.
+      // Session status is required before the opponent starts its sheet.
       await expect(home.page.getByRole('region', { name: 'Shared session result' })).toBeVisible({ timeout: 20000 });
       const awaySheet = await body(away.context.request, 'post', `/events/${awayEventId}/start-match`, {
-        opponentName: home.team.name, isHome: true, startingAthleteIds: away.squad.map((player) => player.id),
+        opponentName: home.team.name, isHome: true, startingAthleteIds: away.squad.slice(0, 11).map((player) => player.id),
+        benchAthleteIds: [away.squad[11].id], formationId: '4-3-3',
       });
       expect(homeSheet.id).not.toBe(awaySheet.id);
       expect(homeSheet.sharedMatchId).toBe(awaySheet.sharedMatchId);
@@ -100,17 +122,31 @@ for (const kind of ['friendly', 'competition'] as const) {
         body(home.context.request, 'get', `/events/${homeEventId}/link-diagnostic`),
         body(away.context.request, 'get', `/events/${awayEventId}/link-diagnostic`),
       ]);
+      for (const [index, side] of ['home', 'away'].entries()) {
+        expect(diagnostics[index]).toMatchObject({ fixtureId, participantSide: side,
+          fixtureSharedSessionId: homeSheet.sharedMatchId, owningMatchSharedSessionId: homeSheet.sharedMatchId,
+          sheetSessionMatchesFixture: true, status: 'correctly_linked' });
+      }
       await testInfo.attach('fixture-identity', { body: JSON.stringify({ fixtureId, homeEventId, awayEventId,
         sheetIds: [homeSheet.id, awaySheet.id], sessionId: homeSheet.sharedMatchId, diagnostics }, null, 2), contentType: 'application/json' });
       await body(home.context.request, 'post', `/matches/${homeSheet.id}/events`, {
         clientRequestId: randomUUID(), team: 'own', eventType: 'goal', athleteId: home.squad[0].id,
         minute: 7, period: 'first_half', matchElapsedMs: 420000,
       });
+      await body(away.context.request, 'post', `/matches/${awaySheet.id}/events`, {
+        clientRequestId: randomUUID(), team: 'own', eventType: 'goal', athleteId: away.squad[0].id,
+        minute: 17, period: 'first_half', matchElapsedMs: 1020000,
+      });
+      await body(away.context.request, 'post', `/matches/${awaySheet.id}/events`, {
+        clientRequestId: randomUUID(), team: 'opponent', eventType: 'goal',
+        opponentLabel: 'Home1 Release Player', minute: 27, period: 'first_half', matchElapsedMs: 1620000,
+      });
       const reportUrl = `/matches/sessions/${homeSheet.sharedMatchId}/report`;
       const reportA = await body(home.context.request, 'get', reportUrl);
       const reportB = await body(away.context.request, 'get', reportUrl);
       expect(reportA).toEqual(reportB);
-      expect(reportA.score).toEqual({ home: 1, away: 0 });
+      expect(reportA.score).toEqual({ home: 2, away: 1 });
+      expect(reportA.timeline).toHaveLength(3);
       expect((await outsider.context.request.get(`${BACKEND_URL}${reportUrl}`)).status()).toBe(404);
       await body(home.context.request, 'patch', `/matches/${homeSheet.id}/clock`, {
         operationId: randomUUID(), baseRevision: 0, clientCreatedAt: new Date().toISOString(),
@@ -120,20 +156,29 @@ for (const kind of ['friendly', 'competition'] as const) {
       await home.page.reload();
       for (const coach of [home, away]) {
         const status = coach.page.getByRole('region', { name: 'Shared session result' });
-        await expect(status).toContainText('Home 1', { timeout: 20000 });
-        await expect(status).toContainText('0 Away');
+        await expect(status).toContainText('Home 2', { timeout: 20000 });
+        await expect(status).toContainText('1 Away');
         await expect(status).toContainText('unconfirmed');
       }
+      const confirmationOrder = firstConfirmation === 'home' ? [home, away] : [away, home];
       for (const coach of [home, away]) {
         const sheet = coach === home ? homeSheet : awaySheet;
         await body(coach.context.request, 'post', `/matches/${sheet.id}/finish`, {});
       }
-      for (const coach of [home, away]) {
+      for (const [index, coach] of confirmationOrder.entries()) {
         const sheet = coach === home ? homeSheet : awaySheet;
         const privateRead = await body(coach.context.request, 'get', `/matches/${sheet.id}`);
         await body(coach.context.request, 'post', `/matches/${sheet.id}/finalise`, {
           expectedRevision: privateRead.projection.revision,
         });
+        const pending = await body(home.context.request, 'get', reportUrl);
+        expect(pending.score).toEqual({ home: 2, away: 1 });
+        if (index === 0) {
+          expect(pending.finalStatus).toBe('awaiting_confirmation');
+          expect(pending.confirmations[firstConfirmation]).toBeTruthy();
+          expect(pending.confirmations[firstConfirmation === 'home' ? 'away' : 'home']).toBeNull();
+          if (competitionId) expect((await body(home.context.request, 'get', `/competitions/${competitionId}`)).results).toHaveLength(0);
+        }
       }
       for (const coach of [home, away]) {
         const sheet = coach === home ? homeSheet : awaySheet;
@@ -142,7 +187,10 @@ for (const kind of ['friendly', 'competition'] as const) {
         await expect(status).toContainText('Final result', { timeout: 20000 });
         await expect(status).toContainText('Home confirmed');
         await expect(status).toContainText('Away confirmed');
-        await expect(status).toContainText('Home 1');
+        await expect(status).toContainText('Home 2');
+        await expect(status).toContainText('1 Away');
+        await coach.page.reload();
+        await expect(status).toContainText('Final result', { timeout: 20000 });
       }
       if (competitionId) {
         const detail = await body(home.context.request, 'get', `/competitions/${competitionId}`);
@@ -172,6 +220,9 @@ for (const kind of ['friendly', 'competition'] as const) {
         await database.delete(competitionFixtures).where(eq(competitionFixtures.competitionId, competitionId));
       }
       await cleanupUsers(identities, { concurrency: 1 });
+      for (const sessionId of sessionIds) {
+        await database.delete(matchSessions).where(eq(matchSessions.id, sessionId));
+      }
     }
   });
 }

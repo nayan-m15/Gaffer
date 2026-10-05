@@ -119,6 +119,22 @@ The remaining evidence must be captured in Gitea after this workflow is pushed:
 
 ## Step 5(b) manual two-browser retest
 
+### Fresh paired-account browser suite
+
+Build both applications first with `npm.cmd run build`. Select a dedicated `TEST_DATABASE_URL` separate from development and apply its pending migrations through `backend/scripts/migrate.mjs` with that URL selected as `DATABASE_URL`. Do not run the reset-based `db:migrate:test` or integration launcher concurrently with browser tests: they drop the test schema. Pause other jobs sharing this database for the entire browser run.
+
+From the repository root in PowerShell:
+
+```powershell
+$env:TWO_SIDED_LIVE_LOGGING_ENABLED = 'true'
+$env:UI_TEST_PRODUCTION = 'true'
+node scripts/run-ui-tests.mjs two-sided-release --project=chromium
+```
+
+The launcher selects the test database for the API and test helpers, allocates dedicated local ports, and suppresses live email. The suite creates fresh coach/outsider accounts and accepted friendly/generated competition fixtures for both confirmation orders. It checks confirmed read-only lineups, exact fixture/session/sheet identity and sides, public opponent goal attribution, a canonical 2-1 result, pending confirmation before publication, final reports/reloads, one competition result and one played match per team, outsider denial and revoked membership. Cleanup targets only records created by the suite, including its session IDs.
+
+This verifies browser rendering with authenticated API mutations and online report reads. It does not exercise every logger control, duplicate resolution, mobile layout or PowerSync peer/offline delivery. Retain the manual checks below for those behaviors. `node backend/scripts/check-two-sided-release.mjs test` remains a release audit: it can fail solely because this API-only test target has no PowerSync publication/grants. Inspect its individual fields rather than calling that failure a browser test failure.
+
 5 October follow-up: disposable `shared-session-integrity` coverage verifies both confirmation orders, canonical 2-1 publication, one standings result per fixture, score-change invalidation (0053), both 24-hour timeout paths and distinct reverse round-robin legs. Run `npm.cmd run test -- --runInBand shared-session-integrity shared-session-privacy session-finalisation sync.controller sync-jwks.controller competition-standings` from `backend/`. Confirm 0052/0053 on the intended source. Main Cloud sync-rule validation passed; local HS256/gaffer-dev auth remains mismatched with the configured hosted RS256 JWKS. Peer delivery and browser reloads remain unverified. Capture an accepted upload's canonical event ID in the peer's local synced tables and repeat after reconnecting, independently of API polling.
 
 Browser automation in the 2026-10-04 sandbox failed before any test ran (`spawn EPERM`). Use two separate browser profiles/accounts and the same generated fixture. Enable the flag only in the controlled test backend, refresh both sync tokens, and validate/deploy the updated PowerSync streams first. The source publication/role must include `match_sessions` and `competition_fixtures`; the existing configuration helper now includes them but was not executed in this session. Stream SQL follows [PowerSync's supported SQL](https://docs.powersync.com/sync/supported-sql); Cloud validation remains required.

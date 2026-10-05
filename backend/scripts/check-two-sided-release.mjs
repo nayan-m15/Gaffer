@@ -18,13 +18,36 @@ if (!url) throw new Error(`No database URL configured for ${target}.`);
 if (target === 'test' && url === process.env.DATABASE_URL) {
   throw new Error('The test database must be separate from development.');
 }
+const endpoint = new URL(url);
+const databaseIdentity = { host: endpoint.hostname, database: decodeURIComponent(endpoint.pathname.slice(1)) };
 const journal = JSON.parse(readFileSync(resolve(root, 'backend/drizzle/meta/_journal.json'), 'utf8'));
 const expected = readMigrationFiles({ migrationsFolder: resolve(root, 'backend/drizzle') });
 const repairDocument = readFileSync(resolve(root, 'docs/two-sided-test-data-repair.md'), 'utf8');
 const repairQuery = repairDocument.match(/```sql\s+BEGIN TRANSACTION READ ONLY;([\s\S]*?)ROLLBACK;\s*```/)?.[1];
 if (!repairQuery) throw new Error('Cannot locate the documented read-only repair query.');
 const sql = neon(url);
-const [, migrations, findings, missingSourceTables, replication, clockTrigger] = await sql.transaction((tx) => [
+const [, missingSchemaColumns] = await sql.transaction((tx) => [
+  tx.query('SET TRANSACTION READ ONLY'),
+  tx.query(`WITH required(table_name, column_name) AS (VALUES
+    ('competition_fixtures', 'shared_session_id'),
+    ('friendly_fixtures', 'shared_session_id'),
+    ('matches', 'shared_match_id'),
+    ('match_sessions', 'home_confirmed_by_user_id'),
+    ('match_sessions', 'away_confirmed_by_user_id'),
+    ('match_clock_operations', 'session_id'))
+    SELECT r.table_name, r.column_name FROM required r
+    WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns c
+      WHERE c.table_schema = 'public' AND c.table_name = r.table_name
+        AND c.column_name = r.column_name)
+    ORDER BY r.table_name, r.column_name`),
+]);
+if (missingSchemaColumns.length) {
+  console.log(JSON.stringify({ checkedAt: new Date().toISOString(), target, databaseIdentity,
+    latestRequiredMigration: journal.entries.at(-1).tag, missingSchemaColumns,
+    note: 'No writes. Schema prerequisites are missing; the historical data audit was not run. Apply reviewed migrations on the intended target before paired-account tests.' }, null, 2));
+  process.exit(1);
+}
+const [, migrations, findings, missingSourceTables, replication, clockTrigger, missingIntegrityObjects] = await sql.transaction((tx) => [
   tx.query('SET TRANSACTION READ ONLY'),
   tx.query('SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at'),
   tx.query(repairQuery),
@@ -48,7 +71,22 @@ const [, migrations, findings, missingSourceTables, replication, clockTrigger] =
   tx.query("SELECT slot_name, active FROM pg_replication_slots WHERE plugin = 'pgoutput'"),
   tx.query(`SELECT EXISTS (SELECT 1 FROM pg_trigger
     WHERE tgrelid = 'public.match_clock_operations'::regclass
-      AND tgname = 'match_clock_operation_session_id' AND NOT tgisinternal) AS installed`),
+      AND tgname = 'match_clock_operation_session_id' AND NOT tgisinternal
+      AND tgenabled IN ('O', 'A')) AS installed`),
+  tx.query(`WITH required(table_name, trigger_name, function_name) AS (VALUES
+    ('match_events', 'match_event_invalidate_session_confirmations', 'invalidate_pending_session_confirmations'),
+    ('match_event_reviews', 'match_review_invalidate_session_confirmations', 'invalidate_pending_session_confirmations'))
+    SELECT trigger_name AS missing_object FROM required r WHERE NOT EXISTS (
+      SELECT 1 FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_proc p ON p.oid = t.tgfoid
+      WHERE n.nspname = 'public' AND c.relname = r.table_name
+        AND t.tgname = r.trigger_name AND NOT t.tgisinternal
+        AND t.tgenabled IN ('O', 'A') AND p.proname = r.function_name)
+    UNION ALL
+    SELECT 'attach_match_session_if_safe(uuid,uuid,boolean)' WHERE
+      to_regprocedure('public.attach_match_session_if_safe(uuid,uuid,boolean)') IS NULL`),
 ]);
 const migrationChecks = expected.map((migration, index) => {
   const tag = journal.entries[index].tag;
@@ -69,7 +107,7 @@ const unknownMigrationCount = migrations.filter((row) => !expected.some(
   (migration) => Number(row.created_at) === migration.folderMillis,
 )).length;
 const result = {
-  checkedAt: new Date().toISOString(), target,
+  checkedAt: new Date().toISOString(), target, databaseIdentity,
   latestRequiredMigration: journal.entries.at(-1).tag,
   migrationCount: migrationChecks.length,
   missingOrChangedMigrations: migrationChecks.filter((migration) => !migration.applied || (!migration.hashMatches && !migration.lineEndingEquivalent)),
@@ -78,10 +116,11 @@ const result = {
   missingSourceTables,
   replication,
   clockSessionTriggerInstalled: clockTrigger[0]?.installed === true,
+  missingIntegrityObjects,
   findings: findings.map((finding) => ({ finding: finding.finding, kind: finding.kind, fixtureId: finding.fixture_id })),
   note: 'No writes. This is database evidence only, not deployed flags, Cloud stream validation, backup/restore or browser approval.',
 };
 console.log(JSON.stringify(result, null, 2));
-if (result.missingOrChangedMigrations.length || missingSourceTables.length || findings.length || unknownMigrationCount || !result.clockSessionTriggerInstalled) {
+if (result.missingOrChangedMigrations.length || missingSourceTables.length || missingIntegrityObjects.length || findings.length || unknownMigrationCount || !result.clockSessionTriggerInstalled) {
   process.exitCode = 1;
 }
