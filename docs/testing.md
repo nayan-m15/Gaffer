@@ -133,6 +133,16 @@ node scripts/run-ui-tests.mjs two-sided-release --project=chromium
 
 The launcher selects the test database for the API and test helpers, allocates dedicated local ports, and suppresses live email. The suite creates fresh coach/outsider accounts and accepted friendly/generated competition fixtures for both confirmation orders. It checks confirmed read-only lineups, exact fixture/session/sheet identity and sides, public opponent goal attribution, a canonical 2-1 result, pending confirmation before publication, final reports/reloads, one competition result and one played match per team, outsider denial and revoked membership. Cleanup targets only records created by the suite, including its session IDs.
 
+For click-based interaction checks on a friendly and competition fixture, additionally set `TWO_SIDED_UI_INTERACTIONS=true` and select the scenarios below:
+
+```powershell
+$env:TWO_SIDED_UI_INTERACTIONS = 'true'
+node scripts/run-ui-tests.mjs two-sided-release --grep 'friendly session with home-first|competition session with away-first' --project=chromium
+Remove-Item Env:TWO_SIDED_UI_INTERACTIONS
+```
+
+This mode changes and reconfirms the starting lineup through the setup controls, checks the peer's refreshed lineup, starts the clock, opens player/event controls at 1280×540 and 390×844, logs the same goal through both coaches' player selectors, resolves the duplicate through the review dialog, and exchanges pause/resume actions. Screenshots are retained as test attachments. Soft assertions for viewport overflow and resume convergence keep independent checks running while still failing the scenario. Setup and finalisation continue to use authenticated API calls; this does not establish PowerSync delivery.
+
 This verifies browser rendering with authenticated API mutations and online report reads. It does not exercise every logger control, duplicate resolution, mobile layout or PowerSync peer/offline delivery. Retain the manual checks below for those behaviors. `node backend/scripts/check-two-sided-release.mjs test` remains a release audit: it can fail solely because this API-only test target has no PowerSync publication/grants. Inspect its individual fields rather than calling that failure a browser test failure.
 
 5 October follow-up: disposable `shared-session-integrity` coverage verifies both confirmation orders, canonical 2-1 publication, one standings result per fixture, score-change invalidation (0053), both 24-hour timeout paths and distinct reverse round-robin legs. Run `npm.cmd run test -- --runInBand shared-session-integrity shared-session-privacy session-finalisation sync.controller sync-jwks.controller competition-standings` from `backend/`. Confirm 0052/0053 on the intended source. Main Cloud sync-rule validation passed; local HS256/gaffer-dev auth remains mismatched with the configured hosted RS256 JWKS. Peer delivery and browser reloads remain unverified. Capture an accepted upload's canonical event ID in the peer's local synced tables and repeat after reconnecting, independently of API polling.
