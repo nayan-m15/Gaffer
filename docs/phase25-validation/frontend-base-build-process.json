@@ -1,0 +1,11 @@
+{
+  "name": "frontend-base-build",
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\frontend\\node_modules\\typescript\\bin\\tsc",
+    "-b",
+    "--force"
+  ],
+  "exitCode": 2,
+  "durationMs": 13160
+}

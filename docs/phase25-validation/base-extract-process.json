@@ -1,0 +1,12 @@
+{
+  "name": "base-extract",
+  "command": [
+    "tar",
+    "-xf",
+    "C:\\Users\\hpars\\AppData\\Local\\Temp\\gaffer-phase25-base-U4lE9H\\base.zip",
+    "-C",
+    "C:\\Users\\hpars\\AppData\\Local\\Temp\\gaffer-phase25-base-U4lE9H"
+  ],
+  "exitCode": 0,
+  "durationMs": 2588
+}
