@@ -113,8 +113,8 @@ const migrationChecks = expected.map((migration, index) => {
   const crlfHash = createHash('sha256').update(source.replace(/\r?\n/g, '\r\n')).digest('hex');
   const recorded = migrations.filter((entry) => Number(entry.created_at) === migration.folderMillis);
   // Legacy journal entries can share a timestamp; match the content as well.
-  const row = recorded.find((entry) => [migration.hash, lfHash, crlfHash].includes(entry.hash)) ?? recorded[0];
   const equivalent = migrations.filter((entry) => [migration.hash, lfHash, crlfHash].includes(entry.hash));
+  const row = recorded.find((entry) => [migration.hash, lfHash, crlfHash].includes(entry.hash)) ?? equivalent[0] ?? recorded[0];
   return { tag, applied: Boolean(row), hashMatches: row?.hash === migration.hash,
     lineEndingEquivalent: Boolean(row && (row.hash === lfHash || row.hash === crlfHash)),
     equivalentRecordedTimestamps: equivalent.map((entry) => Number(entry.created_at)) };

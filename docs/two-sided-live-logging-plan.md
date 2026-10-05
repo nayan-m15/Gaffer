@@ -2,6 +2,8 @@
 
 Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. Steps 1-3 and canonical result corrections have local implementations. Development database and PowerSync deployment work is recorded in [the delivery verification](two-sided-delivery-verification.md); Render deployment and full manual interaction testing remain with the user. Fresh fixture browser evidence is recorded below. The documented frontend build blockers have also been repaired.
 
+Subsequent authorized historical reconciliation repaired the five affected fixture pairs and verified identical actual service reports for both owning coaches. All observations and published competition results were retained; obsolete confirmations were cleared for coaches to reconfirm. The migration-journal review identified shifted timestamps, historical SQL versions and two unmatched hashes; the journal was preserved and the audit's content matching corrected. See [the applied reconciliation](two-sided-test-data-repair.md#applied-historical-reconciliation-5-october-subsequent-to-the-assessment-below). UI retesting and deployment remain with the user.
+
 The goal: two coaches open their own team setup, inspect the opponent's confirmed lineup, record into one shared match, review possible duplicates, and finish with one result everywhere. Implement the remaining fixes and hand the friendly and competition flows back for manual testing. A new validation environment is optional and does not hold up frontend work.
 
 ## Review of the last six commits

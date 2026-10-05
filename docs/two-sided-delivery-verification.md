@@ -2,6 +2,8 @@
 
 5 October 2026. Scope: the user authorized the existing PowerSync Development instance and blue-hill source, then reserved Render deployment for themselves after local testing. No Git commit or push was requested or performed.
 
+Subsequent authorized follow-up repaired the three historical session conflicts and both null-linked sheets; all five coach pairs now receive identical actual service reports. The journal review is complete, with provenance discrepancies preserved and no migration replay. See [the applied repair](two-sided-test-data-repair.md#applied-historical-reconciliation-5-october-subsequent-to-the-assessment-below). Earlier remaining-history statements below describe the delivery verification baseline. UI retesting and Render/Vercel deployment remain with the user.
+
 ## Environment and deployment
 
 - Database: `ep-blue-hill-b1j037cs`, `neondb`, branch `br-odd-cell-b1onih3h`.
