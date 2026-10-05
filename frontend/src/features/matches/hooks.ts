@@ -12,7 +12,7 @@ import {
   subscribeToSyncedSessionReportChanges,
   subscribeToOfflineQueueChanges,
 } from "@/offline/match-store";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import {
   useMutation,
   useQuery,
@@ -56,6 +56,8 @@ export const matchInsightQueryKey = (matchId: string) =>
   ["matches", matchId, "insight"] as const;
 
 const MATCH_QUERY_STALE_MS = 5_000;
+// Shared score and clock changes poll through the canonical session report.
+const SHARED_SHEET_POLL_MS = 10_000;
 /** Insight generation runs in the background after finalisation, so this
  * polls briefly while a result is pending rather than requiring a refresh. */
 const MATCH_INSIGHT_POLL_MS = 3_000;
@@ -71,7 +73,9 @@ export function useMatch(matchId: string | undefined) {
       navigator.onLine &&
       (query.state.data?.eventStatus !== "completed" ||
         Boolean(query.state.data?.sharedSessionId))
-        ? 1_000
+        ? query.state.data?.sharedSessionId
+          ? SHARED_SHEET_POLL_MS
+          : 1_000
         : false,
     refetchIntervalInBackground: false,
   });
@@ -582,7 +586,10 @@ export function useFinishMatch(matchId: string) {
 export function useUpdateMatchClock(matchId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    onSuccess: () => invalidateSheetSession(queryClient, matchId),
+    onSuccess: (match) => {
+      queryClient.setQueryData(matchQueryKey(matchId), match);
+      invalidateSheetSession(queryClient, matchId);
+    },
     scope: { id: `match-clock-${matchId}` },
     networkMode: "always",
     mutationFn: (input: Parameters<typeof updateMatchClock>[1]) =>
@@ -637,6 +644,12 @@ export function useMatchView(matchId: string | undefined) {
     staleTime: MATCH_QUERY_STALE_MS,
     refetchInterval: 1_000,
   });
+  const refetchSheet = sheetQuery.refetch;
+  const refetchReport = reportQuery.refetch;
+  const refetch = useCallback(async () => {
+    const [sheet] = await Promise.all([refetchSheet(), refetchReport()]);
+    return sheet;
+  }, [refetchSheet, refetchReport]);
   useEffect(() => {
     if (!sessionId) return;
     let disposed = false;
@@ -644,6 +657,9 @@ export function useMatchView(matchId: string | undefined) {
     const refresh = () => {
       void queryClient.invalidateQueries({
         queryKey: sessionReportKey(sessionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["matches", matchId, "pending-session-events"],
       });
     };
     void subscribeToSyncedSessionReportChanges(refresh)
@@ -660,7 +676,7 @@ export function useMatchView(matchId: string | undefined) {
       stopQueue();
       window.removeEventListener("online", refresh);
     };
-  }, [sessionId, queryClient]);
+  }, [sessionId, matchId, queryClient]);
   const pendingQuery = useQuery({
     queryKey: ["matches", matchId, "pending-session-events"],
     enabled: Boolean(sessionId && matchId),
@@ -691,10 +707,7 @@ export function useMatchView(matchId: string | undefined) {
         isPending: sheetQuery.isPending || reportQuery.isPending,
         isError: sheetQuery.isError || reportQuery.isError,
         error: sheetQuery.error ?? reportQuery.error,
-        refetch: async () => {
-          await reportQuery.refetch();
-          return sheetQuery.refetch();
-        },
+        refetch,
       }
     : sheetQuery;
   const eventsQuery = sessionId

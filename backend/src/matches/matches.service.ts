@@ -55,7 +55,10 @@ import type {
   UpdateMatchClockDto,
 } from './matches.schemas';
 import { twoSidedLiveLoggingEnabled } from './match-sessions';
-import { shouldFinaliseSession } from './session-finalisation';
+import {
+  sessionHasTimedOutConfirmation,
+  shouldFinaliseSession,
+} from './session-finalisation';
 
 function isGoalkeeperPosition(position: string | null | undefined) {
   const normalized = position?.trim().toLowerCase();
@@ -104,66 +107,148 @@ export class MatchesService {
       )
       .limit(1);
     if (!participant) throw new NotFoundException('Match session not found.');
-    await finaliseTimedOutSession(this.databaseService, sessionId);
-    const [session] = await this.databaseService.database
+    let [session] = await this.databaseService.database
       .select()
       .from(matchSessions)
       .where(eq(matchSessions.id, sessionId))
       .limit(1);
     if (!session) throw new NotFoundException('Match session not found.');
+    if (sessionHasTimedOutConfirmation(session, new Date())) {
+      await finaliseTimedOutSession(this.databaseService, sessionId);
+      [session] = await this.databaseService.database
+        .select()
+        .from(matchSessions)
+        .where(eq(matchSessions.id, sessionId))
+        .limit(1);
+    }
 
-    const participants = await this.databaseService.database
-      .select({
-        side: matchSessionParticipants.side,
-        teamId: matchSessionParticipants.teamId,
-        competitionTeamId: matchSessionParticipants.competitionTeamId,
-      })
-      .from(matchSessionParticipants)
-      .where(eq(matchSessionParticipants.sessionId, sessionId))
-      .orderBy(desc(matchSessionParticipants.side));
-    const timelineRows = await this.databaseService.database
-      .select({
-        id: matchEvents.id,
-        side: matchEvents.side,
-        eventType: matchEvents.eventType,
-        minute: matchEvents.minute,
-        period: matchEvents.period,
-        matchElapsedMs: matchEvents.matchElapsedMs,
-        lifecycleStatus: matchEvents.lifecycleStatus,
-        manuallyAdjusted: matchEvents.manuallyAdjusted,
-        createdAt: matchEvents.createdAt,
-        updatedAt: matchEvents.updatedAt,
-        firstName: athletes.firstName,
-        lastName: athletes.lastName,
-        shirtNumber: athletes.squadNumber,
-        incomingPlayerLabel: sql<
-          string | null
-        >`CASE WHEN ${matchEvents.eventType} = 'substitution'
+    const [
+      participants,
+      timelineRows,
+      reviews,
+      sheets,
+      [clockOperation],
+      [fixture],
+    ] = await Promise.all([
+      this.databaseService.database
+        .select({
+          side: matchSessionParticipants.side,
+          teamId: matchSessionParticipants.teamId,
+          competitionTeamId: matchSessionParticipants.competitionTeamId,
+        })
+        .from(matchSessionParticipants)
+        .where(eq(matchSessionParticipants.sessionId, sessionId))
+        .orderBy(desc(matchSessionParticipants.side)),
+      this.databaseService.database
+        .select({
+          id: matchEvents.id,
+          side: matchEvents.side,
+          eventType: matchEvents.eventType,
+          minute: matchEvents.minute,
+          period: matchEvents.period,
+          matchElapsedMs: matchEvents.matchElapsedMs,
+          lifecycleStatus: matchEvents.lifecycleStatus,
+          manuallyAdjusted: matchEvents.manuallyAdjusted,
+          createdAt: matchEvents.createdAt,
+          updatedAt: matchEvents.updatedAt,
+          firstName: athletes.firstName,
+          lastName: athletes.lastName,
+          shirtNumber: athletes.squadNumber,
+          incomingPlayerLabel: sql<
+            string | null
+          >`CASE WHEN ${matchEvents.eventType} = 'substitution'
           AND ${matchEvents.team} = 'opponent'
           AND ${matchEvents.detail} !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN left(${matchEvents.detail}, 50) ELSE NULL END`,
-        opponentLabel: matchEvents.opponentLabel,
-        opponentName: opponentMatchPlayers.name,
-        opponentNumber: opponentMatchPlayers.shirtNumber,
-      })
-      .from(matchEvents)
-      .leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
-      .leftJoin(
-        opponentMatchPlayers,
-        eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
-      )
-      .where(
-        and(
-          eq(matchEvents.sessionId, sessionId),
-          sql`${matchEvents.eventType} <> 'injury'`,
-          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+          opponentLabel: matchEvents.opponentLabel,
+          opponentName: opponentMatchPlayers.name,
+          opponentNumber: opponentMatchPlayers.shirtNumber,
+        })
+        .from(matchEvents)
+        .leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
+        .leftJoin(
+          opponentMatchPlayers,
+          eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
+        )
+        .where(
+          and(
+            eq(matchEvents.sessionId, sessionId),
+            sql`${matchEvents.eventType} <> 'injury'`,
+            sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+          ),
+        )
+        .orderBy(
+          desc(matchEvents.minute),
+          desc(matchEvents.createdAt),
+          asc(matchEvents.id),
         ),
-      )
-      .orderBy(
-        desc(matchEvents.minute),
-        desc(matchEvents.createdAt),
-        asc(matchEvents.id),
-      );
+      this.databaseService.database
+        .select({
+          id: matchEventReviews.id,
+          canonicalEventId: matchEventReviews.canonicalEventId,
+          reason: matchEventReviews.reason,
+          status: matchEventReviews.status,
+          resolution: matchEventReviews.resolution,
+          resolvedAt: matchEventReviews.resolvedAt,
+          resolvedByUserId: matchEventReviews.resolvedByUserId,
+          disputedAt: matchEventReviews.disputedAt,
+          disputedByUserId: matchEventReviews.disputedByUserId,
+        })
+        .from(matchEventReviews)
+        .where(
+          and(
+            eq(matchEventReviews.sessionId, sessionId),
+            sql`${matchEventReviews.canonicalEventId} in (select id from match_events where event_type <> 'injury')`,
+          ),
+        )
+        .orderBy(asc(matchEventReviews.createdAt), asc(matchEventReviews.id)),
+      this.databaseService.database
+        .select({
+          period: matches.clockPeriod,
+          elapsedMs: matches.clockElapsedMs,
+          startedAt: matches.clockStartedAt,
+          revision: matches.clockRevision,
+          status: events.status,
+        })
+        .from(matches)
+        .innerJoin(events, eq(matches.eventId, events.id))
+        .where(eq(matches.sharedMatchId, sessionId))
+        .orderBy(
+          desc(matches.clockRevision),
+          desc(matches.updatedAt),
+          asc(matches.id),
+        ),
+      this.databaseService.database
+        .select({
+          period: matches.clockPeriod,
+          elapsedMs: matches.clockElapsedMs,
+          startedAt: matches.clockStartedAt,
+          revision: matches.clockRevision,
+        })
+        .from(matchClockOperations)
+        .innerJoin(matches, eq(matchClockOperations.matchId, matches.id))
+        .where(
+          and(
+            eq(matchClockOperations.sessionId, sessionId),
+            sql`${matchClockOperations.outcome} like 'applied%'`,
+          ),
+        )
+        .orderBy(
+          desc(matchClockOperations.createdAt),
+          asc(matchClockOperations.id),
+        )
+        .limit(1),
+      this.databaseService.database
+        .select({
+          homeScore: competitionFixtures.homeScore,
+          awayScore: competitionFixtures.awayScore,
+          status: competitionFixtures.status,
+        })
+        .from(competitionFixtures)
+        .where(eq(competitionFixtures.sharedSessionId, sessionId))
+        .limit(1),
+    ]);
+
     const timeline = timelineRows.map(
       ({
         firstName,
@@ -185,65 +270,9 @@ export class MatchesService {
                 : null,
       }),
     );
-    const reviews = await this.databaseService.database
-      .select({
-        id: matchEventReviews.id,
-        canonicalEventId: matchEventReviews.canonicalEventId,
-        reason: matchEventReviews.reason,
-        status: matchEventReviews.status,
-        resolution: matchEventReviews.resolution,
-        resolvedAt: matchEventReviews.resolvedAt,
-        resolvedByUserId: matchEventReviews.resolvedByUserId,
-        disputedAt: matchEventReviews.disputedAt,
-        disputedByUserId: matchEventReviews.disputedByUserId,
-      })
-      .from(matchEventReviews)
-      .where(
-        and(
-          eq(matchEventReviews.sessionId, sessionId),
-          sql`${matchEventReviews.canonicalEventId} in (select id from match_events where event_type <> 'injury')`,
-        ),
-      )
-      .orderBy(asc(matchEventReviews.createdAt), asc(matchEventReviews.id));
     const unresolved = reviews.some(
       (review) => review.status === 'open' || review.disputedAt !== null,
     );
-    const sheets = await this.databaseService.database
-      .select({
-        period: matches.clockPeriod,
-        elapsedMs: matches.clockElapsedMs,
-        startedAt: matches.clockStartedAt,
-        revision: matches.clockRevision,
-        status: events.status,
-      })
-      .from(matches)
-      .innerJoin(events, eq(matches.eventId, events.id))
-      .where(eq(matches.sharedMatchId, sessionId))
-      .orderBy(
-        desc(matches.clockRevision),
-        desc(matches.updatedAt),
-        asc(matches.id),
-      );
-    const [clockOperation] = await this.databaseService.database
-      .select({
-        period: matches.clockPeriod,
-        elapsedMs: matches.clockElapsedMs,
-        startedAt: matches.clockStartedAt,
-        revision: matches.clockRevision,
-      })
-      .from(matchClockOperations)
-      .innerJoin(matches, eq(matchClockOperations.matchId, matches.id))
-      .where(
-        and(
-          eq(matchClockOperations.sessionId, sessionId),
-          sql`${matchClockOperations.outcome} like 'applied%'`,
-        ),
-      )
-      .orderBy(
-        desc(matchClockOperations.createdAt),
-        asc(matchClockOperations.id),
-      )
-      .limit(1);
     const finished = sheets.some(
       (sheet) => sheet.period === 'full_time' || sheet.status === 'completed',
     );
@@ -258,15 +287,6 @@ export class MatchesService {
       revision: anchor?.revision ?? 0,
     };
     const goals = timeline.filter((event) => event.eventType === 'goal');
-    const [fixture] = await this.databaseService.database
-      .select({
-        homeScore: competitionFixtures.homeScore,
-        awayScore: competitionFixtures.awayScore,
-        status: competitionFixtures.status,
-      })
-      .from(competitionFixtures)
-      .where(eq(competitionFixtures.sharedSessionId, sessionId))
-      .limit(1);
     const published =
       session.finalisedAt &&
       !unresolved &&

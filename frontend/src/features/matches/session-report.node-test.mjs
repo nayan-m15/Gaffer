@@ -175,7 +175,7 @@ test("post-match event creation waits for the projection refresh and completed s
   assert.equal(finished, false, "confirmation must wait for the revision refresh");
   release(); await save;
   assert.equal(finished, true);
-  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed", sharedSessionId: "session" } } }), 1000);
+  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed", sharedSessionId: "session" } } }), 10000);
   assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed" } } }), false);
 });
 test("both access handles fetch and persist one session DTO; offline uses synced session data", async () => {

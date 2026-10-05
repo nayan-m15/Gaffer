@@ -367,6 +367,141 @@ describe('Phase 2 shared privacy and clock', () => {
     ).toHaveLength(1);
   });
 
+  it('reconciles old per-sheet revisions using the most recent shared operation', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    // Before 0054, the home sheet could have a larger revision but an older clock.
+    await db
+      .update(schema.matches)
+      .set({
+        clockPeriod: 'first_half',
+        clockElapsedMs: 60000,
+        clockStartedAt: new Date(),
+        clockRevision: 9,
+      })
+      .where(eq(schema.matches.id, a.id));
+    await db
+      .update(schema.matches)
+      .set({
+        clockPeriod: 'half_time',
+        clockElapsedMs: 2700000,
+        clockStartedAt: null,
+        clockRevision: 1,
+      })
+      .where(eq(schema.matches.id, b.id));
+    await db.insert(schema.matchClockOperations).values({
+      id: randomUUID(),
+      matchId: b.id,
+      actorUserId: f.away.id,
+      period: 'half_time',
+      elapsedMs: 2700000,
+      running: false,
+      baseRevision: 0,
+      appliedRevision: 1,
+      outcome: 'applied',
+      payloadHash: 'legacy',
+      clientCreatedAt: new Date(),
+    });
+    await matches.updateClock(f.home.id, a.id, {
+      operationId: randomUUID(),
+      baseRevision: 1,
+      period: 'half_time',
+      running: false,
+      elapsedMs: 2700000,
+    });
+    expect(
+      (await matches.getSessionReportForSheet(f.home.id, a.id)).clock,
+    ).toMatchObject({
+      period: 'half_time',
+      elapsedMs: 2700000,
+      running: false,
+      revision: 9,
+    });
+    await matches.updateClock(f.away.id, b.id, {
+      operationId: randomUUID(),
+      baseRevision: 9,
+      period: 'second_half',
+      running: true,
+      elapsedMs: 2700000,
+    });
+    const home = await matches.getSessionReportForSheet(f.home.id, a.id);
+    expect(home.clock).toMatchObject({
+      period: 'second_half',
+      revision: 10,
+      running: true,
+    });
+    expect(
+      (await matches.getSessionReportForSheet(f.away.id, b.id)).clock,
+    ).toEqual(home.clock);
+  });
+
+  it.each(['friendly', 'competition'] as const)(
+    '%s: alternating coaches persist one clock through halftime, resume and full time',
+    async (kind) => {
+      const f = await fixture(kind);
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      let revision = 0;
+      for (const [actor, sheet, period, running, elapsedMs] of [
+        [f.home, a, 'first_half', true, 0],
+        [f.away, b, 'first_half', false, 60000],
+        [f.home, a, 'first_half', true, 60000],
+        [f.home, a, 'half_time', false, 2700000],
+        [f.away, b, 'second_half', true, 2700000],
+        [f.home, a, 'second_half', false, 2800000],
+        [f.away, b, 'second_half', true, 2800000],
+        [f.home, a, 'full_time', false, 5400000],
+      ] as const) {
+        const input = {
+          operationId: randomUUID(),
+          clientCreatedAt: new Date().toISOString(),
+          baseRevision: revision,
+          period,
+          running,
+          elapsedMs,
+        };
+        await matches.updateClock(actor.id, sheet.id, input);
+        revision += 1;
+        const home = await matches.getSessionReportForSheet(f.home.id, a.id);
+        const away = await matches.getSessionReportForSheet(f.away.id, b.id);
+        expect(home.clock).toEqual(away.clock);
+        expect(home.clock).toMatchObject({
+          period,
+          running,
+          elapsedMs,
+          revision,
+        });
+        for (const id of [a.id, b.id]) {
+          const [stored] = await db
+            .select()
+            .from(schema.matches)
+            .where(eq(schema.matches.id, id));
+          expect(stored).toMatchObject({
+            clockPeriod: period,
+            clockElapsedMs: elapsedMs,
+            clockRevision: revision,
+          });
+          if (running) expect(stored.clockStartedAt).toBeInstanceOf(Date);
+          else expect(stored.clockStartedAt).toBeNull();
+        }
+        // An exact retry must neither reset the time origin nor advance the revision.
+        await matches.updateClock(actor.id, sheet.id, input);
+        expect(
+          (await matches.getSessionReportForSheet(f.home.id, a.id)).clock,
+        ).toEqual(home.clock);
+      }
+      await matches.finish(f.away.id, b.id);
+      expect(
+        (await matches.getSessionReportForSheet(f.home.id, a.id)).clock,
+      ).toMatchObject({
+        period: 'full_time',
+        running: false,
+        elapsedMs: 5400000,
+      });
+    },
+  );
+
   function streamQuery(
     name: string,
     actor: typeof schema.user.$inferSelect,

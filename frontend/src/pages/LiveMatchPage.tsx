@@ -1,5 +1,4 @@
 import { sessionPlayerLabel } from "@/features/matches/session-report-model";
-import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
 import {
   Fragment,
   useCallback,
@@ -431,6 +430,7 @@ export default function LiveMatchPage() {
   /** Periods whose end-of-regulation check-in has already been shown. */
   const checkedMarksRef = useRef(new Set<Period>());
   const baseRef = useRef(0);
+  const clockOriginRef = useRef(0);
 
   const [target, setTarget] = useState<LogTarget | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
@@ -468,18 +468,21 @@ export default function LiveMatchPage() {
 
   useEffect(() => {
     const match = matchQuery.data;
-    if (!match || lastAppliedClockRevisionRef.current === match.updatedAt)
-      return;
+    if (!match) return;
+    // The peer can change the session clock without changing this sheet's timestamp.
+    const clockKey = JSON.stringify([
+      match.id,
+      match.clockRevision,
+      match.clockPeriod,
+      match.clockElapsedMs,
+      match.clockStartedAt,
+      match.eventStatus,
+    ]);
+    if (lastAppliedClockRevisionRef.current === clockKey) return;
     let cancelled = false;
     void (async () => {
       const local = matchId ? await readClockAnchor(matchId) : null;
       if (cancelled) return;
-      if (match.eventStatus === "completed") {
-        setPeriod("full_time");
-        setRunning(false);
-        lastAppliedClockRevisionRef.current = match.updatedAt;
-        return;
-      }
       const serverElapsed = Math.max(
         0,
         match.clockElapsedMs +
@@ -488,21 +491,27 @@ export default function LiveMatchPage() {
             : 0),
       );
       const useLocal = Boolean(
-        matchId && local && isClockAnchorPending(matchId),
+        match.eventStatus !== "completed" && matchId && local &&
+        isClockAnchorPending(matchId),
       );
       const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
-      const nextPeriod = useLocal && local ? local.period : match.clockPeriod;
+      const nextPeriod = match.eventStatus === "completed"
+        ? "full_time"
+        : useLocal && local ? local.period : match.clockPeriod;
       const nextRunning =
-        useLocal && local ? local.running : Boolean(match.clockStartedAt);
+        match.eventStatus !== "completed" &&
+        (useLocal && local ? local.running : Boolean(match.clockStartedAt));
       if (local?.uncertain) {
         setActionError(
           "The offline match clock changed unexpectedly and was paused. Confirm the time before continuing.",
         );
       }
       baseRef.current = elapsed;
+      clockOriginRef.current = Date.now() - elapsed;
       elapsedRef.current = elapsed;
       setElapsedMs(elapsed);
       setPeriod(nextPeriod);
+      setCheckIn(null);
       const livePeriod =
         nextPeriod === "first_half" || nextPeriod === "second_half";
       const regulation =
@@ -511,7 +520,7 @@ export default function LiveMatchPage() {
         checkedMarksRef.current.add(nextPeriod);
       }
       setRunning(nextRunning);
-      lastAppliedClockRevisionRef.current = match.updatedAt;
+      lastAppliedClockRevisionRef.current = clockKey;
     })();
     return () => {
       cancelled = true;
@@ -522,9 +531,9 @@ export default function LiveMatchPage() {
     if (!running) {
       return;
     }
-    const origin = Date.now() - baseRef.current;
+    clockOriginRef.current = Date.now() - baseRef.current;
     const id = window.setInterval(() => {
-      const next = Date.now() - origin;
+      const next = Date.now() - clockOriginRef.current;
       const minuteChanged =
         Math.floor(elapsedRef.current / 60_000) !== Math.floor(next / 60_000);
       elapsedRef.current = next;
@@ -1789,7 +1798,6 @@ export default function LiveMatchPage() {
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
         <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
-          <SessionReportStatus report={sessionReport} />
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="flex flex-col items-end">
               <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">

@@ -134,8 +134,9 @@ for (const { kind, firstConfirmation } of scenarios) {
       });
       sessionIds.push(homeSheet.sharedMatchId);
       await home.page.goto(`/matches/${homeSheet.id}/live`);
-      // Session status is required before the opponent starts its sheet.
-      await expect(home.page.getByRole('region', { name: 'Shared session result' })).toBeVisible({ timeout: 20000 });
+      // The shared score is available before the opponent starts its sheet.
+      await expect(home.page.locator('.live-match-scoreline')).toBeVisible({ timeout: 20000 });
+      await expect(home.page.getByRole('region', { name: 'Shared session result' })).toHaveCount(0);
       const awaySheet = await body(away.context.request, 'post', `/events/${awayEventId}/start-match`, {
         opponentName: home.team.name, isHome: true, startingAthleteIds: away.squad.slice(0, 11).map((player) => player.id),
         benchAthleteIds: [away.squad[11].id], formationId: '4-3-3',
@@ -204,15 +205,21 @@ for (const { kind, firstConfirmation } of scenarios) {
         await expect(refreshedPeerReview).toContainText('same event', { timeout: 20000 });
         await refreshedPeerReview.getByRole('button', { name: 'Close', exact: true }).click();
         for (const coach of [home, away]) {
-          const state = coach.page.getByRole('region', { name: 'Shared session result' });
-          await expect(state).toContainText('Home 2', { timeout: 20000 });
-          await expect(state).toContainText('1 Away');
+          await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, { timeout: 20000 });
         }
         await away.page.getByRole('button', { name: 'Pause', exact: true }).click();
         await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible({ timeout: 20000 });
         await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
-        // Record this failure without hiding independent publication checks.
-        await expect.soft(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await home.page.getByRole('button', { name: 'Half Time', exact: true }).click();
+        await home.page.getByRole('button', { name: 'YES, CONFIRM', exact: true }).click();
+        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
+        await away.page.getByRole('button', { name: 'START SECOND HALF', exact: true }).click();
+        for (const coach of [home, away]) {
+          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+          await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
+          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+        }
       } else {
         await body(away.context.request, 'post', `/matches/${awaySheet.id}/events`, {
           clientRequestId: randomUUID(), team: 'opponent', eventType: 'goal',
@@ -232,11 +239,10 @@ for (const { kind, firstConfirmation } of scenarios) {
       await away.page.goto(`/matches/${awaySheet.id}/live`);
       await home.page.reload();
       for (const coach of [home, away]) {
-        const status = coach.page.getByRole('region', { name: 'Shared session result' });
-        await expect(status).toContainText('Home 2', { timeout: 20000 });
-        await expect(status).toContainText('1 Away');
-        await expect(status).toContainText('unconfirmed');
+        await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, { timeout: 20000 });
+        await expect(coach.page.getByRole('region', { name: 'Shared session result' })).toHaveCount(0);
       }
+      expect((await body(home.context.request, 'get', reportUrl)).confirmations).toEqual({ home: null, away: null });
       const confirmationOrder = firstConfirmation === 'home' ? [home, away] : [away, home];
       for (const coach of [home, away]) {
         const sheet = coach === home ? homeSheet : awaySheet;
