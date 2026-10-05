@@ -1,0 +1,11 @@
+{
+  "mode": "build",
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "node_modules/@nestjs/cli/bin/nest.js",
+    "build"
+  ],
+  "exitCode": 0,
+  "durationMs": 15841,
+  "log": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase2-validation\\build.log"
+}

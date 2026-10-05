@@ -1,0 +1,173 @@
+{
+  "http": {
+    "friendly-create-aca6abd0-728c-4011-8084-efa379206e0e": {
+      "status": 201,
+      "body": {
+        "id": "fb4a2aa7-7790-4795-9748-6a46a9ad340f",
+        "teamId": "1043a2e2-254d-41d4-8a09-7e76693b5fe7",
+        "title": "phase2 fresh friendly",
+        "type": "match",
+        "status": "scheduled",
+        "scheduledAt": "2026-10-03T22:53:09.318Z",
+        "location": "Synthetic ground",
+        "venueName": null,
+        "venueAddress": null,
+        "weatherLocation": null,
+        "weatherLatitude": null,
+        "weatherLongitude": null,
+        "weatherTimezone": null,
+        "notes": null,
+        "competitionId": null,
+        "competitionFixtureId": null,
+        "friendlyFixtureId": "b06932b4-40dd-4eed-a2db-afe30d183b4c",
+        "createdAt": "2026-10-04T22:53:10.475Z",
+        "updatedAt": "2026-10-04T22:53:10.475Z"
+      }
+    },
+    "friendly-accept-fb4a2aa7-7790-4795-9748-6a46a9ad340f": {
+      "status": 201,
+      "body": {
+        "fixture": {
+          "id": "b06932b4-40dd-4eed-a2db-afe30d183b4c",
+          "requesterTeamId": "1043a2e2-254d-41d4-8a09-7e76693b5fe7",
+          "opponentTeamId": "bec44c3a-62e7-4bd5-aab3-534abc47803a",
+          "status": "accepted",
+          "createdByUserId": "iG76SAk3L4dCCiLgiey6xfqgE1EXWrhT",
+          "respondedByUserId": "xME8awFEiPHtgQ4xEdZ10tX7HwnEo0Ks",
+          "respondedAt": "2026-10-04T22:53:11.561Z",
+          "sharedSessionId": "4e1621ea-a125-49b5-8b5c-df5be39af084",
+          "createdAt": "2026-10-04T22:53:10.288Z",
+          "updatedAt": "2026-10-04T22:53:11.561Z"
+        },
+        "event": {
+          "id": "6aa61195-21de-4f77-88c9-e5f8dd6d0acf",
+          "teamId": "bec44c3a-62e7-4bd5-aab3-534abc47803a",
+          "title": "phase2-home Test Team 2d49a345-f933-4f5c-a015-687eb185bd03",
+          "type": "match",
+          "status": "scheduled",
+          "scheduledAt": "2026-10-03T22:53:09.318Z",
+          "location": "Synthetic ground",
+          "venueName": null,
+          "venueAddress": null,
+          "weatherLocation": null,
+          "weatherLatitude": null,
+          "weatherLongitude": null,
+          "weatherTimezone": null,
+          "notes": null,
+          "competitionId": null,
+          "competitionFixtureId": null,
+          "friendlyFixtureId": "b06932b4-40dd-4eed-a2db-afe30d183b4c",
+          "createdAt": "2026-10-04T22:53:11.972Z",
+          "updatedAt": "2026-10-04T22:53:11.972Z"
+        }
+      }
+    },
+    "revocation-home-start": {
+      "status": 201,
+      "body": {
+        "id": "564cb21e-80e5-438e-8e30-3247a83c4d68",
+        "eventId": "fb4a2aa7-7790-4795-9748-6a46a9ad340f",
+        "sharedMatchId": "4e1621ea-a125-49b5-8b5c-df5be39af084",
+        "competitionId": null,
+        "opponentCompetitionTeamId": null,
+        "opponentTeamId": "bec44c3a-62e7-4bd5-aab3-534abc47803a",
+        "opponentName": "phase2-away Test Team 4dc87be7-16eb-473d-b68e-51b03e0c2c31",
+        "isHome": true,
+        "teamScore": 0,
+        "opponentScore": 0,
+        "gamePlanId": null,
+        "gamePlanSnapshot": null,
+        "opponentSquadVisibility": "numbers",
+        "teamColor": null,
+        "opponentColor": null,
+        "clockPeriod": "not_started",
+        "clockElapsedMs": 0,
+        "clockStartedAt": null,
+        "clockRevision": 0,
+        "createdAt": "2026-10-04T22:53:15.173Z",
+        "updatedAt": "2026-10-04T22:53:15.173Z"
+      }
+    },
+    "revocation-away-start": {
+      "status": 201,
+      "body": {
+        "id": "bc95c863-bfe6-4187-a8ea-aa44be046e3f",
+        "eventId": "6aa61195-21de-4f77-88c9-e5f8dd6d0acf",
+        "sharedMatchId": "4e1621ea-a125-49b5-8b5c-df5be39af084",
+        "competitionId": null,
+        "opponentCompetitionTeamId": null,
+        "opponentTeamId": "1043a2e2-254d-41d4-8a09-7e76693b5fe7",
+        "opponentName": "phase2-home Test Team 2d49a345-f933-4f5c-a015-687eb185bd03",
+        "isHome": false,
+        "teamScore": 0,
+        "opponentScore": 0,
+        "gamePlanId": null,
+        "gamePlanSnapshot": null,
+        "opponentSquadVisibility": "numbers",
+        "teamColor": null,
+        "opponentColor": null,
+        "clockPeriod": "not_started",
+        "clockElapsedMs": 0,
+        "clockStartedAt": null,
+        "clockRevision": 0,
+        "createdAt": "2026-10-04T22:53:18.150Z",
+        "updatedAt": "2026-10-04T22:53:18.150Z"
+      }
+    },
+    "revoked-peer-events": {
+      "status": 403,
+      "body": {
+        "message": "No team associated with this account.",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    "revoked-own-report": {
+      "status": 403,
+      "body": {
+        "message": "No team associated with this account.",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    "revoked-private-sheet": {
+      "status": 403,
+      "body": {
+        "message": "No team associated with this account.",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    }
+  },
+  "revocation": {
+    "userId": "xME8awFEiPHtgQ4xEdZ10tX7HwnEo0Ks",
+    "teamId": "bec44c3a-62e7-4bd5-aab3-534abc47803a",
+    "oldClaimsUsed": true,
+    "selections": {
+      "team_match_events": 0,
+      "team_match_reviews": 0,
+      "team_match_observations": 0,
+      "team_match_memberships": 0,
+      "team_match_operations": 0,
+      "team_match_projections": 0,
+      "team_matches": 0,
+      "team_match_events_metadata": 0,
+      "team_athletes": 0,
+      "team_match_squads": 0,
+      "team_opponent_squads": 0,
+      "team_match_clock_operations": 0,
+      "shared_session_match_events": 0,
+      "shared_session_match_reviews": 0,
+      "shared_session_match_observations": 0,
+      "shared_session_match_memberships": 0,
+      "shared_session_match_operations": 0,
+      "shared_session_match_projections": 0,
+      "shared_session_match_clock_operations": 0,
+      "shared_session_report_state": 0,
+      "shared_session_report_sheets": 0,
+      "shared_session_report_fixture_scores": 0
+    },
+    "httpDenied": true,
+    "cloudRevocation": "NOT TESTED: token already rejected by Cloud"
+  }
+}

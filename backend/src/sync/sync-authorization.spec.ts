@@ -97,4 +97,53 @@ describe('PowerSync shared session authorization', () => {
     );
     expect(config).not.toMatch(/\b(?:jsonb\s*-|->|->>)\s*/i);
   });
+
+  it.each([
+    'shared_session_match_events',
+    'shared_session_match_reviews',
+    'shared_session_match_observations',
+    'shared_session_match_memberships',
+    'shared_session_match_operations',
+    'shared_session_match_projections',
+    'shared_session_match_clock_operations',
+    'shared_session_report_state',
+    'shared_session_report_sheets',
+    'shared_session_report_fixture_scores',
+  ])('%s requires flag, participant identity and live membership', (name) => {
+    const query = streamQuery(name);
+    expect(query).toContain(
+      "auth.parameter('two_sided_live_logging') = 'true'",
+    );
+    expect(query).toContain(
+      "match_session_participants.team_id = auth.parameter('team_id')",
+    );
+    expect(query).toContain("team_members.user_id = auth.parameter('user_id')");
+  });
+
+  it('excludes injuries from shared events, observations and memberships', () => {
+    expect(streamQuery('shared_session_match_events')).toContain(
+      "match_events.event_type <> 'injury'",
+    );
+    for (const name of [
+      'shared_session_match_observations',
+      'shared_session_match_memberships',
+    ])
+      expect(streamQuery(name)).toContain(
+        "match_event_observations.event_type <> 'injury'",
+      );
+    expect(streamQuery('shared_session_match_events')).not.toContain(
+      'match_events.detail',
+    );
+    expect(streamQuery('shared_session_match_operations')).not.toContain(
+      'match_event_operations.reason',
+    );
+  });
+
+  it.each(
+    [...config.matchAll(/^ {2}(team_[a-z_]+):/gm)].map((match) => match[1]),
+  )('%s checks live membership even with an already-issued token', (name) => {
+    expect(streamQuery(name)).toContain(
+      "team_members.user_id = auth.parameter('user_id')",
+    );
+  });
 });

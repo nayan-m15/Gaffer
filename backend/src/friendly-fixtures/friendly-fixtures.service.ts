@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
@@ -110,7 +110,8 @@ export class FriendlyFixturesService {
         eventId: events.id,
         scheduledAt: events.scheduledAt,
         location: events.location,
-        notes: events.notes,
+        // Event notes belong to the requesting team's private calendar.
+        notes: sql<string | null>`NULL`,
         createdAt: friendlyFixtures.createdAt,
       })
       .from(friendlyFixtures)
@@ -211,7 +212,7 @@ export class FriendlyFixturesService {
           weatherLatitude: requesterEvent.weatherLatitude,
           weatherLongitude: requesterEvent.weatherLongitude,
           weatherTimezone: requesterEvent.weatherTimezone,
-          notes: requesterEvent.notes,
+          notes: null,
           friendlyFixtureId: fixture.id,
         })
         .returning();

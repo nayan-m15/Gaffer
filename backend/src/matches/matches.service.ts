@@ -5,6 +5,7 @@ import {
 } from './match-session-integrity';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -147,6 +148,7 @@ export class MatchesService {
       .where(
         and(
           eq(matchEvents.sessionId, sessionId),
+          sql`${matchEvents.eventType} <> 'injury'`,
           sql`${matchEvents.lifecycleStatus} <> 'voided'`,
         ),
       )
@@ -186,7 +188,12 @@ export class MatchesService {
         disputedByUserId: matchEventReviews.disputedByUserId,
       })
       .from(matchEventReviews)
-      .where(eq(matchEventReviews.sessionId, sessionId))
+      .where(
+        and(
+          eq(matchEventReviews.sessionId, sessionId),
+          sql`${matchEventReviews.canonicalEventId} in (select id from match_events where event_type <> 'injury')`,
+        ),
+      )
       .orderBy(asc(matchEventReviews.createdAt), asc(matchEventReviews.id));
     const unresolved = reviews.some(
       (review) => review.status === 'open' || review.disputedAt !== null,
@@ -384,7 +391,8 @@ export class MatchesService {
 
   async listEvents(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireSharedMatch(team.id, matchId);
+    const { event } = await this.requireSharedMatch(team.id, matchId);
+    const peer = event.teamId !== team.id;
 
     const rows = await this.databaseService.database
       .select({
@@ -422,6 +430,7 @@ export class MatchesService {
       .where(
         and(
           eq(matchEvents.matchId, matchId),
+          peer ? sql`${matchEvents.eventType} <> 'injury'` : undefined,
           sql`${matchEvents.lifecycleStatus} <> 'voided'`,
         ),
       )
@@ -430,13 +439,13 @@ export class MatchesService {
     return rows.map((row) => ({
       id: row.id,
       matchId: row.matchId,
-      athleteId: row.athleteId,
+      athleteId: peer ? null : row.athleteId,
       team: row.team,
       opponentLabel: row.opponentLabel,
-      opponentPlayerId: row.opponentPlayerId,
+      opponentPlayerId: peer ? null : row.opponentPlayerId,
       eventType: row.eventType,
       minute: row.minute,
-      detail: row.detail,
+      detail: peer ? null : row.detail,
       loggedByUserId: row.loggedByUserId,
       manuallyAdjusted: row.manuallyAdjusted,
       clientRequestId: row.clientRequestId,
@@ -447,7 +456,7 @@ export class MatchesService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       athlete:
-        row.athleteId && row.athleteFirstName && row.athleteLastName
+        !peer && row.athleteId && row.athleteFirstName && row.athleteLastName
           ? {
               id: row.athleteId,
               firstName: row.athleteFirstName,
@@ -457,7 +466,7 @@ export class MatchesService {
             }
           : null,
       opponentPlayer:
-        row.opponentPlayerId && row.opponentPlayerShirtNumber != null
+        !peer && row.opponentPlayerId && row.opponentPlayerShirtNumber != null
           ? {
               id: row.opponentPlayerId,
               shirtNumber: row.opponentPlayerShirtNumber,
@@ -632,6 +641,19 @@ export class MatchesService {
   async listEventReviews(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     const { match } = await this.requireSharedMatch(team.id, matchId);
+    const ownSheets = await this.databaseService.database
+      .select({ id: matches.id })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .where(
+        and(
+          eq(events.teamId, team.id),
+          match.sharedMatchId
+            ? eq(matches.sharedMatchId, match.sharedMatchId)
+            : eq(matches.id, matchId),
+        ),
+      );
+    const ownSheetIds = new Set(ownSheets.map((row) => row.id));
     const reviewMatchIds =
       match.sharedMatchId && twoSidedLiveLoggingEnabled()
         ? (
@@ -651,7 +673,7 @@ export class MatchesService {
         )})`,
       )
       .orderBy(desc(matchEventReviews.createdAt));
-    return Promise.all(
+    const results = await Promise.all(
       rows.map(async (review) => {
         const observations =
           review.observationIds.length > 0
@@ -684,14 +706,39 @@ export class MatchesService {
               ).map((row) => row.observation);
         return {
           ...review,
-          observations: observations.map((observation) => ({
-            ...observation,
-            ...(observation.matchId !== matchId
-              ? { athleteId: null, opponentPlayerId: null }
-              : {}),
-          })),
+          observations: observations.map((observation) =>
+            ownSheetIds.has(observation.matchId)
+              ? observation
+              : {
+                  id: observation.id,
+                  matchId: observation.matchId,
+                  sessionId: observation.sessionId,
+                  side: observation.side,
+                  loggedByUserId: observation.loggedByUserId,
+                  eventType: observation.eventType,
+                  team: observation.team,
+                  opponentLabel: observation.opponentLabel,
+                  period: observation.period,
+                  matchElapsedMs: observation.matchElapsedMs,
+                  clientCreatedAt: observation.clientCreatedAt,
+                  serverReceivedAt: observation.serverReceivedAt,
+                  athleteId: null,
+                  opponentPlayerId: null,
+                  detail: null,
+                  payload: null,
+                  payloadHash: null,
+                },
+          ),
         };
       }),
+    );
+    return results.filter(
+      (review) =>
+        !review.observations.some(
+          (observation) =>
+            observation.eventType === 'injury' &&
+            !ownSheetIds.has(observation.matchId),
+        ),
     );
   }
 
@@ -1338,7 +1385,8 @@ export class MatchesService {
         }),
       )
       .digest('hex');
-    await this.databaseService.database.execute(sql`
+    try {
+      await this.databaseService.database.execute(sql`
       select * from apply_match_clock_operation(
         ${operationId}::uuid,
         ${matchId}::uuid,
@@ -1350,7 +1398,24 @@ export class MatchesService {
         ${payloadHash}::text,
         ${clientCreatedAt}::timestamptz
       )
-    `);
+      `);
+    } catch (error) {
+      const databaseError: unknown =
+        (error as { cause?: { code?: string; message?: string } }).cause ??
+        error;
+      if (
+        (databaseError as { code?: string }).code === '22000' &&
+        (databaseError as Error).message ===
+          'clock operation id reused with different data'
+      ) {
+        throw new ConflictException({
+          code: 'MATCH_CLOCK_OPERATION_ID_REUSED',
+          message:
+            'This clock operation ID was already used with different data.',
+        });
+      }
+      throw error;
+    }
     return this.findOne(userId, matchId);
   }
 
@@ -1634,13 +1699,27 @@ export class MatchesService {
 
   async listEventOperations(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
-    await this.requireSharedMatch(team.id, matchId);
-    return this.databaseService.database
+    const { event } = await this.requireSharedMatch(team.id, matchId);
+    const peer = event.teamId !== team.id;
+    const operations = await this.databaseService.database
       .select()
       .from(matchEventOperations)
-      .where(eq(matchEventOperations.matchId, matchId))
+      .where(
+        and(
+          eq(matchEventOperations.matchId, matchId),
+          peer
+            ? sql`${matchEventOperations.operationType} in ('merge', 'separate')`
+            : undefined,
+          peer
+            ? sql`${matchEventOperations.canonicalEventId} in (select id from match_events where event_type <> 'injury')`
+            : undefined,
+        ),
+      )
       .orderBy(asc(matchEventOperations.id))
       .limit(500);
+    return peer
+      ? operations.map((operation) => ({ ...operation, reason: null }))
+      : operations;
   }
 
   private async findOperation(operationId: string) {

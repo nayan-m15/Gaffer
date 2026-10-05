@@ -1,0 +1,22 @@
+{
+  "mode": "regressions",
+  "identity": {
+    "database": "neondb",
+    "branch": "br-misty-moon-b2be9vmt",
+    "endpoint": "ep-royal-star-b253pvlk"
+  },
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "node_modules/jest/bin/jest.js",
+    "--config",
+    "./test/jest-e2e.json",
+    "--runInBand",
+    "test/friendly-fixtures.e2e-spec.ts",
+    "test/competitions.e2e-spec.ts",
+    "test/team-isolation.e2e-spec.ts",
+    "test/offline-sync.e2e-spec.ts"
+  ],
+  "exitCode": 1,
+  "durationMs": 19535932,
+  "log": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase2-validation\\regressions.log"
+}

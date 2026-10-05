@@ -1,0 +1,176 @@
+{
+  "http": {
+    "friendly-create-a1187ea3-36ba-443f-b98c-bf0055fcdc8a": {
+      "status": 201,
+      "body": {
+        "id": "2a307262-83ab-4224-8a39-aac747624501",
+        "teamId": "62d50f0a-5107-49ab-8e7b-4f72141ee62e",
+        "title": "phase2 fresh friendly",
+        "type": "match",
+        "status": "scheduled",
+        "scheduledAt": "2026-10-04T04:16:36.449Z",
+        "location": "Synthetic ground",
+        "venueName": null,
+        "venueAddress": null,
+        "weatherLocation": null,
+        "weatherLatitude": null,
+        "weatherLongitude": null,
+        "weatherTimezone": null,
+        "notes": null,
+        "competitionId": null,
+        "competitionFixtureId": null,
+        "friendlyFixtureId": "aaf404da-3c7f-418a-b487-9457e784246e",
+        "createdAt": "2026-10-05T04:16:37.463Z",
+        "updatedAt": "2026-10-05T04:16:37.463Z"
+      }
+    },
+    "friendly-accept-2a307262-83ab-4224-8a39-aac747624501": {
+      "status": 201,
+      "body": {
+        "fixture": {
+          "id": "aaf404da-3c7f-418a-b487-9457e784246e",
+          "requesterTeamId": "62d50f0a-5107-49ab-8e7b-4f72141ee62e",
+          "opponentTeamId": "c06d5e5a-35cd-4b85-bbfb-6c2a1350fd2b",
+          "status": "accepted",
+          "createdByUserId": "wgEFcohctwBzn1ERc2YOpu1ThyY9cvmJ",
+          "respondedByUserId": "Mc8xSCnstRMvDBTqQEisHV6fRcLiWc7D",
+          "respondedAt": "2026-10-05T04:16:38.680Z",
+          "sharedSessionId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+          "createdAt": "2026-10-05T04:16:37.273Z",
+          "updatedAt": "2026-10-05T04:16:38.680Z"
+        },
+        "event": {
+          "id": "a20eb712-2d56-4d8a-a6f3-f14094410965",
+          "teamId": "c06d5e5a-35cd-4b85-bbfb-6c2a1350fd2b",
+          "title": "phase2-home Test Team 444653fe-58db-4f44-8454-3285472d4f4c",
+          "type": "match",
+          "status": "scheduled",
+          "scheduledAt": "2026-10-04T04:16:36.449Z",
+          "location": "Synthetic ground",
+          "venueName": null,
+          "venueAddress": null,
+          "weatherLocation": null,
+          "weatherLatitude": null,
+          "weatherLongitude": null,
+          "weatherTimezone": null,
+          "notes": null,
+          "competitionId": null,
+          "competitionFixtureId": null,
+          "friendlyFixtureId": "aaf404da-3c7f-418a-b487-9457e784246e",
+          "createdAt": "2026-10-05T04:16:38.953Z",
+          "updatedAt": "2026-10-05T04:16:38.953Z"
+        }
+      }
+    },
+    "concurrent-home-start": {
+      "status": 201,
+      "body": {
+        "id": "3469fbe8-d840-4ec8-98ed-56d42548f52b",
+        "eventId": "2a307262-83ab-4224-8a39-aac747624501",
+        "sharedMatchId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+        "competitionId": null,
+        "opponentCompetitionTeamId": null,
+        "opponentTeamId": "c06d5e5a-35cd-4b85-bbfb-6c2a1350fd2b",
+        "opponentName": "phase2-away Test Team ff0b3677-178f-4080-a06d-2fb5761c1171",
+        "isHome": true,
+        "teamScore": 0,
+        "opponentScore": 0,
+        "gamePlanId": null,
+        "gamePlanSnapshot": null,
+        "opponentSquadVisibility": "numbers",
+        "teamColor": null,
+        "opponentColor": null,
+        "clockPeriod": "not_started",
+        "clockElapsedMs": 0,
+        "clockStartedAt": null,
+        "clockRevision": 0,
+        "createdAt": "2026-10-05T04:16:42.107Z",
+        "updatedAt": "2026-10-05T04:16:42.107Z"
+      }
+    },
+    "concurrent-away-start": {
+      "status": 201,
+      "body": {
+        "id": "82d45fcd-4ea0-4757-9b08-a336cc60b857",
+        "eventId": "a20eb712-2d56-4d8a-a6f3-f14094410965",
+        "sharedMatchId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+        "competitionId": null,
+        "opponentCompetitionTeamId": null,
+        "opponentTeamId": "62d50f0a-5107-49ab-8e7b-4f72141ee62e",
+        "opponentName": "phase2-home Test Team 444653fe-58db-4f44-8454-3285472d4f4c",
+        "isHome": false,
+        "teamScore": 0,
+        "opponentScore": 0,
+        "gamePlanId": null,
+        "gamePlanSnapshot": null,
+        "opponentSquadVisibility": "numbers",
+        "teamColor": null,
+        "opponentColor": null,
+        "clockPeriod": "not_started",
+        "clockElapsedMs": 0,
+        "clockStartedAt": null,
+        "clockRevision": 0,
+        "createdAt": "2026-10-05T04:16:45.084Z",
+        "updatedAt": "2026-10-05T04:16:45.084Z"
+      }
+    }
+  },
+  "concurrentClocks": [
+    {
+      "method": "PATCH",
+      "path": "/api/matches/3469fbe8-d840-4ec8-98ed-56d42548f52b/clock",
+      "status": 200,
+      "matchId": "3469fbe8-d840-4ec8-98ed-56d42548f52b",
+      "sessionId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+      "side": "home",
+      "operationId": "87cc98ff-d270-4f35-ac83-5fa451f85b71",
+      "revision": 2,
+      "outcome": "applied_after_stale_base",
+      "body": {
+        "accepted": true
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/matches/3469fbe8-d840-4ec8-98ed-56d42548f52b/clock",
+      "status": 200,
+      "matchId": "3469fbe8-d840-4ec8-98ed-56d42548f52b",
+      "sessionId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+      "side": "home",
+      "operationId": "d056cb09-4558-48a2-b1cb-2803686254c4",
+      "revision": 1,
+      "outcome": "applied",
+      "body": {
+        "accepted": true
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/matches/82d45fcd-4ea0-4757-9b08-a336cc60b857/clock",
+      "status": 200,
+      "matchId": "82d45fcd-4ea0-4757-9b08-a336cc60b857",
+      "sessionId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+      "side": "away",
+      "operationId": "6bafaec0-ec1a-4816-8acf-db60e5687e7c",
+      "revision": 2,
+      "outcome": "applied_after_stale_base",
+      "body": {
+        "accepted": true
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/matches/82d45fcd-4ea0-4757-9b08-a336cc60b857/clock",
+      "status": 200,
+      "matchId": "82d45fcd-4ea0-4757-9b08-a336cc60b857",
+      "sessionId": "b4807d24-d0a5-4172-a8b4-06492d6979ef",
+      "side": "away",
+      "operationId": "0184ea8e-f4af-4861-b9db-5fa65b9f98ab",
+      "revision": 1,
+      "outcome": "applied",
+      "body": {
+        "accepted": true
+      }
+    }
+  ]
+}

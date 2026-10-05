@@ -1,0 +1,15 @@
+{
+  "mode": "migrate",
+  "identity": {
+    "database": "neondb",
+    "branch": "br-misty-moon-b2be9vmt",
+    "endpoint": "ep-royal-star-b253pvlk"
+  },
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "scripts/migrate.mjs"
+  ],
+  "exitCode": 0,
+  "durationMs": 1693,
+  "log": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase2-validation\\migrate.log"
+}

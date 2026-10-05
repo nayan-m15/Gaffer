@@ -1,0 +1,12 @@
+{
+  "mode": "lint",
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "node_modules/eslint/bin/eslint.js",
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exitCode": 0,
+  "durationMs": 23790,
+  "log": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase2-validation\\lint.log"
+}

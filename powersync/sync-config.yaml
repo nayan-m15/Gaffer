@@ -14,6 +14,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -29,6 +30,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -44,6 +46,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -65,6 +68,7 @@ streams:
             SELECT events.id
             FROM events
             WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
           )
         )
       )
@@ -81,6 +85,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -111,6 +116,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -141,6 +147,7 @@ streams:
         SELECT events.id
         FROM events
         WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
       )
 
   team_match_events_metadata:
@@ -154,6 +161,7 @@ streams:
              events.location
       FROM events
       WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   team_athletes:
     auto_subscribe: true
@@ -166,6 +174,7 @@ streams:
              athletes.position
       FROM athletes
       WHERE athletes.team_id = auth.parameter('team_id')
+        AND athletes.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   team_match_squads:
     auto_subscribe: true
@@ -182,6 +191,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -201,6 +211,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -228,6 +239,7 @@ streams:
           SELECT events.id
           FROM events
           WHERE events.team_id = auth.parameter('team_id')
+            AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
         )
       )
 
@@ -245,7 +257,7 @@ streams:
              match_events.event_type,
              match_events.minute,
              match_events.opponent_label,
-             match_events.detail,
+             NULL AS detail,
              match_events.logged_by_user_id,
              match_events.manually_adjusted,
              match_events.client_request_id,
@@ -257,6 +269,7 @@ streams:
              match_events.updated_at
       FROM match_events
       WHERE match_events.session_id IS NOT NULL
+        AND match_events.event_type <> 'injury'
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_events.session_id IN (
           SELECT match_session_participants.session_id
@@ -306,6 +319,7 @@ streams:
              match_event_reviews.updated_at
       FROM match_event_reviews
       WHERE match_event_reviews.session_id IS NOT NULL
+        AND match_event_reviews.canonical_event_id IN (SELECT match_events.id FROM match_events WHERE match_events.event_type <> 'injury')
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_reviews.session_id IN (
           SELECT match_session_participants.session_id
@@ -352,6 +366,7 @@ streams:
              match_event_observations.server_received_at
       FROM match_event_observations
       WHERE match_event_observations.session_id IS NOT NULL
+          AND match_event_observations.event_type <> 'injury'
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_observations.session_id IN (
           SELECT match_session_participants.session_id
@@ -389,10 +404,12 @@ streams:
              match_event_memberships.projection_revision,
              match_event_memberships.created_at
       FROM match_event_memberships
-      WHERE match_event_memberships.observation_id IN (
+      WHERE auth.parameter('two_sided_live_logging') = 'true'
+        AND match_event_memberships.observation_id IN (
         SELECT match_event_observations.id
         FROM match_event_observations
         WHERE match_event_observations.session_id IS NOT NULL
+          AND match_event_observations.event_type <> 'injury'
           AND match_event_observations.session_id IN (
             SELECT match_session_participants.session_id
             FROM match_session_participants
@@ -434,11 +451,12 @@ streams:
              match_event_operations.canonical_event_id,
              match_event_operations.causal_parent_ids,
              match_event_operations.decision,
-             match_event_operations.reason,
+             NULL AS reason,
              match_event_operations.schema_version,
              match_event_operations.created_at
       FROM match_event_operations
       WHERE match_event_operations.session_id IS NOT NULL
+        AND match_event_operations.canonical_event_id IN (SELECT match_events.id FROM match_events WHERE match_events.event_type <> 'injury')
         AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_operations.session_id IN (

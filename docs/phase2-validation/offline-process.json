@@ -1,0 +1,19 @@
+{
+  "mode": "offline",
+  "identity": {
+    "database": "neondb",
+    "branch": "br-misty-moon-b2be9vmt",
+    "endpoint": "ep-royal-star-b253pvlk"
+  },
+  "command": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "node_modules/jest/bin/jest.js",
+    "--config",
+    "./test/jest-e2e.json",
+    "--runInBand",
+    "test/offline-sync.e2e-spec.ts"
+  ],
+  "exitCode": 0,
+  "durationMs": 152164,
+  "log": "C:\\Users\\hpars\\OneDrive\\Documents\\GitHub\\SportCoachingTool\\docs\\phase2-validation\\offline.log"
+}
