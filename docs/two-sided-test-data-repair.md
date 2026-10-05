@@ -73,4 +73,4 @@ Validation recipe (no mutation by this document): in an isolated fixture dataset
 
 ## Latest dry-run review
 
-The 4 October configured-source audit found competing sessions with existing observations and published scores; these are outside the safe repair procedure. See [the verification record](two-sided-release-verification.md). Preserve these rows for explicit reconciliation review. Run `node scripts/check-two-sided-release.mjs dev` from backend for a read-only migration/source/link audit; use `test` for TEST_DATABASE_URL.
+The 4 October configured-source audit found competing sessions with existing observations and published scores; these are outside the safe repair procedure. The original audit remains in Git history; current work is described in [the implementation plan](two-sided-live-logging-plan.md). Preserve these rows for explicit reconciliation review. Run `node scripts/check-two-sided-release.mjs dev` from backend for a read-only migration/source/link audit; use `test` for TEST_DATABASE_URL.

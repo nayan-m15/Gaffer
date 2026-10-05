@@ -1,186 +1,122 @@
-# Two-sided live logging implementation plan
+# Two-sided live logging: fix plan
 
-## 1. Findings
+Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. This change consolidates documentation; the application fixes below still need implementation.
 
-**Confirmed root cause:** calendar fixtures can be shared between teams, but live match state is not. Each team starts a separate `matches` row from its own team-owned event. Events, observations, reviews, clock, and projection are keyed by that row’s `matchId`; match access and PowerSync streams are team-scoped. The duplicate matcher also compares the same `matchId`, team perspective, and player identifiers, which differ between the two teams’ logs.
+The goal: two coaches open their own team setup, inspect the opponent's confirmed lineup, record into one shared match, review possible duplicates, and finish with one result everywhere. Implement the remaining fixes and hand the friendly and competition flows back for manual testing. A new validation environment is optional and does not hold up frontend work.
 
-Key code references:
+## Review of the five commits
 
-- `EventsService.create`, `listForTeam`, and `startMatch` in `backend/src/events/events.service.ts`: team event creation, fixture-linked calendar entries, and one match row per event.
-- `FriendlyFixturesService.accept` in `backend/src/friendly-fixtures/friendly-fixtures.service.ts`: creates the opponent’s mirror event; it links calendars, not match logs.
-- `MatchesService.requireMatch` in `backend/src/matches/matches.service.ts`: authorizes through the caller’s team event and returns 404 across team boundaries.
-- `MatchesService.persistEventObservation` and `resolveEventReview` in `backend/src/matches/matches.service.ts`, plus `ingest_match_event_observation` and `resolve_match_event_candidate` in `backend/drizzle/0036_concurrent_event_candidates.sql` and `0037_concurrent_event_resolution.sql`: reconciliation is scoped to one match ID.
-- `SyncController.executeUploadItem` in `backend/src/sync/sync.controller.ts`, `useMatch` / `useMatchEvents` in `frontend/src/features/matches/hooks.ts`, and `powersync/sync-config.yaml`: writes use the match ID; synced rows are scoped to the authenticated team; online match data also polls.
-- `MatchReportPage` in `frontend/src/pages/MatchReportPage.tsx` reads one match ID. `EventReviewPanel` in `frontend/src/offline/EventReviewPanel.tsx` is currently opened from the live logger, not the report.
-- `syncFixtureResult` in `backend/src/competitions/competition-fixture-results.ts` and `CompetitionsService.loadCompetitionResults` in `backend/src/competitions/competitions.service.ts`: live results currently identify a single match row, while two independent rows could conflict or be counted twice.
+Baseline: e01fe3d18be0c47edc8a56ebcd70d7d83c9a7dec. Reviewed all five subsequent commits through 317eeda5ef0e5d51463cd56657e94c6f63890e28.
 
-## 2. Final design
+| Commit | Useful change | What remains |
+| --- | --- | --- |
+| 25aec593 | Central session identity checks, safe attachment of empty sheets, migration 0052, guards against private/early result publication. | Client rendering, authentication and old conflicting data. |
+| 549f4808 | Corrected tests to expect the existing narrow lineup response. | No application fix; changing assertions did not repair the lineup UI. |
+| 4c6218f0 | Peer sanitization, injury/note filtering, live membership stream checks, clock ID conflict mapped to 409. | No frontend changes or working local PowerSync auth. |
+| cd6f14cb | Diagnosed auth mismatch and existing frontend build errors. | Diagnostics only. |
+| 317eeda5 | Inspected Cloud, attempted a separate instance and prepared an unused RSA signer. | Provisioning hit the instance limit; no application fix. |
 
-Create one canonical **match session** for each new accepted friendly fixture or generated competition fixture. A session owns fixture identity, home/away sides, shared timeline, clock, review state, and result. A unique link prevents more than one session per fixture. Free-text opponents retain the existing one-sided flow. Existing matches are not linked or merged.
+**None of these commits changed the frontend.** Keep the useful backend protections and implement the remaining client fixes.
 
-Keep a **team-specific match sheet** for each participating team. It owns that team’s event, roster, lineup, game plan, private notes, and private setup. The sheets link to the shared session; one side’s sheet and roster never grant access to the other’s.
+Retained historical facts: local HS256 / gaffer-dev tokens were rejected with PSYNC_S2101. Development replicated blue-hill and trusted the hosted production JWKS. Revision 15 matched the current 22-stream config; that exact file passed Cloud validation on 5 October. Migration 0052 was verified on disposable royal-star, which does not establish its presence on blue-hill or the deployed backend's database. Recorded backend tests passed; real two-client PowerSync delivery remained unverified. Recheck the actual environment when implementing, rather than repeating every old investigation.
 
-Store shared event attribution as actual **home/away** side, with the originating team and actor. Convert that to “own” and “opponent” only when rendering for a team. Reconciliation compares observations within the canonical session and can propose duplicates across observers without assuming that different player IDs identify the same person.
+## Findings tied to the recording
 
-Share the match timeline, score, cards, substitutions, and clock. Do not share the opponent’s roster, lineup, private notes, or injuries. Names and shirt numbers appear only when the side that logged an event supplied them on that event. Injury entries remain private to their originating side.
+| User's issue | Current code finding | Fix |
+| --- | --- | --- |
+| Opponent names appear, but the useful lineup view/control fails. | Enabled API returns formation, starters and bench. ConfirmSquadPage auto-population and friendlyLineupPlayers / friendlyLineupStarterIds still consume legacy players. | Normalize the public lineup and use it in setup, pitch and bench views. |
+| Creator sees a roster list above the logger/report; logger clips content. | Both pages mount OpponentConfirmedLineupCard above their main content. Desktop .live-match has fixed viewport height and overflow:hidden. | Integrate lineup into the existing display and fix the content scroll region. |
+| Different match IDs and no shared events. | Two private sheets intentionally have different IDs. The important identity is the same non-null sharedSessionId, plus the exact fixture and correct sides. | Check links, accepted uploads, session reads and peer rendering. |
+| Clock/console errors. | ID-reuse 500 is fixed. applySyncedSessionClock still overwrites fresh API values with a local operation even if its revision is older. | Respect freshness, preserve immutable retry payloads and expose real errors. |
+| Different reports/event scores/standings; first confirmation wins. | Session publication and fixture-based standings already exist, alongside private score/cache paths. Deployment/client behavior is still unproven. | Make all displayed shared scores and confirmation paths use the canonical result. |
 
-One generated competition fixture receives one canonical result, regardless of which match sheet supplies an update. Only generated competition fixtures count toward standings; a fixture result is applied once. Friendlies never count toward standings.
+The recording asks for the opponent's **confirmed match lineup**, formation and bench. Support that public view while keeping tactics, game plans, notes, injuries, drafts and the full roster private. Earlier plans disagree on lineup visibility; this plan follows the user's current request and the narrow API already implemented.
 
-Either coach may finish. Each side confirms the result; it becomes final once both have confirmed, or once one side has confirmed and the other has not responded for 24 hours. Either coach may reopen before finalisation. Either coach may resolve a duplicate review; the decision and actor are visible to both sides, and the other side may flag a dispute.
+## Implementation order
 
-## 3. Implementation steps
+### 1. Fix opponent setup and lineup data
 
-Each step is a bounded change that can be completed and reviewed in one work session. Keep the feature disabled until its step is complete and compatible with the existing single-sided path.
+Files: backend/src/friendly-fixtures/friendly-fixtures.service.ts; frontend/src/features/matches/types.ts and live-match-model.ts; features/events/OpponentConfirmedLineupCard.tsx; pages/ConfirmSquadPage.tsx and OpponentSquadSetupPage.tsx; opponent pitch components.
 
-### Step 1 — Capture regression cases and API contracts
+Create one adapter for starters/bench and the supported legacy shape. Keep substitutes distinct and retain players with missing numbers. Stop importing the linked team's confirmed lineup into an editable manual draft. Show **View opponent lineup** for registered linked opponents, opening a read-only pitch/bench view. Keep the manual editor for external/free-text opponents. Unconfirmed lineups show a waiting state.
 
-- **Files:** `backend/test/friendly-fixtures.e2e-spec.ts`, `backend/test/offline-sync.e2e-spec.ts`, `backend/test/team-isolation.e2e-spec.ts`; optionally `docs/contracts-and-authorization.md`.
-- **Schema/migration:** None.
-- **Tests:** Add failing contract cases for shared-session identity, participant access, third-team isolation, one result per generated fixture, and preserving the free-text opponent path. Keep tests focused on externally observable behaviour.
-- **Done when:**
-  - [ ] Tests demonstrate the current two-match-ID gap.
-  - [ ] Expected participant and third-party access behaviours are explicit.
-  - [ ] Existing single-sided test cases remain intact.
+For accurate formation placement, extend the confirmed public projection with each starter's public slotId, derived from the confirmed snapshot. Custom formations can expose only the public position coordinates/labels required to draw them. Exclude athlete IDs, private plan IDs and the plan object. Current array order is shirt-number order, so it cannot establish pitch position. Unknown slots/formation remain unknown; do not guess. No new database table is expected.
 
-### Step 2 — Add canonical session schema
+Re-confirmation refreshes the opponent view before kickoff. Keep the confirmed snapshot visible afterwards. Without a snapshot, retain the exact-fixture squad fallback, identify it as squad data and leave formation unknown.
 
-- **Files:** `backend/src/database/schema/index.ts`, `backend/drizzle/<next journaled migration>.sql`, `backend/drizzle/meta/_journal.json`, generated Drizzle snapshot if required by repository convention.
-- **Schema/migration:** Add `match_sessions` and participant-side rows (registered team and optional competition participant, home/away role, confirmation state). Add nullable `matches.sharedMatchId` and fixture-to-session unique links for friendly and generated competition fixtures. Backfill each existing match as its own one-sided session. Do not pair historical records.
-- **Tests:** Extend `backend/src/database/migrations.spec.ts` to verify migration and constraints; add schema-level assertions for uniqueness and one-sided backfill.
-- **Done when:**
-  - [ ] Existing match rows and IDs are preserved.
-  - [ ] Every existing match has a one-sided session after migration.
-  - [ ] A fixture can reference at most one session and a session has valid sides.
+Done when both coaches can inspect the permitted lineup, including formation and bench, without entering the manual editor or seeing private setup.
 
-### Step 3 — Create sessions idempotently from new fixtures
+### 2. Repair the logger and report layout and player controls
 
-- **Files:** `backend/src/events/events.service.ts`, `backend/src/friendly-fixtures/friendly-fixtures.service.ts`, `backend/src/competitions/competition-fixture-results.ts` or the fixture materialization service that owns generated fixtures.
-- **Schema/migration:** Use Step 2’s links; no additional migration unless implementation reveals a missing index.
-- **Tests:** Extend `backend/test/friendly-fixtures.e2e-spec.ts` and competition fixture e2e coverage. Race two starts/acceptance paths and verify one session, with a team-specific sheet for each team.
-- **Done when:**
-  - [ ] Accepted new friendlies automatically obtain one session.
-  - [ ] New generated competition fixtures automatically obtain one session.
-  - [ ] Retries and concurrent starts return the same session.
-  - [ ] Free-text opponents remain one-sided.
+Files: LiveMatchPage.tsx, LiveMatchPage.css, MatchReportPage.tsx, the lineup adapter and opponent pitch/bench components; backend/src/matches/matches.service.ts for public event attribution.
 
-### Step 4 — Enforce participant authorization
+Remove the standalone full lineup card above both pages. Feed confirmed starters/bench into the existing opponent display; offer a read-only lineup panel when useful. Place the compact shared-result status within the normal layout. Give desktop content a defined scroll region and keep every control reachable on short screens and mobile.
 
-- **Files:** `backend/src/matches/matches.service.ts`, `backend/src/matches/matches.controller.ts`, `backend/src/teams/teams.service.ts` only if a reusable membership helper is needed; `backend/test/team-isolation.e2e-spec.ts`.
-- **Schema/migration:** None beyond Step 2.
-- **Tests:** Participant coach/assistant can read permitted shared session data; unrelated team gets 404; neither side can read the other’s private match sheet, lineup, roster, or notes.
-- **Done when:**
-  - [ ] Shared endpoints authorize using session participation and current team membership.
-  - [ ] Private endpoints remain scoped to the owning team.
-  - [ ] Revoked membership blocks subsequent API access.
+When public opponent players are available, let the coach select them to record opponent events instead of forcing the generic action. Both coaches may submit observations about either side; duplicate review still reconciles them. Display-only keys must never be uploaded as opponentPlayerId or athleteId, which reference real private/manual roster rows. Use existing label fields for public selections, including substitution labels. Ensure the canonical report retains the safe event-supplied label when no real player row exists: its current player projection only joins athlete/manual-opponent rows. Use real IDs only for own athletes or locally stored manual opponent players. Keep generic logging when player information is unavailable.
 
-### Step 5 — Normalize event storage and reconciliation
+Done when creator and invitee both have usable pitches, benches and event controls, without a roster block pushing the page out of view.
 
-- **Files:** `backend/src/database/schema/index.ts`, `backend/src/matches/matches.service.ts`, `backend/src/matches/matches.schemas.ts`, new `backend/drizzle/<next migration>.sql`, matching migration metadata.
-- **Schema/migration:** Add session identity and actual home/away attribution to observations, canonical events, reviews, operations, and projections. Preserve existing match IDs and legacy values. Update ingestion/review SQL to lock on session ID and match cross-observer candidates using normalized side and event timing.
-- **Tests:** Extend `backend/test/offline-sync.e2e-spec.ts` for cross-side duplicate candidates, different player IDs, distinct same-minute goals, retry IDs, and deterministic merge/separate decisions.
-- **Done when:**
-  - [ ] Existing one-sided observations still project unchanged.
-  - [ ] Observations from both sheets can enter one session ledger.
-  - [ ] Duplicate candidates do not auto-merge; retries remain idempotent.
+### 3. Make shared reads, uploads and clock state dependable
 
-### Step 6 — Sync only authorised shared rows
+Files: frontend/src/features/matches/api.ts, hooks.ts, session-report-model.ts; frontend/src/offline/match-store.ts; queue/review components. Change backend session/clock logic only for a targeted reproduced defect.
 
-- **Files:** `backend/src/sync/sync.controller.ts`, `powersync/sync-config.yaml`, sync token/configuration code, `frontend/src/offline/match-store.ts`.
-- **Schema/migration:** No new columns expected; add indexes only if query plans require them, in a journaled migration.
-- **Tests:** Extend `backend/test/offline-sync.e2e-spec.ts` and `frontend/e2e/offline-event-logging.spec.ts`: both participants receive allowed session events and reviews, unrelated teams receive none, and offline replay/revocation behave safely.
-- **Done when:**
-  - [ ] Sync queries select by session participation, not by widening team-wide access.
-  - [ ] Shared timeline, review, projection, and clock updates reach both sides.
-  - [ ] Private team sheet data never enters the shared stream.
+Check GET /events/:eventId/link-diagnostic from each coach: different sheet IDs, one session matching the exact fixture, correct home/away sides. Verify 0051/0052 and the effective feature flag on the backend/database actually serving the test. Reuse safe start/retry attachment. Recorded legacy events or conflicting links require a visible reconciliation error.
 
-### Step 7 — Update match setup and live logging UI
+Trace one event through own sheet queue -> /sync/upload receipt -> canonical session event -> session report -> both pages. HTTP 201 for the batch does not prove acceptance: inspect each receipt's outcome and safeErrorCode. Preserve rejected/queued items and show the reason. Invalidate shared report/review queries after events, decisions, finish and confirmation.
 
-- **Files:** `frontend/src/features/matches/api.ts`, `hooks.ts`, `types.ts`, `frontend/src/features/events/types.ts`, `frontend/src/pages/LiveLoggerPage.tsx`, `frontend/src/pages/LiveMatchPage.tsx`.
-- **Schema/migration:** None.
-- **Tests:** Extend `frontend/e2e/offline-event-logging.spec.ts` for two accounts, both home/away orientations, simultaneous logging, offline replay, and event-specific player names/numbers. Preserve current free-text fixtures.
-- **Done when:**
-  - [ ] Each coach opens their own match sheet but sees the same session score and shared timeline.
-  - [ ] Actual home/away events render correctly as each viewer’s own/opponent side.
-  - [ ] Opponent roster, lineup, injuries, and private notes are not rendered.
+useMatchView already polls the canonical report every second. Use this existing path to repair online convergence; no additional transport is needed. A shared-read failure must not silently become a private score. PowerSync auth alone cannot explain every online divergence: also check accepted uploads and common session identity.
 
-### Step 8 — Add shared report review and dispute flow
+Replace an API clock anchor only when synced authority is demonstrably newer. Equal/older revisions keep the fresh API values. Never combine an old anchor with Math.max of revisions. Check operation ordering across sheets against existing authority rules. Retries keep the same operation ID and immutable payload; new actions get new IDs. Retain the explicit ID-reuse 409.
 
-- **Files:** `frontend/src/pages/MatchReportPage.tsx`, `frontend/src/offline/EventReviewPanel.tsx`, `frontend/src/features/matches/live-match-report-model.ts`, `backend/src/matches/matches.controller.ts`, `backend/src/matches/matches.service.ts`.
-- **Schema/migration:** Add dispute state/actor/time fields to review records if the existing review/operation history cannot represent a dispute; use a new journaled migration and keep prior decisions auditable.
-- **Tests:** Extend `backend/test/offline-sync.e2e-spec.ts` and report UI e2e coverage for one coach resolving, both seeing actor and decision, and the other flagging a dispute.
-- **Done when:**
-  - [ ] Both coaches can open the same session report and review queue.
-  - [ ] Either coach can resolve; actor and decision are visible to both.
-  - [ ] A dispute is visible to both and preserves the prior decision in history.
+Treat HTTP authorization failures as failures, including private match/squad caches: do not serve stale protected responses after 401/403/404. Offline fallback remains available for network failures and previously warmed authorized matches.
 
-### Step 9 — Add bilateral final result and one-time standings update
+Done when online events, reviews and clock actions converge without reloads, and failures remain visible.
 
-- **Files:** `backend/src/matches/matches.service.ts`, `backend/src/competitions/competition-fixture-results.ts`, `backend/src/competitions/competitions.service.ts`, `backend/src/database/schema/index.ts`, result UI in `frontend/src/pages/LiveMatchPage.tsx` and `MatchReportPage.tsx`.
-- **Schema/migration:** Add per-side result confirmation timestamps/status and finalisation metadata if not already covered by Step 2. Make fixture result publication idempotent on generated fixture/session identity.
-- **Tests:** Extend competition e2e tests for both-side confirmation, one-sided confirmation plus 24-hour timeout (use a controllable clock), reopen-before-final, and duplicate-free standings.
-- **Done when:**
-  - [ ] Either side can finish the session.
-  - [ ] Finalisation requires both confirmations or the defined 24-hour no-response rule.
-  - [ ] Either coach can reopen before final status.
-  - [ ] A generated fixture updates standings once; friendly fixtures do not.
+### 4. Align PowerSync without requiring another instance
 
-### Step 10 — End-to-end hardening and release gate
+Settings/files: backend signer environment; frontend API/auth environment; frontend/src/offline/match-store.ts; chosen instance's Client Auth.
 
-- **Files:** `backend/test/offline-sync.e2e-spec.ts`, `backend/test/friendly-fixtures.e2e-spec.ts`, `backend/test/competitions.e2e-spec.ts`, `backend/test/team-isolation.e2e-spec.ts`, `frontend/e2e/offline-event-logging.spec.ts`, `docs/testing.md`, operational runbook as needed.
-- **Schema/migration:** Only corrective additive migrations, if required by test findings; no destructive cleanup as part of rollout.
-- **Tests:** Complete backend unit/e2e, migration, browser, two-account, reconnect, stale-client, cancellation, rematch, dispute, late-edit, and authorization coverage. Add telemetry checks for duplicate sessions, rejected uploads, open disputes, and inconsistent fixture results.
-- **Done when:**
-  - [ ] All automated release-gate suites pass in CI (run by the implementation session, not this planning task).
-  - [ ] Two-browser manual scenarios pass for friendly and generated competition fixtures.
-  - [ ] Rollback procedure is documented and exercised in staging.
+Establish the actual local/hosted database and endpoint, and whether Development also serves production. Backend database and replication source must match: royal-star writes cannot arrive through a blue-hill instance.
 
-## 4. Rollout plan and feature flag
+**Preferred local route, if Development is confirmed appropriate:** use blue-hill consistently with its existing instance. Load the independent RSA signer already prepared in the ignored local file into the local backend through explicit environment/launcher configuration. Register its **public JWK only** directly in that instance's Client Auth, preserving existing trusted keys/JWKS settings. Keep audience, five-minute expiry, user/team claims and signature checks. Refresh both coaches' credentials. [PowerSync supports direct public-key configuration](https://docs.powersync.com/configuration/auth/custom), so this route needs neither a publicly hosted local JWKS endpoint nor a new instance.
 
-Introduce a server-side `TWO_SIDED_LIVE_LOGGING_ENABLED` flag, default **off**. The server, not only the UI, must enforce the flag. When off, existing and new single-sided/free-text flows behave as today. When on, only newly accepted friendly fixtures and newly materialized generated competition fixtures receive shared sessions; historical matches remain untouched.
+If Development serves production, use an existing properly aligned hosted test path or continue local online UI testing through the authenticated API while selecting a safe sync target. Do not add a local signing key to production, copy the production private key or repoint a source. A new isolated instance remains optional.
 
-Deploy additive schema and backfill first, then deploy code that can read both legacy matches and sessions while the flag remains off. Enable in staging for new fixtures, verify authorization, sync convergence, bilateral finalisation, and standings exactly once. Roll out to a small production cohort, monitor session creation and sync/review/result telemetry, then enable more broadly. If rollback is needed, turn the flag off to stop creating new shared sessions; retain the additive schema and read access needed for already-created sessions until they are safely resolved. Do not roll back by deleting observations or sessions.
+Compare the current sync-config once: recorded revision 15 already matched powersync/sync-config.yaml. Change streams only if the final code needs new synced fields. Show connection failure separately from queued uploads, so local save does not masquerade as peer delivery.
 
-## 5. Decisions
+Done when both real coach clients authenticate and receive peer canonical changes through PowerSync. API polling verifies online behavior; it does not verify PowerSync/offline delivery.
 
-These are settled product decisions for implementation:
+### 5. Make the result agree everywhere
 
-1. **Finishing and finalising:** Either coach can finish. The result becomes final when both sides confirm, or when one side confirms and the other has not responded within 24 hours. Either coach can reopen before final.
-2. **Duplicate reviews:** Either coach can resolve a review. Record who made the decision and show it to both sides. The other side can flag a dispute.
-3. **Visibility:** Share timeline, score, cards, substitutions, and clock. Do not share the opponent’s roster, lineup, private notes, or injuries. Show player names/numbers only on events the opposing side chose to log.
-4. **Session creation:** Accepted friendly fixtures and generated competition fixtures automatically become shared sessions. Free-text opponents remain single-sided.
-5. **Standings:** Only generated competition fixtures count. Friendlies and manually created league matches between linked teams never count toward shared standings.
-6. **History:** Do not link or merge historical matches. Apply the feature to new matches only.
+Files: backend/src/matches/matches.service.ts; backend/src/competitions/competition-fixture-results.ts and competitions.service.ts; event-list/detail score reads; relevant frontend event/match/report/competition hooks.
 
-## 6. Session handoff
+Use the canonical home/away session result in both live views, both reports and any event-list/detail score display. Translate into team perspective only for display: home 2-1 equals away's own 1-2. Published fixture home/away scores remain the standings source. Count one result per fixture; preserve reverse round-robin legs.
 
-- [x] Step 1 — Regression cases and API contracts (skipped: later focused tests and handoff notes already recorded the gap and participant contracts)
-- [x] Step 2 — Canonical session schema
-- [x] Step 3 — Idempotent fixture session creation
-- [x] Step 4 — Participant authorization
-- [x] Step 5 — Normalized event storage and reconciliation
-- [x] Step 6 — Authorised shared sync
-- [x] Step 7 — Match setup and live logger UI
-- [x] Step 8 — Shared report, reviews, and disputes
-- [x] Step 9 — Bilateral final result and standings
-- [x] Step 10 — End-to-end hardening and release gate
+Keep bilateral confirmation and the existing 24-hour no-response rule. Open reviews/disputes block final publication. Show who confirmed and who is pending. Flush uploads before confirming; prevent confirmation while relevant uploads are queued, rejected or under review. Confirm the current canonical score. Reproduce a score-changing event/decision between confirmations; if an old confirmation survives the change, invalidate it or bind it to the canonical revision. Add a migration only if that reproduction proves the existing fields cannot enforce this rule.
 
-Implementation notes:
-- Accepted friendlies assign the requesting team to the home side and the accepting team to the away side, since the plan did not define a friendly home/away rule.
-- Session creation is gated by `TWO_SIDED_LIVE_LOGGING_ENABLED`, defaulting off as specified by the rollout plan. Unlinked generated competition participants retain their participant ID with a null team ID.
-- Step 4 permits current session participants to read shared timeline, review, event-operation, and clock-operation endpoints when the flag is enabled. Match reports, squads, opponent squads, event details, and lineups remain scoped to the owning team. Event uploads continue through each team's own match sheet; Step 5 adds the shared session identity used to reconcile those observations.
-- Step 5(b) is complete in migration `0047_session_event_reconciliation`: flag-enabled linked matches use session-locked ingestion, persist session and actual side identity, and create deterministic review candidates across sheets by period, event type, normalized side, and elapsed time. Player attribution differences do not block a candidate; observations remain separate until an explicit merge decision. The legacy ingestion/review functions remain the flag-off and unlinked-match path.
-- Step 5 tests cover parallel cross-sheet ingestion and retry idempotency, differing player identities, two distinct goals with the same displayed minute outside the candidate window, and retry-safe explicit merge/separate decisions. Reviews and reconciliation rows are session-tagged; the review HTTP route still addresses the initiating match sheet. Step 6 provides shared review visibility to both participants through sync without widening private match-sheet data; Step 8 adds the report and dispute flow.
+Test both confirmation orders. First confirmation must not select that coach's private score. Invalidate event/report/competition caches after publication and compare again after reloading both accounts.
 
-- Step 6 adds shared PowerSync streams for session events, reviews/candidates, sanitized observations, review decisions, projections, and clock operations. Each row requires the session participant team, the current `team_members` row for the token user, and the enabled flag claim. Owners receive full private rows through team streams; shared streams send only the other side's rows with session IDs in place of private match IDs. Shared events omit athlete and opponent roster IDs; event-supplied player labels are synced only on the selected event. Review merge/separate operation JSON is reduced to review ID and resolution. Shared projections are keyed to the viewer's sheet and converted to their perspective. New clock operation rows derive their shared session from the linked source match.
-- Step 7 reads shared synced rows by the viewer's match session, maps actual home/away attribution to own/opponent using the viewer's `is_home`, and merges those rows with online events. Private match, squad, and opponent-squad reads remain match-sheet scoped. The existing live logger consumes the normalized event hook without changes to its page component.
-- Sync authorization tests execute the shared event and review PowerSync SQL for both participants, an unrelated team, and after membership revocation. This plan step was completed without a schema migration; the stream-level projection reuses the existing session-tagged rows.
-- The focused shared-stream authorization e2e passes. The full offline-sync e2e file had unrelated remote database connection resets/timeouts, and the Playwright offline browser command exited with spawn EPERM; browser scenarios remain to be rerun where process launch is available.
-- Step 8 mounts the shared review queue on linked session reports, returns reviews from both match sheets, records the resolving actor and decision, and permits only the other participating team to flag one immutable dispute. Review resolution operations remain the audit trail when a later decision revises an earlier one. Dispute actor/time are additive columns in migration `0048_shared_review_disputes`.
-- Step 9 stores side confirmations and session finalisation on `match_sessions` (`0049_session_result_confirmation`). The finalisation decision uses a controllable `now` argument; a later confirmation request after the 24-hour window enforces timeout without a background scheduler. Reopen clears both confirmations while the session is still non-final. Generated fixture result retries match on `sharedSessionId`; friendlies never publish generated competition results.
-- The initial Step 8/9 e2e attempt used Jest's experimental VM modules and failed to load `better-auth/node`; see the Step 10 diagnosis below. Frontend TypeScript compilation passed, but Vite build stopped at the local Tailwind native binding and a sandbox `spawn EPERM`. Backend focused unit tests and build passed.
-- Step 10 confirmed the earlier Jest loader error was caused by invoking Jest with `--experimental-vm-modules`, which activates Jest's ESM runtime against the repository's existing Babel transform that rewrites `better-auth` `.mjs` modules to CommonJS. Without that flag, Jest loads and reaches tests; `npm run db:migrate:test` must be run first so the dedicated test database has migration `0048+`. No Jest config change was needed.
-- No scheduler/cron module exists in the backend. Timed-out one-side confirmations are now evaluated when the shared match report is read and before generated competition results/standings are loaded. The confirmer's user ID is stored additively in migration `0050_session_confirmation_actors` so lazy finalisation can safely attribute the final result.
-- Added production rollout and rollback instructions in `docs/two-sided-live-logging-rollout.md`. The full offline-sync file attempted before test-database migration failed on missing `0048` columns and later Neon connection resets. After `npm run db:migrate:test`, focused e2e tests passed using Jest without `--experimental-vm-modules`; the browser/two-account release gate remains a manual verification requirement.
-- PowerSync Cloud validation exposed query-language restrictions not covered by the original stream checks: stream queries now use nested `IN` filters and a single selected source table, with current team membership and the flag preserved. Shared projections sync the peer-side row and convert possible-goal effects in the client; migration `0051_match_clock_session_identity` fills the session ID for new clock-operation rows. Revalidate/deploy `powersync/sync-config.yaml` in the PowerSync Cloud Sync Streams page after applying production migrations; the local e2e suite executes the SQL against Postgres but does not invoke PowerSync's compiler.
-- 2 October 2026 verification: the full backend unit suite passed serially (67 suites, 775 tests). The standard parallel command cannot create Jest workers in this Windows environment (`spawn EPERM`). The four release e2e suites did not complete here: the worker run failed with the same process error, and serial execution stalled before reporting tests. The shared-stream authorization unit assertion was updated to accept the supported `OR` form of the merge/separate filter.
-- 2 October 2026 operator update: PowerSync Cloud Sync Streams validation and deployment are complete. Staging rollback, backup/restore verification, production migration/flag status, and production telemetry were not verifiable from this workspace.
+Existing October fixtures with competing sessions/results need an exact-fixture reconciliation decision. Preserve their evidence and use [the repair query](two-sided-test-data-repair.md); fix forward with fresh fixtures while keeping targeted old-data repair separate.
+
+Done when a reviewed 2-1 competition game publishes once, both reports/event scores agree, and standings count one played match per team regardless of confirmation order.
+
+### 6. Build and hand back for manual testing
+
+Fix the known TypeScript errors in frontend/src/components/landing/gaffer-stadium.ts and landing-scene.ts as needed for a runnable build. They were reproduced on the review baseline and are separate from the match defect.
+
+Run build/lint for changed code and existing focused integrity/privacy coverage when touching that behavior. Add narrow regressions for the lineup adapter, stale-clock overwrite and any reproduced confirmation bug. Reuse existing suites; no additional phase runner or evidence bundle. Record checks briefly in the implementation PR/commit. The user performs the paired browser test below.
+
+## Short manual test
+
+Use two independent coach accounts/browser profiles. Run once for an accepted friendly and once for a generated competition fixture.
+
+1. Confirm lineups; open View opponent lineup from both sides. Check formation, starters and bench, then re-confirm before kickoff and see the update. Private tactics/notes stay private.
+2. Start both sheets, verify the common session and inspect both logger layouts on desktop/mobile. Select a confirmed opponent player to log an event.
+3. Log different goals from each coach; both timelines/scores update. Log the same goal from both sides, resolve the duplicate and see the same decision and corrected score.
+4. Alternate clock start/pause/resume between coaches. Once real sync is connected, briefly disconnect a warmed client, log an event, reconnect and check it arrives once on both sides.
+5. Finish and confirm A then B; repeat on another fixture with B then A. Check pending state after the first confirmation, then one final result across reports, event score display and standings. Friendlies contribute no standings result.
+6. Reload both accounts. Check persistence, accessible layout and third-account rejection of the shared match/private setup.
+
+## Documentation kept
+
+Use this plan, [short rollout notes](two-sided-live-logging-rollout.md) and [the repair query](two-sided-test-data-repair.md). Repeated phase reports, the superseded phase 2/release documents and generated docs/phase*-validation artifacts are removed. Committed evidence remains in Git history at the reviewed commits; disposable ignored logs are discarded. Generated output is ignored so historical runners cannot refill tracked docs. Keep application tests, migrations and runtime integrity checks.

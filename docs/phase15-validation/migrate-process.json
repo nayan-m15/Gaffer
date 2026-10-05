@@ -1,8 +1,0 @@
-{
-  "command": [
-    "C:\\Program Files\\nodejs\\node.exe",
-    "scripts/migrate.mjs"
-  ],
-  "exitCode": 0,
-  "durationSeconds": 1.745
-}

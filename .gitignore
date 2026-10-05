@@ -24,3 +24,6 @@ playwright-report/
 *.log
 
 .claude/settings.local.json
+
+# Generated output from historical two-sided diagnostic runners.
+/docs/phase*-validation/
