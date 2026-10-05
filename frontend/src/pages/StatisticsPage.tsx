@@ -130,6 +130,9 @@ export default function StatisticsPage() {
 
   const activeSeason = overview?.season ?? null;
   const activeCompetition = competitions.find((competition) => competition.id === competitionId);
+  const standingsCompetitions = competitionId
+    ? competitions.filter((competition) => competition.id === competitionId)
+    : competitions;
   const scopeLabel = activeSeason
     ? `${activeSeason.name} · ${formatSeasonRange(activeSeason.startDate, activeSeason.endDate)}`
     : "All time";
@@ -384,7 +387,7 @@ export default function StatisticsPage() {
 
         {/* ── Competitions & standings ─────────────────────────────────────── */}
         <StandingsSection
-          competitions={competitions}
+          competitions={standingsCompetitions}
           isLoading={competitionsQuery.isLoading}
         />
         </div>
