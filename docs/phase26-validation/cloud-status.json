@@ -1,0 +1,207 @@
+{
+  "capturedAt": "2026-10-05T08:56:03.029Z",
+  "command": [
+    "fetch",
+    "status",
+    "--instance-id",
+    "6aac1ed7a77ca1231d28f82d",
+    "--directory",
+    "powersync",
+    "--output",
+    "json"
+  ],
+  "exitCode": 0,
+  "processErrorCode": null,
+  "stdoutBytes": 4969,
+  "stderrBytes": 0,
+  "data": {
+    "connections": [
+      {
+        "id": "default",
+        "postgres_uri": "postgresql://ep-blue-hill-b1j037cs.c-5.eu-central-1.aws.neon.tech:5432/neondb",
+        "connected": true,
+        "errors": []
+      }
+    ],
+    "active_sync_rules": {
+      "version_label": "15",
+      "connections": [
+        {
+          "id": "default",
+          "tag": "default",
+          "slot_name": "powersync_6aac1ed7a77ca1231d28f82d_9_c79d",
+          "initial_replication_done": true,
+          "last_lsn": "00000000/0D252D28",
+          "last_keepalive_ts": "2026-10-05T08:55:13.314Z",
+          "last_checkpoint_ts": "2026-10-05T08:55:13.314Z",
+          "replication_lag_bytes": 0,
+          "wal_status": "reserved",
+          "tables": [
+            {
+              "schema": "public",
+              "name": "match_events",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": true,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_event_reviews",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_event_observations",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": true,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_event_memberships",
+              "replication_id": [
+                "observation_id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_event_operations",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_projection_state",
+              "replication_id": [
+                "match_id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "matches",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": true,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "events",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": true,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "athletes",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "athlete_match_stats",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "opponent_match_players",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_clock_operations",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_sessions",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "competition_fixtures",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": true,
+              "parameter_queries": false,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "team_members",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": false,
+              "parameter_queries": true,
+              "errors": []
+            },
+            {
+              "schema": "public",
+              "name": "match_session_participants",
+              "replication_id": [
+                "id"
+              ],
+              "data_queries": false,
+              "parameter_queries": true,
+              "errors": []
+            }
+          ]
+        }
+      ],
+      "errors": []
+    }
+  },
+  "failure": null
+}

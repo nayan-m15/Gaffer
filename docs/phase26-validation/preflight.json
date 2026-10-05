@@ -1,0 +1,340 @@
+{
+  "capturedAt": "2026-10-05T09:00:20.438Z",
+  "readOnly": true,
+  "configuredSigner": {
+    "alg": "HS256",
+    "kid": "gaffer-dev",
+    "audience": "https://6aac1ed7a77ca1231d28f82d.powersync.journeyapps.com"
+  },
+  "database": {
+    "configuredHost": "ep-royal-star-b253pvlk-pooler.c-6.eu-central-1.aws.neon.tech",
+    "unpooledHost": "ep-royal-star-b253pvlk.c-6.eu-central-1.aws.neon.tech",
+    "directIdentity": {
+      "database": "neondb",
+      "branch": "br-misty-moon-b2be9vmt",
+      "endpoint": "ep-royal-star-b253pvlk"
+    },
+    "directProbeTransport": "Neon HTTPS SQL, not a logical replication connection",
+    "identity": {
+      "database": "neondb",
+      "branch": "br-misty-moon-b2be9vmt",
+      "endpoint": "ep-royal-star-b253pvlk",
+      "version": "18.6 (4e955f5)",
+      "connected_role": "neondb_owner"
+    },
+    "settings": [
+      {
+        "name": "max_replication_slots",
+        "setting": "10"
+      },
+      {
+        "name": "max_wal_senders",
+        "setting": "10"
+      },
+      {
+        "name": "wal_level",
+        "setting": "replica"
+      }
+    ],
+    "roles": [],
+    "publications": [],
+    "published": [],
+    "replicaIdentity": [
+      {
+        "table_name": "account",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "athlete_match_stats",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "athletes",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "competition_fixtures",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "competition_invites",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "competition_matches",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "competition_teams",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "competitions",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "event_lineups",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "event_rsvps",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "events",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "friendly_fixtures",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "game_plans",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "injuries",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "injury_timeline_entries",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_clock_operations",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_event_memberships",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_event_observations",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_event_operations",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_event_reviews",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_events",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_insights",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "match_projection_state",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "matches",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "opponent_match_players",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "player_claim_invites",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "season_insights",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "seasons",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "session",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "standings",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "sync_client_telemetry",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "sync_upload_receipts",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "team_invites",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "team_members",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "teams",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "user",
+        "replica_identity": "d",
+        "has_primary_key": true
+      },
+      {
+        "table_name": "verification",
+        "replica_identity": "d",
+        "has_primary_key": true
+      }
+    ],
+    "slots": [
+      {
+        "slot_name": "wal_proposer_slot",
+        "plugin": null,
+        "slot_type": "physical",
+        "database": null,
+        "active": true,
+        "temporary": false,
+        "wal_status": "reserved",
+        "has_confirmed_flush_lsn": false,
+        "retained_wal_bytes": "0",
+        "unconfirmed_wal_bytes": null
+      },
+      {
+        "slot_name": "wal_retention_slot",
+        "plugin": null,
+        "slot_type": "physical",
+        "database": null,
+        "active": false,
+        "temporary": false,
+        "wal_status": "reserved",
+        "has_confirmed_flush_lsn": false,
+        "retained_wal_bytes": "248",
+        "unconfirmed_wal_bytes": null
+      }
+    ],
+    "grants": null
+  },
+  "syncConfig": {
+    "path": "powersync/sync-config.yaml",
+    "sha256": "5d2f6b9a0241d5e344c00aecac3789dc853cee9e337ded596e088001d788147e",
+    "lfNormalizedSha256": "cbbbe2dcb69f66f29e3ec6da1aaf9b6e3ce46ea1863edefc4e7cef35d3e3ead2",
+    "streams": [
+      "team_match_events",
+      "team_match_reviews",
+      "team_match_observations",
+      "team_match_memberships",
+      "team_match_operations",
+      "team_match_projections",
+      "team_matches",
+      "team_match_events_metadata",
+      "team_athletes",
+      "team_match_squads",
+      "team_opponent_squads",
+      "team_match_clock_operations",
+      "shared_session_match_events",
+      "shared_session_match_reviews",
+      "shared_session_match_observations",
+      "shared_session_match_memberships",
+      "shared_session_match_operations",
+      "shared_session_match_projections",
+      "shared_session_match_clock_operations",
+      "shared_session_report_state",
+      "shared_session_report_sheets",
+      "shared_session_report_fixture_scores"
+    ],
+    "sourceTables": [
+      "athlete_match_stats",
+      "athletes",
+      "competition_fixtures",
+      "events",
+      "match_clock_operations",
+      "match_event_memberships",
+      "match_event_observations",
+      "match_event_operations",
+      "match_event_reviews",
+      "match_events",
+      "match_projection_state",
+      "match_session_participants",
+      "match_sessions",
+      "matches",
+      "opponent_match_players",
+      "team_members"
+    ],
+    "missingPublishedTables": [
+      "athlete_match_stats",
+      "athletes",
+      "competition_fixtures",
+      "events",
+      "match_clock_operations",
+      "match_event_memberships",
+      "match_event_observations",
+      "match_event_operations",
+      "match_event_reviews",
+      "match_events",
+      "match_projection_state",
+      "match_session_participants",
+      "match_sessions",
+      "matches",
+      "opponent_match_players",
+      "team_members"
+    ],
+    "missingSelectGrants": [
+      "athlete_match_stats",
+      "athletes",
+      "competition_fixtures",
+      "events",
+      "match_clock_operations",
+      "match_event_memberships",
+      "match_event_observations",
+      "match_event_operations",
+      "match_event_reviews",
+      "match_events",
+      "match_projection_state",
+      "match_session_participants",
+      "match_sessions",
+      "matches",
+      "opponent_match_players",
+      "team_members"
+    ]
+  }
+}

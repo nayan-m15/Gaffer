@@ -1,0 +1,47 @@
+{
+  "capturedAt": "2026-10-05T09:05:28.559Z",
+  "command": [
+    "validate",
+    "--instance-id",
+    "6aac1ed7a77ca1231d28f82d",
+    "--directory",
+    "powersync",
+    "--output",
+    "json",
+    "--validate-only",
+    "sync-config",
+    "--sync-config-file-path",
+    "powersync/sync-config.yaml"
+  ],
+  "exitCode": 0,
+  "processErrorCode": null,
+  "stdoutBytes": 490,
+  "stderrBytes": 0,
+  "data": {
+    "passed": true,
+    "tests": [
+      {
+        "id": "configuration",
+        "name": "Validate Configuration Schema",
+        "passed": true,
+        "warnings": [
+          "Test skipped based on input flags."
+        ]
+      },
+      {
+        "id": "connections",
+        "name": "Test Connections",
+        "passed": true,
+        "warnings": [
+          "Test skipped based on input flags."
+        ]
+      },
+      {
+        "id": "sync-config",
+        "name": "Validate Sync Config",
+        "passed": true
+      }
+    ]
+  },
+  "failure": null
+}

@@ -1,0 +1,15 @@
+{
+  "capturedAt": "2026-10-05T08:59:28.097Z",
+  "created": true,
+  "secretFile": ".env.phase26-validation.local",
+  "scope": "Prepared local signer; not installed in a running or hosted backend, not accepted by Cloud",
+  "kid": "gaffer-phase25-validation-1",
+  "alg": "RS256",
+  "kty": "RSA",
+  "use": "sig",
+  "modulusLength": 3072,
+  "publicKeyFingerprintSha256": "e95d24eabd9c3f516e737dcc71b309c2f4df7fc973f12588f2b768c878f942bd",
+  "rfc7638Thumbprint": "6V0k6r2cP1Fuc33McbMJwvTff8lz8SWI8rdoyHj5Qr0",
+  "signatureVerified": true,
+  "publicJwksUrl": null
+}
