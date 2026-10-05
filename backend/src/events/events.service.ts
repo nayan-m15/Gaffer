@@ -939,6 +939,7 @@ export class EventsService {
             penaltyTakerId: gamePlan.penaltyTakerId,
             cornerTakerId: gamePlan.cornerTakerId,
             rightCornerTakerId: gamePlan.rightCornerTakerId,
+            playerInstructions: gamePlan.playerInstructions,
           }
         : null,
       opponentSquadVisibility: dto.opponentSquadVisibility,

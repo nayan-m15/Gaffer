@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToolbarField } from "@/features/team-management/ToolbarField";
+import { cn } from "@/lib/utils";
 import type { BackendGamePlan } from "@/services/gamePlans";
 
 /** Sentinel value for the "New game plan" entry. */
@@ -24,6 +25,8 @@ interface GamePlanSelectorProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   disabled?: boolean;
+  /** Widens the trigger when the field is stacked in a popover. */
+  className?: string;
 }
 
 export function GamePlanSelector({
@@ -31,6 +34,7 @@ export function GamePlanSelector({
   selectedId,
   onSelect,
   disabled,
+  className,
 }: GamePlanSelectorProps) {
   const items = useMemo(() => {
     const map: Record<string, string> = {
@@ -54,7 +58,7 @@ export function GamePlanSelector({
         <SelectTrigger
           id="game-plan-select"
           aria-label="Select game plan"
-          className="h-8 w-36 font-semibold"
+          className={cn("h-8 w-36 font-semibold", className)}
         >
           <SelectValue placeholder="New game plan" />
         </SelectTrigger>

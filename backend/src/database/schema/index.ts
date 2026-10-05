@@ -266,6 +266,12 @@ export const offensiveStyle = pgEnum('offensive_style', [
   'long_ball',
 ]);
 
+/** Athlete ID -> instruction category ID -> chosen option ID. */
+export type PlayerInstructionsByAthlete = Record<
+  string,
+  Record<string, string>
+>;
+
 export interface GamePlanFormationPosition {
   id: string;
   label: string;
@@ -342,6 +348,16 @@ export const gamePlans = pgTable(
       () => athletes.id,
       { onDelete: 'set null' },
     ),
+    // Player instructions, keyed by athlete ID and then by instruction
+    // category ID. Only a coach's overrides are stored: a category the athlete
+    // is not listed under means they are on the default for the position they
+    // play. JSONB rather than columns because which categories apply depends
+    // on where the player is in the formation, and the catalogue of them will
+    // keep growing. See `game-plans/player-instructions.ts` for the IDs.
+    playerInstructions: jsonb('player_instructions')
+      .notNull()
+      .default({})
+      .$type<PlayerInstructionsByAthlete>(),
     ...timestamps,
   },
   (table) => [
@@ -370,6 +386,8 @@ export interface GamePlanSnapshot {
   penaltyTakerId: string | null;
   cornerTakerId: string | null;
   rightCornerTakerId: string | null;
+  /** Absent on snapshots taken before player instructions existed. */
+  playerInstructions?: PlayerInstructionsByAthlete;
 }
 
 export const friendlyFixtureStatus = pgEnum('friendly_fixture_status', [

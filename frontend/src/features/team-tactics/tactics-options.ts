@@ -155,13 +155,6 @@ export function toTacticPercent(value: number, meta: SliderMeta): number {
   return 50 + ((clamped - neutral) / (max - neutral)) * 50;
 }
 
-/** Tactical settings shown within the Team page. Squad and formation are
- * configured and saved by the Team lineup board, and the leadership/set-piece
- * roles have their own Team section, so neither is duplicated here. */
-export const TACTICS_TABS = ["Tactics", "Instructions"] as const;
-
-export type TacticsTab = (typeof TACTICS_TABS)[number];
-
 /**
  * Tactical values a brand-new game plan starts from — matches the backend
  * column defaults so a freshly created plan and a locally-initialised one
@@ -183,4 +176,5 @@ export const DEFAULT_GAME_PLAN_TACTICS: GamePlanTactics = {
   penaltyTakerId: null,
   cornerTakerId: null,
   rightCornerTakerId: null,
+  playerInstructions: {},
 };

@@ -52,7 +52,15 @@ export default function TeamRolesPanel({
   editor,
   readOnly = false,
 }: TeamRolesPanelProps) {
-  const { athletes, content, patch, saving, lineup } = editor;
+  const {
+    athletes,
+    content,
+    patch,
+    saving,
+    lineup,
+    saveError,
+    clearSaveError,
+  } = editor;
   const [selectedRole, setSelectedRole] = useState<TeamRole>("captain");
 
   const athleteById = useMemo(
@@ -72,6 +80,18 @@ export default function TeamRolesPanel({
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+      {/* Save is reachable from every section, so every section has to be
+          able to say why one was refused. */}
+      {saveError && (
+        <p
+          role="alert"
+          className="cursor-pointer rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive lg:col-span-2"
+          onClick={clearSaveError}
+        >
+          {saveError} (dismiss)
+        </p>
+      )}
+
       {/* ── Role assignments ──────────────────────────────────────────────── */}
       <section className="min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-6">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">

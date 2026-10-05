@@ -372,6 +372,13 @@
       "when": 1791100010000,
       "tag": "0047_match_tactical_change_ingest",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791100110000,
+      "tag": "0048_game_plan_player_instructions",
+      "breakpoints": true
     }
   ]
 }

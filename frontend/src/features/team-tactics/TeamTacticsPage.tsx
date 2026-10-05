@@ -4,20 +4,20 @@
  * plan; the squad half lives on the board in the "Squad" section and is saved
  * with it.
  *
- * The Tactics tab lays its controls out beside a live mini pitch, so it is given
- * the full width of the page; the narrower tabs stay centred.
+ * The controls lay out beside a live mini pitch, so the panel is given the full
+ * width of the page.
  *
- * The save controls and dialogs live on the page itself; this component
- * renders the tab strip and the active tab body. All state comes from the
- * shared `useGamePlanEditor` instance.
+ * It used to carry its own tab strip, whose second tab was a placeholder for
+ * player instructions. Those now have a section of their own on the page, so
+ * what is left here is the tactical settings alone.
+ *
+ * The save controls and dialogs live on the page itself. All state comes from
+ * the shared `useGamePlanEditor` instance.
  */
 
-import { ClipboardList, Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { PlaceholderTab } from "./PlaceholderTab";
 import { TacticsTab } from "./TacticsTab";
-import { TACTICS_TABS } from "./tactics-options";
 import type { GamePlanEditor } from "./useGamePlanEditor";
 
 interface TeamTacticsPanelProps {
@@ -40,8 +40,6 @@ export default function TeamTacticsPanel({
     refetch,
     content,
     patch,
-    activeTab,
-    setActiveTab,
     saving,
     saveError,
     clearSaveError,
@@ -70,28 +68,6 @@ export default function TeamTacticsPanel({
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4">
-        <nav
-          className="flex gap-1 overflow-x-auto"
-          aria-label="Tactics sections"
-        >
-          {TACTICS_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              aria-current={activeTab === tab ? "page" : undefined}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                activeTab === tab
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-
         {saveError && (
           <p
             role="alert"
@@ -117,24 +93,12 @@ export default function TeamTacticsPanel({
           </div>
         ) : (
           <>
-            {activeTab === "Tactics" && (
-              <TacticsTab
-                content={content}
-                formation={lineup.formation}
-                onChange={patch}
-                disabled={saving || readOnly}
-              />
-            )}
-
-            {activeTab === "Instructions" && (
-              <div className="mx-auto max-w-3xl">
-                <PlaceholderTab
-                  icon={ClipboardList}
-                  title="Player instructions"
-                  description="Per-player instructions (attacking support, defensive behaviour, width, runs) will hang off each formation slot here in a future update."
-                />
-              </div>
-            )}
+            <TacticsTab
+              content={content}
+              formation={lineup.formation}
+              onChange={patch}
+              disabled={saving || readOnly}
+            />
           </>
         )}
     </div>

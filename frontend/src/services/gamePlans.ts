@@ -15,6 +15,20 @@ export type OffensiveStyle =
   | "fast_build_up"
   | "long_ball";
 
+/**
+ * Per-player instruction overrides, keyed by athlete ID and then by instruction
+ * category ID (e.g. `{ "<athlete>": { "positioning_freedom": "free_roam" } }`).
+ *
+ * Only what a coach has changed is stored; a category the player is not listed
+ * under means they are on the default for the position they are playing. The
+ * registry that gives these IDs meaning lives in
+ * `@/features/team-tactics/instructions`.
+ */
+export type GamePlanPlayerInstructions = Record<
+  string,
+  Record<string, string>
+>;
+
 export interface GamePlanFormationPosition {
   id: string;
   label: string;
@@ -59,6 +73,8 @@ export interface BackendGamePlan {
   penaltyTakerId: string | null;
   cornerTakerId: string | null;
   rightCornerTakerId: string | null;
+  /** Per-player instructions chosen for this plan; see the type's own note. */
+  playerInstructions: GamePlanPlayerInstructions;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,8 +86,11 @@ export type GamePlanContent = Omit<
 >;
 
 /** Immutable tactical state captured when a match is started. */
-export interface GamePlanSnapshot extends GamePlanContent {
+export interface GamePlanSnapshot
+  extends Omit<GamePlanContent, "playerInstructions"> {
   name: string;
+  /** Absent on snapshots taken before player instructions existed. */
+  playerInstructions?: GamePlanPlayerInstructions;
 }
 
 /** The squad half of a game plan — what the tactical board edits. */

@@ -10,55 +10,41 @@
  * data is used; empty and loading states are handled explicitly.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AnimatedTabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
-import {
-  Users,
-  ShieldAlert,
-  Loader2,
-  SlidersHorizontal,
-  Star,
-} from "lucide-react";
+import { Users, ShieldAlert, Loader2 } from "lucide-react";
 
 import { useAthletes } from "./api";
 import { FootballPitch } from "./FootballPitch";
 import { PitchPlayer } from "./PitchPlayer";
 import { CustomFormationHandle } from "./CustomFormationHandle";
 import { SubstitutesArea } from "./SubstitutesArea";
-import { TeamToolbarActions, TeamToolbarFields } from "./TeamToolbar";
+import {
+  TeamToolbarActions,
+  TeamToolbarFields,
+  TeamToolbarMobile,
+} from "./TeamToolbar";
+import { SquadStatusStrip } from "./SquadStatusStrip";
+import {
+  TEAM_SECTIONS,
+  toTeamSection,
+  type TeamSection,
+} from "./team-sections";
 import type { BackendAthlete } from "@/services/athletes";
 import { useAuth } from "@/hooks/useAuth";
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import TeamTacticsPanel from "@/features/team-tactics/TeamTacticsPage";
 import TeamRolesPanel from "./roles/TeamRolesPanel";
+import PlayerInstructionsPanel from "@/features/team-tactics/instructions/PlayerInstructionsPanel";
+import { ResetInstructionsDialog } from "@/features/team-tactics/instructions/ResetInstructionsDialog";
 import { DeleteGamePlanDialog } from "@/features/team-tactics/DeleteGamePlanDialog";
 import { SaveGamePlanDialog } from "@/features/team-tactics/SaveGamePlanDialog";
 import { useGamePlanEditor } from "@/features/team-tactics/useGamePlanEditor";
 import "./team-background.css";
-
-type TeamSection = "squad" | "tactics" | "roles";
-
-const TEAM_SECTIONS = [
-  {
-    value: "squad",
-    label: "Squad",
-    icon: <Users className="size-4" aria-hidden="true" />,
-  },
-  {
-    value: "tactics",
-    label: "Tactics",
-    icon: <SlidersHorizontal className="size-4" aria-hidden="true" />,
-  },
-  {
-    value: "roles",
-    label: "Roles",
-    icon: <Star className="size-4" aria-hidden="true" />,
-  },
-] satisfies Array<{ value: TeamSection; label: string; icon: ReactNode }>;
 
 export default function TeamManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,15 +53,21 @@ export default function TeamManagementPage() {
   // management controls are hidden here and the backend rejects game-plan
   // mutations from non-coaches with 403.
   const canManageTeam = team?.role === "coach";
-  const sectionParam = searchParams.get("section");
-  const activeSection: TeamSection =
-    sectionParam === "tactics" || sectionParam === "roles"
-      ? sectionParam
-      : "squad";
+  const activeSection = toTeamSection(searchParams.get("section"));
 
   const setActiveSection = (section: TeamSection) => {
     setSearchParams(section === "squad" ? {} : { section });
   };
+
+  const tabItems = useMemo(
+    () =>
+      TEAM_SECTIONS.map(({ value, label, Icon }) => ({
+        value,
+        label,
+        icon: <Icon className="size-4" aria-hidden="true" />,
+      })),
+    [],
+  );
 
   const { data: athletes, isLoading, isError, refetch } = useAthletes();
   const emptyRef = useRef<BackendAthlete[]>([]);
@@ -123,6 +115,15 @@ export default function TeamManagementPage() {
     () => lineup.substituteIds.map((id) => athleteMap.get(id)).filter(Boolean) as BackendAthlete[],
     [lineup.substituteIds, athleteMap],
   );
+
+  /**
+   * What the phone's warning figure counts: the things the wide-screen status
+   * bar spells out one chip at a time.
+   */
+  const lineupWarningCount =
+    lineup.misplacedAthleteIds.length +
+    (lineup.hasGoalkeeper ? 0 : 1) +
+    (lineup.hasEnoughPlayers ? 0 : 1);
 
   /** Squad-wide availability counts for the status bar (0 values stay hidden). */
   const unavailableCounts = useMemo(() => {
@@ -212,42 +213,70 @@ export default function TeamManagementPage() {
     <div className="team-page relative isolate min-h-full">
       <div className="team-page-backdrop" aria-hidden="true" />
       <div className="relative z-10">
-      <PageHeader
-        title="Team Management"
-        subtitle="Configure your starting lineup, match format, tactical formation, and matchday squad."
-        actions={
-          <TeamToolbarActions
-            editor={gamePlanEditor}
-            section={activeSection}
-            readOnly={!canManageTeam}
-          />
-        }
-      >
-        <div className="space-y-3">
-          <AnimatedTabs
-            items={TEAM_SECTIONS}
-            value={activeSection}
-            onValueChange={setActiveSection}
-            ariaLabel="Team sections"
-            variant="primary"
-          />
-          <TeamToolbarFields
-            editor={gamePlanEditor}
-            section={activeSection}
-            readOnly={!canManageTeam}
-          />
-        </div>
-      </PageHeader>
+      {/* Phone: title, then one row of controls, then straight to the pitch.
+          Four tabs and a bar of labelled selectors do not fit at 360px — they
+          wrapped onto four lines and left the pitch below the fold. */}
+      <div className="border-b border-border bg-background/90 px-4 pb-3 pt-6 backdrop-blur-md md:hidden">
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.025em] text-foreground">
+          Team Management
+        </h1>
+        <TeamToolbarMobile
+          editor={gamePlanEditor}
+          section={activeSection}
+          onSectionChange={setActiveSection}
+          readOnly={!canManageTeam}
+          className="mt-3"
+        />
+      </div>
+
+      <div className="hidden md:block">
+        <PageHeader
+          title="Team Management"
+          subtitle="Configure your starting lineup, match format, tactical formation, and matchday squad."
+          actions={
+            <TeamToolbarActions
+              editor={gamePlanEditor}
+              section={activeSection}
+              readOnly={!canManageTeam}
+            />
+          }
+        >
+          <div className="space-y-3">
+            <AnimatedTabs
+              items={tabItems}
+              value={activeSection}
+              onValueChange={setActiveSection}
+              ariaLabel="Team sections"
+              variant="primary"
+            />
+            <TeamToolbarFields
+              editor={gamePlanEditor}
+              section={activeSection}
+              readOnly={!canManageTeam}
+            />
+          </div>
+        </PageHeader>
+      </div>
 
       <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        {activeSection === "roles" ? (
+        {activeSection === "instructions" ? (
+          <PlayerInstructionsPanel
+            editor={gamePlanEditor}
+            readOnly={!canManageTeam}
+            onGoToSquad={() => setActiveSection("squad")}
+          />
+        ) : activeSection === "roles" ? (
           <TeamRolesPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : activeSection === "tactics" ? (
           <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (
           <>
         {/* ── Status bar ────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 text-xs">
+      {/* Same near-opaque card as the toolbar fields: the pills are tinted at
+          10% opacity, which disappears against the photographic backdrop.
+          Spelled out here; a phone gets the same counts as icons under the
+          pitch, where three wrapped lines of captions would not fit. */}
+      <div className="hidden w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md md:flex">
         <StatusBar
           label="On Pitch"
           value={lineup.pitchCount}
@@ -276,7 +305,12 @@ export default function TeamManagementPage() {
             Suspended: {unavailableCounts.suspended}
           </span>
         )}
+      </div>
 
+      {/* Anything the coach has to act on. Unlike the counts these are
+          sentences, not figures, so they read the same at every width —
+          `empty:hidden` keeps the card out of the layout when all is well. */}
+      <div className="flex w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md empty:hidden">
         {lineup.hasInjuredPitchPlayers && (
           <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
             Remove injured players from the starting lineup before saving
@@ -362,6 +396,16 @@ export default function TeamManagementPage() {
               />
             ))}
         </FootballPitch>
+
+        <SquadStatusStrip
+          className="md:hidden"
+          pitchCount={lineup.pitchCount}
+          lineupSize={lineup.lineupSize}
+          isLineupComplete={lineup.isLineupComplete}
+          substitutes={lineup.substituteIds.length}
+          injured={unavailableCounts.injured}
+          warnings={lineupWarningCount}
+        />
       </div>
 
       {/* ── Substitutes ───────────────────────────────────────────────────── */}
@@ -405,6 +449,12 @@ export default function TeamManagementPage() {
         onConfirm={gamePlanEditor.confirmDelete}
         gamePlanName={selectedPlan?.name ?? ""}
         isDeleting={gamePlanEditor.isDeleting}
+      />
+
+      <ResetInstructionsDialog
+        isOpen={gamePlanEditor.isResetInstructionsDialogOpen}
+        onClose={() => gamePlanEditor.setResetInstructionsDialogOpen(false)}
+        onConfirm={gamePlanEditor.resetAllPlayerInstructions}
       />
       </div>
     </div>
