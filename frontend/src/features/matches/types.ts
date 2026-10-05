@@ -239,7 +239,7 @@ export interface SessionReport {
       | "manuallyAdjusted"
       | "createdAt"
       | "updatedAt"
-    > & { player: { name: string | null; shirtNumber: number | null } | null }
+    > & { incomingPlayerLabel?: string | null; player: { name: string | null; shirtNumber: number | null } | null }
   >;
   reviews: Array<{
     id: string;

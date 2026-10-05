@@ -164,6 +164,32 @@ describe('Phase 2 shared privacy and clock', () => {
     };
   }
 
+  it('both reports retain public opponent and substitution labels without roster identities', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      clientRequestId: randomUUID(),
+      team: 'opponent',
+      eventType: 'substitution',
+      opponentLabel: '#9 Public Player',
+      detail: '#12 Public Substitute',
+      minute: 10,
+      period: 'first_half',
+      matchElapsedMs: 600000,
+    });
+    const homeReport = await matches.getSessionReportForSheet(f.home.id, a.id);
+    const awayReport = await matches.getSessionReportForSheet(f.away.id, b.id);
+    expect(homeReport.timeline).toEqual(awayReport.timeline);
+    expect(homeReport.timeline[0]).toMatchObject({
+      player: { name: '#9 Public Player', shirtNumber: null },
+      incomingPlayerLabel: '#12 Public Substitute',
+      side: 'away',
+    });
+    expect(homeReport.timeline[0]).not.toHaveProperty('detail');
+    expect(homeReport.timeline[0]).not.toHaveProperty('opponentPlayerId');
+  });
+
   it.each(['friendly', 'competition'] as const)(
     '%s: peer events and nested review observations stay private',
     async (kind) => {

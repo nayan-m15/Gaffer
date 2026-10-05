@@ -80,9 +80,9 @@ export function opponentPlayerLabel(
   visibility: OpponentSquadVisibility,
 ) {
   if (visibility === "full" && player.name) {
-    return `#${player.shirtNumber} ${player.name}`;
+    return [player.shirtNumber == null ? "" : `#${player.shirtNumber}`, player.name].filter(Boolean).join(" ");
   }
-  return `#${player.shirtNumber}`;
+  return player.shirtNumber == null ? "Unassigned" : `#${player.shirtNumber}`;
 }
 
 export function emptyEventDraft(
@@ -163,7 +163,7 @@ export function draftFromLoggedEvent(
     incomingAthleteId:
       event.team === "own" && looksLikeId(incomingRaw) ? incomingRaw ?? "" : "",
     incomingOpponentPlayerId:
-      event.team === "opponent" && options.roster && looksLikeId(incomingRaw)
+      event.team === "opponent" && options.roster && (looksLikeId(incomingRaw) || incomingRaw?.startsWith("public-lineup:"))
         ? incomingRaw ?? ""
         : "",
     incomingOpponentLabel:

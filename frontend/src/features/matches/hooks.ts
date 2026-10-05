@@ -708,7 +708,7 @@ export function useMatchView(matchId: string | undefined) {
                         )
                       : undefined;
                   return own
-                    ? { ...row, athleteId: own.athleteId, athlete: own.athlete }
+                    ? { ...row, athleteId: own.athleteId, athlete: own.athlete, detail: own.detail }
                     : row;
                 }),
               ]

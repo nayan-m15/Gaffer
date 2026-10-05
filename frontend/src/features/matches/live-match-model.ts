@@ -312,9 +312,16 @@ export function opponentPitchState(
   const bench = new Set(extras.map((player) => player.id));
 
   applyOpponentSubstitutions(unique, timeline, onPitch, bench);
-
+  const publicSlots = new Map(unique.map((player) => [player.id, player.publicLineup?.slotId]));
+  for (const event of chronological(timeline)) {
+    if (event.team === "opponent" && event.eventType === "substitution" && event.opponentPlayerId && event.detail) {
+      publicSlots.set(event.detail, publicSlots.get(event.opponentPlayerId));
+    }
+  }
   return {
-    onPitch: unique.filter((player) => onPitch.has(player.id)),
+    onPitch: unique.filter((player) => onPitch.has(player.id)).map((player) => player.publicLineup
+      ? { ...player, publicLineup: { ...player.publicLineup, slotId: publicSlots.get(player.id) ?? null } }
+      : player),
     bench: unique.filter((player) => bench.has(player.id)),
   };
 }
@@ -649,4 +656,31 @@ export function runningScoreByEvent(
     }
   }
   return scores;
+}
+
+/** Resolve public labels for display only; uploads must remove these keys. */
+export function publicOpponentTimeline(timeline: MatchLogEvent[], players: OpponentMatchPlayer[]): MatchLogEvent[] {
+  const label = (player: OpponentMatchPlayer) => [
+    player.shirtNumber == null ? "" : "#" + player.shirtNumber,
+    player.name ?? "",
+  ].filter(Boolean).join(" ") || "Unassigned";
+  const resolve = (value: string | null | undefined) => {
+    const matches = players.filter((player) => player.publicLineup && label(player) === value);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  return timeline.map((event) => event.team !== "opponent" ? event : {
+    ...event,
+    opponentPlayerId: event.opponentPlayerId ?? resolve(event.opponentLabel)?.id ?? null,
+    detail: event.eventType === "substitution" ? resolve(event.detail)?.id ?? event.detail : event.detail,
+  });
+}
+
+export function opponentEventAttribution(player: OpponentMatchPlayer) {
+  return {
+    opponentPlayerId: player.publicLineup ? undefined : player.id,
+    opponentLabel: [player.shirtNumber == null ? "" : "#" + player.shirtNumber, player.name ?? ""].filter(Boolean).join(" ") || "Unassigned",
+  };
+}
+export function opponentSubstitutionDetail(player: OpponentMatchPlayer) {
+  return player.publicLineup ? opponentEventAttribution(player).opponentLabel : player.id;
 }

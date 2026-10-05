@@ -76,7 +76,7 @@ export function sessionTimeline(
     opponentLabel:
       row.player?.name ??
       (row.player?.shirtNumber ? `#${row.player.shirtNumber}` : null),
-    detail: null,
+    detail: row.eventType === "substitution" ? row.incomingPlayerLabel ?? null : null,
     loggedByUserId: "",
     syncStatus: "synced",
     pending: false,

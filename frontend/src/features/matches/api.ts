@@ -42,6 +42,7 @@ export async function fetchMatch(matchId: string) {
     await cacheResponse(`match:${matchId}`, withClock);
     return withClock;
   } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
     const match =
       (await readSyncedPreparedMatch(matchId)) ??
       (await readCachedResponse<MatchRecord>(`match:${matchId}`));
@@ -65,13 +66,13 @@ async function applySyncedSessionClock(
 ): Promise<MatchRecord> {
   try {
     const clock = await readSyncedSessionClockOperation(matchId);
-    if (!clock) return match;
+    if (!clock || clock.applied_revision <= match.clockRevision) return match;
     return {
       ...match,
       clockPeriod: clock.period,
       clockElapsedMs: clock.elapsed_ms,
       clockStartedAt: clock.running ? clock.created_at : null,
-      clockRevision: Math.max(match.clockRevision, clock.applied_revision),
+      clockRevision: clock.applied_revision,
     };
   } catch {
     // Keep the API/cache result usable if the local PowerSync database is
@@ -88,6 +89,7 @@ export async function fetchMatchSquad(matchId: string) {
     await cacheResponse(`squad:${matchId}`, squad);
     return squad;
   } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
     const synced = await readSyncedMatchSquad(matchId);
     if (synced.length > 0 || (await hasSyncedPreparedMatch(matchId))) {
       return synced;
@@ -108,6 +110,7 @@ export async function fetchMatchOpponentSquad(matchId: string) {
     await cacheResponse(`opponent-squad:${matchId}`, squad);
     return squad;
   } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
     const synced = await readSyncedOpponentSquad(matchId);
     if (synced.length > 0 || (await hasSyncedPreparedMatch(matchId))) {
       return synced;
@@ -132,6 +135,7 @@ export async function fetchMatchEvents(matchId: string) {
     ).map((event) => ({ ...event, syncStatus: "reconciled" as const }));
     await cacheResponse(`events:${matchId}`, events);
   } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
     const synced = await readSyncedMatchEvents(matchId);
     const cached = await readCachedResponse<MatchLogEvent[]>(
       `events:${matchId}`,
@@ -286,8 +290,13 @@ export async function createMatchLogEvent(
   try {
     await setQueuedEventState(enriched.clientRequestId, "uploading");
     const response = await uploadMatchLogEvent(matchId, enriched);
-    const receipt = response.receipts[0];
-    if (!receipt) throw new Error("The server did not acknowledge the event.");
+    const receipt = response.receipts.find((item) => item.id === enriched.clientRequestId);
+    if (!receipt) {
+      await setQueuedItemOutcome(enriched.clientRequestId, "queued", null, "The server did not acknowledge this item. Retry upload.");
+      const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+      if (queued) return queued;
+      throw new Error("The server did not acknowledge the event.");
+    }
     await applyReceipt(receipt);
     if (receipt.outcome === "rejected") {
       const rejected = await queuedTimelineRow(
@@ -304,6 +313,10 @@ export async function createMatchLogEvent(
       throw new Error("The accepted event could not be read locally.");
     return queued;
   } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      await setQueuedItemOutcome(enriched.clientRequestId, "queued", null, "Sign in again to upload this item.");
+      throw error;
+    }
     if (
       error instanceof ApiError &&
       error.status >= 400 &&
@@ -337,7 +350,7 @@ export async function flushOfflineMatchEvents() {
       for (const row of batch) {
         const receipt = receipts.get(row.id);
         if (receipt) await applyReceipt(receipt);
-        else await setQueuedEventState(row.id, "queued");
+        else await setQueuedItemOutcome(row.id, "queued", row.canonical_event_id, "The server did not acknowledge this item. Retry upload.");
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) {
@@ -453,11 +466,11 @@ export async function fetchSessionReport(sessionId: string, matchId: string) {
     const report = await apiFetch<
       import("./session-report-model").SessionReport
     >(`/matches/sessions/${sessionId}/report`, { cache: "no-store" });
+    if (report.sessionId !== sessionId) throw new Error("The shared report belongs to a different session.");
     await cacheResponse(key, report);
     return report;
   } catch (error) {
-    if (error instanceof ApiError && error.status >= 400 && error.status < 500)
-      throw error;
+    if (!(error instanceof TypeError)) throw error;
     const cached =
       await readCachedResponse<import("./session-report-model").SessionReport>(
         key,

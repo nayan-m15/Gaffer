@@ -1,6 +1,5 @@
 import { sessionPlayerLabel } from "@/features/matches/session-report-model";
 import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
-import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import {
   Fragment,
   useCallback,
@@ -81,6 +80,9 @@ import {
   isSubOutCallout,
 } from "@/features/matches/live-callouts";
 import {
+  publicOpponentTimeline,
+  opponentEventAttribution,
+  opponentSubstitutionDetail,
   friendlyLineupPlayers,
   friendlyLineupStarterIds,
   opponentPitchState,
@@ -333,9 +335,9 @@ function opponentShirtLabel(
   visibility: "none" | "numbers" | "full",
 ) {
   if (visibility === "full" && player.name) {
-    return `#${player.shirtNumber} ${player.name}`;
+    return [player.shirtNumber == null ? "" : `#${player.shirtNumber}`, player.name].filter(Boolean).join(" ");
   }
-  return `#${player.shirtNumber}`;
+  return player.shirtNumber == null ? "Unassigned" : `#${player.shirtNumber}`;
 }
 
 function substitutionIncoming(
@@ -540,7 +542,17 @@ export default function LiveMatchPage() {
   }, [running]);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
-  const timeline = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
+  const manualOpponentSquad = matchQuery.data?.opponentSquad;
+  const opponentSquad = useMemo(
+    () => manualOpponentSquad?.length
+      ? manualOpponentSquad
+      : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
+    [manualOpponentSquad, matchQuery.data?.friendlyOpponentLineup],
+  );
+  const visibility = opponentSquad.some((player) => player.publicLineup)
+    ? "full" : matchQuery.data?.opponentSquadVisibility ?? "none";
+  const opponentDisplaySquad = opponentSquad;
+  const timeline = useMemo(() => publicOpponentTimeline(eventsQuery.data ?? [], opponentSquad), [eventsQuery.data, opponentSquad]);
   const loggedGoalsOwn = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "own",
   ).length;
@@ -576,21 +588,6 @@ export default function LiveMatchPage() {
     [timeline],
   );
   const assistsByGoal = useMemo(() => pairAssistsToGoals(timeline), [timeline]);
-  const opponentSquad = useMemo(
-    () => matchQuery.data?.opponentSquad ?? [],
-    [matchQuery.data?.opponentSquad],
-  );
-  const visibility = matchQuery.data?.opponentSquadVisibility ?? "none";
-  // Pitch and bench display only: manual entries win, otherwise show the
-  // shared lineup of an accepted Gaffer friendly. Event attribution keeps
-  // using the manual `opponentSquad` above, whose ids are real rows.
-  const opponentDisplaySquad = useMemo(
-    () =>
-      opponentSquad.length > 0
-        ? opponentSquad
-        : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
-    [matchQuery.data?.friendlyOpponentLineup, opponentSquad],
-  );
   const currentMinute = Math.floor(elapsedMs / 60_000);
 
   const rowKey = (event: MatchLogEvent) => event.optimisticKey ?? event.id;
@@ -623,7 +620,7 @@ export default function LiveMatchPage() {
         opponentDisplaySquad,
         timeline,
         matchPlayerCount,
-        opponentSquad.length > 0
+        manualOpponentSquad?.length
           ? undefined
           : friendlyLineupStarterIds(matchQuery.data?.friendlyOpponentLineup),
       ),
@@ -631,7 +628,7 @@ export default function LiveMatchPage() {
       matchPlayerCount,
       matchQuery.data?.friendlyOpponentLineup,
       opponentDisplaySquad,
-      opponentSquad,
+      manualOpponentSquad,
       timeline,
     ],
   );
@@ -715,8 +712,8 @@ export default function LiveMatchPage() {
     [ownPlaced],
   );
   const oppPitchIds = useMemo(
-    () => new Set(oppPlaced.map((placed) => placed.player.id)),
-    [oppPlaced],
+    () => new Set(oppState.onPitch.map((player) => player.id)),
+    [oppState.onPitch],
   );
   const ownBench = useMemo(() => {
     const overflow = ownState.onPitch.filter(
@@ -729,13 +726,13 @@ export default function LiveMatchPage() {
   }, [ownState.bench, ownState.onPitch, ownPitchIds]);
   const oppBench = useMemo(() => {
     const overflow = oppState.onPitch.filter(
-      (player) => !oppPitchIds.has(player.id),
+      (player) => !oppPlaced.some((placed) => placed.player.id === player.id),
     );
     return [
       ...oppState.bench.filter((player) => !oppPitchIds.has(player.id)),
       ...overflow,
     ];
-  }, [oppState.bench, oppState.onPitch, oppPitchIds]);
+  }, [oppState.bench, oppState.onPitch, oppPitchIds, oppPlaced]);
 
   const runningScores = useMemo(
     () => runningScoreByEvent(timeline, isHome),
@@ -793,7 +790,7 @@ export default function LiveMatchPage() {
             clientCreatedAt: anchor.clientCreatedAt,
             period: anchor.period,
             running: anchor.running,
-            elapsedMs: anchor.elapsedMs,
+            elapsedMs: anchor.operationElapsedMs,
           });
           markClockAnchorSynced(matchId, anchor.updatedAt);
           lastAppliedClockRevisionRef.current = null;
@@ -1033,6 +1030,13 @@ export default function LiveMatchPage() {
         closeComposer();
       }
 
+      const publicPlayer = opponentSquad.find((player) =>
+        player.publicLineup && player.id === input.opponentPlayerId);
+      const publicIncoming = eventType === "substitution"
+        ? opponentSquad.find((player) => player.publicLineup && player.id === detail)
+        : undefined;
+      const safeOpponentId = publicPlayer ? opponentEventAttribution(publicPlayer).opponentPlayerId : input.opponentPlayerId;
+      const safeDetail = publicIncoming ? opponentSubstitutionDetail(publicIncoming) : detail;
       try {
         if (input.reassignId) {
           await updateEvent.mutateAsync({
@@ -1040,7 +1044,7 @@ export default function LiveMatchPage() {
             input: {
               athleteId: input.athleteId ?? null,
               opponentLabel: input.opponentLabel ?? null,
-              opponentPlayerId: input.opponentPlayerId ?? null,
+              opponentPlayerId: safeOpponentId ?? null,
             },
           });
         } else {
@@ -1054,8 +1058,8 @@ export default function LiveMatchPage() {
             minute: input.minute ?? currentMinute,
             ...(input.athleteId ? { athleteId: input.athleteId } : {}),
             ...(input.opponentLabel ? { opponentLabel: input.opponentLabel } : {}),
-            ...(input.opponentPlayerId ? { opponentPlayerId: input.opponentPlayerId } : {}),
-            ...(detail ? { detail } : {}),
+            ...(safeOpponentId ? { opponentPlayerId: safeOpponentId } : {}),
+            ...(safeDetail ? { detail: safeDetail } : {}),
           });
           await handleLoggedEventFollowUp(input, created, eventType, detail, canSelectOpponentTeammate);
           return created.id;
@@ -1411,7 +1415,7 @@ export default function LiveMatchPage() {
     if (
       isSubIncomingComposer(composer) &&
       composer.team === "opponent" &&
-      oppBench.some((item) => item.id === player.id)
+      oppState.bench.some((item) => item.id === player.id)
     ) {
       completeSubIn(player);
       return;
@@ -1769,11 +1773,6 @@ export default function LiveMatchPage() {
           </button>
         </div>
       </header>
-      {(sessionReport || (match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available)) && <div className="px-4 pt-3">
-        <SessionReportStatus report={sessionReport} />
-        {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available &&
-          <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />}
-      </div>}
 
       {reviewOpen && matchId ? (
         <EventReviewPanel
@@ -1790,6 +1789,7 @@ export default function LiveMatchPage() {
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
         <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
+          <SessionReportStatus report={sessionReport} />
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="flex flex-col items-end">
               <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
@@ -1965,7 +1965,7 @@ export default function LiveMatchPage() {
             align="left"
           />
           <LiveBenchRow
-            label={`${oppAbbrev} bench`}
+            label={`${oppAbbrev} ${oppBench.some((player) => oppPitchIds.has(player.id)) ? "bench / unplaced starters" : "bench"}`}
             color={oppColor}
             opponents={oppBench}
             visibility={visibility}

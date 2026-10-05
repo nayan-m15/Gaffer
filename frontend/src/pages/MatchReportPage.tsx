@@ -1,6 +1,5 @@
 import { sessionPlayerLabel } from "@/features/matches/session-report-model";
 import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
-import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -87,6 +86,7 @@ import {
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
 import {
+  publicOpponentTimeline,
   friendlyLineupPlayers,
   friendlyLineupStarterIds,
   opponentPitchState,
@@ -361,7 +361,9 @@ export default function MatchReportPage() {
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
-    const rows = uniqueTimelineEvents(eventsQuery.data ?? []);
+    const publicPlayers = matchQuery.data?.opponentSquad?.length ? [] : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup);
+    const originals = uniqueTimelineEvents(eventsQuery.data ?? []);
+    const rows = publicOpponentTimeline(originals, publicPlayers).map((row, index) => ({ ...row, detail: originals[index].detail }));
     return [...rows].sort((a, b) => {
       const byMinute = a.minute - b.minute;
       if (byMinute !== 0) {
@@ -369,13 +371,14 @@ export default function MatchReportPage() {
       }
       return a.createdAt.localeCompare(b.createdAt);
     });
-  }, [eventsQuery.data]);
+  }, [eventsQuery.data, matchQuery.data?.opponentSquad, matchQuery.data?.friendlyOpponentLineup]);
 
   const ownName = team?.name ?? "US";
   const match = matchQuery.data;
   const oppName = match?.opponentName ?? "OPP";
   const isHome = match?.isHome ?? true;
-  const visibility = match?.opponentSquadVisibility ?? "none";
+  const visibility = !match?.opponentSquad?.length && friendlyLineupPlayers(match?.friendlyOpponentLineup).length
+    ? "full" : match?.opponentSquadVisibility ?? "none";
   const ownColor = resolveOwnColor(match?.teamColor, team?.primaryColor);
   const oppColor = resolveOppColor(match?.opponentColor);
   const ownHalf = isHome ? "left" : "right";
@@ -431,7 +434,7 @@ export default function MatchReportPage() {
     () =>
       opponentPitchState(
         opponentDisplaySquad,
-        timeline,
+        publicOpponentTimeline(timeline, opponentDisplaySquad),
         matchPlayerCount,
         (match?.opponentSquad ?? []).length > 0
           ? undefined
@@ -504,7 +507,7 @@ export default function MatchReportPage() {
         ).length,
       };
     });
-  }, [squad, timeline, privateEventsQuery.data]);
+  }, [squad, timeline]);
 
   const topPerformers = useMemo(
     () =>
@@ -842,13 +845,9 @@ export default function MatchReportPage() {
           ) : null}
         </div>
       </header>
-      {(sessionReport || (match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available)) && <div className="px-4 pt-3">
-        <SessionReportStatus report={sessionReport} />
-        {match.friendlyOpponentLineup && "starters" in match.friendlyOpponentLineup && match.friendlyOpponentLineup.available &&
-          <OpponentConfirmedLineupCard lineup={match.friendlyOpponentLineup} opponentName={match.opponentName} />}
-      </div>}
 
       <div className="w-full px-4 pb-12 pt-4 sm:px-6 sm:pt-5 lg:px-8">
+        <SessionReportStatus report={sessionReport} />
         <div className="mb-5 flex w-full max-w-md justify-center rounded-xl border border-[#2a2e31] bg-[#111315] p-1 shadow-inner">
           {TABS.map((item) => (
             <button
@@ -1025,7 +1024,7 @@ export default function MatchReportPage() {
           ownPlaced={ownPlaced}
           oppPlaced={oppPlaced}
           visibility={visibility}
-          timeline={timeline}
+          timeline={publicOpponentTimeline(timeline, opponentDisplaySquad)}
           ownAbbrev={ownAbbrev}
           oppAbbrev={oppAbbrev}
           ownBench={ownBench}
@@ -1039,7 +1038,7 @@ export default function MatchReportPage() {
       {adding && (
         <AddEventOverlay
           squad={squad}
-          opponentSquad={match.opponentSquad}
+          opponentSquad={opponentDisplaySquad}
           visibility={visibility}
           ownName={ownName}
           oppName={oppName}
@@ -1098,7 +1097,7 @@ export default function MatchReportPage() {
         <EditEventOverlay
           event={editing}
           squad={squad}
-          opponentSquad={match.opponentSquad}
+          opponentSquad={opponentDisplaySquad}
           visibility={visibility}
           linkedAssist={linkedAssistsForGoal(timeline, editing)[0] ?? null}
           linkedSub={linkedSubstitutionForInjury(timeline, editing) ?? null}
@@ -1441,13 +1440,14 @@ function createComposerDraft(input: {
     }),
     incomingAthleteId: ownTeamValue(input.team, input.incomingAthleteId),
     incomingOpponentPlayerId: opponentRosterValue(isOpponent, input.roster, input.incomingOpponentPlayerId),
-    incomingOpponentLabel: freeOpponentLabel(isOpponent, input.roster, input.incomingOpponentLabel),
+    incomingOpponentLabel: input.incomingOpponentPlayerId.startsWith("public-lineup:")
+      ? input.incomingOpponentLabel : freeOpponentLabel(isOpponent, input.roster, input.incomingOpponentLabel),
     injuryLedToSub: input.injuryLedToSub,
   });
 }
 
 function opponentRosterValue(isOpponent: boolean, roster: boolean, value: string) {
-  return isOpponent && roster ? value : "";
+  return isOpponent && roster && !value.startsWith("public-lineup:") ? value : "";
 }
 
 function ownTeamValue(team: MatchEventTeam, value: string) {
@@ -1772,7 +1772,9 @@ function EventComposerOverlay({
     selectedAssistOpponent,
     incomingAthleteId,
     incomingOpponentPlayerId,
-    incomingOpponentLabel,
+    incomingOpponentLabel: opponentSquad.find((player) => player.publicLineup && player.id === incomingOpponentPlayerId)
+      ? opponentPlayerLabel(opponentSquad.find((player) => player.id === incomingOpponentPlayerId)!, visibility)
+      : incomingOpponentLabel,
     roster,
     visibility,
     injuryLedToSub,

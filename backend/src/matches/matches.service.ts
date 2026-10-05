@@ -136,6 +136,13 @@ export class MatchesService {
         firstName: athletes.firstName,
         lastName: athletes.lastName,
         shirtNumber: athletes.squadNumber,
+        incomingPlayerLabel: sql<
+          string | null
+        >`CASE WHEN ${matchEvents.eventType} = 'substitution'
+          AND ${matchEvents.team} = 'opponent'
+          AND ${matchEvents.detail} !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN left(${matchEvents.detail}, 50) ELSE NULL END`,
+        opponentLabel: matchEvents.opponentLabel,
         opponentName: opponentMatchPlayers.name,
         opponentNumber: opponentMatchPlayers.shirtNumber,
       })
@@ -164,6 +171,7 @@ export class MatchesService {
         shirtNumber,
         opponentName,
         opponentNumber,
+        opponentLabel,
         ...row
       }) => ({
         ...row,
@@ -172,7 +180,9 @@ export class MatchesService {
             ? { name: `${firstName} ${lastName}`.trim(), shirtNumber }
             : opponentName || opponentNumber !== null
               ? { name: opponentName, shirtNumber: opponentNumber }
-              : null,
+              : opponentLabel
+                ? { name: opponentLabel, shirtNumber: null }
+                : null,
       }),
     );
     const reviews = await this.databaseService.database
@@ -2250,8 +2260,20 @@ export class MatchesService {
     }
     if (team === 'own') {
       await this.requireMatchAthlete(matchId, detail);
-    } else {
+    } else if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        detail,
+      )
+    ) {
       await this.requireOpponentPlayer(matchId, detail);
+    } else if (
+      !detail.trim() ||
+      detail.length > 50 ||
+      detail.startsWith('public-lineup:')
+    ) {
+      throw new BadRequestException(
+        'An incoming public player label is required.',
+      );
     }
   }
 

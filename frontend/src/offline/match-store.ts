@@ -476,7 +476,7 @@ export async function rejectQueuedEvent(id: string, message: string) {
 
 export async function setQueuedItemOutcome(
   id: string,
-  outcome: "accepted" | "dependency_pending" | "quarantined",
+  outcome: "queued" | "accepted" | "dependency_pending" | "quarantined",
   canonicalEventId?: string | null,
   message?: string | null,
 ) {
@@ -686,6 +686,7 @@ export interface OfflineClockAnchor {
   wallClockMs: number;
   uncertain: boolean;
   operationId: string;
+  operationElapsedMs: number;
   clientCreatedAt: string;
   updatedAt: string;
 }
@@ -701,6 +702,7 @@ export async function saveClockAnchor(
     | "wallClockMs"
     | "uncertain"
     | "operationId"
+    | "operationElapsedMs"
     | "clientCreatedAt"
     | "updatedAt"
   >,
@@ -757,17 +759,22 @@ export async function readClockAnchor(
     updated_at: string;
   }>("SELECT * FROM offline_clock_anchors WHERE id = ?", [matchId]);
   if (!row) return null;
+  const operationId = row.operation_id ?? crypto.randomUUID();
+  if (!row.operation_id) {
+    await db.execute("UPDATE offline_clock_anchors SET operation_id = ? WHERE id = ? AND operation_id IS NULL", [operationId, matchId]);
+  }
   const wallDelta = Date.now() - row.wall_clock_ms;
   const uncertain =
     Boolean(row.uncertain) || wallDelta < 0 || wallDelta > 6 * 60 * 60 * 1000;
   return {
     period: row.period,
+    operationElapsedMs: row.elapsed_ms,
     elapsedMs: row.elapsed_ms + (row.running && !uncertain ? wallDelta : 0),
     running: Boolean(row.running) && !uncertain,
     authorityRevision: row.authority_revision,
     wallClockMs: row.wall_clock_ms,
     uncertain,
-    operationId: row.operation_id ?? crypto.randomUUID(),
+    operationId,
     clientCreatedAt: row.client_created_at ?? row.updated_at,
     updatedAt: row.updated_at,
   };
@@ -1354,6 +1361,9 @@ export async function readSyncedSessionReport(
       manuallyAdjusted: row.manuallyAdjusted,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      incomingPlayerLabel: row.eventType === "substitution"
+        ? cached.timeline.find((event) => event.id === row.id)?.incomingPlayerLabel ?? null
+        : null,
       player: row.athlete
         ? {
             name: `${row.athlete.firstName} ${row.athlete.lastName}`,
@@ -1364,15 +1374,16 @@ export async function readSyncedSessionReport(
               name: row.opponentPlayer.name,
               shirtNumber: row.opponentPlayer.shirtNumber,
             }
-          : (cached.timeline.find((event) => event.id === row.id)?.player ??
-            null),
+          : row.opponentLabel
+            ? { name: row.opponentLabel, shirtNumber: null }
+            : (cached.timeline.find((event) => event.id === row.id)?.player ?? null),
     }));
   const unresolved = reviews.some(
     (row) => row.status === "open" || row.disputedAt,
   );
   const anchor =
     sheets.find((row) => row.id === operation?.match_id) ?? sheets[0];
-  const clock = anchor
+  const syncedClock = anchor
     ? {
         period: anchor.clock_period,
         elapsedMs: anchor.clock_elapsed_ms,
@@ -1389,6 +1400,7 @@ export async function readSyncedSessionReport(
           revision: operation.applied_revision,
         }
       : cached.clock;
+  const clock = syncedClock.revision > cached.clock.revision ? syncedClock : cached.clock;
   const finished =
     sheets.some((row) => row.clock_period === "full_time") ||
     clock.period === "full_time" ||

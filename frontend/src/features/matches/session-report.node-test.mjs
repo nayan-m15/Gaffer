@@ -288,3 +288,72 @@ test('canonical player labels ignore viewer-private identity and legacy labels s
   assert.equal(sessionPlayerLabel(b), sessionPlayerLabel(a));
   assert.equal(sessionPlayerLabel({athlete:a.athlete}), null);
 });
+
+function stubApi(apiFetch, offline) {
+  const compiled = {};
+  new Function("exports", "require", apiJs)(compiled, (name) =>
+    name === "@/lib/api" ? { ApiError, apiFetch } : offline);
+  return compiled;
+}
+test("older and equal synced clock revisions retain the API anchor; newer revisions replace it completely", async () => {
+  const match = { clockRevision: 8, clockPeriod: "second_half", clockElapsedMs: 1000, clockStartedAt: "fresh" };
+  for (const revision of [7, 8, 9]) {
+    const api = stubApi(async () => match, {
+      cacheResponse: async () => {},
+      readSyncedSessionClockOperation: async () => ({ applied_revision: revision, period: "first_half", elapsed_ms: 10, running: 1, created_at: "old" }),
+    });
+    const actual = await api.fetchMatch("sheet");
+    assert.deepEqual(actual, revision <= 8 ? match : { clockRevision: 9, clockPeriod: "first_half", clockElapsedMs: 10, clockStartedAt: "old" });
+  }
+});
+test("protected match and squad reads never fall back after HTTP denial", async () => {
+  for (const status of [401, 403, 404]) {
+    const api = stubApi(async () => { throw new ApiError(status); }, new Proxy({}, {
+      get: () => async () => { assert.fail("protected cache was read after denial"); },
+    }));
+    for (const method of ["fetchMatch", "fetchMatchSquad", "fetchMatchOpponentSquad", "fetchMatchEvents"])
+      await assert.rejects(api[method]("sheet"), /request failed/);
+  }
+});
+test("batch success applies individual receipts and leaves missing acknowledgements queued with a reason", async () => {
+  const outcomes = [], states = [], rejected = [];
+  const queue = ["accepted", "rejected", "pending", "missing"].map((id) => ({ id, match_id: "sheet", kind: "operation", state: "queued", payload: JSON.stringify({ id }) }));
+  const api = stubApi(async () => ({ receipts: [
+    { id: "accepted", outcome: "accepted", canonicalEventId: "canonical" },
+    { id: "rejected", outcome: "rejected", safeErrorCode: "SHARED_SESSION_CONFLICT" },
+    { id: "pending", outcome: "dependency_pending" },
+  ] }), {
+    listQueuedEvents: async () => queue,
+    setQueuedEventState: async (...args) => states.push(args),
+    setQueuedItemOutcome: async (...args) => outcomes.push(args),
+    rejectQueuedEvent: async (...args) => rejected.push(args),
+  });
+  await api.flushOfflineMatchEvents();
+  assert.deepEqual(rejected, [["rejected", "SHARED_SESSION_CONFLICT"]]);
+  assert.equal(outcomes.find(([id]) => id === "accepted")[1], "accepted");
+  assert.equal(outcomes.find(([id]) => id === "pending")[1], "dependency_pending");
+  assert.match(outcomes.find(([id]) => id === "missing")[3], /did not acknowledge/);
+  assert.equal(outcomes.find(([id]) => id === "missing")[1], "queued");
+});
+test("a report for another session fails visibly without using cached scores", async () => {
+  const api = stubApi(async () => ({ ...report, sessionId: "wrong" }), {
+    cacheResponse: async () => assert.fail("wrong report cached"),
+    readCachedResponse: async () => assert.fail("private fallback used"),
+  });
+  await assert.rejects(api.fetchSessionReport("session", "sheet"), /different session/);
+});
+
+test("clock retry payload retains original elapsed time and identity while the display advances", async () => {
+  const source = storeSource.slice(storeSource.indexOf("export async function readClockAnchor("), storeSource.indexOf("export function queuedEventAsTimelineRow("));
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const compiled = {};
+  new Function("exports", "database", js)(compiled, async () => ({ getOptional: async () => ({
+    period: "first_half", elapsed_ms: 1000, running: 1, authority_revision: "4", wall_clock_ms: Date.now() - 5000,
+    uncertain: 0, operation_id: "immutable", client_created_at: "original", updated_at: "version",
+  }) }));
+  const anchor = await compiled.readClockAnchor("sheet");
+  assert.ok(anchor.elapsedMs >= 6000);
+  assert.equal(anchor.operationElapsedMs, 1000);
+  assert.equal(anchor.operationId, "immutable");
+  assert.equal(anchor.clientCreatedAt, "original");
+});
