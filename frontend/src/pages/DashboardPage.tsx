@@ -91,6 +91,7 @@ interface UpcomingEvent {
   type: "match" | "training" | "meeting";
   scheduledAt: string;
   location: string;
+  venueName?: string | null;
   venueAddress: string | null;
   weatherLocation: string | null;
   weatherLatitude: number | null;
@@ -589,7 +590,7 @@ function EventItem({
   event: UpcomingEvent;
   onOpen: () => void;
 }) {
-  const destination = [event.location, event.venueAddress]
+  const destination = [event.location, event.venueName, event.venueAddress]
     .filter(Boolean)
     .join(", ");
 
@@ -613,7 +614,7 @@ function EventItem({
         </p>
         {destination && (
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <span>{event.location || event.venueAddress}</span>
+            <span>{[event.location, event.venueName, event.venueAddress].filter(Boolean).join(", ")}</span>
             <span aria-hidden="true">·</span>
             <a
               className="font-medium text-primary hover:underline"

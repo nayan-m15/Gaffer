@@ -21,6 +21,7 @@ export interface TeamEvent {
   status: EventStatus;
   scheduledAt: string;
   location: string;
+  venueName?: string | null;
   venueAddress: string | null;
   weatherLocation: string | null;
   weatherLatitude: number | null;
@@ -61,6 +62,7 @@ export interface CreateEventInput {
   type: EventType;
   scheduledAt: string;
   location?: string;
+  venueName?: string | null;
   venueAddress?: string | null;
   weatherLocation?: string | null;
   weatherLatitude?: number | null;
@@ -81,6 +83,7 @@ export interface UpdateEventInput {
   status?: EventStatus;
   scheduledAt?: string;
   location?: string;
+  venueName?: string | null;
   venueAddress?: string | null;
   weatherLocation?: string | null;
   weatherLatitude?: number | null;

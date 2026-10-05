@@ -16,6 +16,7 @@ export interface PlayerEvent {
   status: "scheduled" | "cancelled" | "completed";
   scheduledAt: string;
   location: string;
+  venueName?: string | null;
   venueAddress: string | null;
   weatherLocation: string | null;
   weatherLatitude: number | null;

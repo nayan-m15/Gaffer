@@ -415,6 +415,7 @@ export const events = pgTable(
     status: eventStatus('status').default('scheduled').notNull(),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     location: text('location').notNull(),
+    venueName: text('venue_name'),
     venueAddress: text('venue_address'),
     weatherLocation: text('weather_location'),
     // Keep the original column names from migration 0018 while exposing their

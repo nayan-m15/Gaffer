@@ -191,6 +191,7 @@ export class FriendlyFixturesService {
           status: 'scheduled',
           scheduledAt: requesterEvent.scheduledAt,
           location: requesterEvent.location,
+          venueName: requesterEvent.venueName,
           venueAddress: requesterEvent.venueAddress,
           weatherLocation: requesterEvent.weatherLocation,
           weatherLatitude: requesterEvent.weatherLatitude,

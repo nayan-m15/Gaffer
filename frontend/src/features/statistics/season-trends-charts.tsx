@@ -185,7 +185,7 @@ export function PeriodSplitChart({
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="label" axisLine={false} tickLine={false} tick={AXIS} />
           <YAxis axisLine={false} tickLine={false} tick={AXIS} />
-          <Tooltip {...tooltipStyle} />
+          <Tooltip {...tooltipStyle} cursor={false} />
           <Bar
             dataKey="value"
             name={label}
@@ -214,7 +214,7 @@ export function AthleteComparisonChart({
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="metric" axisLine={false} tickLine={false} tick={AXIS} />
           <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={AXIS} />
-          <Tooltip {...tooltipStyle} />
+          <Tooltip {...tooltipStyle} cursor={false} />
           <Legend wrapperStyle={legendStyle} />
           {athletes.map((athlete, index) => (
             <Bar

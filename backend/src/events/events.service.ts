@@ -103,6 +103,7 @@ export class EventsService {
           type: dto.type,
           scheduledAt: new Date(dto.scheduledAt),
           location: dto.location,
+          venueName: dto.venueName,
           venueAddress: dto.venueAddress,
           weatherLocation: dto.weatherLocation,
           weatherLatitude: dto.weatherLatitude,
@@ -619,6 +620,7 @@ export class EventsService {
         ? { scheduledAt: new Date(dto.scheduledAt) }
         : {}),
       ...(dto.location !== undefined ? { location: dto.location } : {}),
+      ...(dto.venueName !== undefined ? { venueName: dto.venueName } : {}),
       ...(dto.venueAddress !== undefined
         ? { venueAddress: dto.venueAddress }
         : {}),

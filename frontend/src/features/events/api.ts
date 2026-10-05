@@ -38,6 +38,12 @@ export function searchLocations(query: string) {
   );
 }
 
+export function reverseSearchLocation(latitude: number, longitude: number) {
+  return apiFetch<LocationSearchResult>(
+    `/locations/reverse?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`,
+  );
+}
+
 export function createEvent(input: CreateEventInput) {
   return apiFetch<TeamEvent>("/events", {
     method: "POST",
