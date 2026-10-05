@@ -672,10 +672,10 @@ function createCentralIsland(kit: DressingRoomKit) {
 
     // Subtle premium detailing: cushion seams, lower trim, and four small feet.
     group.add(
-      box([2.86, .028, .028], [-65.9, .662, side * 1.03], kit.light),
-      box([2.86, .028, .028], [-65.9, .662, side * 1.65], kit.light),
-      box([.028, .028, .62], [-66.92, .662, side * 1.34], kit.light),
-      box([.028, .028, .62], [-64.88, .662, side * 1.34], kit.light),
+      box([2.86, .028, .028], [-65.9, .662, side * 1.03], kit.warmLight),
+      box([2.86, .028, .028], [-65.9, .662, side * 1.65], kit.warmLight),
+      box([.028, .028, .62], [-66.92, .662, side * 1.34], kit.warmLight),
+      box([.028, .028, .62], [-64.88, .662, side * 1.34], kit.warmLight),
       box([2.88, .045, .72], [-65.9, .13, side * 1.34], kit.wood),
       box([.18, .11, .18], [-67.18, .06, side * .98], kit.metal),
       box([.18, .11, .18], [-64.62, .06, side * .98], kit.metal),
@@ -689,12 +689,12 @@ function createCentralIsland(kit: DressingRoomKit) {
   leftTowelBottom.rotation.y = -.08;
   const leftTowelMid = roundedBox([.58, .04, .31], [-65.39, .776, -1.32], kit.white, .02);
   leftTowelMid.rotation.y = -.05;
-  const leftTowelTop = roundedBox([.42, .028, .2], [-65.36, .807, -1.305], kit.light, .018);
+  const leftTowelTop = roundedBox([.42, .028, .2], [-65.36, .807, -1.305], kit.warmLight, .018);
   leftTowelTop.rotation.y = -.02;
 
   const rightTowelBottom = roundedBox([.74, .05, .44], [-65.78, .73, 1.33], kit.white, .02);
   rightTowelBottom.rotation.y = .12;
-  const rightTowelMid = roundedBox([.6, .038, .32], [-65.74, .768, 1.315], kit.light, .018);
+  const rightTowelMid = roundedBox([.6, .038, .32], [-65.74, .768, 1.315], kit.warmLight, .018);
   rightTowelMid.rotation.y = .09;
   const rightTowelTop = roundedBox([.4, .026, .21], [-65.71, .797, 1.3], kit.towel, .016);
   rightTowelTop.rotation.y = .06;
@@ -983,8 +983,7 @@ function createCornerFlag(lowPower: boolean, poleMaterial: THREE.Material) {
   return { group, pivot };
 }
 
-function applyGrassShader(material: THREE.Material & { onBeforeCompile: (shader: THREE.Shader) => void; customProgramCacheKey?: () => string; needsUpdate: boolean }, lowPower: boolean) {
-  const turfCells = lowPower ? 180 : 280;
+function applyGrassShader(material: THREE.Material, lowPower: boolean) {
   material.onBeforeCompile = shader => {
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <map_fragment>",
@@ -1062,7 +1061,7 @@ function buildPitchAndStadium(
   roomAssets: ReturnType<typeof buildDressingRoomAndTunnel>,
 ) {
   const { dark, metal, cushion } = roomAssets;
-  const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassDetail=surfaceDetailTexture(lowPower,"Landing grass micro surface",18,28);const grassMat=new THREE.MeshLambertMaterial({map:grassTexture,bumpMap:grassDetail,bumpScale:lowPower ? .006 : .01});applyGrassShader(grassMat,lowPower);const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
+  const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassMat=new THREE.MeshLambertMaterial({map:grassTexture});applyGrassShader(grassMat,lowPower);const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
   const ball=createClassicFootball(.22,lowPower);ball.position.set(0,.225,0);ball.rotation.set(.22,-.58,.12);scene.add(ball);
   const cornerFlag=createCornerFlag(lowPower,metal);scene.add(cornerFlag.group);
   const glass=new THREE.MeshPhysicalMaterial({color:0xb9d8d0,roughness:.24,transparent:true,opacity:.25,side:THREE.DoubleSide}),dugout=new THREE.Group();dugout.position.set(-39.2,0,13.5);dugout.add(box([2.8,.3,13],[0,.15,0],dark),box([.3,3.2,13],[-1.25,1.75,0],glass),box([2.8,.32,13],[0,3.25,0],metal));
@@ -1093,7 +1092,7 @@ function buildPitchAndStadium(
   const pitchRimRight=new THREE.PointLight(0x85d7b0,lowPower?.05:.11,42,2);pitchRimRight.position.set(-18,7,28);
   scene.add(roomLight,lockerLightLeft,lockerLightRight,roomAccentLeft,roomAccentRight,portalLight,exitLight,tunnelFill,tunnelAccentLeft,tunnelAccentRight,pitchFillLeft,pitchFillLeft.target,pitchFillRight,pitchFillRight.target,pitchRimLeft,pitchRimRight);
 
-  return { grassTexture, grassDetail, stadium, skyMat, daylightSun, cornerFlag, lighting: { roomLight, lockerLightLeft, lockerLightRight, roomAccentLeft, roomAccentRight, portalLight, tunnelFill, tunnelAccentLeft, tunnelAccentRight, exitLight, pitchFillLeft, pitchFillRight, pitchRimLeft, pitchRimRight } };
+  return { grassTexture, stadium, skyMat, daylightSun, cornerFlag, lighting: { roomLight, lockerLightLeft, lockerLightRight, roomAccentLeft, roomAccentRight, portalLight, tunnelFill, tunnelAccentLeft, tunnelAccentRight, exitLight, pitchFillLeft, pitchFillRight, pitchRimLeft, pitchRimRight } };
 }
 export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
@@ -1129,7 +1128,7 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
 
   const roomAssets = buildDressingRoomAndTunnel(scene, lowPower);
   const { floorTexture, roomSurfaceDetail, crestMap, numberMaps, ballTexture, shirtFabricMap, tunnelAssets } = roomAssets;
-  const { grassTexture, grassDetail, stadium, skyMat, daylightSun, cornerFlag, lighting } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
+  const { grassTexture, stadium, skyMat, daylightSun, cornerFlag, lighting } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
   const applyEnvironmentTheme=()=>{const lightMode=!document.documentElement.classList.contains("dark");const background=lightMode?LIGHT_BACKGROUND:DARK_BACKGROUND;sceneBackground.setHex(background);renderer.setClearColor(background);skyMat.uniforms.topColor.value.setHex(lightMode?LIGHT_SKY_TOP:DARK_SKY_TOP);skyMat.uniforms.bottomColor.value.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);if(scene.fog instanceof THREE.Fog)scene.fog.color.setHex(lightMode?0x9eb8b0:0x0b1512);daylightSun.visible=lightMode;stadium.updateTheme(lightMode);};
   const updateLighting=(progress:number)=>{
     const tunnelArrival=smooth(.24,.5,progress),stadiumReveal=smooth(.43,.62,progress);
@@ -1148,8 +1147,8 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     if(scene.fog instanceof THREE.Fog){scene.fog.near=THREE.MathUtils.lerp(18,30,stadiumReveal);scene.fog.far=THREE.MathUtils.lerp(lowPower?126:164,lowPower?156:206,stadiumReveal);}
   };
   applyEnvironmentTheme();
-  let animatedShirt: THREE.Group | null = null;
-  scene.traverse(object => { if (!animatedShirt && object instanceof THREE.Group && object.name === "Dressing room shirt") animatedShirt = object; });
+  const shirtObject = scene.getObjectByName("Dressing room shirt");
+  const animatedShirt = shirtObject instanceof THREE.Group ? shirtObject : null;
   const shirtBaseRoll = animatedShirt?.rotation.z ?? 0;
   const flagBaseYaw = cornerFlag.pivot.rotation.y;
   // Static geometry dominates this scene. Stop Three.js from rebuilding local
@@ -1199,5 +1198,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }

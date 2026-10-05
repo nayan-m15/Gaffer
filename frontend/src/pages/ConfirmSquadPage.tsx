@@ -1599,7 +1599,7 @@ export default function ConfirmSquadPage() {
     if (canonicalSnapshot(confirmedLineup.customPositions ?? null) !==
         canonicalSnapshot(previewCustomPositions)) return true;
     return false;
-  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, selectedPlan, athletes]);
+  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, gamePlanQuery.data, athletes]);
   // Lineups can be confirmed before match day for advance sharing.
   const canConfirmLineup =
     startingCount === startingTarget &&
