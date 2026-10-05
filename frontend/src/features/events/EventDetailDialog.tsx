@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink, MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -8,7 +9,17 @@ import {
 import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { displayEventStatus, eventStatusLabel, eventTypeLabel, formatEventDateTime } from "./event-utils";
+import { searchLocations } from "./api";
+import {
+  buildEventDestination,
+  buildEventMapUrl,
+  displayEventStatus,
+  eventStatusLabel,
+  eventTypeLabel,
+  formatCoordinatesDms,
+  formatEventDateTime,
+  getEventMapTiles,
+} from "./event-utils";
 import { useCancelEvent } from "./hooks";
 import type { EventStatus, TeamEvent } from "./types";
 import { fetchEventRsvps, type AthleteRsvp } from "@/services/rsvps";
@@ -157,19 +168,16 @@ export function EventDetailDialog({
         </DialogHeader>
 
         {event && (
-          <div className={cn("space-y-4 rounded-lg border border-border bg-background p-4", event.status === "cancelled" && "opacity-70")}>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className={cn("text-xl font-semibold text-foreground", event.status === "cancelled" && "line-through")}>
+          <div className={cn("space-y-3.5 rounded-xl border border-border bg-card p-4 shadow-sm", event.status === "cancelled" && "opacity-70")}>
+            <div className="flex items-center justify-between">
+              <h3 className={cn("text-xl font-bold text-foreground tracking-tight", event.status === "cancelled" && "line-through")}>
                 {event.title}
               </h3>
               <StatusBadge status={displayEventStatus(event, now)} />
             </div>
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
             <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
-            <DetailRow label="Location" value={event.location || "Not set"} />
-            {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
-            <LocationLinks event={event} />
-            <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+            <EventLocationSection event={event} />
             {generatedFixture && event.status === "scheduled" && (
               <div
                 className={cn(
@@ -263,30 +271,202 @@ export function EventDetailDialog({
   );
 }
 
+function EventLocationSection({ event }: { event: TeamEvent | PlayerEvent }) {
+  const destination = buildEventDestination(event);
+  if (!destination) {
+    return (
+      <>
+        <DetailRow label="Location" value="Not set" />
+        <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex items-stretch justify-between gap-3 sm:gap-4">
+      <div className="min-w-0 flex-1 space-y-2.5">
+        <DetailRow label="Location" value={event.location || "Not set"} />
+        {event.venueName && <DetailRow label="Venue" value={event.venueName} />}
+        {event.venueAddress && <DetailRow label="Address" value={event.venueAddress} />}
+        <LocationLinks event={event} />
+        <DetailRow label="Notes" value={event.notes?.trim() ? event.notes : "None"} />
+      </div>
+      <EventLocationMapSquare event={event} destination={destination} />
+    </div>
+  );
+}
+
 function LocationLinks({ event }: { event: TeamEvent | PlayerEvent }) {
-  const destination = [event.location, event.venueAddress]
-    .filter(Boolean)
-    .join(", ");
+  const destination = buildEventDestination(event);
   if (!destination) {
     return null;
   }
   const encoded = encodeURIComponent(destination);
   return (
-    <div className="flex gap-3 text-xs">
-      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/search/?api=1&query=${encoded}`} target="_blank" rel="noreferrer">View map</a>
-      <a className="font-medium text-primary hover:underline" href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`} target="_blank" rel="noreferrer">Get directions</a>
+    <div className="flex items-center gap-2 pt-1 text-xs">
+      <a
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-foreground/80 shadow-xs transition hover:bg-muted hover:text-foreground"
+        href={buildEventMapUrl(destination)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <span>Map</span>
+        <span className="text-[10px] opacity-70">↗</span>
+      </a>
+      <a
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-500 dark:text-emerald-400 shadow-xs transition hover:bg-emerald-500/25"
+        href={`https://www.google.com/maps/dir/?api=1&destination=${encoded}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <Navigation className="size-3" />
+        <span>Route</span>
+      </a>
     </div>
   );
 }
 
-// DetailRow, StatusBadge, RsvpGroup — unchanged, keep as-is.
+function EventLocationMapSquare({
+  event,
+  destination,
+}: {
+  event: TeamEvent | PlayerEvent;
+  destination: string;
+}) {
+  const mapUrl = buildEventMapUrl(destination);
+  const containerRef = useRef<HTMLAnchorElement>(null);
+  const [mapSize, setMapSize] = useState({ width: 224, height: 180 });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setMapSize({ width: Math.round(width), height: Math.round(height) });
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasEventCoords =
+    event.weatherLatitude != null && event.weatherLongitude != null;
+
+  // Fallback to searching coordinates by location if missing
+  const { data: searchResults, isLoading: isSearching } = useQuery({
+    queryKey: ["locations", "search", event.location],
+    queryFn: () => searchLocations(event.location),
+    enabled:
+      !hasEventCoords &&
+      Boolean(event.location && event.location.trim().length >= 3),
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+
+  const latitude = hasEventCoords
+    ? event.weatherLatitude
+    : searchResults?.[0]?.latitude ?? null;
+  const longitude = hasEventCoords
+    ? event.weatherLongitude
+    : searchResults?.[0]?.longitude ?? null;
+
+  const [tileError, setTileError] = useState(false);
+
+  const tiles = useMemo(() => {
+    if (latitude == null || longitude == null || tileError) return null;
+    return getEventMapTiles(latitude, longitude, 15, mapSize.width, mapSize.height);
+  }, [latitude, longitude, tileError, mapSize.width, mapSize.height]);
+
+  return (
+    <a
+      ref={containerRef}
+      href={mapUrl}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${destination} in Google Maps`}
+      aria-label={`Open ${destination} in Google Maps`}
+      className="group relative flex w-44 sm:w-60 shrink-0 self-stretch min-h-[170px] flex-col items-center justify-center overflow-hidden rounded-xl border border-emerald-500/40 bg-muted/40 shadow-md transition-all hover:border-emerald-500/70 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {tiles ? (
+        <>
+          {/* Direct OpenStreetMap tiles without iframe clutter */}
+          <div className="pointer-events-none absolute inset-0 select-none overflow-hidden">
+            {tiles.map((tile) => (
+              <img
+                key={tile.key}
+                src={tile.url}
+                alt=""
+                onError={() => setTileError(true)}
+                className="absolute size-[256px] max-w-none select-none"
+                style={{
+                  left: `${tile.left}px`,
+                  top: `${tile.top}px`,
+                }}
+                loading="lazy"
+                draggable={false}
+              />
+            ))}
+          </div>
+
+          {/* Centered green map pin */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full drop-shadow-md">
+            <svg
+              viewBox="0 0 24 36"
+              className="h-7 w-auto"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24c0-6.63-5.37-12-12-12z"
+                fill="#10b981"
+              />
+              <circle cx="12" cy="12" r="4.5" fill="#ffffff" />
+            </svg>
+          </div>
+
+          {/* GPS Coordinates bottom bar */}
+          {latitude != null && longitude != null && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-black/80 px-2 py-0.5 text-center font-mono text-[9px] text-zinc-300 backdrop-blur-xs">
+              {formatCoordinatesDms(latitude, longitude)}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="relative flex size-full flex-col items-center justify-center bg-muted/30 p-3 text-center">
+          <div className="relative mb-2 flex items-center justify-center">
+            <span className="absolute inline-flex size-7 animate-ping rounded-full bg-primary/20 opacity-75" />
+            <div className="relative flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MapPin className="size-4.5" />
+            </div>
+          </div>
+          <span className="line-clamp-1 max-w-full text-xs font-medium text-foreground">
+            {event.venueName || event.location}
+          </span>
+          <span className="text-[10px] text-muted-foreground mt-0.5">
+            {isSearching ? "Finding location…" : "Open map"}
+          </span>
+        </div>
+      )}
+
+      {/* Floating hover badge */}
+      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40">
+        <div className="flex items-center gap-1.5 rounded-md bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <span>View map</span>
+          <ExternalLink className="size-3 text-primary" />
+        </div>
+      </div>
+    </a>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
         {label}
-      </p>
-      <p className="mt-1 text-sm text-foreground">{value}</p>
+      </div>
+      <div className="text-sm font-medium text-foreground mt-0.5">{value}</div>
     </div>
   );
 }

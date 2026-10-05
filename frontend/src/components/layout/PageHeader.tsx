@@ -33,8 +33,8 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        // Mobile: clear fixed sidebar toggle (left-4 top-4) horizontally and vertically
-        "mx-auto w-full max-w-[1600px] pt-8 pb-5 pl-16 pr-6 sm:pr-8 lg:px-10 lg:pb-6 lg:pt-9",
+        // The player shell still clears its mobile sidebar toggle.
+        "page-header mx-auto w-full max-w-[1600px] pt-8 pb-5 pl-16 pr-6 sm:pr-8 lg:px-10 lg:pb-6 lg:pt-9",
         className,
       )}
     >

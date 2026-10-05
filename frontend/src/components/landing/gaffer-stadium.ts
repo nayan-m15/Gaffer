@@ -64,6 +64,85 @@ function scoreboardTexture() {
   return texture;
 }
 
+
+function createRoofLightRig(span: number, y: number, z: number, count: number, materials: ReturnType<typeof makeMaterials>) {
+  const group = new THREE.Group();
+  group.name = "Roof floodlight gantry";
+  const usableSpan = Math.max(0, span - 12);
+  const positions = Array.from(
+    { length: count },
+    (_, index) => count === 1 ? 0 : -usableSpan / 2 + index * (usableSpan / (count - 1)),
+  );
+
+  group.add(
+    block([span, .12, .16], [0, y + .08, z], materials.steel),
+    block([span, .08, .12], [0, y + .58, z + .24], materials.steel),
+  );
+
+  const fixtureOffsets = [-1.02, -.34, .34, 1.02];
+  const fixtureCount = positions.length * fixtureOffsets.length;
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  const housingMesh = new THREE.InstancedMesh(unitBox, materials.lightHousing, fixtureCount);
+  const lampMesh = new THREE.InstancedMesh(unitBox, materials.lampGlow, fixtureCount);
+  const lensMesh = new THREE.InstancedMesh(unitBox, materials.lampLens, fixtureCount);
+  const coreOuterMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreOuter, fixtureCount);
+  const coreMidMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreMid, fixtureCount);
+  const coreInnerMesh = new THREE.InstancedMesh(unitBox, materials.lampCoreInner, fixtureCount);
+  const stripMesh = new THREE.InstancedMesh(unitBox, materials.lampStrip, positions.length);
+  const haloMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(3.95, .72), materials.lampHalo, positions.length);
+  const wideHaloMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(5.15, 1.04), materials.lampHaloWide, positions.length);
+  const dummy = new THREE.Object3D();
+  let fixtureIndex = 0;
+
+  const setBoxInstance = (
+    mesh: THREE.InstancedMesh,
+    index: number,
+    px: number, py: number, pz: number,
+    sx: number, sy: number, sz: number,
+  ) => {
+    dummy.position.set(px, py, pz);
+    dummy.rotation.set(-.36, 0, 0);
+    dummy.scale.set(sx, sy, sz);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  };
+
+  positions.forEach((x, bankIndex) => {
+    const leftPost = new THREE.Vector3(x - 1.55, y, z + .02);
+    const leftTop = new THREE.Vector3(x - 1.35, y + .68, z + .22);
+    const rightPost = new THREE.Vector3(x + 1.55, y, z + .02);
+    const rightTop = new THREE.Vector3(x + 1.35, y + .68, z + .22);
+    group.add(
+      strut(leftPost, leftTop, .055, materials.steel),
+      strut(rightPost, rightTop, .055, materials.steel),
+      block([3.05, .09, .13], [x, y + .68, z + .22], materials.steel),
+    );
+
+    fixtureOffsets.forEach(offset => {
+      setBoxInstance(housingMesh, fixtureIndex, x + offset, y + .54, z - .02, .5, .3, .34);
+      setBoxInstance(lampMesh, fixtureIndex, x + offset, y + .455, z - .185, .34, .16, .07);
+      setBoxInstance(lensMesh, fixtureIndex, x + offset, y + .42, z - .245, .29, .02, .08);
+      setBoxInstance(coreOuterMesh, fixtureIndex, x + offset, y + .414, z - .258, .2, .012, .038);
+      setBoxInstance(coreMidMesh, fixtureIndex, x + offset, y + .4145, z - .259, .16, .012, .03);
+      setBoxInstance(coreInnerMesh, fixtureIndex, x + offset, y + .415, z - .26, .145, .012, .027);
+      fixtureIndex += 1;
+    });
+
+    setBoxInstance(stripMesh, bankIndex, x, y + .382, z - .286, 2.86, .022, .06);
+    dummy.position.set(x, y + .455, z - .355); dummy.rotation.set(-.36, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); haloMesh.setMatrixAt(bankIndex, dummy.matrix);
+    dummy.position.set(x, y + .46, z - .42); dummy.updateMatrix(); wideHaloMesh.setMatrixAt(bankIndex, dummy.matrix);
+  });
+
+  [housingMesh, lampMesh, lensMesh, coreOuterMesh, coreMidMesh, coreInnerMesh, stripMesh, haloMesh, wideHaloMesh].forEach(mesh => {
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = true;
+  });
+  haloMesh.renderOrder = 4;
+  wideHaloMesh.renderOrder = 3;
+  group.add(housingMesh, lampMesh, lensMesh, coreOuterMesh, coreMidMesh, coreInnerMesh, stripMesh, haloMesh, wideHaloMesh);
+  return group;
+}
+
 function standTransform(group: THREE.Group, side: Side) {
   if (side === "east") { group.position.x = 37.5; group.rotation.y = Math.PI / 2; }
   if (side === "west") { group.position.x = -37.5; group.rotation.y = -Math.PI / 2; }
@@ -78,7 +157,7 @@ function opening(side: Side, along: number, row: number, tier: number) {
   return false;
 }
 
-function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>, textures: THREE.Texture[]) {
+function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>) {
   const stand = new THREE.Group();
   stand.name = `Gaffer ${spec.name} stand`;
   standTransform(stand, spec.side);
@@ -219,15 +298,14 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
   const frontY = spec.roof - 2.4;
   const rearY = spec.roof + 1.7;
   const roofDepth = roofBack - roofFront;
-  const pitch = Math.atan2(rearY - frontY, roofDepth);
-  const roofSegments = lowPower ? Math.ceil(spec.length / 12) : Math.ceil(spec.length / 7);
-  const segmentWidth = spec.length / roofSegments;
-  const panelMat = materials.roofPanel;
-  for (let i = 0; i < roofSegments; i++) {
-    const x = -spec.length / 2 + (i + .5) * segmentWidth;
-    const panel = block([segmentWidth - .18, .12, roofDepth - .15], [x, (frontY + rearY) / 2, (roofFront + roofBack) / 2], i % 4 === 0 ? materials.solidRoof : panelMat);
-    panel.rotation.x = -pitch; stand.add(panel);
-  }
+  // The former full-depth translucent roof panels produced a stretched sheet-like
+  // shape across the top of the stands from the walk-out camera. Keep the roof
+  // visually open instead: the truss structure below defines the canopy and only
+  // a narrow rear cap remains for depth at the back of the stand.
+  const rearCapDepth = 2.1;
+  const rearCapZ = roofBack - rearCapDepth / 2;
+  const rearCapY = frontY + (rearCapZ - roofFront) / roofDepth * (rearY - frontY);
+  stand.add(block([spec.length + .8, .14, rearCapDepth], [0, rearCapY, rearCapZ], materials.solidRoof));
   stand.add(block([spec.length + 2, 1.05, .72], [0, frontY - .32, roofFront], fascia, !lowPower));
   stand.add(block([spec.length + 2, .62, .9], [0, rearY, roofBack], steel));
   const trusses = lowPower ? Math.ceil(spec.length / 14) : Math.ceil(spec.length / 8);
@@ -251,10 +329,11 @@ function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typ
     const y = frontY + (z - roofFront) / roofDepth * (rearY - frontY) - .18;
     stand.add(block([spec.length + 1, .16, .18], [0, y, z], steel));
   }
-  const signMap = signTexture(spec.name === "Kop" ? "GAFFER  •  OWN THE TOUCHLINE" : "GAFFER  •  PREPARE. PERFORM. IMPROVE.");
-  textures.push(signMap);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(spec.length * .64, 60), .84), new THREE.MeshBasicMaterial({ map: signMap }));
-  sign.position.set(0, frontY - .31, roofFront - .38); sign.rotation.y = Math.PI; stand.add(sign);
+  // Stadium-style floodlight banks replace the old stretched roof surface at the
+  // visible front edge. Counts are intentionally modest so the roofline stays clean.
+  const lightRigCount = spec.length > 100 ? (lowPower ? 4 : 6) : (lowPower ? 3 : 4);
+  stand.add(createRoofLightRig(spec.length * .88, frontY + .28, roofFront - .08, lightRigCount, materials));
+  // Keep the roof edge clean: no long banner planes on any stand.
   return stand;
 }
 
@@ -268,8 +347,30 @@ function makeMaterials() {
     aisle: new THREE.MeshStandardMaterial({ color: 0x858d88, roughness: .92 }),
     rail: new THREE.MeshStandardMaterial({ color: 0x9ba8a0, roughness: .6, metalness: .34 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x6d9187, roughness: .27, metalness: .22, transparent: true, opacity: .35, depthWrite: false }),
-    roofPanel: new THREE.MeshStandardMaterial({ color: 0x8da8a3, roughness: .48, metalness: .1, transparent: true, opacity: .32, side: THREE.DoubleSide, depthWrite: false }),
-    solidRoof: new THREE.MeshStandardMaterial({ color: 0x454d4b, roughness: .72, metalness: .25 }),
+    solidRoof: new THREE.MeshStandardMaterial({ color: 0x2e3735, roughness: .82, metalness: .18 }),
+    lightHousing: new THREE.MeshStandardMaterial({ color: 0x202826, roughness: .5, metalness: .48 }),
+    lampGlow: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4fbff, emissiveIntensity: 2.8, roughness: .18, metalness: .01, transparent: true }),
+    lampLens: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }),
+    lampCoreOuter: new THREE.MeshBasicMaterial({ color: 0xf2f8ff, transparent: true, opacity: 0 }),
+    lampCoreMid: new THREE.MeshBasicMaterial({ color: 0xfcfeff, transparent: true, opacity: 0 }),
+    lampCoreInner: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
+    lampStrip: new THREE.MeshBasicMaterial({ color: 0xf6fbff, transparent: true, opacity: .92 }),
+    lampHalo: new THREE.MeshBasicMaterial({
+      color: 0xe6f6ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    }),
+    lampHaloWide: new THREE.MeshBasicMaterial({
+      color: 0x9fd7ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    }),
   };
 }
 
@@ -401,7 +502,7 @@ export function createGafferStadium(lowPower: boolean) {
     { side: "north", name: "Kop", length: 79, tiers: [{ rows: 20, start: 0, rise: .68, depth: 1.13, base: .5 }], roof: 19.7, columns: 8 },
     { side: "south", name: "South", length: 79, tiers: [{ rows: 9, start: 0, rise: .58, depth: 1.13, base: .5 }, { rows: 8, start: 12, rise: .75, depth: 1.12, base: 7.1 }], roof: 18.6, columns: 8 },
   ];
-  specs.forEach(spec => group.add(makeStand(spec, lowPower, materials, textures)));
+  specs.forEach(spec => group.add(makeStand(spec, lowPower, materials)));
 
   // Corner circulation towers and connecting roof edges close the rectangular skyline.
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
@@ -430,5 +531,37 @@ export function createGafferStadium(lowPower: boolean) {
   const adMap = signTexture("GAFFER"); textures.push(adMap);
   const adMaterial = new THREE.MeshStandardMaterial({ map: adMap, emissive: 0x073a2a, emissiveIntensity: .16, roughness: .72 });
   group.add(createAdvertisingBoards(adMaterial, materials.aisle));
-  return { group, textures };
+
+  const updateTheme = (lightMode: boolean) => {
+    // Dark mode: clearly illuminated roof floodlights with a restrained halo.
+    // Light mode: the gantry/housings remain, but the actual lamps are switched off.
+    materials.lampGlow.color.setHex(0xffffff);
+    materials.lampGlow.emissive.setHex(0xffffff);
+    materials.lampGlow.emissiveIntensity = lightMode ? 0 : 28;
+    materials.lampGlow.opacity = lightMode ? 0 : 1;
+    materials.lampLens.color.setHex(0xffffff);
+    materials.lampLens.opacity = lightMode ? 0 : 1;
+    materials.lampCoreOuter.color.setHex(0xf2f8ff);
+    materials.lampCoreOuter.opacity = lightMode ? 0 : .58;
+    materials.lampCoreMid.color.setHex(0xfbfdff);
+    materials.lampCoreMid.opacity = lightMode ? 0 : .88;
+    materials.lampCoreInner.color.setHex(0xffffff);
+    materials.lampCoreInner.opacity = lightMode ? 0 : 1;
+    materials.lampStrip.color.setHex(0xffffff);
+    materials.lampStrip.opacity = lightMode ? 0 : .92;
+    materials.lampHalo.color.setHex(0xf2f9ff);
+    materials.lampHalo.opacity = lightMode ? 0 : .42;
+    materials.lampHaloWide.color.setHex(0xd8edff);
+    materials.lampHaloWide.opacity = lightMode ? 0 : .11;
+    materials.lampGlow.needsUpdate = true;
+    materials.lampLens.needsUpdate = true;
+    materials.lampCoreOuter.needsUpdate = true;
+    materials.lampCoreMid.needsUpdate = true;
+    materials.lampCoreInner.needsUpdate = true;
+    materials.lampStrip.needsUpdate = true;
+    materials.lampHalo.needsUpdate = true;
+    materials.lampHaloWide.needsUpdate = true;
+  };
+
+  return { group, textures, updateTheme };
 }

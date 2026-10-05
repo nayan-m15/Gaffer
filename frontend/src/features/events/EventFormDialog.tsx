@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { CalendarIcon, Check, ClockIcon, MapPinned, Search, LocateFixed } from "lucide-react";
+import { CalendarIcon, Check, ClockIcon, Search, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { Calendar } from "@/components/ui/calendar";
@@ -40,7 +40,7 @@ import {
   startOfLocalDay,
 } from "./event-utils";
 import { useCreateEvent, useUpdateEvent } from "./hooks";
-import { searchLocations } from "./api";
+import { reverseSearchLocation, searchLocations } from "./api";
 import type {
   CreateEventInput,
   EventType,
@@ -105,6 +105,7 @@ type EventFormValues = {
   type: EventType;
   scheduledAt: string;
   location: string;
+  venueName: string;
   venueAddress: string;
   forecastLocation: LocationSearchResult | null;
   notes: string;
@@ -118,6 +119,7 @@ function commonEventInput(values: EventFormValues) {
     type: values.type,
     scheduledAt: values.scheduledAt,
     location: values.location.trim(),
+    venueName: values.venueName.trim() || null,
     venueAddress: values.venueAddress.trim() || null,
     weatherLocation: values.forecastLocation?.displayName ?? null,
     weatherLatitude: values.forecastLocation?.latitude ?? null,
@@ -168,25 +170,6 @@ function eventScheduleError(
   return undefined;
 }
 
-function parseExactWeatherCoordinates(latitudeText: string, longitudeText: string, timezoneText: string) {
-  const latitude = Number(latitudeText);
-  const longitude = Number(longitudeText);
-  const timezone = timezoneText.trim();
-  const coordinatesValid =
-    latitudeText.trim() !== "" && longitudeText.trim() !== "" &&
-    Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
-    Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
-  if (!coordinatesValid) {
-    return { error: "Enter valid latitude (-90 to 90) and longitude (-180 to 180)." } as const;
-  }
-  try {
-    new Intl.DateTimeFormat(undefined, { timeZone: timezone }).format();
-  } catch {
-    return { error: "Enter a valid IANA timezone, such as Africa/Johannesburg." } as const;
-  }
-  return { latitude, longitude, timezone } as const;
-}
-
 interface EventFormDialogProps {
   open: boolean;
   event?: TeamEvent;
@@ -223,6 +206,7 @@ export function EventFormDialog({
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
+  const [venueName, setVenueName] = useState("");
   const [venueAddress, setVenueAddress] = useState("");
   const [selectedVenueLocation, setSelectedVenueLocation] = useState<LocationSearchResult | null>(null);
   const [venueResults, setVenueResults] = useState<LocationSearchResult[]>([]);
@@ -231,17 +215,6 @@ export function EventFormDialog({
   const [venueSearchEnabled, setVenueSearchEnabled] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const [weatherOverride, setWeatherOverride] = useState(false);
-  const [weatherLocationQuery, setWeatherLocationQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
-  const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
-  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
-  const [locationSearchCompleted, setLocationSearchCompleted] = useState(false);
-  const [manualLatitude, setManualLatitude] = useState("");
-  const [manualLongitude, setManualLongitude] = useState("");
-  const [manualTimezone, setManualTimezone] = useState(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  );
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
   const [opponentPick, setOpponentPick] = useState("");
@@ -256,7 +229,6 @@ export function EventFormDialog({
   const [gafferOpponentSearchCompleted, setGafferOpponentSearchCompleted] =
     useState(false);
   const [error, setError] = useState<string | null>(null);
-  const locationSearchIdRef = useRef(0);
   const venueSearchIdRef = useRef(0);
   const gafferOpponentSearchIdRef = useRef(0);
 
@@ -282,24 +254,26 @@ export function EventFormDialog({
       setDate(parseLocalDate(parts.date));
       setTime(parts.time);
       setLocation(event.location);
+      setVenueName(event.venueName ?? "");
       setVenueAddress(event.venueAddress ?? "");
-      setSelectedVenueLocation(null);
-      setVenueResults([]);
-      setVenueSearchCompleted(false);
-      setVenueSearchEnabled(false);
-      setWeatherOverride(event.weatherLatitude != null && event.weatherLongitude != null);
-      setWeatherLocationQuery(event.weatherLocation ?? "");
-      setSelectedLocation(event.weatherLatitude != null && event.weatherLongitude != null ? {
+      const savedPlaceMatchesLocation = Boolean(
+        event.weatherLatitude != null &&
+        event.weatherLongitude != null &&
+        event.weatherLocation &&
+        (event.weatherLocation === event.location ||
+          event.weatherLocation.startsWith(`${event.location},`)),
+      );
+      setSelectedVenueLocation(savedPlaceMatchesLocation ? {
         id: event.id,
-        name: event.weatherLocation ?? event.location,
+        name: event.location,
         displayName: event.weatherLocation ?? event.location,
-        latitude: event.weatherLatitude,
-        longitude: event.weatherLongitude,
+        latitude: event.weatherLatitude!,
+        longitude: event.weatherLongitude!,
         timezone: event.weatherTimezone,
       } : null);
-      setManualLatitude(event.weatherLatitude?.toString() ?? "");
-      setManualLongitude(event.weatherLongitude?.toString() ?? "");
-      setManualTimezone(event.weatherTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+      setVenueResults([]);
+      setVenueSearchCompleted(false);
+      setVenueSearchEnabled(!savedPlaceMatchesLocation && event.location.trim().length >= 3);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
       setGafferOpponentPick(
@@ -317,25 +291,18 @@ export function EventFormDialog({
       setDate(initialDate ? startOfLocalDay(initialDate) : undefined);
       setTime("");
       setLocation("");
+      setVenueName("");
       setVenueAddress("");
       setSelectedVenueLocation(null);
       setVenueResults([]);
       setVenueSearchCompleted(false);
       setVenueSearchEnabled(false);
-      setWeatherOverride(false);
-      setWeatherLocationQuery("");
-      setSelectedLocation(null);
-      setManualLatitude("");
-      setManualLongitude("");
-      setManualTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
       setNotes("");
       setCompetitionId("none");
       setGafferOpponentPick(null);
     }
     setOpponentPick("");
     setError(null);
-    setLocationResults([]);
-    setLocationSearchCompleted(false);
     setGafferOpponentQuery("");
     setGafferOpponentResults([]);
     setGafferOpponentSearchCompleted(false);
@@ -414,28 +381,6 @@ export function EventFormDialog({
     [opponentTeams],
   );
 
-  const useExactCoordinates = () => {
-    const coordinates = parseExactWeatherCoordinates(manualLatitude, manualLongitude, manualTimezone);
-    if (coordinates.error) {
-      setError(coordinates.error);
-      return;
-    }
-    const { latitude, longitude, timezone } = coordinates;
-    const displayName = weatherLocationQuery.trim() || `${latitude}, ${longitude}`;
-    setSelectedLocation({
-      id: `coordinates:${latitude}:${longitude}`,
-      name: displayName,
-      displayName,
-      latitude,
-      longitude,
-      timezone,
-    });
-    setWeatherLocationQuery(displayName);
-    setLocationResults([]);
-    setLocationSearchCompleted(false);
-    setError(null);
-  };
-
   const searchGafferOpponent = () => {
     const query = gafferOpponentQuery.trim();
     const searchId = ++gafferOpponentSearchIdRef.current;
@@ -476,6 +421,11 @@ export function EventFormDialog({
       return;
     }
 
+    if (!venueName.trim()) {
+      setError("Venue name is required.");
+      return;
+    }
+
     if (!/^\d{2}:\d{2}$/.test(time)) {
       setError("Enter a valid date and time.");
       return;
@@ -488,13 +438,19 @@ export function EventFormDialog({
       return;
     }
 
+    if (location.trim() && !selectedVenueLocation) {
+      setError("Choose a location from the suggestions so its forecast uses the same place.");
+      return;
+    }
+
     const values: EventFormValues = {
       title,
       type,
       scheduledAt,
       location,
+      venueName,
       venueAddress,
-      forecastLocation: weatherOverride ? selectedLocation : selectedVenueLocation,
+      forecastLocation: selectedVenueLocation,
       notes: notes.trim(),
       competitionId,
       opponentTeamId: gafferOpponentPick?.id ?? null,
@@ -777,18 +733,15 @@ export function EventFormDialog({
             </Field>
           </div>
 
-          <Field htmlFor={`${baseId}-location`} label="Location (optional)">
+          <Field htmlFor={`${baseId}-location`} label="Location">
             <input
               id={`${baseId}-location`}
               value={location}
               onChange={(e) => {
                 setLocation(e.target.value);
+                setLocationMessage(null);
                 setSelectedVenueLocation(null);
                 setVenueSearchEnabled(true);
-                if (!weatherOverride) {
-                  setSelectedLocation(null);
-                  setWeatherLocationQuery("");
-                }
               }}
               placeholder="Search for a place or area"
               className={inputClassName}
@@ -797,7 +750,7 @@ export function EventFormDialog({
               aria-describedby={`${baseId}-location-hint`}
             />
             <p id={`${baseId}-location-hint`} className="mt-1 text-xs text-muted-foreground">
-              Choose a place or area, or enter a location manually. The selected location is used for the forecast.
+              Choose a place from the suggestions, or use your coordinates to find a nearby town. The forecast always uses this location.
             </p>
             <Button
               type="button"
@@ -809,27 +762,25 @@ export function EventFormDialog({
                 setLocating(true);
                 setLocationMessage(null);
                 navigator.geolocation.getCurrentPosition(
-                  ({ coords }) => {
-                    const name = `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
-                    const current = {
-                      id: "current-location",
-                      name,
-                      displayName: `Current location (${name})`,
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                    };
-                    setLocation(name);
-                    setSelectedVenueLocation(current);
-                    setSelectedLocation(current);
-                    setWeatherOverride(false);
-                    setVenueResults([]);
-                    setVenueSearchEnabled(false);
-                    setManualLatitude(String(coords.latitude));
-                    setManualLongitude(String(coords.longitude));
-                    setManualTimezone(current.timezone);
-                    setLocationMessage("Current location selected for the event and forecast.");
-                    setLocating(false);
+                  async ({ coords }) => {
+                    try {
+                      const place = await reverseSearchLocation(coords.latitude, coords.longitude);
+                      const current = {
+                        ...place,
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      };
+                      setLocation(current.name);
+                      setSelectedVenueLocation(current);
+                      setVenueResults([]);
+                      setVenueSearchEnabled(false);
+                      setLocationMessage(`Nearby town selected for the forecast: ${current.displayName}.`);
+                    } catch {
+                      setLocation("");
+                      setSelectedVenueLocation(null);
+                      setLocationMessage("Could not find a nearby town or city. Search for one or enter a place manually.");
+                    } finally {
+                      setLocating(false);
+                    }
                   },
                   () => {
                     setLocationMessage("Could not access your location. Check browser permission or enter a place manually.");
@@ -855,14 +806,8 @@ export function EventFormDialog({
                     className="block w-full rounded px-3 py-2 text-left hover:bg-muted"
                     onClick={() => {
                       setSelectedVenueLocation(result);
-                      setSelectedLocation(result);
-                      setWeatherOverride(false);
                       setLocation(result.name);
                       setVenueSearchEnabled(false);
-                      setWeatherLocationQuery(result.displayName);
-                      setManualLatitude(String(result.latitude));
-                      setManualLongitude(String(result.longitude));
-                      setManualTimezone(result.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
                       setVenueResults([]);
                       setVenueSearchCompleted(false);
                     }}
@@ -876,9 +821,9 @@ export function EventFormDialog({
               </div>
             )}
             {venueSearchCompleted && venueResults.length === 0 && location.trim().length >= 3 && !selectedVenueLocation && (
-              <p className="text-xs text-muted-foreground">No matching place. You can still use this name as the venue.</p>
+              <p className="text-xs text-muted-foreground">No matching place found. Try a nearby town or city.</p>
             )}
-            {selectedVenueLocation && !weatherOverride && (
+            {selectedVenueLocation && (
               <div className="mt-2 flex items-start justify-between gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
                 <p className="flex items-start gap-2">
                   <Check className="mt-0.5 size-3 shrink-0 text-emerald-500" />
@@ -889,7 +834,6 @@ export function EventFormDialog({
                   className="shrink-0 font-medium text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     setSelectedVenueLocation(null);
-                    setSelectedLocation(null);
                     setLocation("");
                     setVenueSearchEnabled(false);
                   }}
@@ -899,167 +843,34 @@ export function EventFormDialog({
               </div>
             )}
 
-            <details className="mt-2 rounded-md border border-border bg-background p-3 text-sm" open={isEditing && Boolean(event?.venueAddress || event?.weatherLatitude != null)}>
-              <summary className="cursor-pointer font-medium text-foreground">More location options</summary>
+            <Field htmlFor={`${baseId}-venue-name`} label="Venue name">
+              <input
+                id={`${baseId}-venue-name`}
+                value={venueName}
+                onChange={(e) => setVenueName(e.target.value)}
+                placeholder="e.g. Riverside Sports Ground"
+                className={inputClassName}
+                maxLength={200}
+                required
+              />
+            </Field>
+
+            <section className="mt-3 rounded-md border border-border bg-background p-3 text-sm">
+              <h3 className="font-medium text-foreground">Optional venue details</h3>
               <div className="mt-3 flex flex-col gap-4">
-                <Field htmlFor={`${baseId}-address`} label="Street address (optional)">
+                <Field htmlFor={`${baseId}-address`} label="Venue address (optional)">
                   <input
                     id={`${baseId}-address`}
                     value={venueAddress}
                     onChange={(e) => setVenueAddress(e.target.value)}
-                    placeholder="Add an address for directions"
+                    placeholder="e.g. 12 River Road"
                     className={inputClassName}
                     maxLength={300}
                   />
                 </Field>
-                <div>
-                  <button
-                    type="button"
-                    className="text-left text-sm font-medium text-primary hover:underline"
-                    onClick={() => {
-                      if (weatherOverride) {
-                        setWeatherOverride(false);
-                        setSelectedLocation(selectedVenueLocation);
-                        setWeatherLocationQuery(selectedVenueLocation?.displayName ?? "");
-                      } else {
-                        setWeatherOverride(true);
-                        if (!selectedVenueLocation) setSelectedLocation(null);
-                      }
-                    }}
-                  >
-                    {weatherOverride ? "Use the event location for the forecast" : "Use a different forecast location"}
-                  </button>
-                  {weatherOverride && (
-                    <div className="mt-3 flex flex-col gap-3">
-                      <Field htmlFor={`${baseId}-weather-location`} label="Forecast area">
-                        <div className="flex gap-2">
-                          <input
-                            id={`${baseId}-weather-location`}
-                            value={weatherLocationQuery}
-                            onChange={(e) => {
-                              locationSearchIdRef.current += 1;
-                              setWeatherLocationQuery(e.target.value);
-                              setIsSearchingLocation(false);
-                              setSelectedLocation(null);
-                              setLocationResults([]);
-                              setLocationSearchCompleted(false);
-                            }}
-                            placeholder="Search a town or suburb"
-                            className={inputClassName}
-                            maxLength={300}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isSearchingLocation || weatherLocationQuery.trim().length < 3}
-                            onClick={() => {
-                              const query = weatherLocationQuery.trim();
-                              const searchId = ++locationSearchIdRef.current;
-                              setIsSearchingLocation(true);
-                              setLocationSearchCompleted(false);
-                              setError(null);
-                              void searchLocations(query)
-                                .then((results) => {
-                                  if (locationSearchIdRef.current === searchId) {
-                                    setLocationResults(results);
-                                    setLocationSearchCompleted(true);
-                                  }
-                                })
-                                .catch((err) => {
-                                  if (locationSearchIdRef.current === searchId) {
-                                    setError(err instanceof ApiError ? err.message : "Could not search locations.");
-                                  }
-                                })
-                                .finally(() => {
-                                  if (locationSearchIdRef.current === searchId) setIsSearchingLocation(false);
-                                });
-                            }}
-                          >
-                            <Search className="size-4" />
-                            {isSearchingLocation ? "Searching…" : "Find"}
-                          </Button>
-                        </div>
-                      </Field>
-                      {selectedLocation && (
-                        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-foreground">
-                          <p className="flex items-center gap-1 font-medium text-emerald-500">
-                            <Check className="size-3" />Selected forecast area
-                          </p>
-                          <p className="mt-1">{selectedLocation.displayName}</p>
-                        </div>
-                      )}
-                      {locationResults.length > 0 && !selectedLocation && (
-                        <div className="rounded-md border border-border bg-background p-1">
-                          {locationResults.map((result) => (
-                            <button
-                              key={result.id}
-                              type="button"
-                              className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-                              onClick={() => {
-                                setSelectedLocation(result);
-                                setWeatherLocationQuery(result.displayName);
-                                setManualLatitude(String(result.latitude));
-                                setManualLongitude(String(result.longitude));
-                                setManualTimezone(result.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
-                                setLocationResults([]);
-                                setLocationSearchCompleted(false);
-                              }}
-                            >{result.displayName}</button>
-                          ))}
-                        </div>
-                      )}
-                      {locationSearchCompleted && locationResults.length === 0 && !selectedLocation && (
-                        <p className="text-xs text-muted-foreground">No forecast area found.</p>
-                      )}
-                      <p className="text-xs text-muted-foreground">Weather uses the selected area’s coordinates.</p>
-                      <details className="rounded-md border border-border p-3 text-sm">
-                        <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
-                          <MapPinned className="size-4" />Use exact coordinates
-                        </summary>
-                        <div className="mt-3 grid grid-cols-2 gap-3">
-                          <label className="text-xs text-muted-foreground">
-                            Latitude
-                            <input
-                              type="number"
-                              min="-90"
-                              max="90"
-                              step="any"
-                              value={manualLatitude}
-                              onChange={(e) => setManualLatitude(e.target.value)}
-                              className={cn(inputClassName, "mt-1")}
-                            />
-                          </label>
-                          <label className="text-xs text-muted-foreground">
-                            Longitude
-                            <input
-                              type="number"
-                              min="-180"
-                              max="180"
-                              step="any"
-                              value={manualLongitude}
-                              onChange={(e) => setManualLongitude(e.target.value)}
-                              className={cn(inputClassName, "mt-1")}
-                            />
-                          </label>
-                          <label className="col-span-2 text-xs text-muted-foreground">
-                            Venue timezone
-                            <input
-                              value={manualTimezone}
-                              onChange={(e) => setManualTimezone(e.target.value)}
-                              placeholder="Africa/Johannesburg"
-                              className={cn(inputClassName, "mt-1")}
-                            />
-                          </label>
-                          <Button type="button" variant="outline" className="col-span-2" onClick={useExactCoordinates}>
-                            Use these coordinates
-                          </Button>
-                        </div>
-                      </details>
-                    </div>
-                  )}
-                </div>
               </div>
-            </details>
+              <p className="mt-3 text-xs text-muted-foreground">Current-location place names © OpenStreetMap contributors.</p>
+            </section>
           </Field>
 
           <Field htmlFor={`${baseId}-notes`} label="Notes">

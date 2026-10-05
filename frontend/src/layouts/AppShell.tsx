@@ -35,7 +35,7 @@ function AppShellContent() {
   const isEventsPage = pathname === "/events" || pathname === "/events/";
 
   return (
-    <div className="app-shell relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="app-shell app-shell--coach relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
       <div
         className="no-print pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
         aria-hidden="true"
