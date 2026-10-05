@@ -90,8 +90,10 @@ export class LocationsController {
     @Query('lat') latitudeQuery: unknown,
     @Query('lon') longitudeQuery: unknown,
   ) {
-    const latitude = typeof latitudeQuery === 'string' ? Number(latitudeQuery) : NaN;
-    const longitude = typeof longitudeQuery === 'string' ? Number(longitudeQuery) : NaN;
+    const latitude =
+      typeof latitudeQuery === 'string' ? Number(latitudeQuery) : NaN;
+    const longitude =
+      typeof longitudeQuery === 'string' ? Number(longitudeQuery) : NaN;
     if (
       !Number.isFinite(latitude) ||
       latitude < -90 ||
@@ -100,7 +102,9 @@ export class LocationsController {
       longitude < -180 ||
       longitude > 180
     ) {
-      throw new BadRequestException('Enter valid latitude and longitude coordinates.');
+      throw new BadRequestException(
+        'Enter valid latitude and longitude coordinates.',
+      );
     }
 
     const cacheKey = `${latitude.toFixed(3)},${longitude.toFixed(3)}`;
@@ -124,8 +128,12 @@ export class LocationsController {
       process.env.REVERSE_GEOCODING_API_URL ??
       'https://nominatim.openstreetmap.org/reverse';
     const params = new URLSearchParams({
-      lat: String(latitude), lon: String(longitude), format: 'jsonv2',
-      zoom: '10', addressdetails: '1', layer: 'address',
+      lat: String(latitude),
+      lon: String(longitude),
+      format: 'jsonv2',
+      zoom: '10',
+      addressdetails: '1',
+      layer: 'address',
     });
     try {
       const response = await fetch(`${baseUrl}?${params}`, {
@@ -137,7 +145,8 @@ export class LocationsController {
             'SportCoachingTool/1.0 (event location lookup)',
         },
       });
-      if (!response.ok) throw new Error('Reverse geocoder rejected the request');
+      if (!response.ok)
+        throw new Error('Reverse geocoder rejected the request');
       const body = (await response.json()) as ReverseGeocodingResponse;
       const address = body.address ?? {};
       const name =
@@ -161,7 +170,7 @@ export class LocationsController {
         longitude: Number.isFinite(Number(body.lon))
           ? Number(body.lon)
           : longitude,
-        timezone: null as null,
+        timezone: null,
       };
       this.reverseCache.set(cacheKey, place);
       return place;
