@@ -3,7 +3,7 @@ config:
 
 streams:
   team_match_events:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_events.*
       FROM match_events
@@ -19,7 +19,7 @@ streams:
       )
 
   team_match_reviews:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_reviews.*
       FROM match_event_reviews
@@ -35,7 +35,7 @@ streams:
       )
 
   team_match_observations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_observations.*
       FROM match_event_observations
@@ -51,7 +51,7 @@ streams:
       )
 
   team_match_memberships:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_memberships.observation_id AS id,
              match_event_memberships.canonical_event_id,
@@ -74,7 +74,7 @@ streams:
       )
 
   team_match_operations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_operations.*
       FROM match_event_operations
@@ -90,7 +90,7 @@ streams:
       )
 
   team_match_projections:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_projection_state.match_id AS id,
              match_projection_state.revision,
@@ -121,7 +121,7 @@ streams:
       )
 
   team_matches:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT matches.id,
              matches.event_id,
@@ -151,7 +151,7 @@ streams:
       )
 
   team_match_events_metadata:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT events.id,
              events.team_id,
@@ -164,7 +164,7 @@ streams:
             AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   team_athletes:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT athletes.id,
              athletes.team_id,
@@ -177,7 +177,7 @@ streams:
         AND athletes.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   team_match_squads:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT athlete_match_stats.id,
              athlete_match_stats.match_id,
@@ -196,7 +196,7 @@ streams:
       )
 
   team_opponent_squads:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT opponent_match_players.id,
              opponent_match_players.match_id,
@@ -216,7 +216,7 @@ streams:
       )
 
   team_match_clock_operations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_clock_operations.id,
              match_clock_operations.match_id,
@@ -247,7 +247,7 @@ streams:
   # participant and team membership subqueries are re-evaluated for each sync
   # bucket, so removing team_members revokes an already-issued sync token.
   shared_session_match_events:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_events.id,
              match_events.session_id AS match_id,
@@ -268,39 +268,16 @@ streams:
              match_events.created_at,
              match_events.updated_at
       FROM match_events
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_events.match_id || '/' || match_events.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_events.session_id IS NOT NULL
         AND match_events.event_type <> 'injury'
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_events.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_events.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_events.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_events.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_match_reviews:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_reviews.id,
              match_event_reviews.session_id AS match_id,
@@ -318,51 +295,18 @@ streams:
              match_event_reviews.created_at,
              match_event_reviews.updated_at
       FROM match_event_reviews
+      JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_reviews.canonical_event_id || '/' || match_event_reviews.session_id
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_reviews.match_id || '/' || match_event_reviews.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_event_reviews.session_id IS NOT NULL
-        AND match_event_reviews.canonical_event_id IN (
-          SELECT match_events.id FROM match_events
-          WHERE match_events.event_type <> 'injury'
-            AND match_events.session_id IN (
-              SELECT match_session_participants.session_id
-              FROM match_session_participants
-              WHERE match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND public_event.event_type <> 'injury'
+        AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_event_reviews.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_event_reviews.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_event_reviews.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_event_reviews.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_match_observations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_observations.id,
              match_event_observations.session_id AS match_id,
@@ -377,82 +321,33 @@ streams:
              match_event_observations.client_created_at,
              match_event_observations.server_received_at
       FROM match_event_observations
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_observations.match_id || '/' || match_event_observations.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_event_observations.session_id IS NOT NULL
-          AND match_event_observations.event_type <> 'injury'
+        AND match_event_observations.event_type <> 'injury'
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_event_observations.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_event_observations.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_event_observations.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_event_observations.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_match_memberships:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_memberships.observation_id AS id,
              match_event_memberships.canonical_event_id,
              match_event_memberships.projection_revision,
              match_event_memberships.created_at
       FROM match_event_memberships
-      WHERE auth.parameter('two_sided_live_logging') = 'true'
-        AND match_event_memberships.observation_id IN (
-        SELECT match_event_observations.id
-        FROM match_event_observations
-        WHERE match_event_observations.session_id IS NOT NULL
-          AND match_event_observations.event_type <> 'injury'
-          AND match_event_observations.session_id IN (
-            SELECT match_session_participants.session_id
-            FROM match_session_participants
-            WHERE match_session_participants.team_id = auth.parameter('team_id')
-              AND match_session_participants.team_id IN (
-                SELECT team_members.team_id
-                FROM team_members
-                WHERE team_members.user_id = auth.parameter('user_id')
-              )
-          )
-          AND match_event_observations.match_id IN (
-            SELECT matches.id
-            FROM matches
-            WHERE matches.shared_match_id = match_event_observations.session_id
-              AND matches.is_home IN (
-                SELECT CASE match_session_participants.side
-                         WHEN 'home' THEN false ELSE true END
-                FROM match_session_participants
-                WHERE match_session_participants.session_id = match_event_observations.session_id
-                  AND match_session_participants.team_id = auth.parameter('team_id')
-                  AND match_session_participants.team_id IN (
-                    SELECT team_members.team_id
-                    FROM team_members
-                    WHERE team_members.user_id = auth.parameter('user_id')
-                  )
-              )
-          )
-      )
+      JOIN match_event_observations ON match_event_observations.id = match_event_memberships.observation_id
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_observations.match_id || '/' || match_event_observations.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+      WHERE match_event_observations.session_id IS NOT NULL
+        AND match_event_observations.event_type <> 'injury'
+        AND auth.parameter('two_sided_live_logging') = 'true'
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_match_operations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_event_operations.id,
              match_event_operations.session_id AS match_id,
@@ -467,52 +362,19 @@ streams:
              match_event_operations.schema_version,
              match_event_operations.created_at
       FROM match_event_operations
+      JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_operations.canonical_event_id || '/' || match_event_operations.session_id
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_operations.match_id || '/' || match_event_operations.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_event_operations.session_id IS NOT NULL
-        AND match_event_operations.canonical_event_id IN (
-          SELECT match_events.id FROM match_events
-          WHERE match_events.event_type <> 'injury'
-            AND match_events.session_id IN (
-              SELECT match_session_participants.session_id
-              FROM match_session_participants
-              WHERE match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
-        AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
+        AND public_event.event_type <> 'injury'
+        AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_event_operations.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_event_operations.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_event_operations.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_event_operations.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+        AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
 
   shared_session_match_projections:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_projection_state.match_id AS id,
              match_projection_state.session_id,
@@ -532,38 +394,15 @@ streams:
              match_projection_state.created_at,
              match_projection_state.updated_at
       FROM match_projection_state
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_projection_state.match_id || '/' || match_projection_state.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_projection_state.session_id IS NOT NULL
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_projection_state.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_projection_state.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_projection_state.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_projection_state.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_match_clock_operations:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_clock_operations.id,
              match_clock_operations.match_id,
@@ -579,38 +418,15 @@ streams:
              match_clock_operations.client_created_at,
              match_clock_operations.created_at
       FROM match_clock_operations
+      JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_clock_operations.match_id || '/' || match_clock_operations.session_id
+      JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_clock_operations.session_id IS NOT NULL
         AND auth.parameter('two_sided_live_logging') = 'true'
-        AND match_clock_operations.session_id IN (
-          SELECT match_session_participants.session_id
-          FROM match_session_participants
-          WHERE match_session_participants.team_id = auth.parameter('team_id')
-            AND match_session_participants.team_id IN (
-              SELECT team_members.team_id
-              FROM team_members
-              WHERE team_members.user_id = auth.parameter('user_id')
-            )
-        )
-        AND match_clock_operations.match_id IN (
-          SELECT matches.id
-          FROM matches
-          WHERE matches.shared_match_id = match_clock_operations.session_id
-            AND matches.is_home IN (
-              SELECT CASE match_session_participants.side
-                       WHEN 'home' THEN false ELSE true END
-              FROM match_session_participants
-              WHERE match_session_participants.session_id = match_clock_operations.session_id
-                AND match_session_participants.team_id = auth.parameter('team_id')
-                AND match_session_participants.team_id IN (
-                  SELECT team_members.team_id
-                  FROM team_members
-                  WHERE team_members.user_id = auth.parameter('user_id')
-                )
-            )
-        )
+        AND participant.team_id = auth.parameter('team_id')
+        AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
 
   shared_session_report_state:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT match_sessions.id,
              match_sessions.home_confirmed_at,
@@ -630,7 +446,7 @@ streams:
         )
 
   shared_session_report_sheets:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT session_report_sheets.id, session_report_sheets.shared_match_id AS session_id, session_report_sheets.clock_period, session_report_sheets.clock_elapsed_ms, session_report_sheets.clock_started_at, session_report_sheets.clock_revision, session_report_sheets.updated_at
       FROM matches AS session_report_sheets
@@ -647,7 +463,7 @@ streams:
         )
 
   shared_session_report_fixture_scores:
-    auto_subscribe: true
+    auto_subscribe: false
     query: |
       SELECT competition_fixtures.id, competition_fixtures.shared_session_id, competition_fixtures.home_score, competition_fixtures.away_score, competition_fixtures.status
       FROM competition_fixtures
@@ -662,3 +478,423 @@ streams:
               WHERE team_members.user_id = auth.parameter('user_id')
             )
         )
+
+  team_data:
+    auto_subscribe: true
+    queries:
+      - |
+        SELECT match_events.*
+        FROM match_events
+        WHERE match_events.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT match_event_reviews.*
+        FROM match_event_reviews
+        WHERE match_event_reviews.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT match_event_observations.*
+        FROM match_event_observations
+        WHERE match_event_observations.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT match_event_memberships.observation_id AS id,
+               match_event_memberships.canonical_event_id,
+               match_event_memberships.projection_revision,
+               match_event_memberships.created_at
+        FROM match_event_memberships
+        WHERE match_event_memberships.observation_id IN (
+          SELECT match_event_observations.id
+          FROM match_event_observations
+          WHERE match_event_observations.match_id IN (
+            SELECT matches.id
+            FROM matches
+            WHERE matches.event_id IN (
+              SELECT events.id
+              FROM events
+              WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+            )
+          )
+        )
+      - |
+        SELECT match_event_operations.*
+        FROM match_event_operations
+        WHERE match_event_operations.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT match_projection_state.match_id AS id,
+               match_projection_state.revision,
+               match_projection_state.input_digest,
+               match_projection_state.rules_version,
+               match_projection_state.confirmed_team_score,
+               match_projection_state.confirmed_opponent_score,
+               match_projection_state.provisional_team_score,
+               match_projection_state.provisional_opponent_score,
+               match_projection_state.possible_effects,
+               match_projection_state.disciplinary_projection,
+               match_projection_state.unresolved_review_count,
+               match_projection_state.finalisation_state,
+               match_projection_state.finalised_by_user_id,
+               match_projection_state.finalised_at,
+               match_projection_state.created_at,
+               match_projection_state.updated_at
+        FROM match_projection_state
+        WHERE match_projection_state.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT matches.id,
+               matches.event_id,
+               matches.shared_match_id,
+               matches.competition_id,
+               matches.opponent_name,
+               matches.is_home,
+               matches.team_score,
+               matches.opponent_score,
+               matches.game_plan_id,
+               matches.game_plan_snapshot,
+               matches.opponent_squad_visibility,
+               matches.team_color,
+               matches.opponent_color,
+               matches.clock_period,
+               matches.clock_elapsed_ms,
+               matches.clock_started_at,
+               matches.clock_revision,
+               matches.created_at,
+               matches.updated_at
+        FROM matches
+        WHERE matches.event_id IN (
+          SELECT events.id
+          FROM events
+          WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+        )
+      - |
+        SELECT events.id,
+               events.team_id,
+               events.title,
+               events.status,
+               events.scheduled_at,
+               events.location
+        FROM events
+        WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT athletes.id,
+               athletes.team_id,
+               athletes.first_name,
+               athletes.last_name,
+               athletes.squad_number,
+               athletes.position
+        FROM athletes
+        WHERE athletes.team_id = auth.parameter('team_id')
+          AND athletes.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT athlete_match_stats.id,
+               athlete_match_stats.match_id,
+               athlete_match_stats.athlete_id,
+               athlete_match_stats.started
+        FROM athlete_match_stats
+        WHERE athlete_match_stats.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT opponent_match_players.id,
+               opponent_match_players.match_id,
+               opponent_match_players.shirt_number,
+               opponent_match_players.name,
+               opponent_match_players.position
+        FROM opponent_match_players
+        WHERE opponent_match_players.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+      - |
+        SELECT match_clock_operations.id,
+               match_clock_operations.match_id,
+               match_clock_operations.session_id,
+               match_clock_operations.actor_user_id,
+               match_clock_operations.period,
+               match_clock_operations.elapsed_ms,
+               match_clock_operations.running,
+               match_clock_operations.base_revision,
+               match_clock_operations.applied_revision,
+               match_clock_operations.outcome,
+               match_clock_operations.payload_hash,
+               match_clock_operations.client_created_at,
+               match_clock_operations.created_at
+        FROM match_clock_operations
+        WHERE match_clock_operations.match_id IN (
+          SELECT matches.id
+          FROM matches
+          WHERE matches.event_id IN (
+            SELECT events.id
+            FROM events
+            WHERE events.team_id = auth.parameter('team_id')
+              AND events.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          )
+        )
+
+    # Shared streams expose only the opposite participant's match sheet. The
+    # participant and team membership subqueries are re-evaluated for each sync
+    # bucket, so removing team_members revokes an already-issued sync token.
+
+  shared_session_data:
+    auto_subscribe: true
+    queries:
+      - |
+        SELECT match_events.id,
+               match_events.session_id AS match_id,
+               match_events.session_id,
+               match_events.side,
+               match_events.team,
+               match_events.event_type,
+               match_events.minute,
+               match_events.opponent_label,
+               NULL AS detail,
+               match_events.logged_by_user_id,
+               match_events.manually_adjusted,
+               match_events.client_request_id,
+               match_events.period,
+               match_events.match_elapsed_ms,
+               match_events.lifecycle_status,
+               match_events.projection_revision,
+               match_events.created_at,
+               match_events.updated_at
+        FROM match_events
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_events.match_id || '/' || match_events.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_events.session_id IS NOT NULL
+          AND match_events.event_type <> 'injury'
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_event_reviews.id,
+               match_event_reviews.session_id AS match_id,
+               match_event_reviews.session_id,
+               match_event_reviews.canonical_event_id,
+               match_event_reviews.observation_ids,
+               match_event_reviews.review_version,
+               match_event_reviews.reason,
+               match_event_reviews.status,
+               match_event_reviews.resolution,
+               match_event_reviews.resolved_by_user_id,
+               match_event_reviews.resolved_at,
+               match_event_reviews.disputed_by_user_id,
+               match_event_reviews.disputed_at,
+               match_event_reviews.created_at,
+               match_event_reviews.updated_at
+        FROM match_event_reviews
+        JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_reviews.canonical_event_id || '/' || match_event_reviews.session_id
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_reviews.match_id || '/' || match_event_reviews.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_event_reviews.session_id IS NOT NULL
+          AND public_event.event_type <> 'injury'
+          AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_event_observations.id,
+               match_event_observations.session_id AS match_id,
+               match_event_observations.session_id,
+               match_event_observations.side,
+               match_event_observations.logged_by_user_id,
+               match_event_observations.event_type,
+               match_event_observations.team,
+               match_event_observations.opponent_label,
+               match_event_observations.period,
+               match_event_observations.match_elapsed_ms,
+               match_event_observations.client_created_at,
+               match_event_observations.server_received_at
+        FROM match_event_observations
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_observations.match_id || '/' || match_event_observations.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_event_observations.session_id IS NOT NULL
+          AND match_event_observations.event_type <> 'injury'
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_event_memberships.observation_id AS id,
+               match_event_memberships.canonical_event_id,
+               match_event_memberships.projection_revision,
+               match_event_memberships.created_at
+        FROM match_event_memberships
+        JOIN match_event_observations ON match_event_observations.id = match_event_memberships.observation_id
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_observations.match_id || '/' || match_event_observations.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_event_observations.session_id IS NOT NULL
+          AND match_event_observations.event_type <> 'injury'
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_event_operations.id,
+               match_event_operations.session_id AS match_id,
+               match_event_operations.session_id,
+               match_event_operations.actor_user_id,
+               match_event_operations.operation_type,
+               match_event_operations.target_observation_ids,
+               match_event_operations.canonical_event_id,
+               match_event_operations.causal_parent_ids,
+               match_event_operations.decision,
+               NULL AS reason,
+               match_event_operations.schema_version,
+               match_event_operations.created_at
+        FROM match_event_operations
+        JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_operations.canonical_event_id || '/' || match_event_operations.session_id
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_operations.match_id || '/' || match_event_operations.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_event_operations.session_id IS NOT NULL
+          AND public_event.event_type <> 'injury'
+          AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+          AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
+      - |
+        SELECT match_projection_state.match_id AS id,
+               match_projection_state.session_id,
+               match_projection_state.revision,
+               match_projection_state.input_digest,
+               match_projection_state.rules_version,
+               match_projection_state.confirmed_opponent_score AS confirmed_team_score,
+               match_projection_state.confirmed_team_score AS confirmed_opponent_score,
+               match_projection_state.provisional_opponent_score AS provisional_team_score,
+               match_projection_state.provisional_team_score AS provisional_opponent_score,
+               match_projection_state.possible_effects,
+               match_projection_state.disciplinary_projection,
+               match_projection_state.unresolved_review_count,
+               match_projection_state.finalisation_state,
+               match_projection_state.finalised_by_user_id,
+               match_projection_state.finalised_at,
+               match_projection_state.created_at,
+               match_projection_state.updated_at
+        FROM match_projection_state
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_projection_state.match_id || '/' || match_projection_state.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_projection_state.session_id IS NOT NULL
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_clock_operations.id,
+               match_clock_operations.match_id,
+               match_clock_operations.session_id,
+               match_clock_operations.actor_user_id,
+               match_clock_operations.period,
+               match_clock_operations.elapsed_ms,
+               match_clock_operations.running,
+               match_clock_operations.base_revision,
+               match_clock_operations.applied_revision,
+               match_clock_operations.outcome,
+               match_clock_operations.payload_hash,
+               match_clock_operations.client_created_at,
+               match_clock_operations.created_at
+        FROM match_clock_operations
+        JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_clock_operations.match_id || '/' || match_clock_operations.session_id
+        JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
+        WHERE match_clock_operations.session_id IS NOT NULL
+          AND auth.parameter('two_sided_live_logging') = 'true'
+          AND participant.team_id = auth.parameter('team_id')
+          AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
+      - |
+        SELECT match_sessions.id,
+               match_sessions.home_confirmed_at,
+               match_sessions.away_confirmed_at,
+               match_sessions.finalised_at
+        FROM match_sessions
+        WHERE auth.parameter('two_sided_live_logging') = 'true'
+          AND match_sessions.id IN (
+            SELECT match_session_participants.session_id
+            FROM match_session_participants
+            WHERE match_session_participants.team_id = auth.parameter('team_id')
+              AND match_session_participants.team_id IN (
+                SELECT team_members.team_id
+                FROM team_members
+                WHERE team_members.user_id = auth.parameter('user_id')
+              )
+          )
+      - |
+        SELECT session_report_sheets.id, session_report_sheets.shared_match_id AS session_id, session_report_sheets.clock_period, session_report_sheets.clock_elapsed_ms, session_report_sheets.clock_started_at, session_report_sheets.clock_revision, session_report_sheets.updated_at
+        FROM matches AS session_report_sheets
+        WHERE auth.parameter('two_sided_live_logging') = 'true'
+          AND session_report_sheets.shared_match_id IN (
+            SELECT match_session_participants.session_id
+            FROM match_session_participants
+            WHERE match_session_participants.team_id = auth.parameter('team_id')
+              AND match_session_participants.team_id IN (
+                SELECT team_members.team_id
+                FROM team_members
+                WHERE team_members.user_id = auth.parameter('user_id')
+              )
+          )
+      - |
+        SELECT competition_fixtures.id, competition_fixtures.shared_session_id, competition_fixtures.home_score, competition_fixtures.away_score, competition_fixtures.status
+        FROM competition_fixtures
+        WHERE auth.parameter('two_sided_live_logging') = 'true'
+          AND competition_fixtures.shared_session_id IN (
+            SELECT match_session_participants.session_id
+            FROM match_session_participants
+            WHERE match_session_participants.team_id = auth.parameter('team_id')
+              AND match_session_participants.team_id IN (
+                SELECT team_members.team_id
+                FROM team_members
+                WHERE team_members.user_id = auth.parameter('user_id')
+              )
+          )

@@ -378,8 +378,18 @@ describe('Phase 2 shared privacy and clock', () => {
       'utf8',
     );
     const block = config.split(`  ${name}:`)[1].split(/\n {2}[a-z_]+:/)[0];
-    return block
-      .split(/query:\s*\|\s*\n/)[1]
+    const single = block.split(/query:\s*\|\s*\n/)[1];
+    const query =
+      single ??
+      block
+        .split(/\n\s*-\s*\|\s*\n/)
+        .slice(1)
+        .map(
+          (sql) =>
+            `SELECT to_jsonb(stream_row) AS row FROM (${sql}) AS stream_row`,
+        )
+        .join('\nUNION ALL\n');
+    return query
       .replace(/^\s*#.*$/gm, '')
       .replace(/auth\.parameter\('([^']+)'\)/g, (_match, claim: string) => {
         const claims: Record<string, string> = {

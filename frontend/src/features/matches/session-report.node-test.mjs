@@ -130,6 +130,54 @@ function apiHarness() {
     },
   };
 }
+test("confirmation refuses a stale revision after adding a goal, then succeeds after review", async () => {
+  const compiled = {}, calls = [];
+  let revision = 7;
+  let failure;
+  new Function("exports", "require", apiJs)(compiled, (name) => name === "@/lib/api" ? {
+    ApiError,
+    apiFetch: async (url, options) => {
+      calls.push({ url, options });
+      if (failure) throw failure;
+      return url.endsWith("/finalise") ? { confirmed: true } : { projection: { revision } };
+    },
+  } : {});
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 6), /Review the updated result/);
+  assert.equal(calls.length, 1, "stale confirmation must not POST or retry unseen results");
+  assert.deepEqual(await compiled.finaliseMatchProjection("sheet", 7), { confirmed: true });
+  assert.equal(calls.at(-1).options.body, JSON.stringify({ expectedRevision: 7 }));
+  failure = new ApiError(403);
+  const count = calls.length;
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 7), /request failed/);
+  assert.equal(calls.length, count + 1, "authorization failure must not POST");
+  failure = undefined;
+  revision = 8;
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 7), /result changed/);
+});
+test("post-match event creation waits for the projection refresh and completed shared sheets keep polling", async () => {
+  const hookJs = ts.transpileModule(readFileSync(new URL("./hooks.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const compiled = {};
+  let release;
+  const refreshed = new Promise(resolve => { release = resolve; });
+  const client = {
+    getQueryData: () => ({ sharedSessionId: "session" }),
+    setQueryData: (_key, update) => update([]),
+    invalidateQueries: ({ queryKey }) => queryKey.length === 2 && queryKey[0] === "matches" ? refreshed : Promise.resolve(),
+  };
+  new Function("exports", "require", "navigator", hookJs)(compiled, name =>
+    name === "@tanstack/react-query" ? { useMutation: options => options, useQueryClient: () => client, useQuery: options => options }
+      : name === "./session-report-model" ? { sessionReportKey } : {}, { onLine: true });
+  let finished = false;
+  const save = compiled.useLogMatchEvent("sheet").onSuccess({}, {}, {}).then(() => { finished = true; });
+  await Promise.resolve();
+  assert.equal(finished, false, "confirmation must wait for the revision refresh");
+  release(); await save;
+  assert.equal(finished, true);
+  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed", sharedSessionId: "session" } } }), 1000);
+  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed" } } }), false);
+});
 test("both access handles fetch and persist one session DTO; offline uses synced session data", async () => {
   const h = apiHarness();
   await h.api.fetchSessionReport("session", "sheet-a");

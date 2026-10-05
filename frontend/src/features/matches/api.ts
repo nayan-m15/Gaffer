@@ -442,10 +442,16 @@ export function updateMatchClock(
   });
 }
 
-export function finaliseMatchProjection(
+export async function finaliseMatchProjection(
   matchId: string,
   expectedRevision: number,
 ) {
+  const current = await apiFetch<MatchRecord>(`/matches/${matchId}`, {
+    cache: "no-store",
+  });
+  if (!current.projection || current.projection.revision !== expectedRevision) {
+    throw new Error("The result changed. Review the updated result and confirm again.");
+  }
   return apiFetch(`/matches/${matchId}/finalise`, {
     method: "POST",
     body: JSON.stringify({ expectedRevision }),

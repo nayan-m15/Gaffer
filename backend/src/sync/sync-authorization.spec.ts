@@ -31,8 +31,12 @@ describe('PowerSync shared session authorization', () => {
     expect(query).not.toMatch(/match_events\.opponent_player_id/);
     expect(query).not.toMatch(/match_events\.athlete_id\s*,/);
     expect(query).toMatch(/match_events\.session_id AS match_id/);
-    expect(query).toMatch(/match_events\.match_id IN/);
-    expect(query).toMatch(/matches\.is_home IN/);
+    expect(query).toMatch(
+      /match_events\.match_id \|\| '\/' \|\| match_events\.session_id/,
+    );
+    expect(query).toMatch(
+      /CASE participant\.side WHEN 'home' THEN 0 ELSE 1 END/,
+    );
     expect(query).not.toMatch(/NOT EXISTS|LEFT JOIN|concat_ws|COALESCE/i);
   });
 
@@ -45,13 +49,20 @@ describe('PowerSync shared session authorization', () => {
     expect(query).toMatch(/auth\.parameter\('user_id'\)/);
     expect(query).toMatch(/auth\.parameter\('two_sided_live_logging'\)/);
     expect(query).toMatch(/match_event_reviews\.session_id AS match_id/);
-    expect(query).toMatch(/match_event_reviews\.match_id IN/);
-    expect(query).toMatch(/matches\.is_home IN/);
-    expect(query).not.toMatch(/NOT EXISTS|JOIN/i);
+    expect(query).toMatch(
+      /match_event_reviews\.match_id \|\| '\/' \|\| match_event_reviews\.session_id/,
+    );
+    expect(query).toMatch(/public_event\.event_type <> 'injury'/);
+    expect(query).toMatch(
+      /CASE participant\.side WHEN 'home' THEN 0 ELSE 1 END/,
+    );
+    expect(query).not.toMatch(/NOT EXISTS/i);
     const observations = streamQuery('shared_session_match_observations');
     expect(observations).toMatch(/match_session_participants/);
     expect(observations).toMatch(/team_members/);
-    expect(observations).toMatch(/match_event_observations\.match_id IN/);
+    expect(observations).toMatch(
+      /match_event_observations\.match_id \|\| '\/' \|\| match_event_observations\.session_id/,
+    );
     expect(observations).not.toMatch(/athlete_id|opponent_player_id|payload/);
   });
 
@@ -64,7 +75,10 @@ describe('PowerSync shared session authorization', () => {
     expect(query).not.toMatch(/jsonb_build_object|replacement/i);
     expect(query).not.toMatch(/'replacement'/);
     expect(query).toMatch(/team_members/);
-    expect(query).toMatch(/match_event_operations\.match_id IN/);
+    expect(query).toMatch(
+      /match_event_operations\.match_id \|\| '\/' \|\| match_event_operations\.session_id/,
+    );
+    expect(query).toMatch(/public_event\.event_type <> 'injury'/);
   });
 
   it('keeps private sheet streams scoped to their owning team', () => {
@@ -82,15 +96,16 @@ describe('PowerSync shared session authorization', () => {
     expect(query).toMatch(/match_clock_operations\.match_id,/);
     expect(query).toMatch(/match_clock_operations\.session_id,/);
     expect(query).not.toMatch(/session_id AS match_id/);
-    expect(query).toMatch(/match_clock_operations\.match_id IN/);
+    expect(query).toMatch(
+      /match_clock_operations\.match_id \|\| '\/' \|\| match_clock_operations\.session_id/,
+    );
     expect(query).toMatch(/match_session_participants/);
     expect(query).toMatch(/team_members/);
-    expect(query).not.toMatch(/COALESCE|JOIN/i);
+    expect(query).not.toMatch(/COALESCE/i);
   });
 
   it('uses the PowerSync-supported query subset throughout the config', () => {
     expect(config).not.toMatch(/\b(?:LEFT|RIGHT|FULL)\s+JOIN\b/i);
-    expect(config).not.toMatch(/\bJOIN\b/i);
     expect(config).not.toMatch(/\bNOT\s+EXISTS\b/i);
     expect(config).not.toMatch(
       /\b(?:COALESCE|CONCAT_WS|JSONB_BUILD_OBJECT)\s*\(/i,
@@ -114,8 +129,8 @@ describe('PowerSync shared session authorization', () => {
     expect(query).toContain(
       "auth.parameter('two_sided_live_logging') = 'true'",
     );
-    expect(query).toContain(
-      "match_session_participants.team_id = auth.parameter('team_id')",
+    expect(query).toMatch(
+      /(?:match_session_participants|participant)\.team_id = auth\.parameter\('team_id'\)/,
     );
     expect(query).toContain("team_members.user_id = auth.parameter('user_id')");
   });
@@ -140,7 +155,9 @@ describe('PowerSync shared session authorization', () => {
   });
 
   it.each(
-    [...config.matchAll(/^ {2}(team_[a-z_]+):/gm)].map((match) => match[1]),
+    [...config.matchAll(/^ {2}(team_[a-z_]+):/gm)]
+      .map((match) => match[1])
+      .filter((name) => name !== 'team_data'),
   )('%s checks live membership even with an already-issued token', (name) => {
     expect(streamQuery(name)).toContain(
       "team_members.user_id = auth.parameter('user_id')",

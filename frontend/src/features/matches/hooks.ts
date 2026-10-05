@@ -69,7 +69,8 @@ export function useMatch(matchId: string | undefined) {
     refetchInterval: (query) =>
       typeof navigator !== "undefined" &&
       navigator.onLine &&
-      query.state.data?.eventStatus !== "completed"
+      (query.state.data?.eventStatus !== "completed" ||
+        Boolean(query.state.data?.sharedSessionId))
         ? 1_000
         : false,
     refetchIntervalInBackground: false,
@@ -360,7 +361,7 @@ export function useLogMatchEvent(matchId: string) {
         applyScoreDelta(queryClient, matchId, context.scoreTeam, -1);
       }
     },
-    onSuccess: (created, input, context) => {
+    onSuccess: async (created, _input, context) => {
       invalidateSheetSession(queryClient, matchId);
       queryClient.setQueryData<MatchLogEvent[]>(
         eventsKey(matchId),
@@ -375,9 +376,10 @@ export function useLogMatchEvent(matchId: string) {
           );
         },
       );
-      if (input.eventType === "goal") {
-        void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
-      }
+      // Every event changes the projection, including edits after full time.
+      // Keep the add dialog pending until the revision used to confirm is fresh.
+      const refresh = queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
+      if (typeof navigator === "undefined" || navigator.onLine) await refresh;
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
       void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
     },
@@ -593,6 +595,10 @@ export function useFinaliseMatchProjection(matchId: string) {
   return useMutation({
     mutationFn: (expectedRevision: number) =>
       finaliseMatchProjection(matchId, expectedRevision),
+    onError: async () => {
+      invalidateSheetSession(queryClient, matchId);
+      await queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
+    },
     onSuccess: () => {
       invalidateSheetSession(queryClient, matchId);
       void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
