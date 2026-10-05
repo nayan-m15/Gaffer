@@ -73,6 +73,28 @@ Validation recipe (no mutation by this document): in an isolated fixture dataset
 
 ## Latest dry-run review
 
+### Exact-record reconciliation assessment (5 October, after 67a301f3)
+
+Read all four two-sided documents and reviewed the last six branch commits, from `1b79e97a` through `67a301f3`. The latest commit installed 0052/0053 and verified transport; none repaired historical data. Reran the development release audit: all three integrity function bodies match and source publication/grants pass. Three conflicting competition fixtures and two null-linked sheets remain, alongside migration-journal drift (13 unknown entries).
+
+`node backend/scripts/inspect-two-sided-history.mjs --blue-hill` now exports the exact affected fixtures, events, sheets, participants, session state, projections, observations, memberships, operations, reviews, clocks, competition teams/results and current team memberships in one repeatable-read, read-only transaction. It pins endpoint/branch identity and saves timestamped evidence under ignored `docs/phase-history-validation/`. This is evidence containing private data, not a full recoverable database backup; keep it out of Git. The run exported 12 sheets, eight sessions and 55 observations/canonical events across six candidate fixtures. The sixth fixture has only the completed-sheet candidate finding, which alone does not prove duplicate standings.
+
+Goal counts below are non-voided recorded canonical goals in **home/away fixture perspective**, calculated from the owning team's actual participant identity. They are evidence, not approved final scores or duplicate decisions.
+
+| Fixture | Finding | Published home-away score | Recorded home sheet / away sheet | Required decision |
+| --- | --- | --- | --- | --- |
+| `35f00ca4-642e-410e-a4b2-9190f759fd85` | Two one-sided sessions | 1-0 | 2-0 / 0-3 | Identify authoritative goals/result; neither sheet agrees with publication. |
+| `71cc8d48-d7b4-4bb0-89dc-e6a9644d353d` | Two sessions; away sheet incorrectly home | 3-3 | 3-3 / 0-0 | Retain or amend published result; correct side and preserve voided card evidence. |
+| `ccc81418-259c-430a-a0b0-2bbc2ccea8ae` | Two finalised projections; away sheet incorrectly home | 2-1 | 2-1 / 2-1 | Decide which goal observations describe the same events; do not sum to 4-2. |
+| `fd41392c-429f-42ee-80a3-f72af3195323` | Away sheet null-linked, with observations and finalised projection | 0-3 | 2-1 / 0-3 | Choose authoritative goals/result; existing home confirmation must be reconsidered. |
+| `16ab1963-b32d-4f81-bc42-cd203a59839d` | Friendly away sheet null-linked, with observations and finalised projection | No published fixture score | 1-0 / 0-1 | Determine whether these are distinct goals (1-1) or erroneous observations. |
+
+Every affected sheet is completed and contains observations. **Zero sheets qualify for the empty-sheet attachment procedure.** Merely setting `shared_match_id` would leave canonical events/observations/projections/clock operations on their original sessions (or null), and could retain stale confirmation/publication. Choosing a session alone cannot reconcile these records.
+
+No historical writes were performed. Requested an explicit outcome: preserve historical records with authoritative result/goal decisions, or replace confirmed disposable test fixtures. Before applying a selected outcome, preserve a recoverable database snapshot, rehearse it on a separate restore, lock/revalidate exact records, retain original IDs/evidence and verify both reports and one standings result per fixture. Do not manufacture confirmations or silently change published scores.
+
+Fresh validation after this assessment: the existing six focused backend suites pass **50 tests**; all **59 frontend tests** pass. Build results and the remaining deployment/UI work are recorded in the rollout notes. These tests do not approve any historical reconciliation.
+
 Latest deployment follow-up (5 October): the user authorized blue-hill/Development. Migrations 0052/0053 were installed atomically after backing up their affected function/trigger definitions and journal, and proving object rollback in isolated PGlite. This is an object backup, not a full database backup or historical repair. The final audit verifies all three function bodies, enabled confirmation/clock triggers and source publication/grants. Existing journal drift/13 unknown entries, three conflicting fixtures and two null-linked sheets remain; the release audit correctly still exits 1. Fresh delivery fixtures use exact-ID cleanup. See [the delivery verification](two-sided-delivery-verification.md). The older reports below describe the source before deployment.
 
 Evening follow-up (5 October): the separate test target's nine pending migrations were restored through 0053 without a schema reset. The final read-only audit reports zero historical findings, no missing/changed migrations and all required integrity objects; its release exit 1 reflects missing PowerSync publication/grants. Browser checks remain failed/incomplete as recorded in the plan. Development data was not migrated, relinked or reconciled. One longer browser run lost its schema-reset guard to an idle-transaction timeout; the schema remained present in the final audit.

@@ -4,12 +4,13 @@ Updated 5 October 2026. This is the single implementation plan for the issues in
 
 The goal: two coaches open their own team setup, inspect the opponent's confirmed lineup, record into one shared match, review possible duplicates, and finish with one result everywhere. Implement the remaining fixes and hand the friendly and competition flows back for manual testing. A new validation environment is optional and does not hold up frontend work.
 
-## Review of the five commits
+## Review of the last six commits
 
 Current branch review for this request, newest first:
 
 | Commit | Change | Delivery implication |
 | --- | --- | --- |
+| 67a301f3 | Installed 0052/0053, aligned Development RSA trust and scoped sync lookups; verified real friendly/competition peer SQLite delivery. | Transport verified on Development; historical repair, Render deployment and full UI regression remain. |
 | b12d5a4f | Optional click-based lineup/logger/review/clock checks. | Records remaining UI failures; no Cloud delivery proof. |
 | e4fc18d8 | Fresh paired friendly/competition browser fixtures and integrity-object audit. | API/browser checks on a separate test source; no real peer SQLite assertion. |
 | a3889756 | Pending confirmation invalidation, canonical timeout scoring and connection reporting. | Adds 0053; accepted uploads and connection status do not establish delivery. |
