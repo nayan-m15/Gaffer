@@ -319,7 +319,19 @@ streams:
              match_event_reviews.updated_at
       FROM match_event_reviews
       WHERE match_event_reviews.session_id IS NOT NULL
-        AND match_event_reviews.canonical_event_id IN (SELECT match_events.id FROM match_events WHERE match_events.event_type <> 'injury')
+        AND match_event_reviews.canonical_event_id IN (
+          SELECT match_events.id FROM match_events
+          WHERE match_events.event_type <> 'injury'
+            AND match_events.session_id IN (
+              SELECT match_session_participants.session_id
+              FROM match_session_participants
+              WHERE match_session_participants.team_id = auth.parameter('team_id')
+                AND match_session_participants.team_id IN (
+                  SELECT team_members.team_id FROM team_members
+                  WHERE team_members.user_id = auth.parameter('user_id')
+                )
+            )
+        )
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_reviews.session_id IN (
           SELECT match_session_participants.session_id
@@ -456,7 +468,19 @@ streams:
              match_event_operations.created_at
       FROM match_event_operations
       WHERE match_event_operations.session_id IS NOT NULL
-        AND match_event_operations.canonical_event_id IN (SELECT match_events.id FROM match_events WHERE match_events.event_type <> 'injury')
+        AND match_event_operations.canonical_event_id IN (
+          SELECT match_events.id FROM match_events
+          WHERE match_events.event_type <> 'injury'
+            AND match_events.session_id IN (
+              SELECT match_session_participants.session_id
+              FROM match_session_participants
+              WHERE match_session_participants.team_id = auth.parameter('team_id')
+                AND match_session_participants.team_id IN (
+                  SELECT team_members.team_id FROM team_members
+                  WHERE team_members.user_id = auth.parameter('user_id')
+                )
+            )
+        )
         AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND match_event_operations.session_id IN (

@@ -47,7 +47,7 @@ if (missingSchemaColumns.length) {
     note: 'No writes. Schema prerequisites are missing; the historical data audit was not run. Apply reviewed migrations on the intended target before paired-account tests.' }, null, 2));
   process.exit(1);
 }
-const [, migrations, findings, missingSourceTables, replication, clockTrigger, missingIntegrityObjects] = await sql.transaction((tx) => [
+const [, migrations, findings, missingSourceTables, replication, clockTrigger, missingIntegrityObjects, integrityFunctions] = await sql.transaction((tx) => [
   tx.query('SET TRANSACTION READ ONLY'),
   tx.query('SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at'),
   tx.query(repairQuery),
@@ -87,7 +87,23 @@ const [, migrations, findings, missingSourceTables, replication, clockTrigger, m
     UNION ALL
     SELECT 'attach_match_session_if_safe(uuid,uuid,boolean)' WHERE
       to_regprocedure('public.attach_match_session_if_safe(uuid,uuid,boolean)') IS NULL`),
+  tx.query(`SELECT p.proname AS name, p.prosrc AS body FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public'
+    AND p.proname IN ('refresh_match_projection', 'attach_match_session_if_safe', 'invalidate_pending_session_confirmations')`),
 ]);
+const integrityFunctionChecks = [
+  ['refresh_match_projection', '0052_shared_session_integrity'],
+  ['attach_match_session_if_safe', '0052_shared_session_integrity'],
+  ['invalidate_pending_session_confirmations', '0053_session_confirmation_invalidation'],
+].map(([name, migration]) => {
+  const source = readFileSync(resolve(root, `backend/drizzle/${migration}.sql`), 'utf8');
+  const expectedBody = source.match(new RegExp(`CREATE (?:OR REPLACE )?FUNCTION ${name}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`))?.[1];
+  if (!expectedBody) throw new Error(`Cannot locate required function ${name}`);
+  const installed = integrityFunctions.filter(row => row.name === name);
+  const normalize = value => value.replace(/\r\n/g, '\n').trim();
+  return { name, migration, installed: installed.length === 1,
+    bodyMatches: installed.length === 1 && normalize(installed[0].body) === normalize(expectedBody) };
+});
 const migrationChecks = expected.map((migration, index) => {
   const tag = journal.entries[index].tag;
   // Git can change SQL line endings on Windows; identify this separately
@@ -117,10 +133,11 @@ const result = {
   replication,
   clockSessionTriggerInstalled: clockTrigger[0]?.installed === true,
   missingIntegrityObjects,
+  integrityFunctionChecks,
   findings: findings.map((finding) => ({ finding: finding.finding, kind: finding.kind, fixtureId: finding.fixture_id })),
   note: 'No writes. This is database evidence only, not deployed flags, Cloud stream validation, backup/restore or browser approval.',
 };
 console.log(JSON.stringify(result, null, 2));
-if (result.missingOrChangedMigrations.length || missingSourceTables.length || missingIntegrityObjects.length || findings.length || unknownMigrationCount || !result.clockSessionTriggerInstalled) {
+if (result.missingOrChangedMigrations.length || missingSourceTables.length || missingIntegrityObjects.length || integrityFunctionChecks.some(check => !check.bodyMatches) || findings.length || unknownMigrationCount || !result.clockSessionTriggerInstalled) {
   process.exitCode = 1;
 }

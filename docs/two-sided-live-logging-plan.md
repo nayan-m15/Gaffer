@@ -1,10 +1,22 @@
 # Two-sided live logging: fix plan
 
-Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. Steps 1-3 and canonical result corrections have local implementations; deployed-environment, full manual interaction and PowerSync delivery verification remain. Fresh fixture browser evidence is recorded below. The documented frontend build blockers have also been repaired.
+Updated 5 October 2026. This is the single implementation plan for the issues in Recording (4).txt. It replaces the numbered phase handoffs and the previous phase 2 plan. Steps 1-3 and canonical result corrections have local implementations. Development database and PowerSync deployment work is recorded in [the delivery verification](two-sided-delivery-verification.md); Render deployment and full manual interaction testing remain with the user. Fresh fixture browser evidence is recorded below. The documented frontend build blockers have also been repaired.
 
 The goal: two coaches open their own team setup, inspect the opponent's confirmed lineup, record into one shared match, review possible duplicates, and finish with one result everywhere. Implement the remaining fixes and hand the friendly and competition flows back for manual testing. A new validation environment is optional and does not hold up frontend work.
 
 ## Review of the five commits
+
+Current branch review for this request, newest first:
+
+| Commit | Change | Delivery implication |
+| --- | --- | --- |
+| b12d5a4f | Optional click-based lineup/logger/review/clock checks. | Records remaining UI failures; no Cloud delivery proof. |
+| e4fc18d8 | Fresh paired friendly/competition browser fixtures and integrity-object audit. | API/browser checks on a separate test source; no real peer SQLite assertion. |
+| a3889756 | Pending confirmation invalidation, canonical timeout scoring and connection reporting. | Adds 0053; accepted uploads and connection status do not establish delivery. |
+| 1e23f3da | Public lineup integration, clock retries, upload receipts and protected shared reads. | Useful client fixes; PowerSync authentication and target deployment remained unresolved. |
+| 1b79e97a | Public confirmed opponent lineup adapter and views. | Fixes lineup contract; no deployment or offline-delivery evidence. |
+
+The following table preserves the earlier five-commit review, which concerns a different historical baseline.
 
 Baseline: e01fe3d18be0c47edc8a56ebcd70d7d83c9a7dec. Reviewed all five subsequent commits through 317eeda5ef0e5d51463cd56657e94c6f63890e28.
 
