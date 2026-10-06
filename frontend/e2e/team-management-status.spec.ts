@@ -117,7 +117,7 @@ test('team management reflects athlete status badges and roster edits', async ({
     });
 
     await test.step('auto-fill keeps unavailable players off the pitch', async () => {
-      await page.getByRole('button', { name: /auto-fill/i }).click();
+      await page.getByRole('switch', { name: /auto-fill/i }).click();
 
       const pitch = page.getByRole('group', { name: 'Pitch positions' });
       await expect(

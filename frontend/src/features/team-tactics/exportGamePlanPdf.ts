@@ -608,15 +608,18 @@ function drawTacticsPage(
   y += attackHeight + 14;
 
   // ── Set-piece roles ───────────────────────────────────────────────
-  const rolesHeight = 158;
-  drawCardShell(doc, PAGE_MARGIN, y, contentWidth, rolesHeight);
-  cy = drawCardHeader(doc, PAGE_MARGIN, y, drawFlagGlyph, "SET-PIECE ROLES");
   const roles: [string, string | null][] = [
     ["Captain", data.tactics.captainId],
-    ["Free kick taker", data.tactics.freeKickTakerId],
-    ["Penalty taker", data.tactics.penaltyTakerId],
-    ["Corner taker", data.tactics.cornerTakerId],
+    ["Short free kick", data.tactics.freeKickTakerId],
+    ["Long free kick", data.tactics.longFreeKickTakerId],
+    ["Penalties", data.tactics.penaltyTakerId],
+    ["Left corner", data.tactics.cornerTakerId],
+    ["Right corner", data.tactics.rightCornerTakerId],
   ];
+  // Header block, one 20pt row per role, then the card's bottom padding.
+  const rolesHeight = 56 + roles.length * 20 + 22;
+  drawCardShell(doc, PAGE_MARGIN, y, contentWidth, rolesHeight);
+  cy = drawCardHeader(doc, PAGE_MARGIN, y, drawFlagGlyph, "SET-PIECE ROLES");
   for (const [label, athleteId] of roles) {
     cy = drawLabelValueRow(
       doc,

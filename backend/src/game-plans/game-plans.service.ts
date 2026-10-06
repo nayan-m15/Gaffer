@@ -12,6 +12,7 @@ import {
   getFormationPlayerCount,
   isCustomFormationId,
 } from '../common/formations';
+import { assertValidPlayerInstructions } from './player-instructions';
 import type {
   CreateGamePlanDto,
   UpdateGamePlanDto,
@@ -62,8 +63,11 @@ export class GamePlansService {
       substituteIds: input.substituteIds ?? [],
       captainId: input.captainId ?? null,
       freeKickTakerId: input.freeKickTakerId ?? null,
+      longFreeKickTakerId: input.longFreeKickTakerId ?? null,
       penaltyTakerId: input.penaltyTakerId ?? null,
       cornerTakerId: input.cornerTakerId ?? null,
+      rightCornerTakerId: input.rightCornerTakerId ?? null,
+      playerInstructions: input.playerInstructions ?? {},
     });
     try {
       const [plan] = await this.databaseService.database
@@ -136,8 +140,11 @@ export class GamePlansService {
       substituteIds: string[];
       captainId: string | null;
       freeKickTakerId: string | null;
+      longFreeKickTakerId: string | null;
       penaltyTakerId: string | null;
       cornerTakerId: string | null;
+      rightCornerTakerId: string | null;
+      playerInstructions: Record<string, Record<string, string>>;
     },
   ) {
     const starters = Object.values(plan.assignments).filter(
@@ -249,8 +256,13 @@ export class GamePlansService {
       ...plan.substituteIds,
       plan.captainId,
       plan.freeKickTakerId,
+      plan.longFreeKickTakerId,
       plan.penaltyTakerId,
       plan.cornerTakerId,
+      plan.rightCornerTakerId,
+      // Instructions may be kept for a player who is neither starting nor on
+      // the bench, so their athletes are checked for team membership here too.
+      ...Object.keys(plan.playerInstructions),
     ].filter((id): id is string => id !== null);
     const uniqueIds = [...new Set(referencedIds)];
     if (uniqueIds.length === 0) return;
@@ -275,5 +287,13 @@ export class GamePlansService {
         'Injured athletes cannot be placed in the starting lineup.',
       );
     }
+
+    assertValidPlayerInstructions({
+      instructions: plan.playerInstructions,
+      formationId: plan.formationId,
+      assignments: plan.assignments,
+      customPositions: plan.customPositions,
+      teamAthleteIds: new Set(valid.map((athlete) => athlete.id)),
+    });
   }
 }

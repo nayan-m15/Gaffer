@@ -1,6 +1,10 @@
 /**
- * A style dropdown (Defensive style / Offensive style) with the FIFA-style
- * live-updating trade-off caption shown directly beneath it.
+ * A style dropdown (Defensive style / Build-up style) with the live-updating
+ * trade-off caption shown directly beneath it.
+ *
+ * On the Tactics tab the caption is suppressed, because the preview panel beside
+ * the controls already shows it next to the mini pitch; elsewhere (the PDF-facing
+ * and read-only views) it stays inline.
  */
 
 import { useId, useMemo } from "react";
@@ -19,6 +23,8 @@ interface StyleFieldProps<T extends string> {
   options: StyleOption<T>[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** Hide the inline trade-off caption when something else is showing it. */
+  hideDescription?: boolean;
 }
 
 export function StyleField<T extends string>({
@@ -27,6 +33,7 @@ export function StyleField<T extends string>({
   options,
   onChange,
   disabled,
+  hideDescription = false,
 }: StyleFieldProps<T>) {
   const id = useId();
 
@@ -72,9 +79,11 @@ export function StyleField<T extends string>({
         </SelectContent>
       </Select>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {description}
-      </p>
+      {!hideDescription && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      )}
     </div>
   );
 }
