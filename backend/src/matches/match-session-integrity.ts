@@ -81,11 +81,25 @@ export async function resolveMatchSessionIdentity(
     participants: [],
     reconciliationRequired: false,
   };
-  if (
-    !identity.fixtureId ||
-    (!options.ignoreFeatureFlag && !twoSidedLiveLoggingEnabled())
-  )
+  if (!identity.fixtureId) return identity;
+  if (!options.ignoreFeatureFlag && !twoSidedLiveLoggingEnabled()) {
+    // A disabled/older server must not create independent history for a fixture
+    // that another server already enrolled in shared logging.
+    const table =
+      identity.fixtureType === 'competition'
+        ? competitionFixtures
+        : friendlyFixtures;
+    const [fixture] = await database.database
+      .select({ sharedSessionId: table.sharedSessionId })
+      .from(table)
+      .where(eq(table.id, identity.fixtureId))
+      .limit(1);
+    if (fixture?.sharedSessionId) {
+      identity.fixtureSharedSessionId = fixture.sharedSessionId;
+      return { ...identity, state: 'shared_missing_link' };
+    }
     return identity;
+  }
   let eligible = false;
   let completed = false;
   if (identity.fixtureType === 'competition') {

@@ -482,12 +482,12 @@ export class FriendlyFixturesService {
     fixtureId: string,
     competition = false,
   ): Promise<FriendlyOpponentLineup | ConfirmedOpponentLineup> {
-    const legacy = await this.resolveLegacyOpponentEvent(
-      opponentTeamId,
-      fixtureId,
-      competition,
-    );
-    if (!twoSidedLiveLoggingEnabled()) return legacy;
+    if (!twoSidedLiveLoggingEnabled())
+      return this.resolveLegacyOpponentEvent(
+        opponentTeamId,
+        fixtureId,
+        competition,
+      );
     const [event] = await this.databaseService.database
       .select({ id: events.id })
       .from(events)
@@ -507,7 +507,8 @@ export class FriendlyFixturesService {
           .where(eq(eventLineups.eventId, event.id))
           .limit(1)
       : [];
-    let players = legacy.players;
+    let players: FriendlyOpponentLineupPlayer[] = [];
+    let legacy: FriendlyOpponentLineup | undefined;
     if (lineup) {
       const ids = [...lineup.startingAthleteIds, ...lineup.benchAthleteIds];
       const roster = ids.length
@@ -531,6 +532,13 @@ export class FriendlyFixturesService {
         ...athlete,
         started: lineup.startingAthleteIds.includes(athlete.id),
       }));
+    } else {
+      legacy = await this.resolveLegacyOpponentEvent(
+        opponentTeamId,
+        fixtureId,
+        competition,
+      );
+      players = legacy.players;
     }
     const toPlayer = (player: FriendlyOpponentLineupPlayer) => ({
       name: (player.firstName + ' ' + player.lastName).trim(),
@@ -543,9 +551,9 @@ export class FriendlyFixturesService {
         a.firstName.localeCompare(b.firstName),
     );
     return {
-      available: Boolean(lineup) || legacy.available,
+      available: Boolean(lineup) || Boolean(legacy?.available),
       formation: lineup?.formationId ?? null,
-      ...(lineup || legacy.available
+      ...(lineup || legacy?.available
         ? { source: lineup ? ('confirmed' as const) : ('squad' as const) }
         : {}),
       ...(lineup?.formationId?.startsWith('custom-') && lineup.customPositions

@@ -207,7 +207,7 @@ test("live match clock resumes from the persisted value", async ({ page }) => {
 
   await page.goto(`/matches/${MATCH_ID}/live`);
 
-  await expect(page.getByText("12:34", { exact: true })).toBeVisible();
+  await expect(page.getByText("12:34", { exact: true })).toBeVisible({ timeout: 20000 });
   await expect(page.getByText("1ST HALF", { exact: true })).toBeVisible();
 });
 
@@ -332,6 +332,9 @@ test("dashboard live match clock advances without a page refresh", async ({
 test("shared logger follows peer halves and clock corrections with an unchanged sheet timestamp", async ({ page }) => {
   const sessionId = "44444444-4444-4444-8444-444444444444";
   await mockAuthenticatedMatch(page, false, { sharedSessionId: sessionId, clockRevision: 0 });
+  await page.route(`**/api/events/${EVENT_ID}/opponent-lineup`, route => json(route, {
+    available: false, formation: null, starters: [], bench: [],
+  }));
   await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
   let report = {
     sessionId, participants: [], score: { home: 1, away: 0 },

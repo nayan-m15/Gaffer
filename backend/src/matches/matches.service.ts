@@ -98,9 +98,13 @@ export class MatchesService {
       throw new NotFoundException('Match session not found.');
     }
     const team = await this.requireTeam(userId);
-    const [participant] = await this.databaseService.database
-      .select({ id: matchSessionParticipants.id })
-      .from(matchSessionParticipants)
+    const [authorized] = await this.databaseService.database
+      .select({ session: matchSessions })
+      .from(matchSessions)
+      .innerJoin(
+        matchSessionParticipants,
+        eq(matchSessionParticipants.sessionId, matchSessions.id),
+      )
       .where(
         and(
           eq(matchSessionParticipants.sessionId, sessionId),
@@ -108,13 +112,8 @@ export class MatchesService {
         ),
       )
       .limit(1);
-    if (!participant) throw new NotFoundException('Match session not found.');
-    let [session] = await this.databaseService.database
-      .select()
-      .from(matchSessions)
-      .where(eq(matchSessions.id, sessionId))
-      .limit(1);
-    if (!session) throw new NotFoundException('Match session not found.');
+    if (!authorized) throw new NotFoundException('Match session not found.');
+    let session = authorized.session;
     if (sessionHasTimedOutConfirmation(session, new Date())) {
       await finaliseTimedOutSession(this.databaseService, sessionId);
       [session] = await this.databaseService.database

@@ -295,12 +295,10 @@ streams:
              match_event_reviews.created_at,
              match_event_reviews.updated_at
       FROM match_event_reviews
-      JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_reviews.canonical_event_id || '/' || match_event_reviews.session_id
       JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_reviews.match_id || '/' || match_event_reviews.session_id
       JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_event_reviews.session_id IS NOT NULL
-        AND public_event.event_type <> 'injury'
-        AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+        AND match_event_reviews.public_canonical_event = true
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND participant.team_id = auth.parameter('team_id')
         AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
@@ -362,12 +360,10 @@ streams:
              match_event_operations.schema_version,
              match_event_operations.created_at
       FROM match_event_operations
-      JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_operations.canonical_event_id || '/' || match_event_operations.session_id
       JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_operations.match_id || '/' || match_event_operations.session_id
       JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
       WHERE match_event_operations.session_id IS NOT NULL
-        AND public_event.event_type <> 'injury'
-        AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+        AND match_event_operations.public_canonical_event = true
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND participant.team_id = auth.parameter('team_id')
         AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
@@ -739,12 +735,10 @@ streams:
                match_event_reviews.created_at,
                match_event_reviews.updated_at
         FROM match_event_reviews
-        JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_reviews.canonical_event_id || '/' || match_event_reviews.session_id
         JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_reviews.match_id || '/' || match_event_reviews.session_id
         JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
         WHERE match_event_reviews.session_id IS NOT NULL
-          AND public_event.event_type <> 'injury'
-          AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+          AND match_event_reviews.public_canonical_event = true
           AND auth.parameter('two_sided_live_logging') = 'true'
           AND participant.team_id = auth.parameter('team_id')
           AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
@@ -797,12 +791,10 @@ streams:
                match_event_operations.schema_version,
                match_event_operations.created_at
         FROM match_event_operations
-        JOIN match_events AS public_event ON public_event.id || '/' || public_event.session_id = match_event_operations.canonical_event_id || '/' || match_event_operations.session_id
         JOIN matches AS peer_sheet ON peer_sheet.id || '/' || peer_sheet.shared_match_id = match_event_operations.match_id || '/' || match_event_operations.session_id
         JOIN match_session_participants AS participant ON participant.session_id || '/' || CASE participant.side WHEN 'home' THEN 0 ELSE 1 END = peer_sheet.shared_match_id || '/' || CASE peer_sheet.is_home WHEN true THEN 1 ELSE 0 END
         WHERE match_event_operations.session_id IS NOT NULL
-          AND public_event.event_type <> 'injury'
-          AND public_event.session_id IN (SELECT match_session_participants.session_id FROM match_session_participants WHERE match_session_participants.team_id = auth.parameter('team_id'))
+          AND match_event_operations.public_canonical_event = true
           AND auth.parameter('two_sided_live_logging') = 'true'
           AND participant.team_id = auth.parameter('team_id')
           AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))

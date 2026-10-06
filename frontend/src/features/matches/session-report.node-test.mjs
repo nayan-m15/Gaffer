@@ -29,6 +29,15 @@ const report = {
   ],
   reviews: [],
 };
+test("an older shared poll cannot undo an acknowledged second-half clock", () => {
+  const sheet = { id: 'sheet', isHome: true, eventStatus: 'scheduled', clockRevision: 6,
+    clockPeriod: 'second_half', clockElapsedMs: 2700000, clockStartedAt: '2026-10-06T12:00:00Z' };
+  const stale = { ...report, finalStatus: 'open', clock: { period: 'half_time', elapsedMs: 2700000, startedAt: null, revision: 5 } };
+  assert.equal(applySessionReport(sheet, stale).clockPeriod, 'second_half');
+  assert.equal(applySessionReport(sheet, stale).clockStartedAt, sheet.clockStartedAt);
+  const fresh = { ...stale, clock: { ...stale.clock, revision: 7 } };
+  assert.equal(applySessionReport(sheet, fresh).clockPeriod, 'half_time');
+});
 test("both owning sheets resolve one shared cache, score, clock and timeline while private fields survive", () => {
   const home = {
     id: "sheet-a",

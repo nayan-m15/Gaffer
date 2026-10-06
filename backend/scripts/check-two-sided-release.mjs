@@ -34,7 +34,9 @@ const [, missingSchemaColumns] = await sql.transaction((tx) => [
     ('matches', 'shared_match_id'),
     ('match_sessions', 'home_confirmed_by_user_id'),
     ('match_sessions', 'away_confirmed_by_user_id'),
-    ('match_clock_operations', 'session_id'))
+    ('match_clock_operations', 'session_id'),
+    ('match_event_reviews', 'public_canonical_event'),
+    ('match_event_operations', 'public_canonical_event'))
     SELECT r.table_name, r.column_name FROM required r
     WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns c
       WHERE c.table_schema = 'public' AND c.table_name = r.table_name
@@ -75,7 +77,10 @@ const [, migrations, findings, missingSourceTables, replication, clockTrigger, m
       AND tgenabled IN ('O', 'A')) AS installed`),
   tx.query(`WITH required(table_name, trigger_name, function_name) AS (VALUES
     ('match_events', 'match_event_invalidate_session_confirmations', 'invalidate_pending_session_confirmations'),
-    ('match_event_reviews', 'match_review_invalidate_session_confirmations', 'invalidate_pending_session_confirmations'))
+    ('match_event_reviews', 'match_review_invalidate_session_confirmations', 'invalidate_pending_session_confirmations'),
+    ('match_event_reviews', 'match_reviews_derive_public_canonical_event', 'derive_public_canonical_event'),
+    ('match_event_operations', 'match_operations_derive_public_canonical_event', 'derive_public_canonical_event'),
+    ('match_events', 'match_events_refresh_public_canonical_event', 'refresh_public_canonical_event_dependents'))
     SELECT trigger_name AS missing_object FROM required r WHERE NOT EXISTS (
       SELECT 1 FROM pg_trigger t
       JOIN pg_class c ON c.oid = t.tgrelid
@@ -89,12 +94,14 @@ const [, migrations, findings, missingSourceTables, replication, clockTrigger, m
       to_regprocedure('public.attach_match_session_if_safe(uuid,uuid,boolean)') IS NULL`),
   tx.query(`SELECT p.proname AS name, p.prosrc AS body FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public'
-    AND p.proname IN ('refresh_match_projection', 'attach_match_session_if_safe', 'invalidate_pending_session_confirmations')`),
+    AND p.proname IN ('refresh_match_projection', 'attach_match_session_if_safe', 'invalidate_pending_session_confirmations', 'derive_public_canonical_event', 'refresh_public_canonical_event_dependents')`),
 ]);
 const integrityFunctionChecks = [
   ['refresh_match_projection', '0052_shared_session_integrity'],
   ['attach_match_session_if_safe', '0052_shared_session_integrity'],
   ['invalidate_pending_session_confirmations', '0053_session_confirmation_invalidation'],
+  ['derive_public_canonical_event', '0055_shared_review_visibility'],
+  ['refresh_public_canonical_event_dependents', '0055_shared_review_visibility'],
 ].map(([name, migration]) => {
   const source = readFileSync(resolve(root, `backend/drizzle/${migration}.sql`), 'utf8');
   const expectedBody = source.match(new RegExp(`CREATE (?:OR REPLACE )?FUNCTION ${name}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`))?.[1];

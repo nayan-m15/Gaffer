@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { FORMATIONS } from '../src/features/team-management/formations';
 import { eq } from '../../backend/node_modules/drizzle-orm/index.cjs';
 import { BACKEND_URL, FRONTEND_URL } from './utils/auth';
 import { cleanupUsers, uniqueTestIdentity, verifyUserEmail, type TestIdentity } from '../../backend/test/utils/test-db';
@@ -23,6 +24,7 @@ const scenarios = (['friendly', 'competition'] as const).flatMap((kind) =>
   (['home', 'away'] as const).map((firstConfirmation) => ({ kind, firstConfirmation })),
 );
 const verifyControls = process.env.TWO_SIDED_UI_INTERACTIONS === 'true';
+const verifyClockControls = process.env.TWO_SIDED_UI_CLOCK_CONTROLS === 'true';
 
 async function openReviews(page: Page) {
   await page.getByRole('button', { name: 'Match settings', exact: true }).click();
@@ -31,7 +33,9 @@ async function openReviews(page: Page) {
 }
 for (const { kind, firstConfirmation } of scenarios) {
   test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, async ({ browser }, testInfo) => {
-    test.setTimeout(verifyControls ? 360_000 : 240_000);
+    // The two real API accounts, fixture setup and exact-ID cleanup can take
+    // over four minutes against the remote test database, even with passing UI assertions.
+    test.setTimeout(360_000);
     test.skip(process.env.TWO_SIDED_LIVE_LOGGING_ENABLED !== 'true', 'Run with the controlled backend flag enabled.');
     const identities: TestIdentity[] = [];
     const contexts: BrowserContext[] = [];
@@ -97,6 +101,7 @@ for (const { kind, firstConfirmation } of scenarios) {
         await body(coach.context.request, 'put', `/events/${eventId}/lineup`, {
           startingAthleteIds: coach.squad.slice(0, 11).map((player) => player.id),
           benchAthleteIds: [coach.squad[11].id], formationId: '4-3-3',
+          pitchAssignments: Object.fromEntries(FORMATIONS['4-3-3'].positions.map((slot, i) => [slot.id, coach.squad[i].id])),
         });
         const publicLineup = await body(opponent.context.request, 'get',
           `/events/${opponent === home ? homeEventId : awayEventId}/opponent-lineup`);
@@ -106,6 +111,13 @@ for (const { kind, firstConfirmation } of scenarios) {
         expect(Object.keys(publicLineup).sort()).toEqual(['available', 'bench', 'formation', 'source', 'starters']);
       }
       for (const [coach, eventId] of [[home, homeEventId], [away, awayEventId]] as const) {
+        await coach.page.goto(`/events/${eventId}/confirm-squad`);
+        const homeVenue = coach.page.getByRole('button', { name: 'Home', exact: true });
+        const awayVenue = coach.page.getByRole('button', { name: 'Away', exact: true });
+        await expect(homeVenue).toBeDisabled({ timeout: 20000 });
+        await expect(awayVenue).toBeDisabled();
+        await expect(homeVenue).toHaveAttribute('aria-pressed', coach === home ? 'true' : 'false');
+        await expect(awayVenue).toHaveAttribute('aria-pressed', coach === away ? 'true' : 'false');
         await coach.page.goto(`/events/${eventId}/confirm-squad/opponent`);
         await expect(coach.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible({ timeout: 20000 });
         await expect(coach.page.getByText('Confirmed lineup · read only')).toBeVisible({ timeout: 20000 });
@@ -241,6 +253,48 @@ for (const { kind, firstConfirmation } of scenarios) {
       for (const coach of [home, away]) {
         await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, { timeout: 20000 });
         await expect(coach.page.getByRole('region', { name: 'Shared session result' })).toHaveCount(0);
+        await expect(coach.page.locator('.live-pitch-panel').getByRole('button')).toHaveCount(22);
+      }
+      if (!verifyControls && verifyClockControls) {
+        await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await away.page.getByRole('button', { name: 'Pause', exact: true }).click();
+        await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible({ timeout: 20000 });
+        await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await home.page.getByRole('button', { name: 'Half Time', exact: true }).click();
+        await home.page.getByRole('button', { name: 'YES, CONFIRM', exact: true }).click();
+        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
+        await away.page.getByRole('button', { name: 'START SECOND HALF', exact: true }).click();
+        for (const coach of [home, away]) {
+          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+          await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
+          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+        }
+      } else if (!verifyControls) {
+        for (const [coach, sheet, period, running, elapsedMs] of [
+          [home, homeSheet, 'half_time', false, 2700000],
+          [away, awaySheet, 'second_half', true, 2700000],
+          [home, homeSheet, 'second_half', false, 2800000],
+          [away, awaySheet, 'second_half', true, 2800000],
+        ] as const) {
+          const before = await body(coach.context.request, 'get', reportUrl);
+          await body(coach.context.request, 'patch', `/matches/${sheet.id}/clock`, {
+            operationId: randomUUID(), baseRevision: before.clock.revision,
+            clientCreatedAt: new Date().toISOString(), period, running, elapsedMs,
+          });
+          for (const peer of [home, away]) {
+            if (period === 'half_time') {
+              await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
+              await expect(peer.page.locator('.live-match-score .tabular-nums').last()).toHaveText('45:00');
+              await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toContainText('2');
+            } else {
+              await expect(peer.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+              await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
+              await expect(peer.page.getByRole('button', { name: running ? 'Pause' : 'Resume', exact: true })).toBeVisible({ timeout: 20000 });
+            }
+          }
+        }
       }
       expect((await body(home.context.request, 'get', reportUrl)).confirmations).toEqual({ home: null, away: null });
       const confirmationOrder = firstConfirmation === 'home' ? [home, away] : [away, home];

@@ -240,8 +240,17 @@ describe('Phase 1 shared-session integrity', () => {
       const a = await f.start(f.home, f.homeEvent);
       await unlink(a.id);
       if (evidence === 'observation') {
+        // Model history written before this fixture was enrolled in shared logging.
+        await db
+          .update(schema.friendlyFixtures)
+          .set({ sharedSessionId: null })
+          .where(eq(schema.friendlyFixtures.id, f.fixtureId));
         process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
         await matches.logEvent(f.home.id, a.id, goal());
+        await db
+          .update(schema.friendlyFixtures)
+          .set({ sharedSessionId: a.sharedMatchId })
+          .where(eq(schema.friendlyFixtures.id, f.fixtureId));
         process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
       }
       if (evidence === 'finalisation') {
@@ -897,14 +906,14 @@ describe('Phase 1 shared-session integrity', () => {
   it.each(['manual', 'flag-off'] as const)(
     'preserves %s legacy ingestion',
     async (kind) => {
+      if (kind === 'flag-off')
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
       const f = await fixture();
       if (kind === 'manual')
         await db
           .update(schema.events)
           .set({ friendlyFixtureId: null })
           .where(eq(schema.events.id, f.homeEvent));
-      if (kind === 'flag-off')
-        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
       const a = await f.start(f.home, f.homeEvent);
       const input = goal();
       await matches.logEvent(f.home.id, a.id, input);

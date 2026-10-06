@@ -191,6 +191,111 @@ describe('Phase 2 shared privacy and clock', () => {
   });
 
   it.each(['friendly', 'competition'] as const)(
+    '%s: fixture side survives all client choices and flag-off starts cannot split a session',
+    async (kind) => {
+      for (const [homeChoice, awayChoice] of [
+        [true, true],
+        [false, false],
+        [false, true],
+        [true, false],
+      ]) {
+        const f = await fixture(kind);
+        expect(
+          (await events.findOne(f.home.id, f.homeEvent)).fixtureIsHome,
+        ).toBe(true);
+        expect(
+          (await events.findOne(f.away.id, f.awayEvent)).fixtureIsHome,
+        ).toBe(false);
+        for (const [coach, eventId] of [
+          [f.home, f.homeEvent],
+          [f.away, f.awayEvent],
+        ] as const) {
+          await events.confirmLineup(coach.id, eventId, {
+            startingAthleteIds: coach.athletes.map((a) => a.id),
+            formationId: '4-3-3',
+            pitchAssignments: { '433-gk': coach.athletes[0].id },
+          });
+        }
+        const start = (
+          coach: typeof f.home,
+          eventId: string,
+          isHome: boolean,
+        ) =>
+          events.startMatch(coach.id, eventId, {
+            opponentName: 'Other team',
+            isHome,
+            startingAthleteIds: coach.athletes.map((a) => a.id),
+            opponentSquadVisibility: 'none',
+          });
+        const a = await start(f.home, f.homeEvent, homeChoice);
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+        await expect(
+          start(f.away, f.awayEvent, awayChoice),
+        ).rejects.toMatchObject({
+          response: { code: 'SHARED_MATCH_SESSION_REQUIRED' },
+        });
+        expect(await events.getLineup(f.away.id, f.awayEvent)).not.toBeNull();
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+        const b = await start(f.away, f.awayEvent, awayChoice);
+        expect(a.isHome).toBe(true);
+        expect(b.isHome).toBe(false);
+        expect(a.sharedMatchId).toBe(b.sharedMatchId);
+        for (const [coach, sheet] of [
+          [f.home, a],
+          [f.away, b],
+        ] as const) {
+          const lineup = (await matches.findOne(coach.id, sheet.id))
+            .friendlyOpponentLineup;
+          expect(lineup).toMatchObject({
+            available: true,
+            source: 'confirmed',
+            formation: '4-3-3',
+          });
+          expect('starters' in lineup && lineup.starters).toHaveLength(11);
+          expect('starters' in lineup && lineup.starters[0].slotId).toBe(
+            '433-gk',
+          );
+        }
+        await matches.logEvent(f.home.id, a.id, {
+          clientRequestId: randomUUID(),
+          team: 'own',
+          eventType: 'goal',
+          minute: 1,
+        });
+        await matches.logEvent(f.away.id, b.id, {
+          clientRequestId: randomUUID(),
+          team: 'own',
+          eventType: 'goal',
+          minute: 2,
+        });
+        const home = await matches.getSessionReportForSheet(f.home.id, a.id);
+        const away = await matches.getSessionReportForSheet(f.away.id, b.id);
+        expect(home.score).toEqual({ home: 1, away: 1 });
+        expect(away).toEqual(home);
+      }
+    },
+  );
+
+  it('keeps a linked fixture lineup when both coaches use legacy logging', async () => {
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+    const f = await fixture();
+    await events.confirmLineup(f.home.id, f.homeEvent, {
+      startingAthleteIds: f.home.athletes.map((a) => a.id),
+      formationId: '4-3-3',
+      pitchAssignments: { '433-gk': f.home.athletes[0].id },
+    });
+    const sheet = await f.start(f.home, f.homeEvent);
+    expect(sheet.sharedMatchId).toBeNull();
+    expect(await events.getLineup(f.home.id, f.homeEvent)).not.toBeNull();
+    const lineup = await events.getFriendlyOpponentLineup(
+      f.away.id,
+      f.awayEvent,
+    );
+    expect(lineup).toMatchObject({ available: true });
+    expect('players' in lineup && lineup.players).toHaveLength(11);
+  });
+
+  it.each(['friendly', 'competition'] as const)(
     '%s: peer events and nested review observations stay private',
     async (kind) => {
       const f = await fixture(kind);
@@ -535,6 +640,136 @@ describe('Phase 2 shared privacy and clock', () => {
         return `'${claims[claim].replaceAll("'", "''")}'`;
       });
   }
+
+  it('backfills review visibility without losing confirmations and revokes it after canonical edits', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    for (const [actor, sheet, team] of [
+      [f.home, a, 'own'],
+      [f.away, b, 'opponent'],
+    ] as const) {
+      await matches.logEvent(actor.id, sheet.id, {
+        clientRequestId: randomUUID(),
+        team,
+        eventType: 'goal',
+        minute: 1,
+        period: 'first_half',
+        matchElapsedMs: 60000,
+      });
+    }
+    const [review] = await matches.listEventReviews(f.away.id, b.id);
+    await matches.resolveEventReview(f.away.id, b.id, review.id, {
+      resolution: 'same_event',
+    });
+    const [{ canonicalEventId }] = await db
+      .select()
+      .from(schema.matchEventReviews)
+      .where(eq(schema.matchEventReviews.id, review.id));
+    // The merge can choose either candidate as its primary UUID. Create a
+    // dependent decision for this review's canonical row to test both gates
+    // without depending on random candidate ordering.
+    await db.insert(schema.matchEventOperations).values({
+      id: randomUUID(),
+      matchId: b.id,
+      sessionId: a.sharedMatchId,
+      actorUserId: f.away.id,
+      operationType: 'merge',
+      canonicalEventId,
+      decision: {},
+    });
+    const visibility = () =>
+      pg.query<{ kind: string; visible: boolean }>(`
+      SELECT 'review' AS kind, public_canonical_event AS visible
+      FROM match_event_reviews WHERE canonical_event_id = '${canonicalEventId}'
+      UNION ALL
+      SELECT 'operation', public_canonical_event FROM match_event_operations
+      WHERE canonical_event_id = '${canonicalEventId}'`);
+    expect((await visibility()).rows).toEqual(
+      expect.arrayContaining([
+        { kind: 'review', visible: true },
+        { kind: 'operation', visible: true },
+      ]),
+    );
+
+    // Simulate pre-migration rows, then execute the migration's exact backfill.
+    await pg.exec(`
+      ALTER TABLE match_event_reviews DISABLE TRIGGER match_reviews_derive_public_canonical_event;
+      ALTER TABLE match_event_operations DISABLE TRIGGER match_operations_derive_public_canonical_event;
+      UPDATE match_event_reviews SET public_canonical_event = false WHERE id = '${review.id}';
+      UPDATE match_event_operations SET public_canonical_event = false WHERE canonical_event_id = '${canonicalEventId}';
+      ALTER TABLE match_event_reviews ENABLE TRIGGER match_reviews_derive_public_canonical_event;
+      ALTER TABLE match_event_operations ENABLE TRIGGER match_operations_derive_public_canonical_event;
+      UPDATE match_sessions SET home_confirmed_at = now(), home_confirmed_by_user_id = '${f.home.id}' WHERE id = '${a.sharedMatchId}';
+    `);
+    const migration = readFileSync(
+      resolve(__dirname, '../../drizzle/0055_shared_review_visibility.sql'),
+      'utf8',
+    );
+    await pg.exec(
+      `BEGIN; ${migration.slice(migration.indexOf('-- Backfill'))} COMMIT;`,
+    );
+    expect((await visibility()).rows.every((row) => row.visible)).toBe(true);
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.matchSessions)
+          .where(eq(schema.matchSessions.id, a.sharedMatchId!))
+      )[0].homeConfirmedAt,
+    ).not.toBeNull();
+
+    await pg.exec(
+      `UPDATE match_events SET event_type = 'injury' WHERE id = '${canonicalEventId}'`,
+    );
+    expect((await visibility()).rows.every((row) => !row.visible)).toBe(true);
+    // Forging the stored flag cannot make a private canonical event public.
+    await pg.exec(`
+      UPDATE match_event_reviews SET public_canonical_event = true WHERE id = '${review.id}';
+      UPDATE match_event_operations SET public_canonical_event = true WHERE canonical_event_id = '${canonicalEventId}';
+    `);
+    expect((await visibility()).rows.every((row) => !row.visible)).toBe(true);
+    for (const actor of [f.home, f.away])
+      for (const name of [
+        'shared_session_match_reviews',
+        'shared_session_match_operations',
+      ]) {
+        const result = await pg.query<{ canonical_event_id: string }>(
+          streamQuery(name, actor, actor.team.id),
+        );
+        expect(
+          result.rows.some(
+            (row) => row.canonical_event_id === canonicalEventId,
+          ),
+        ).toBe(false);
+      }
+    await pg.exec(
+      `UPDATE match_events SET event_type = 'goal' WHERE id = '${canonicalEventId}'`,
+    );
+    expect((await visibility()).rows.every((row) => row.visible)).toBe(true);
+    await pg.exec(
+      `UPDATE match_event_reviews SET session_id = NULL WHERE id = '${review.id}'`,
+    );
+    expect(
+      (await visibility()).rows.find((row) => row.kind === 'review')?.visible,
+    ).toBe(false);
+    await pg.exec(
+      `UPDATE match_event_reviews SET session_id = '${a.sharedMatchId}' WHERE id = '${review.id}'`,
+    );
+    expect((await visibility()).rows.every((row) => row.visible)).toBe(true);
+    await pg.exec(`DELETE FROM match_events WHERE id = '${canonicalEventId}'`);
+    expect((await visibility()).rows).toHaveLength(0);
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.matchEventOperations)
+          .where(eq(schema.matchEventOperations.matchId, b.id))
+      ).every(
+        (row) => row.canonicalEventId !== null || !row.publicCanonicalEvent,
+      ),
+    ).toBe(true);
+  });
 
   it('executes every actual stream SQL with participant, third-team, flag-off and revoked claims', async () => {
     const f = await fixture('competition');

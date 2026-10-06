@@ -4,6 +4,20 @@ Current work is described in [the implementation plan](two-sided-live-logging-pl
 
 ## Current readiness
 
+6 October regression work supersedes the older readiness notes below. The
+development database has the shared-clock function from `0054`, but today's
+paired sheets include mixed shared/legacy identities. Setup now displays and
+locks the fixture-assigned side, linked snapshots survive kickoff, stale polls
+cannot overwrite acknowledged clocks, and a disabled server rejects writes to
+an already enrolled shared fixture. Local rules also remove the current bucket
+overflow using the trigger-maintained privacy gate in new migration `0055`.
+Apply `0055` to the verified target before deploying the backend or updated
+PowerSync rules, deploy both apps, and align both coaches' API flags/credentials.
+The development/hosted migration and rules deployment has not been performed
+in this assessment. Today's recorded unlinked history needs separate reviewed
+reconciliation. See [the regression assessment](live-logger-regression-2026-10-06.md)
+for evidence, exact local checks and deployment limitations.
+
 Subsequent historical repair: all five affected fixture pairs now share the correct session/sides and the actual report service returns identical scores/timelines/clocks for both coaches. Competition results remain 1-0, 3-3, 2-1 and 0-3; friendly is 1-1. All observations are retained. Obsolete confirmations were cleared, so both coaches must reconfirm. Historical session-conflict/null-sheet findings are now zero. Journal review is complete without replaying migrations or modifying the journal; two hashes remain without Git provenance. See [the applied repair](two-sided-test-data-repair.md#applied-historical-reconciliation-5-october-subsequent-to-the-assessment-below). The user retains UI retesting and Render/Vercel deployment. Earlier assessment/readiness paragraphs below are historical.
 
 Latest historical assessment after `67a301f3`: the three conflicting fixtures and both null-linked sheets all contain completed recorded games. None qualifies for safe empty-sheet attachment. Exact evidence and the outstanding result/goal decisions are in [the repair assessment](two-sided-test-data-repair.md#exact-record-reconciliation-assessment-5-october-after-67a301f3). No historical writes occurred; reconciliation awaits the user's outcome selection. The release audit still fails for historical findings and journal drift, while 0052/0053 function bodies and publication/grants pass.

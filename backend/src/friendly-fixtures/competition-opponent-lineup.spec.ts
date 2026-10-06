@@ -209,11 +209,7 @@ describe('opponent lineup access and public projection', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /PRIVATE|private-athlete|private-bench|not-a-starter/,
     );
-    expect(projectionService.resolveLegacyOpponentEvent).toHaveBeenCalledWith(
-      'away',
-      'exact-fixture',
-      true,
-    );
+    expect(projectionService.resolveLegacyOpponentEvent).not.toHaveBeenCalled();
   });
 
   it('labels an exact-fixture squad fallback with unknown formation', async () => {

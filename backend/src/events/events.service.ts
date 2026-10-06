@@ -354,6 +354,9 @@ export class EventsService {
         fixtureScheduleConfirmedAt: null,
         fixtureOpponentCompetitionTeamId: null,
         fixtureOpponentName: null,
+        fixtureIsHome: friendlyContext
+          ? friendlyContext.requester?.id === team.id
+          : null,
         ...friendlyFields,
         ...lineupFields,
       };
@@ -370,6 +373,9 @@ export class EventsService {
       fixtureScheduleConfirmedAt: fixtureContext.scheduleConfirmedAt,
       fixtureOpponentCompetitionTeamId: fixtureContext.opponent?.id ?? null,
       fixtureOpponentName: fixtureContext.opponent?.displayName ?? null,
+      fixtureIsHome:
+        fixtureContext.ownCompetitionTeamId ===
+        fixtureContext.homeCompetitionTeamId,
       ...friendlyFields,
       ...lineupFields,
     };
@@ -1070,7 +1076,11 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
-      if (!twoSidedLiveLoggingEnabled()) {
+      if (
+        !twoSidedLiveLoggingEnabled() &&
+        !event.friendlyFixtureId &&
+        !event.competitionFixtureId
+      ) {
         await this.databaseService.database
           .delete(eventLineups)
           .where(eq(eventLineups.eventId, event.id));
@@ -1148,7 +1158,11 @@ export class EventsService {
 
       // Keep the confirmed lineup snapshot for the opponent's read-only view.
       // confirmLineup rejects changes once this match row exists.
-      if (!twoSidedLiveLoggingEnabled()) {
+      if (
+        !twoSidedLiveLoggingEnabled() &&
+        !event.friendlyFixtureId &&
+        !event.competitionFixtureId
+      ) {
         await this.databaseService.database
           .delete(eventLineups)
           .where(eq(eventLineups.eventId, event.id));

@@ -31,7 +31,10 @@ const {
 } = await import(pathToFileURL(resolve(compiler, 'dist/index.js')));
 config({ path: resolve(root, '.env'), quiet: true });
 const sql = neon(process.env.DATABASE_URL);
-const paths = process.argv.slice(2);
+const simulateReviewVisibility = process.argv.includes(
+  '--simulate-review-visibility',
+);
+const paths = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 if (!paths.length) paths.push('powersync/sync-config.yaml');
 const rules = paths.map((path) => {
   const parsed = SqlSyncRules.fromYaml(
@@ -56,6 +59,17 @@ const loaded = await sql.transaction((tx) => [
   tx.query('SET TRANSACTION READ ONLY'),
   ...tables.map((table) => {
     if (!/^\w+$/.test(table)) throw new Error('Unexpected table name');
+    if (
+      simulateReviewVisibility &&
+      ['match_event_reviews', 'match_event_operations'].includes(table)
+    ) {
+      return tx.query(`SELECT dependent.*,
+        EXISTS (SELECT 1 FROM match_events canonical
+          WHERE canonical.id = dependent.canonical_event_id
+            AND canonical.session_id = dependent.session_id
+            AND canonical.event_type <> 'injury') AS public_canonical_event
+        FROM "${table}" dependent`);
+    }
     return tx.query(`SELECT * FROM "${table}"`);
   }),
 ]);
@@ -145,6 +159,26 @@ for (const rule of rules) {
     }
     const allBuckets = [...querier.staticBuckets, ...buckets];
     const count = new Set(allBuckets.map((b) => b.bucket)).size;
+    const perDefinition = {};
+    for (const bucket of new Map(
+      allBuckets.map((b) => [b.bucket, b]),
+    ).values()) {
+      const definition = bucket.bucket.split('[')[0];
+      perDefinition[definition] = (perDefinition[definition] ?? 0) + 1;
+    }
+    console.log(
+      encode({
+        rules: rule.path,
+        simulatedMigration0055: simulateReviewVisibility,
+        team: coach.name,
+        mode: coach.mode,
+        buckets: count,
+        parameterResults,
+        perStream,
+        perDefinition,
+        failure,
+      }),
+    );
     assert.equal(failure, null, 'Compiled parameter evaluation failed');
     assert.ok(
       count < 1000 && parameterResults < 1000,
@@ -157,15 +191,5 @@ for (const rule of rules) {
         allBuckets.every((b) => !b.definition.startsWith('shared_session_')),
         'Disabled feature must receive no shared data',
       );
-    console.log(
-      encode({
-        rules: rule.path,
-        team: coach.name,
-        mode: coach.mode,
-        buckets: count,
-        parameterResults,
-        perStream,
-      }),
-    );
   }
 }

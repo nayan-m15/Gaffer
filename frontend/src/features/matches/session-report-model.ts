@@ -26,16 +26,22 @@ export function applySessionReport(
         row.lifecycleStatus === "needs_review" &&
         (row.side === ownSide) === own,
     ).length;
+  // A poll already in flight can return the report from before our clock write.
+  // Keep the acknowledged anchor until the shared report catches up.
+  const clock = (sheet.clockRevision ?? 0) > report.clock.revision
+    ? { period: sheet.clockPeriod, elapsedMs: sheet.clockElapsedMs,
+        startedAt: sheet.clockStartedAt, revision: sheet.clockRevision }
+    : report.clock;
   return {
     ...sheet,
     teamScore,
     opponentScore,
-    clockPeriod: report.clock.period,
-    clockElapsedMs: report.clock.elapsedMs,
-    clockStartedAt: report.clock.startedAt,
-    clockRevision: report.clock.revision,
+    clockPeriod: clock.period,
+    clockElapsedMs: clock.elapsedMs,
+    clockStartedAt: clock.startedAt,
+    clockRevision: clock.revision,
     eventStatus:
-      report.clock.period === "full_time" ? "completed" : sheet.eventStatus,
+      clock.period === "full_time" ? "completed" : sheet.eventStatus,
     projection: {
       ...sheet.projection,
       revision: sheet.projection?.revision ?? 0,

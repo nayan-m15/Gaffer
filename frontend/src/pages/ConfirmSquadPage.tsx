@@ -565,6 +565,7 @@ function MatchDetailsSection({
   opponentName,
   onOpponentNameChange,
   isHome,
+  venueLocked,
   venuePulse,
   ownColor,
   opponentColor,
@@ -582,6 +583,7 @@ function MatchDetailsSection({
   opponentName: string;
   onOpponentNameChange: (name: string) => void;
   isHome: boolean;
+  venueLocked: boolean;
   venuePulse: number;
   ownColor: string;
   opponentColor: string;
@@ -610,6 +612,8 @@ function MatchDetailsSection({
             <button
               type="button"
               key={isHome ? `home-${venuePulse}` : "home"}
+              disabled={venueLocked}
+              aria-pressed={isHome}
               onClick={() => onVenueChange(true)}
               className={cn(
                 "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
@@ -632,6 +636,8 @@ function MatchDetailsSection({
             <button
               type="button"
               key={!isHome ? `away-${venuePulse}` : "away"}
+              disabled={venueLocked}
+              aria-pressed={!isHome}
               onClick={() => onVenueChange(false)}
               className={cn(
                 "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em]",
@@ -652,6 +658,7 @@ function MatchDetailsSection({
               Away
             </button>
           </div>
+          {venueLocked && <p className="text-xs text-muted-foreground">Home and away are set by this fixture.</p>}
         </div>
       </div>
     </section>
@@ -1280,7 +1287,14 @@ export default function ConfirmSquadPage() {
   );
   const [opponentName, setOpponentName] = useState("");
   const [opponentCompetitionTeamId, setOpponentCompetitionTeamId] = useState<string | null>(null);
-  const [isHome, setIsHome] = useState(true);
+  const [manualIsHome, setIsHome] = useState(true);
+  const venueLocked = Boolean(eventQuery.data?.friendlyFixtureId || eventQuery.data?.competitionFixtureId);
+  const fixtureIsHome = eventQuery.data?.fixtureIsHome ?? (
+    eventQuery.data?.friendlyRequesterTeamId
+      ? eventQuery.data.friendlyRequesterTeamId === eventQuery.data.teamId
+      : null
+  );
+  const isHome = venueLocked ? (fixtureIsHome ?? true) : manualIsHome;
   const [venuePulse, setVenuePulse] = useState(0);
   const [opponentSquadVisibility, setOpponentSquadVisibility] =
     useState<OpponentSquadVisibility>("none");
@@ -1567,7 +1581,7 @@ export default function ConfirmSquadPage() {
     canConfirmLineup,
     lineupReady,
     lineupDirty,
-    opponentReady,
+    opponentReady: opponentReady && (!venueLocked || fixtureIsHome !== null),
     beforeMatchDay,
     startPending: startMatch.isPending,
     hasCompetition: Boolean(eventQuery.data?.competitionId),
@@ -1672,6 +1686,7 @@ export default function ConfirmSquadPage() {
   }, [opponentFormationId, opponentPlayers, opponentSquadVisibility]);
 
   const setVenue = (home: boolean) => {
+    if (venueLocked) return;
     setIsHome(home);
     setVenuePulse((tick) => tick + 1);
   };
@@ -1735,7 +1750,7 @@ export default function ConfirmSquadPage() {
   };
 
   const handleSubmit = async () => {
-    if (!eventId || !canSubmit) {
+    if (!eventId || !canSubmit || (venueLocked && fixtureIsHome === null)) {
       return;
     }
     const squadError = linkedOpponent
@@ -2014,6 +2029,7 @@ export default function ConfirmSquadPage() {
           opponentName={opponentName}
           onOpponentNameChange={setOpponentName}
           isHome={isHome}
+          venueLocked={venueLocked}
           venuePulse={venuePulse}
           ownColor={ownColor}
           opponentColor={oppColor}

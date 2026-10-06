@@ -52,7 +52,9 @@ describe('PowerSync shared session authorization', () => {
     expect(query).toMatch(
       /match_event_reviews\.match_id \|\| '\/' \|\| match_event_reviews\.session_id/,
     );
-    expect(query).toMatch(/public_event\.event_type <> 'injury'/);
+    expect(query).toContain(
+      'match_event_reviews.public_canonical_event = true',
+    );
     expect(query).toMatch(
       /CASE participant\.side WHEN 'home' THEN 0 ELSE 1 END/,
     );
@@ -78,7 +80,9 @@ describe('PowerSync shared session authorization', () => {
     expect(query).toMatch(
       /match_event_operations\.match_id \|\| '\/' \|\| match_event_operations\.session_id/,
     );
-    expect(query).toMatch(/public_event\.event_type <> 'injury'/);
+    expect(query).toContain(
+      'match_event_operations.public_canonical_event = true',
+    );
   });
 
   it('keeps private sheet streams scoped to their owning team', () => {

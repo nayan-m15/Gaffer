@@ -593,9 +593,8 @@ export const eventRsvps = pgTable(
 // The coach's confirmed pre-match lineup for one event (one row per event).
 // Confirming a lineup is a separate step from starting the match: the XI is
 // stored here so an accepted Gaffer friendly opponent can see it before
-// kickoff. startMatch keeps its own athlete_match_stats squad and clears this
-// row once the match exists, so the live match squad stays the single source
-// for everything after kickoff.
+// kickoff. Linked fixtures retain this public tactical snapshot after kickoff;
+// athlete_match_stats remains the source for the team's live match squad.
 export const eventLineups = pgTable(
   'event_lineups',
   {
@@ -1445,6 +1444,10 @@ export const matchEventOperations = pgTable(
       () => matchEvents.id,
       { onDelete: 'set null' },
     ),
+    // Derived by database triggers; never trust a client-supplied privacy flag.
+    publicCanonicalEvent: boolean('public_canonical_event')
+      .default(false)
+      .notNull(),
     causalParentIds: jsonb('causal_parent_ids')
       .$type<string[]>()
       .default([])
@@ -1466,6 +1469,7 @@ export const matchEventOperations = pgTable(
       table.sessionId,
       table.createdAt,
     ),
+    index('match_event_operations_canonical_index').on(table.canonicalEventId),
   ],
 );
 
@@ -1525,6 +1529,10 @@ export const matchEventReviews = pgTable(
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    // Enables session-scoped sync without one bucket per canonical event.
+    publicCanonicalEvent: boolean('public_canonical_event')
+      .default(false)
+      .notNull(),
     observationIds: jsonb('observation_ids')
       .$type<string[]>()
       .default([])
@@ -1548,6 +1556,7 @@ export const matchEventReviews = pgTable(
       table.sessionId,
       table.status,
     ),
+    index('match_event_reviews_canonical_index').on(table.canonicalEventId),
   ],
 );
 

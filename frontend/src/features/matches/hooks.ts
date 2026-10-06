@@ -13,6 +13,7 @@ import {
   subscribeToOfflineQueueChanges,
 } from "@/offline/match-store";
 import { useCallback, useEffect } from "react";
+import { useFriendlyOpponentLineup } from "@/features/events/hooks";
 import {
   useMutation,
   useQuery,
@@ -586,7 +587,9 @@ export function useFinishMatch(matchId: string) {
 export function useUpdateMatchClock(matchId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    onSuccess: (match) => {
+    onSuccess: async (match) => {
+      // Discard a sheet read that started before this clock command committed.
+      await queryClient.cancelQueries({ queryKey: matchQueryKey(matchId), exact: true });
       queryClient.setQueryData(matchQueryKey(matchId), match);
       invalidateSheetSession(queryClient, matchId);
     },
@@ -634,6 +637,11 @@ export function useReopenMatchProjection(matchId: string) {
 export function useMatchView(matchId: string | undefined) {
   const sheetQuery = useMatch(matchId);
   const sessionId = sheetQuery.data?.sharedSessionId;
+  const lineupQuery = useFriendlyOpponentLineup(
+    sheetQuery.data?.eventId,
+    Boolean(sessionId) && sheetQuery.data?.eventStatus !== "completed",
+    2_000,
+  );
   const legacyEvents = useMatchEvents(matchId);
   const queryClient = useQueryClient();
   const reportQuery = useQuery({
@@ -646,10 +654,14 @@ export function useMatchView(matchId: string | undefined) {
   });
   const refetchSheet = sheetQuery.refetch;
   const refetchReport = reportQuery.refetch;
+  const refetchLineup = lineupQuery.refetch;
   const refetch = useCallback(async () => {
-    const [sheet] = await Promise.all([refetchSheet(), refetchReport()]);
+    const [sheet] = await Promise.all([
+      refetchSheet(), refetchReport(),
+      ...(sessionId ? [refetchLineup()] : []),
+    ]);
     return sheet;
-  }, [refetchSheet, refetchReport]);
+  }, [refetchSheet, refetchReport, refetchLineup, sessionId]);
   useEffect(() => {
     if (!sessionId) return;
     let disposed = false;
@@ -703,7 +715,10 @@ export function useMatchView(matchId: string | undefined) {
   const matchQuery = sessionId
     ? {
         ...sheetQuery,
-        data: sheet && report ? applySessionReport(sheet, report) : undefined,
+        data: sheet && report ? applySessionReport({
+          ...sheet,
+          friendlyOpponentLineup: lineupQuery.data ?? sheet.friendlyOpponentLineup,
+        }, report) : undefined,
         isPending: sheetQuery.isPending || reportQuery.isPending,
         isError: sheetQuery.isError || reportQuery.isError,
         error: sheetQuery.error ?? reportQuery.error,
