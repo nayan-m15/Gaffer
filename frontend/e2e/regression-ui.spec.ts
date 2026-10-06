@@ -429,7 +429,7 @@ for (const isHome of [true, false]) {
   test(`shared pitch badges and peer formations render for the ${isHome ? "home" : "away"} coach`, async ({ page }, testInfo) => {
     const sessionId = "44444444-4444-4444-8444-444444444444";
     const slots = ['433-gk','433-lb','433-cb1','433-cb2','433-rb','433-cm1','433-cm2','433-cm3','433-lw','433-st','433-rw'];
-    const squad = slots.map((_, i) => ({ id: `own-${i}`, firstName: 'Own', lastName: `Player${i}`, squadNumber: i+1, position: i === 0 ? 'GK' : null, started: true }));
+    const squad = Array.from({ length: 18 }, (_, i) => ({ id: `own-${i}`, firstName: 'Own', lastName: `Player${i}`, squadNumber: i+1, position: i === 0 ? 'GK' : null, started: i < 11 }));
     await mockAuthenticatedMatch(page, false, { isHome, sharedSessionId: sessionId, clockRevision: 0 });
     await page.route(`**/api/matches/${MATCH_ID}/squad`, route => json(route, squad));
     await page.route(`**/api/events/${EVENT_ID}/opponent-lineup`, route => json(route, {
@@ -463,18 +463,43 @@ for (const isHome of [true, false]) {
     await expect.poll(async () => await markers.evaluateAll(elements => elements.map(element => element.getAttribute('style')))).not.toEqual(before);
     await expect(pitch.locator('.live-squad-token')).toHaveCount(22);
     await expect(pitch.locator('[data-marker-badge="goal"]')).toHaveCount(2);
-    for (const [width, height] of [[1440,900], [1280,560], [1100,700], [900,700], [390,844]]) {
+    for (const [width, height] of [[1920,900], [1440,900], [1280,560], [1100,700], [900,700], [390,844]]) {
       await page.setViewportSize({width, height});
       const panel = page.locator('.live-pitch-panel-landscape');
-      await expect.poll(async () => {
-        const box = await panel.boundingBox();
-        return box ? box.width / box.height : 0;
-      }).toBeCloseTo(105/68, 1);
+      if (width <= 1024) {
+        await expect.poll(async () => {
+          const box = await panel.boundingBox();
+          return box ? box.width / box.height : 0;
+        }).toBeCloseTo(105/68, 1);
+      }
       const scoreBox = await page.locator('.live-match-score').boundingBox();
       expect(scoreBox!.y).toBeLessThan(24);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (width > 1024) {
+        expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+        const panelBox = await panel.boundingBox();
+        const benchBox = await page.locator('.live-match-bench-area').boundingBox();
+        const activityBox = await page.locator('.live-match-activity').boundingBox();
+        const pitchAreaBox = await pitch.boundingBox();
+        expect(panelBox!.width).toBeCloseTo(pitchAreaBox!.width, 0);
+        expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(benchBox!.y);
+        expect(benchBox!.y + benchBox!.height).toBeLessThanOrEqual(height);
+        expect(activityBox!.y + activityBox!.height).toBeLessThanOrEqual(height);
+      }
       if (width === 1440 || width === 390) await page.screenshot({path: testInfo.outputPath(`pitch-${width}.png`), fullPage:true});
     }
+    await page.setViewportSize({ width: 1280, height: 560 });
+    await pitch.locator('button.live-marker-hit').first().click();
+    await page.getByRole('button', { name: 'Substitution', exact: true }).click();
+    const callout = page.locator('.live-match-callout');
+    await expect(callout).toBeVisible();
+    const panelBox = await page.locator('.live-pitch-panel-landscape').boundingBox();
+    const calloutBox = await callout.boundingBox();
+    const benchBox = await page.locator('.live-match-bench-area').boundingBox();
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(calloutBox!.y);
+    expect(calloutBox!.y + calloutBox!.height).toBeLessThanOrEqual(benchBox!.y);
+    expect(benchBox!.y + benchBox!.height).toBeLessThanOrEqual(560);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
   });
 }
 
