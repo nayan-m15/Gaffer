@@ -164,6 +164,83 @@ describe('Phase 2 shared privacy and clock', () => {
     };
   }
 
+  it.each(['friendly', 'competition'] as const)(
+    '%s: either coach can delete a post-match public event from the other sheet',
+    async (kind) => {
+      const f = await fixture(kind);
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      for (const [owner, ownerSheet, peer, peerSheet] of [
+        [f.home, a, f.away, b],
+        [f.away, b, f.home, a],
+      ] as const) {
+        await matches.logEvent(owner.id, ownerSheet.id, {
+          clientRequestId: randomUUID(),
+          team: 'own',
+          eventType: 'goal',
+          minute: 91,
+          athleteId: owner.athletes[0].id,
+        });
+        const before = await matches.getSessionReportForSheet(
+          peer.id,
+          peerSheet.id,
+        );
+        const goal = before.timeline.find((row) => row.eventType === 'goal')!;
+        expect(goal).toBeDefined();
+        const operationId = randomUUID();
+        const deleted = await matches.deleteEvent(
+          peer.id,
+          peerSheet.id,
+          goal.id,
+          operationId,
+        );
+        expect(deleted.lifecycleStatus).toBe('voided');
+        expect(JSON.stringify(deleted)).not.toContain(owner.athletes[0].id);
+        await matches.deleteEvent(peer.id, peerSheet.id, goal.id, operationId);
+        for (const [coach, sheet] of [
+          [owner, ownerSheet],
+          [peer, peerSheet],
+        ] as const) {
+          const after = await matches.getSessionReportForSheet(
+            coach.id,
+            sheet.id,
+          );
+          expect(after.timeline.some((row) => row.id === goal.id)).toBe(false);
+          expect(after.score).toEqual({ home: 0, away: 0 });
+        }
+        const operations = await db
+          .select()
+          .from(schema.matchEventOperations)
+          .where(eq(schema.matchEventOperations.id, operationId));
+        expect(operations).toHaveLength(1);
+        expect(operations[0]).toMatchObject({
+          matchId: peerSheet.id,
+          actorUserId: peer.id,
+        });
+        const outsider = await fixture();
+        const outsiderSheet = await outsider.start(
+          outsider.home,
+          outsider.homeEvent,
+        );
+        await expect(
+          matches.deleteEvent(outsider.home.id, outsiderSheet.id, goal.id),
+        ).rejects.toThrow('Match event not found');
+      }
+      const injury = await matches.logEvent(f.home.id, a.id, {
+        clientRequestId: randomUUID(),
+        team: 'own',
+        eventType: 'injury',
+        minute: 92,
+        athleteId: f.home.athletes[1].id,
+      });
+      await expect(
+        matches.deleteEvent(f.away.id, b.id, injury.id),
+      ).rejects.toThrow('Match event not found');
+    },
+  );
+
   it('both reports share formation geometry while retaining private tactical settings on the owner sheet', async () => {
     const f = await fixture();
     const a = await f.start(f.home, f.homeEvent);

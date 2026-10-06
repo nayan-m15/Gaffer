@@ -423,6 +423,10 @@ export async function deleteMatchLogEvent(matchId: string, eventId: string) {
   };
   await enqueueOperation(operation);
   if (navigator.onLine) await flushOfflineMatchEvents();
+  const queued = (await listQueuedEvents(matchId)).find(row => row.id === operation.id);
+  if (queued && ["rejected", "quarantined"].includes(queued.state)) {
+    throw new Error(queued.error ?? "The server rejected this deletion.");
+  }
   return storedEvent(matchId, eventId);
 }
 

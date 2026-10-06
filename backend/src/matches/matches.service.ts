@@ -1312,16 +1312,38 @@ export class MatchesService {
     assertMatchSessionIdentity(
       await resolveMatchSessionIdentity(this.databaseService, event, match),
     );
+    const readDeletedEvent = async () => {
+      const row = await this.requireDeletableMatchEvent(match, eventId);
+      return row.matchId === matchId
+        ? row
+        : {
+            id: row.id,
+            matchId,
+            eventType: row.eventType,
+            minute: row.minute,
+            team:
+              row.side === (match.isHome ? 'home' : 'away')
+                ? 'own'
+                : 'opponent',
+            lifecycleStatus: row.lifecycleStatus,
+          };
+    };
     const previous = await this.findOperation(operationId);
     if (previous) {
       this.assertSameOperation(previous, userId, matchId, eventId, 'void', {
         lifecycleStatus: 'voided',
       });
       await this.refreshProjection(matchId);
-      return this.requireMatchEvent(matchId, eventId);
+      return readDeletedEvent();
     }
     this.assertEditable(event.status);
-    const logged = await this.requireMatchEvent(matchId, eventId);
+    const logged = await this.requireDeletableMatchEvent(match, eventId);
+    const relativeTeam =
+      match.sharedMatchId && twoSidedLiveLoggingEnabled()
+        ? logged.side === (match.isHome ? 'home' : 'away')
+          ? 'own'
+          : 'opponent'
+        : logged.team;
 
     const changesScore =
       event.status === 'completed' &&
@@ -1333,7 +1355,7 @@ export class MatchesService {
         const projected = this.adjustFixtureScore(
           current.result,
           match.isHome,
-          logged.team,
+          relativeTeam,
           -1,
         );
         await validateFixtureResult(
@@ -1351,17 +1373,26 @@ export class MatchesService {
       }
     }
 
-    await this.applyEventMutation({
-      id: operationId,
-      matchId,
-      actorUserId: userId,
-      operationType: 'void',
-      canonicalEventId: eventId,
-      decision: { lifecycleStatus: 'voided' },
-      causalParentIds,
-      reason,
-    });
-    const deleted = await this.requireMatchEvent(matchId, eventId);
+    if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) {
+      await this.databaseService.database.execute(sql`
+        select void_match_session_event(
+          ${operationId}::uuid, ${matchId}::uuid, ${userId}::text,
+          ${eventId}::uuid, ${JSON.stringify(causalParentIds)}::jsonb,
+          ${reason ?? null}::text
+        )
+      `);
+    } else
+      await this.applyEventMutation({
+        id: operationId,
+        matchId,
+        actorUserId: userId,
+        operationType: 'void',
+        canonicalEventId: eventId,
+        decision: { lifecycleStatus: 'voided' },
+        causalParentIds,
+        reason,
+      });
+    const deleted = await readDeletedEvent();
     await this.syncCompletedCompetitionFixture(
       team.id,
       match,
@@ -2185,6 +2216,30 @@ export class MatchesService {
       .limit(1);
     if (!participant) throw new NotFoundException('Match not found.');
     return row;
+  }
+
+  private async requireDeletableMatchEvent(
+    match: typeof matches.$inferSelect,
+    eventId: string,
+  ) {
+    const sessionId = twoSidedLiveLoggingEnabled() ? match.sharedMatchId : null;
+    const [logged] = await this.databaseService.database
+      .select()
+      .from(matchEvents)
+      .where(
+        and(
+          eq(matchEvents.id, eventId),
+          sql`(
+        ${matchEvents.matchId} = ${match.id}::uuid OR (
+          ${sessionId}::uuid IS NOT NULL AND ${matchEvents.sessionId} = ${sessionId}::uuid
+          AND ${matchEvents.eventType} <> 'injury'
+        )
+      )`,
+        ),
+      )
+      .limit(1);
+    if (!logged) throw new NotFoundException('Match event not found.');
+    return logged;
   }
 
   private async requireMatchEvent(matchId: string, eventId: string) {

@@ -456,6 +456,13 @@
       "when": 1791244805000,
       "tag": "0055_shared_review_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791244806000,
+      "tag": "0056_shared_event_deletion",
+      "breakpoints": true
     }
   ]
 }

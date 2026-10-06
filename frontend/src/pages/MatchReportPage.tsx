@@ -675,7 +675,7 @@ export default function MatchReportPage() {
       setDeleting(null);
     } catch (err) {
       setDeleteError(
-        err instanceof ApiError ? err.message : "Could not delete this event.",
+        err instanceof Error ? err.message : "Could not delete this event.",
       );
     }
   };

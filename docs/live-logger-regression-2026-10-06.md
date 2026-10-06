@@ -261,3 +261,23 @@ both pitch checks: all five pass. The pitch checks cover 1440×900, 1280×560,
 1100×700, 900×700 and 390×844, with 22 players, both sides' badges, formation
 movement, a score at the top and no horizontal overflow. Screenshots were
 visually reviewed for desktop and mobile layout.
+
+## Post-match shared deletion and comparison labels
+
+Either coach can now delete a public canonical event from their own report,
+including events recorded on the other team's sheet. The operation retains the
+acting coach and sheet for audit and retry handling. Private injuries remain
+restricted to their originating sheet, and unrelated sessions remain excluded.
+Rejected deletion uploads now produce a visible error in the confirmation dialog.
+Team comparison bars no longer animate on polling updates, keeping labels visible.
+
+Validation: frontend and backend builds pass; frontend lint retains its five
+existing warnings, changed backend files pass ESLint, and `git diff --check`
+passes. The shared privacy, shared integrity, sync controller and sync
+authorization suites pass all 78 tests. The focused Chromium run passes all
+three report checks: peer deletion with stable labels across refreshes,
+visible upload rejection, and the existing correction/reload workflow.
+
+Deployment requires migration `0056_shared_event_deletion` before the updated
+backend, plus the frontend update. The migration adds a function and does not
+rewrite historical match data. No hosted database migration was run here.

@@ -520,6 +520,65 @@ for (const isHome of [true, false]) {
   });
 }
 
+for (const rejected of [false, true]) {
+  test(`shared post-match deletion ${rejected ? 'shows upload rejection' : 'updates the peer report and keeps comparison labels stable'}`, async ({ page }) => {
+    const sessionId = '44444444-4444-4444-8444-444444444444';
+    await mockAuthenticatedMatch(page, true, { isHome: false, sharedSessionId: sessionId });
+    await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+    let polls = 0;
+    let timeline = [{ id: LOG_ID, side: 'home', eventType: 'goal', minute: 10,
+      createdAt: '2026-10-06T10:00:00Z', player: { name: 'Peer scorer', shirtNumber: 9 } }];
+    await page.route(`**/api/matches/sessions/${sessionId}/report`, route => {
+      polls++;
+      return json(route, { sessionId, participants: [], score: { home: timeline.length, away: 0 },
+        clock: { period: 'full_time', elapsedMs: 5400000, startedAt: null, running: false, revision: 1 },
+        finalStatus: 'awaiting_confirmation', finalisedAt: null, confirmations: { home: null, away: null },
+        timeline, reviews: [] });
+    });
+    await page.route('**/api/sync/upload', route => {
+      const { items } = route.request().postDataJSON();
+      const operation = items.find((item: { operationType: string }) => item.operationType === 'void');
+      expect(operation).toMatchObject({ matchId: MATCH_ID, canonicalEventId: LOG_ID });
+      if (!rejected) timeline = [];
+      return json(route, { receipts: [{ id: operation.id, outcome: rejected ? 'rejected' : 'accepted',
+        canonicalEventId: LOG_ID, safeErrorCode: rejected ? 'EVENT_NOT_FOUND' : null }] });
+    });
+    await page.goto(`/matches/${MATCH_ID}/report`);
+    await expect(page.getByRole('button', { name: /10' Goal/i })).toBeVisible({ timeout: 20000 });
+    const chart = page.getByRole('heading', { name: 'Team comparison' }).locator('..').locator('..');
+    await expect(chart.locator('.recharts-label-list').first()).toBeVisible();
+    if (!rejected) {
+      await chart.evaluate(section => {
+        const state = { missing: 0 };
+        const initialLabels = section.querySelectorAll('.recharts-label-list').length;
+        const observer = new MutationObserver(() => {
+          if (section.querySelectorAll('.recharts-label-list').length !== initialLabels) state.missing++;
+        });
+        observer.observe(section, { childList: true, subtree: true });
+        Object.assign(window, { comparisonLabelCheck: { state, observer } });
+      });
+      const initialPolls = polls;
+      await expect.poll(() => polls).toBeGreaterThanOrEqual(initialPolls + 3);
+      expect(await page.evaluate(() => {
+        const check = (window as unknown as { comparisonLabelCheck: { state: { missing: number }; observer: MutationObserver } }).comparisonLabelCheck;
+        check.observer.disconnect();
+        return check.state.missing;
+      })).toBe(0);
+    }
+    await page.getByRole('button', { name: 'Delete event', exact: true }).click();
+    await page.getByRole('button', { name: 'DELETE', exact: true }).click();
+    if (rejected) {
+      await expect(page.getByText('EVENT_NOT_FOUND', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /10' Goal/i })).toBeVisible();
+    } else {
+      await expect(page.getByRole('button', { name: /10' Goal/i })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Match Events' })).toBeVisible();
+      await expect(page.getByRole('button', { name: /10' Goal/i })).toHaveCount(0);
+    }
+  });
+}
+
 test("post-match correction updates the visible timeline", async ({ page }) => {
   await mockAuthenticatedMatch(page, true);
   let event = {
