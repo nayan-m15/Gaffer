@@ -243,11 +243,16 @@
   }
 
   .live-match-bench-area .live-bench-list {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5rem;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding-top: 0.25rem;
     padding-bottom: 0.125rem;
+  }
+
+  .live-match-bench-area .live-bench-player {
+    flex-shrink: 0;
   }
 }
 
