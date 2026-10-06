@@ -1,4 +1,9 @@
-import type { MatchRecord, MatchLogEvent, SessionReport } from "./types";
+import type {
+  MatchRecord,
+  MatchLogEvent,
+  MatchSquadAthlete,
+  SessionReport,
+} from "./types";
 
 export type { SessionReport } from "./types";
 
@@ -70,26 +75,36 @@ export function applySessionReport(
 export function sessionTimeline(
   report: SessionReport,
   sheet: MatchRecord,
+  squad: MatchSquadAthlete[] = [],
 ): MatchLogEvent[] {
-  return report.timeline.map((row) => ({
-    ...row,
-    matchId: sheet.id,
-    team: row.side === (sheet.isHome ? "home" : "away") ? "own" : "opponent",
-    athleteId: null,
-    athlete: null,
-    opponentPlayerId: null,
-    opponentPlayer: null,
-    opponentLabel:
-      row.player?.name ??
-      (row.player?.shirtNumber ? `#${row.player.shirtNumber}` : null),
-    detail: row.eventType === "substitution" ? row.incomingPlayerLabel ?? null : null,
-    loggedByUserId: "",
-    syncStatus: "synced",
-    pending: false,
-  }));
+  return report.timeline.map((row) => {
+    const own = row.side === (sheet.isHome ? "home" : "away");
+    const label = sessionPlayerLabel(row);
+    const candidates = own && row.player ? squad.filter((athlete) => {
+      const name = `${athlete.firstName} ${athlete.lastName}`.trim();
+      const numbered = [athlete.squadNumber == null ? "" : `#${athlete.squadNumber}`, name].filter(Boolean).join(" ");
+      return label === numbered || (row.player?.name === name &&
+        (row.player.shirtNumber == null || row.player.shirtNumber === athlete.squadNumber));
+    }) : [];
+    const athlete = candidates.length === 1 ? candidates[0] : null;
+    return {
+      ...row,
+      matchId: sheet.id,
+      team: own ? "own" : "opponent",
+      athleteId: athlete?.id ?? null,
+      athlete,
+      opponentPlayerId: null,
+      opponentPlayer: null,
+      opponentLabel: label,
+      detail: row.eventType === "substitution" ? row.incomingPlayerLabel ?? null : null,
+      loggedByUserId: "",
+      syncStatus: "synced",
+      pending: false,
+    };
+  });
 }
 
-export function sessionPlayerLabel(event: MatchLogEvent): string | null {
+export function sessionPlayerLabel(event: Pick<MatchLogEvent, "player">): string | null {
   if (event.player === undefined) return null;
   return (
     [

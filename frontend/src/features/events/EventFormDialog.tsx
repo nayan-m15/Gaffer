@@ -671,6 +671,11 @@ export function EventFormDialog({
                           }}
                         >
                           {team.name}
+                          {team.coachName ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Coach: {team.coachName}
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>

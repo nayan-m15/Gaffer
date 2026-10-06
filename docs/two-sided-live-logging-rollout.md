@@ -4,6 +4,13 @@ Current work is described in [the implementation plan](two-sided-live-logging-pl
 
 ## Current readiness
 
+The 6 October event search/map/pitch follow-up adds public formation geometry
+to shared reports and fixes badge attribution and responsive pitch dimensions.
+Deploy both apps together for that response contract; this follow-up needs no
+additional migration or sync-rule deployment. Existing prerequisites below
+still apply. See [the regression follow-up](live-logger-regression-2026-10-06.md#event-search-map-and-pitch-follow-up-6-october)
+for verification and limits.
+
 6 October regression work supersedes the older readiness notes below. The
 development database has the shared-clock function from `0054`, but today's
 paired sheets include mixed shared/legacy identities. Setup now displays and

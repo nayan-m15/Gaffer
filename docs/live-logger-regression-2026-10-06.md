@@ -180,3 +180,84 @@ Post-migration checks verify exactly one added migration record, unchanged
 historical journal rows, confirmations, sheet links, sides and clocks, correct
 visibility backfill, and installed privacy triggers with matching function bodies.
 PowerSync rule and application deployments were not performed by this retry.
+
+## Event search, map and pitch follow-up, 6 October
+
+Reviewed the latest two commits (`56aea983`, dependency security, and
+`588891e1`, migration journal handling) alongside all four two-sided documents.
+Neither commit changes the picker, map tiles or shared player/formation rendering.
+The recording's five issues are addressed on
+`fix/live-logger-shared-pitch-regressions`.
+
+- Friendly search already used distinct team IDs, but its left joins also
+  returned coachless teams. Search now requires a coach membership and groups
+  by team identity. The client also removes repeated IDs. Coach names distinguish
+  genuinely separate teams with the same name; those teams are not merged.
+  No existing teams are deleted, and no production duplicate records were
+  inspected or repaired for this change.
+- Event maps explicitly send the app origin as the tile referrer and display
+  a visible OpenStreetMap copyright link. Separate map and copyright anchors
+  avoid nested links. This meets the referrer/attribution requirements in the
+  [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/).
+  Browser checks intercept tiles and verify request headers, including a host
+  default of `Referrer-Policy: no-referrer`; they do not prove a previously
+  blocked account/network has been unblocked by the tile provider.
+- Shared event labels retain shirt numbers. Public opponent labels now match
+  the public lineup markers, and owning markers recover identity only from a
+  unique match in the viewer's private match squad. Ambiguous matches stay
+  unassigned. Private IDs are never added to the shared response.
+- The shared report allowlists formation and custom coordinate deltas from
+  tactical events. Opponent placement folds those deltas in chronological
+  order, ignoring voided events, and keeps the goalkeeper when formations
+  change. The owning sheet retains the full private tactical delta. Captain,
+  set-piece athlete IDs, defensive/offensive settings and raw payloads stay
+  private. Cached public geometry remains available in offline reports.
+- The scoreboard/clock move into the top bar. The full pitch uses a 105:68
+  aspect ratio and scrolls on short screens instead of being compressed by a
+  maximum height. The activity panel starts alongside the pitch; responsive
+  marker insets keep edge badges inside the pitch.
+
+Backend and frontend must be deployed together for live formation geometry;
+no new migration or PowerSync rule change is required. No hosted application,
+Cloud configuration or development records were changed. Related work: this
+recording; no issue/card was supplied. Assisted by Codex (GPT-6).
+
+Validation for this follow-up:
+
+- `npm.cmd --prefix backend test -- --runInBand --silent`: 72 suites,
+  857 tests pass. After tightening the geometry-only gate, reran
+  `npm.cmd --prefix backend test -- --runInBand --silent public-formation-change shared-session-privacy teams-search`:
+  3 suites/19 tests pass, including real PGlite SQL/service paths.
+- From `frontend`, `node --test --test-isolation=none "src/**/*.node-test.mjs"`:
+  all 91 tests pass, including cached offline geometry and both views' badges.
+- `npm.cmd --prefix frontend run build` and
+  `npm.cmd --prefix backend run build` pass. The existing frontend chunk-size
+  warning remains. Final frontend type checking and lint pass with the five
+  existing warnings; ESLint passes for all changed backend files. Full backend
+  lint retains the same two unrelated errors listed earlier in this document.
+- `git diff --check` passes.
+
+The focused production-build Chromium run passes all eight checks: existing
+clock regressions, friendly-search identity deduplication, creating/receiving
+coach map referrers, and both home/away pitch views. These browser scenarios
+mock API/tile responses; the separate backend tests exercise actual service SQL
+in PGlite. They do not establish hosted delivery or tile-provider unblocking.
+Reproduce from the repository root:
+
+```powershell
+$env:UI_TEST_PRODUCTION='true'
+node scripts/run-ui-tests.mjs regression-ui --project=chromium --grep 'friendly search|friendly event map|shared pitch|shared logger|live match clock resumes|assistant controls'
+```
+
+Initial browser attempts exposed incorrect test selectors, which were fixed.
+A subsequent shortened 30-second run expired on the receiving-map case during
+concurrent build/test work; the final run with the normal 90-second budget
+passes all eight. Pitch screenshots are retained under ignored `test-results/`.
+No test-schema reset was needed.
+
+After the final intermediate-laptop header breakpoint and pause-overlay
+alignment changes, rebuilt the frontend and reran the three clock checks and
+both pitch checks: all five pass. The pitch checks cover 1440×900, 1280×560,
+1100×700, 900×700 and 390×844, with 22 players, both sides' badges, formation
+movement, a score at the top and no horizontal overflow. Screenshots were
+visually reviewed for desktop and mobile layout.

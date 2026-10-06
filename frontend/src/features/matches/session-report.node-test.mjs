@@ -227,6 +227,26 @@ const readerSource = storeSource.slice(
 const readerJs = ts.transpileModule(readerSource, {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 }).outputText;
+test("offline report retains cached public formation geometry without copying private tactical payloads", async () => {
+  const cached = { ...report, timeline: [{
+    id:'tactic', side:'home', eventType:'tactical_change',
+    tacticalChange:{formationId:'4-4-2'}, player:null,
+  }] };
+  const db = {
+    getAll: async () => [],
+    getOptional: async (sql) => sql.includes('competition_fixtures') ? null : {},
+  };
+  const compiled = {};
+  new Function('exports', 'database', 'readSyncedMatchEvents', 'readSyncedMatchReviews', 'readSyncedSessionClockOperation', readerJs)(
+    compiled, async () => db,
+    async () => [{id:'tactic', side:'home', eventType:'tactical_change', tacticalChange:{formationId:'4-4-2', captainId:'private', defensiveWidth:9}}],
+    async () => [], async () => null,
+  );
+  const offline = await compiled.readSyncedSessionReport('session', 'own', cached);
+  assert.deepEqual(offline.timeline[0].tacticalChange, {formationId:'4-4-2'});
+  assert.doesNotMatch(JSON.stringify(offline.timeline), /captainId|defensiveWidth|private/);
+});
+
 test("synced report reconstructs canonical score, full time, bilateral confirmation and disputed decisions", async () => {
   const calls = [];
   const db = {

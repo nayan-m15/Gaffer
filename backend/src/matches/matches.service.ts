@@ -1,3 +1,4 @@
+import { publicFormationChange } from './public-formation-change';
 import {
   assertMatchSessionIdentity,
   resolveMatchSessionIdentity,
@@ -164,6 +165,7 @@ export class MatchesService {
           opponentLabel: matchEvents.opponentLabel,
           opponentName: opponentMatchPlayers.name,
           opponentNumber: opponentMatchPlayers.shirtNumber,
+          structuredPayload: matchEvents.structuredPayload,
         })
         .from(matchEvents)
         .leftJoin(athletes, eq(matchEvents.athleteId, athletes.id))
@@ -258,9 +260,15 @@ export class MatchesService {
         opponentName,
         opponentNumber,
         opponentLabel,
+        structuredPayload,
         ...row
       }) => ({
         ...row,
+        // The shared pitch needs formation geometry, never private tactical
+        // settings or athlete IDs (captain/set-piece roles).
+        ...(row.eventType === 'tactical_change'
+          ? { tacticalChange: publicFormationChange(structuredPayload) }
+          : {}),
         player:
           firstName && lastName
             ? { name: `${firstName} ${lastName}`.trim(), shirtNumber }

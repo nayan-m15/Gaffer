@@ -1638,7 +1638,7 @@ export default function LiveMatchPage() {
 
   return (
     <div className="live-match relative flex min-h-dvh flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
+      <header className="live-match-header shrink-0 items-center gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />
           <h1 className="font-display text-base font-bold tracking-wide text-[#16d99a]">
@@ -1652,6 +1652,79 @@ export default function LiveMatchPage() {
             <LayoutDashboard className="size-3.5" aria-hidden="true" />
             <span>Dashboard</span>
           </button>
+        </div>
+        <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+            <div className="flex flex-col items-end">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {homeAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: homeColor }}
+              />
+            </div>
+            <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+              <span style={{ color: homeColor }}>{homeScore}</span>
+              <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
+              <span style={{ color: awayColor }}>{awayScore}</span>
+            </p>
+            <div className="flex flex-col items-start">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {awayAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: awayColor }}
+              />
+            </div>
+          </div>
+          {projection ? (
+            <div className="mt-1 flex justify-center">
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
+                  projection.finalisationState === "finalised"
+                    ? "bg-[#16d99a]/12 text-[#16d99a]"
+                    : projection.unresolvedReviewCount > 0 ||
+                        projection.finalisationState === "amendment_required"
+                      ? "bg-[#d6a447]/12 text-[#d6a447]"
+                      : "bg-[#707773]/15 text-[#9ca39f]",
+                )}
+              >
+                {!projectionConsistent
+                  ? "Syncing result and event log"
+                  : projection.finalisationState === "finalised"
+                    ? `Final result · revision ${projection.revision}`
+                    : projection.finalisationState === "amendment_required"
+                      ? "Result changed · amendment review required"
+                      : projection.unresolvedReviewCount > 0
+                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+                        : `Live provisional · revision ${projection.revision}`}
+              </span>
+            </div>
+          ) : null}
+          <div className="mt-1.5 flex justify-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
+                )}
+              />
+              <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
+                <LiveClockTime elapsedMs={elapsedMs} running={running} />
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
+                {periodLabel}
+              </span>
+              {addedStoppageMin > 0 ? (
+                <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
+                  +{addedStoppageMin}
+                </span>
+              ) : null}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
@@ -1852,78 +1925,7 @@ export default function LiveMatchPage() {
       ) : null}
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
-        <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-            <div className="flex flex-col items-end">
-              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
-                {homeAbbrev}
-              </p>
-              <span
-                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
-                style={{ backgroundColor: homeColor }}
-              />
-            </div>
-            <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
-              <span style={{ color: homeColor }}>{homeScore}</span>
-              <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
-              <span style={{ color: awayColor }}>{awayScore}</span>
-            </p>
-            <div className="flex flex-col items-start">
-              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
-                {awayAbbrev}
-              </p>
-              <span
-                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
-                style={{ backgroundColor: awayColor }}
-              />
-            </div>
-          </div>
-          {projection ? (
-            <div className="mt-1 flex justify-center">
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
-                  projection.finalisationState === "finalised"
-                    ? "bg-[#16d99a]/12 text-[#16d99a]"
-                    : projection.unresolvedReviewCount > 0 ||
-                        projection.finalisationState === "amendment_required"
-                      ? "bg-[#d6a447]/12 text-[#d6a447]"
-                      : "bg-[#707773]/15 text-[#9ca39f]",
-                )}
-              >
-                {!projectionConsistent
-                  ? "Syncing result and event log"
-                  : projection.finalisationState === "finalised"
-                    ? `Final result · revision ${projection.revision}`
-                    : projection.finalisationState === "amendment_required"
-                      ? "Result changed · amendment review required"
-                      : projection.unresolvedReviewCount > 0
-                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
-                        : `Live provisional · revision ${projection.revision}`}
-              </span>
-            </div>
-          ) : null}
-          <div className="mt-1.5 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
-                )}
-              />
-              <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
-                <LiveClockTime elapsedMs={elapsedMs} running={running} />
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
-                {periodLabel}
-              </span>
-              {addedStoppageMin > 0 ? (
-                <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
-                  +{addedStoppageMin}
-                </span>
-              ) : null}
-            </span>
-          </div>
+        <div className="live-match-summary">
           {period === "full_time" && (
             <PeriodSummary
               title="FULL TIME"

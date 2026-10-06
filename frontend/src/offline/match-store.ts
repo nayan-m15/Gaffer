@@ -1392,6 +1392,7 @@ export async function readSyncedSessionReport(
       incomingPlayerLabel: row.eventType === "substitution"
         ? cached.timeline.find((event) => event.id === row.id)?.incomingPlayerLabel ?? null
         : null,
+      tacticalChange: cached.timeline.find((event) => event.id === row.id)?.tacticalChange ?? null,
       player: row.athlete
         ? {
             name: `${row.athlete.firstName} ${row.athlete.lastName}`,

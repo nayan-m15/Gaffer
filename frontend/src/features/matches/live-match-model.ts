@@ -479,8 +479,48 @@ export function placeOppPlayers(
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
   if (unique.some((player) => player.publicLineup)) {
+    const changes = chronological(timeline).filter((event) =>
+      event.team === "opponent" &&
+      event.eventType === "tactical_change" &&
+      event.tacticalChange &&
+      (event.tacticalChange.formationId || event.tacticalChange.customPositions !== undefined) &&
+      event.lifecycleStatus !== "voided",
+    );
+    const initial = unique.find((player) => player.publicLineup)?.publicLineup;
+    const geometry = changes.reduce(
+      (view, event) => ({
+        formation: event.tacticalChange?.formationId ?? view.formation,
+        customPositions: event.tacticalChange?.customPositions === undefined
+          ? view.customPositions : event.tacticalChange.customPositions,
+      }),
+      { formation: initial?.formation ?? null, customPositions: initial?.customPositions ?? null },
+    );
+    const changed = changes.length > 0 && geometry.formation;
+    const preferred = Object.fromEntries(unique.flatMap((player) =>
+      player.publicLineup?.slotId ? [[player.publicLineup.slotId, player.id]] : [],
+    ));
+    const customPositions = geometry.customPositions?.map((position) => ({
+      ...position, role: position.label === "GK" ? "GK" as const : "MID" as const,
+    })) ?? null;
+    const initialPositions = initial?.formation?.startsWith("custom-")
+      ? initial.customPositions : FORMATIONS[initial?.formation ?? ""]?.positions;
+    const assignments = changed ? previewAssignmentsForStarters(
+      geometry.formation!,
+      unique.map((player) => player.id),
+      (id) => {
+        const slotId = unique.find((player) => player.id === id)?.publicLineup?.slotId;
+        return initialPositions?.find((position) => position.id === slotId)?.label ?? null;
+      },
+      preferred,
+      customPositions,
+    ) : null;
     return unique.flatMap((player) => {
       const view = player.publicLineup;
+      if (view && assignments) {
+        const formation = resolveFormation(geometry.formation!, customPositions);
+        const slot = formation.positions.find((position) => assignments[position.id] === player.id);
+        return slot ? [{ player, ...formationToHalf(slot.x, slot.y, half) }] : [];
+      }
       if (!view?.formation || !view.slotId) return [];
       const positions = view.formation.startsWith("custom-")
         ? view.customPositions ?? []

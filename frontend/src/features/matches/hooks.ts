@@ -732,7 +732,7 @@ export function useMatchView(matchId: string | undefined) {
           sheet && report
             ? [
                 ...(pendingQuery.data ?? []),
-                ...sessionTimeline(report, sheet).map((row) => {
+                ...sessionTimeline(report, sheet, squadFromCache(queryClient, sheet.id)).map((row) => {
                   // Only the owning sheet supplies private athlete identity; shared text stays allowlisted.
                   const own =
                     row.team === "own"
@@ -742,7 +742,13 @@ export function useMatchView(matchId: string | undefined) {
                         )
                       : undefined;
                   return own
-                    ? { ...row, athleteId: own.athleteId, athlete: own.athlete, detail: own.detail }
+                    ? {
+                        ...row,
+                        athleteId: own.athleteId ?? row.athleteId,
+                        athlete: own.athlete ?? row.athlete,
+                        detail: own.detail,
+                        tacticalChange: own.tacticalChange ?? row.tacticalChange,
+                      }
                     : row;
                 }),
               ]

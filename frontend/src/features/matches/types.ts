@@ -272,6 +272,7 @@ export interface SessionReport {
       | "manuallyAdjusted"
       | "createdAt"
       | "updatedAt"
+      | "tacticalChange"
     > & { incomingPlayerLabel?: string | null; player: { name: string | null; shirtNumber: number | null } | null }
   >;
   reviews: Array<{

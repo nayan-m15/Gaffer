@@ -49,7 +49,7 @@ Retained historical facts: local HS256 / gaffer-dev tokens were rejected with PS
 | Clock/console errors. | ID-reuse 500 is fixed. applySyncedSessionClock still overwrites fresh API values with a local operation even if its revision is older. | Respect freshness, preserve immutable retry payloads and expose real errors. |
 | Different reports/event scores/standings; first confirmation wins. | Session publication and fixture-based standings already exist, alongside private score/cache paths. Deployment/client behavior is still unproven. | Make all displayed shared scores and confirmation paths use the canonical result. |
 
-The recording asks for the opponent's **confirmed match lineup**, formation and bench. Support that public view while keeping tactics, game plans, notes, injuries, drafts and the full roster private. Earlier plans disagree on lineup visibility; this plan follows the user's current request and the narrow API already implemented.
+The recording asks for the opponent's **confirmed match lineup**, formation and bench. The 6 October follow-up also asks for formation changes during play to appear on the peer pitch. Share only formation/custom coordinate deltas in the canonical report; tactical settings, captain/set-piece athlete IDs, saved game plans, notes, injuries, drafts and the full roster remain private. See [the pitch follow-up](live-logger-regression-2026-10-06.md#event-search-map-and-pitch-follow-up-6-october).
 
 ## Implementation order
 

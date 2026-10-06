@@ -164,6 +164,38 @@ describe('Phase 2 shared privacy and clock', () => {
     };
   }
 
+  it('both reports share formation geometry while retaining private tactical settings on the owner sheet', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      clientRequestId: randomUUID(),
+      team: 'own',
+      eventType: 'tactical_change',
+      minute: 20,
+      period: 'first_half',
+      matchElapsedMs: 1200000,
+      tacticalChange: {
+        formationId: '4-4-2',
+        defensiveWidth: 8,
+        captainId: f.home.athletes[0].id,
+      },
+    });
+    const home = await matches.getSessionReportForSheet(f.home.id, a.id);
+    const away = await matches.getSessionReportForSheet(f.away.id, b.id);
+    expect(home.timeline).toEqual(away.timeline);
+    expect(home.timeline[0].tacticalChange).toEqual({ formationId: '4-4-2' });
+    expect(JSON.stringify(away.timeline)).not.toContain(f.home.athletes[0].id);
+    expect(JSON.stringify(away.timeline)).not.toMatch(
+      /defensiveWidth|captainId|structuredPayload/,
+    );
+    const privateRows = await matches.listEvents(f.home.id, a.id);
+    expect(privateRows[0].tacticalChange).toMatchObject({
+      defensiveWidth: 8,
+      captainId: f.home.athletes[0].id,
+    });
+  });
+
   it('both reports retain public opponent and substitution labels without roster identities', async () => {
     const f = await fixture();
     const a = await f.start(f.home, f.homeEvent);
