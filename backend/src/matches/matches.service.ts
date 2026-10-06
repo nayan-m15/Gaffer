@@ -15,6 +15,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { stableStringify } from '@gaffer/match-domain';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { getFormationPlayerCount } from '../common/formations';
 import { DatabaseService } from '../database/database.service';
 import { InsightsService } from '../insights/insights.service';
 import {
@@ -50,6 +51,7 @@ import {
 } from '../competitions/competition-fixture-results';
 import type {
   CreateMatchLogEventDto,
+  MatchTacticalChangeDto,
   ResolveMatchEventReviewDto,
   UpdateMatchLogEventDto,
   UpdateMatchClockDto,
@@ -442,6 +444,7 @@ export class MatchesService {
         matchElapsedMs: matchEvents.matchElapsedMs,
         lifecycleStatus: matchEvents.lifecycleStatus,
         projectionRevision: matchEvents.projectionRevision,
+        structuredPayload: matchEvents.structuredPayload,
         createdAt: matchEvents.createdAt,
         updatedAt: matchEvents.updatedAt,
         athleteFirstName: athletes.firstName,
@@ -483,6 +486,11 @@ export class MatchesService {
       matchElapsedMs: row.matchElapsedMs,
       lifecycleStatus: row.lifecycleStatus,
       projectionRevision: row.projectionRevision,
+      // Only the tactical delta is surfaced; the rest of structured_payload is
+      // the ingest record, which clients have no use for.
+      tacticalChange:
+        (row.structuredPayload as { tacticalChange?: MatchTacticalChangeDto })
+          ?.tacticalChange ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       athlete:
@@ -559,6 +567,8 @@ export class MatchesService {
       dto.athleteId ?? null,
       opponentPlayerId,
     );
+    this.validateTacticalChange(match, dto);
+
     const payload = {
       team: dto.team,
       eventType: dto.eventType,
@@ -568,6 +578,9 @@ export class MatchesService {
       period,
       matchElapsedMs,
       detail: dto.detail ?? null,
+      // Rides along to structured_payload, and into the dedup hash so two
+      // different tactical changes are never collapsed into one.
+      ...(dto.tacticalChange ? { tacticalChange: dto.tacticalChange } : {}),
     };
     const payloadHash = createHash('sha256')
       .update(JSON.stringify(payload))
@@ -2293,6 +2306,31 @@ export class MatchesService {
     ) {
       throw new BadRequestException(
         'An incoming public player label is required.',
+      );
+    }
+  }
+
+  /**
+   * A match is played at one squad size throughout, so a tactical change may
+   * not switch to a formation built for a different number of players. Nothing
+   * else about the change is restricted — a coach reshapes the team the same
+   * way whether they are eleven or down to ten after a red card.
+   */
+  private validateTacticalChange(
+    match: typeof matches.$inferSelect,
+    dto: CreateMatchLogEventDto,
+  ) {
+    const nextFormationId = dto.tacticalChange?.formationId;
+    if (!nextFormationId) return;
+
+    const startingFormationId = match.gamePlanSnapshot?.formationId;
+    if (!startingFormationId) return;
+
+    const next = getFormationPlayerCount(nextFormationId);
+    const current = getFormationPlayerCount(startingFormationId);
+    if (next && current && next !== current) {
+      throw new BadRequestException(
+        `This match is ${current}-a-side, so it cannot switch to a ${next}-a-side formation.`,
       );
     }
   }

@@ -52,6 +52,7 @@ import {
 } from "@/features/matches/hooks";
 import type {
   MatchEventTeam,
+  MatchTacticalChange,
   MatchEventType,
   MatchLogEvent,
   MatchSquadAthlete,
@@ -87,6 +88,7 @@ import {
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
+  effectiveGamePlan,
   placeOwnPlayers,
   resolveOppColor,
   resolveOwnColor,
@@ -98,6 +100,7 @@ import {
   LiveInjurySheet,
   type LiveInjurySpec,
 } from "@/features/matches/LiveInjurySheet";
+import { LiveTacticsSheet } from "@/features/matches/LiveTacticsSheet";
 import { injuryTitle } from "@/features/injuries/body-regions";
 import { useCreateInjury } from "@/features/injuries/hooks";
 import {
@@ -432,6 +435,7 @@ export default function LiveMatchPage() {
   const baseRef = useRef(0);
   const clockOriginRef = useRef(0);
 
+  const [tacticsOpen, setTacticsOpen] = useState(false);
   const [target, setTarget] = useState<LogTarget | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [composer, setComposer] = useState<Composer>({ kind: "closed" });
@@ -562,6 +566,16 @@ export default function LiveMatchPage() {
     ? "full" : matchQuery.data?.opponentSquadVisibility ?? "none";
   const opponentDisplaySquad = opponentSquad;
   const timeline = useMemo(() => publicOpponentTimeline(eventsQuery.data ?? [], opponentSquad), [eventsQuery.data, opponentSquad]);
+
+  /**
+   * The plan in force right now: the one the match kicked off with, plus every
+   * tactical change the coach has logged. `gamePlan` stays the starting plan,
+   * so the squad size it was locked at never moves.
+   */
+  const effectivePlan = useMemo(
+    () => effectiveGamePlan(gamePlan, timeline),
+    [gamePlan, timeline],
+  );
   const loggedGoalsOwn = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "own",
   ).length;
@@ -700,12 +714,12 @@ export default function LiveMatchPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        gamePlan,
+        effectivePlan,
         ownHalf,
         timeline,
         visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
+    [ownState.onPitch, effectivePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
     () => placeOppPlayers(
@@ -1101,6 +1115,37 @@ export default function LiveMatchPage() {
       closeComposer,
       handleLoggedEventFollowUp,
     ],
+  );
+
+  /**
+   * Logs one tactical change. Deliberately not routed through `persistEvent`:
+   * this is a coach instruction, not an observation of play, so none of the
+   * attribution, dismissal or follow-up rules there apply to it. The saved game
+   * plan is never touched — the timeline carries what changed and when.
+   */
+  const logTacticalChange = useCallback(
+    async (change: MatchTacticalChange) => {
+      if (!matchId || Object.keys(change).length === 0) return;
+      setTacticsOpen(false);
+      try {
+        await logEvent.mutateAsync({
+          clientRequestId: crypto.randomUUID(),
+          clientCreatedAt: new Date().toISOString(),
+          period,
+          matchElapsedMs: elapsedRef.current,
+          team: "own",
+          eventType: "tactical_change",
+          minute: currentMinute,
+          tacticalChange: change,
+        });
+      } catch (err) {
+        const message = persistEventErrorMessage(err);
+        setActionError(message);
+        setToast({ label: message });
+        window.setTimeout(() => setToast(null), 5000);
+      }
+    },
+    [matchId, logEvent, period, currentMinute],
   );
 
   const persistFromTarget = (
@@ -1629,6 +1674,16 @@ export default function LiveMatchPage() {
                     }}
                   >
                     Review duplicates
+                  </SettingsItem>
+                ) : null}
+                {team?.role === "coach" && period !== "full_time" ? (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setTacticsOpen(true);
+                    }}
+                  >
+                    Change tactics
                   </SettingsItem>
                 ) : null}
                 <SettingsItem
@@ -2384,6 +2439,17 @@ export default function LiveMatchPage() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {tacticsOpen && (
+        <LiveTacticsSheet
+          plan={effectivePlan}
+          playerCount={matchPlayerCount}
+          onPitch={ownState.onPitch}
+          minute={currentMinute}
+          onApply={(change) => void logTacticalChange(change)}
+          onClose={() => setTacticsOpen(false)}
+        />
       )}
 
       {composer.kind === "injury-detail" && (

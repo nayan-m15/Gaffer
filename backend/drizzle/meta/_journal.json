@@ -421,6 +421,34 @@
       "when": 1791244800000,
       "tag": "0054_shared_session_clock",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791244801000,
+      "tag": "0045_game_plan_set_piece_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791244802000,
+      "tag": "0046_match_tactical_change_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791244803000,
+      "tag": "0047_match_tactical_change_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791244804000,
+      "tag": "0048_game_plan_player_instructions",
+      "breakpoints": true
     }
   ]
 }

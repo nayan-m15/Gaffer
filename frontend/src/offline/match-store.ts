@@ -807,6 +807,7 @@ export function queuedEventAsTimelineRow(row: QueuedEventRow): MatchLogEvent {
     clientRequestId: input.clientRequestId,
     period: input.period,
     matchElapsedMs: input.matchElapsedMs ?? input.minute * 60_000,
+    tacticalChange: input.tacticalChange ?? null,
     createdAt: now,
     updatedAt: now,
     athlete: null,
@@ -841,8 +842,25 @@ interface SyncedEventRow {
   match_elapsed_ms: number | null;
   lifecycle_status: MatchLogEvent["lifecycleStatus"];
   projection_revision: number;
+  /** The ingest record, from which only the tactical delta is read back. */
+  structured_payload: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Pulls the tactical delta out of a synced event's ingest payload. */
+function tacticalChangeOf(
+  payload: string | null,
+): MatchLogEvent["tacticalChange"] {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload) as {
+      tacticalChange?: MatchLogEvent["tacticalChange"];
+    };
+    return parsed.tacticalChange ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function readSyncedMatchEvents(
@@ -884,6 +902,7 @@ export async function readSyncedMatchEvents(
     matchElapsedMs: row.match_elapsed_ms,
     lifecycleStatus: row.lifecycle_status,
     projectionRevision: row.projection_revision,
+    tacticalChange: tacticalChangeOf(row.structured_payload),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     athlete: null,

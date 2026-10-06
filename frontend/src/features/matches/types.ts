@@ -10,7 +10,36 @@ export type MatchEventType =
   | "substitution"
   | "penalty"
   | "injury"
-  | "goalkeeper_save";
+  | "goalkeeper_save"
+  | "tactical_change";
+
+/**
+ * The parts of the game plan a coach switched to mid-match, carried by a
+ * `tactical_change` event. Folding these over the match's starting plan gives
+ * the shape in force at any minute, so the plan the match kicked off with is
+ * never overwritten.
+ */
+export type MatchTacticalChange = Partial<
+  Pick<
+    GamePlanSnapshot,
+    | "formationId"
+    | "customPositions"
+    | "defensiveStyle"
+    | "defensiveWidth"
+    | "defensiveDepth"
+    | "offensiveStyle"
+    | "offensiveWidth"
+    | "playersInBox"
+    | "cornersCommitment"
+    | "freeKicksCommitment"
+    | "captainId"
+    | "freeKickTakerId"
+    | "longFreeKickTakerId"
+    | "penaltyTakerId"
+    | "cornerTakerId"
+    | "rightCornerTakerId"
+  >
+>;
 
 export type OpponentSquadVisibility = "none" | "numbers" | "full";
 export type MatchClockPeriod =
@@ -139,6 +168,8 @@ export interface MatchLogEvent {
   matchElapsedMs?: number | null;
   lifecycleStatus?: "provisional" | "confirmed" | "needs_review" | "voided";
   projectionRevision?: number;
+  /** Set only on `tactical_change` events. */
+  tacticalChange?: MatchTacticalChange | null;
   createdAt: string;
   updatedAt: string;
   athlete: MatchSquadAthlete | null;
@@ -172,6 +203,8 @@ export interface CreateMatchLogEventInput {
   opponentPlayerId?: string;
   minute: number;
   detail?: string;
+  /** Required for `tactical_change`, rejected for every other event type. */
+  tacticalChange?: MatchTacticalChange;
 }
 
 export interface UpdateMatchLogEventInput {

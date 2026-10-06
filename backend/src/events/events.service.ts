@@ -1050,8 +1050,11 @@ export class EventsService {
             freeKicksCommitment: gamePlan.freeKicksCommitment,
             captainId: gamePlan.captainId,
             freeKickTakerId: gamePlan.freeKickTakerId,
+            longFreeKickTakerId: gamePlan.longFreeKickTakerId,
             penaltyTakerId: gamePlan.penaltyTakerId,
             cornerTakerId: gamePlan.cornerTakerId,
+            rightCornerTakerId: gamePlan.rightCornerTakerId,
+            playerInstructions: gamePlan.playerInstructions,
           }
         : null,
       opponentSquadVisibility: dto.opponentSquadVisibility,
