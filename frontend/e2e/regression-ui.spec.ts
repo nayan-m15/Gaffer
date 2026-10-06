@@ -463,7 +463,7 @@ for (const isHome of [true, false]) {
     await expect.poll(async () => await markers.evaluateAll(elements => elements.map(element => element.getAttribute('style')))).not.toEqual(before);
     await expect(pitch.locator('.live-squad-token')).toHaveCount(22);
     await expect(pitch.locator('[data-marker-badge="goal"]')).toHaveCount(2);
-    for (const [width, height] of [[1920,900], [1440,900], [1280,560], [1100,700], [900,700], [390,844]]) {
+    for (const [width, height] of [[1920,900], [1440,900], [1280,560], [1100,700], [900,700], [390,844], [320,740]]) {
       await page.setViewportSize({width, height});
       const panel = page.locator('.live-pitch-panel-landscape');
       if (width <= 1024) {
@@ -473,7 +473,21 @@ for (const isHome of [true, false]) {
         }).toBeCloseTo(105/68, 1);
       }
       const scoreBox = await page.locator('.live-match-score').boundingBox();
-      expect(scoreBox!.y).toBeLessThan(24);
+      if (width > 640) {
+        expect(scoreBox!.y).toBeLessThan(24);
+      } else {
+        const dashboardBox = await page.getByRole('button', { name: 'Dashboard', exact: true }).boundingBox();
+        expect(dashboardBox!.y + dashboardBox!.height).toBeLessThanOrEqual(scoreBox!.y);
+        await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Half Time', exact: true }).locator('.live-match-control-short')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'End Match', exact: true }).locator('.live-match-control-short')).toBeVisible();
+        const overlaps = await pitch.locator('.live-squad-token').evaluateAll(tokens => {
+          const boxes = tokens.map(token => token.getBoundingClientRect());
+          return boxes.some((box, i) => boxes.slice(i + 1).some(other =>
+            box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top));
+        });
+        expect(overlaps).toBe(false);
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       if (width > 1024) {
         expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
@@ -481,6 +495,9 @@ for (const isHome of [true, false]) {
         const benchBox = await page.locator('.live-match-bench-area').boundingBox();
         const activityBox = await page.locator('.live-match-activity').boundingBox();
         const pitchAreaBox = await pitch.boundingBox();
+        const labelBox = await page.locator('.live-match-tactical-label').boundingBox();
+        const clockBox = await page.locator('.live-match-clock').boundingBox();
+        expect(labelBox!.y + labelBox!.height / 2).toBeCloseTo(clockBox!.y + clockBox!.height / 2, 0);
         expect(panelBox!.width).toBeCloseTo(pitchAreaBox!.width, 0);
         expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(benchBox!.y);
         expect(benchBox!.y + benchBox!.height).toBeLessThanOrEqual(height);

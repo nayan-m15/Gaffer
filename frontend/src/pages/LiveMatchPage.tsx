@@ -1704,29 +1704,32 @@ export default function LiveMatchPage() {
               </span>
             </div>
           ) : null}
-          <div className="mt-1.5 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
-                )}
-              />
-              <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
-                <LiveClockTime elapsedMs={elapsedMs} running={running} />
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
-                {periodLabel}
-              </span>
-              {addedStoppageMin > 0 ? (
-                <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
-                  +{addedStoppageMin}
-                </span>
-              ) : null}
-            </span>
-          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="live-match-clock mt-1.5 flex justify-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
+              )}
+            />
+            <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
+              <LiveClockTime elapsedMs={elapsedMs} running={running} />
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
+              {periodLabel}
+            </span>
+            {addedStoppageMin > 0 ? (
+              <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
+                +{addedStoppageMin}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <h2 className="live-match-tactical-label text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
+          Tactical view
+        </h2>
+        <div className="live-match-controls flex items-center gap-2">
           {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
           <div className="relative">
             <button
@@ -1870,6 +1873,8 @@ export default function LiveMatchPage() {
           {liveLogging && !checkIn && (
             <button
               type="button"
+              aria-label={running ? "Pause" : "Resume"}
+              title={running ? "Pause" : "Resume"}
               className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#2a2e31] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => {
                 if (running) {
@@ -1884,20 +1889,23 @@ export default function LiveMatchPage() {
               ) : (
                 <Play className="size-3.5 sm:size-4" />
               )}
-              {running ? "Pause" : "Resume"}
+              <span className="live-match-control-label">{running ? "Pause" : "Resume"}</span>
             </button>
           )}
           {liveLogging && period === "first_half" && (
             <button
               type="button"
+              aria-label="Half Time"
               className="rounded-md bg-[#72a7d5] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => setConfirm("half")}
             >
-              Half Time
+              <span className="live-match-control-label">Half Time</span>
+              <span className="live-match-control-short" aria-hidden="true">HT</span>
             </button>
           )}
           <button
             type="button"
+            aria-label="End Match"
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
             onClick={() => {
               if (period !== "full_time") {
@@ -1906,7 +1914,8 @@ export default function LiveMatchPage() {
               setEndOpen(true);
             }}
           >
-            End Match
+            <span className="live-match-control-label">End Match</span>
+            <span className="live-match-control-short" aria-hidden="true">FT</span>
           </button>
         </div>
       </header>
