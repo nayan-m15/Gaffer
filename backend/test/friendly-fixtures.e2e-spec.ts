@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { eq } from 'drizzle-orm';
 import { AppModule } from '../src/app.module';
+import { FORMATIONS } from '../src/game-plans/lineup-engine';
 import { createDatabaseClient } from '../src/database/drizzle';
 import { matchSessionParticipants, teamMembers } from '../src/database/schema';
 import { registerCoach } from './utils/auth-helpers';
@@ -999,7 +1000,12 @@ describe('Friendly fixtures (e2e)', () => {
           startingAthleteIds: starters,
           benchAthleteIds: bench,
           formationId: '4-3-3',
-          pitchAssignments: { '433-gk': squadB[0].id },
+          pitchAssignments: Object.fromEntries(
+            FORMATIONS['4-3-3'].positions.map((slot, index) => [
+              slot.id,
+              starters[index],
+            ]),
+          ),
         })
         .expect(200);
       const firstRead = await coachA.agent
@@ -1035,7 +1041,12 @@ describe('Friendly fixtures (e2e)', () => {
           startingAthleteIds: rotatedStarters,
           benchAthleteIds: [squadB[0].id],
           formationId: '3-5-2',
-          pitchAssignments: { '352-gk': squadB[11].id },
+          pitchAssignments: Object.fromEntries(
+            FORMATIONS['3-5-2'].positions.map((slot, index) => [
+              slot.id,
+              rotatedStarters[index],
+            ]),
+          ),
         })
         .expect(200);
       const updatedRead = await coachA.agent

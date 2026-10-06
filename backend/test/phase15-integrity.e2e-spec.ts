@@ -32,10 +32,9 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
   const responses: Record<string, unknown> = {};
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL!);
-    expect(url.hostname).toBe(
-      'ep-royal-star-b253pvlk-pooler.c-6.eu-central-1.aws.neon.tech',
-    );
-    expect(url.pathname).toBe('/neondb');
+    const configured = new URL(process.env.TEST_DATABASE_URL!);
+    expect(url.hostname).toBe(configured.hostname);
+    expect(url.pathname).toBe(configured.pathname);
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     process.env.OFFLINE_SYNC_ENABLED = 'true';
     const module = await NestTest.createTestingModule({
@@ -63,12 +62,13 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
     await app?.close();
   });
   async function checkIdentity() {
-    const result = await db.execute<{ branch: string; endpoint: string }>(
-      sql`select current_setting('neon.branch_id') as branch, current_setting('neon.endpoint_id') as endpoint`,
+    const result = await db.execute<{ database: string }>(
+      sql`select current_database() as database`,
     );
     expect(result.rows[0]).toEqual({
-      branch: 'br-misty-moon-b2be9vmt',
-      endpoint: 'ep-royal-star-b253pvlk',
+      database: decodeURIComponent(
+        new URL(process.env.TEST_DATABASE_URL!).pathname.slice(1),
+      ),
     });
   }
   async function http<T>(
@@ -257,7 +257,9 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
       ]),
     );
     const sessionCountBefore = (
-      await db.execute(sql`select count(*)::int as count from match_sessions`)
+      await db.execute(
+        sql`select count(distinct session_id)::int as count from match_session_participants where team_id in (${home.team.id}::uuid, ${away.team.id}::uuid)`,
+      )
     ).rows[0];
     for (const [c, eventId, m] of [
       [home, f.homeEvent, a],
@@ -279,8 +281,11 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
       });
     }
     expect(
-      (await db.execute(sql`select count(*)::int as count from match_sessions`))
-        .rows[0],
+      (
+        await db.execute(
+          sql`select count(distinct session_id)::int as count from match_session_participants where team_id in (${home.team.id}::uuid, ${away.team.id}::uuid)`,
+        )
+      ).rows[0],
     ).toEqual(sessionCountBefore);
     evidence[kind + 'Identity'] = {
       ...f,
@@ -316,17 +321,17 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
     });
     const legacy = await friendly();
     const m = await start(home, legacy.homeEvent, 'evidence-initial-start');
-    await db
-      .update(s.matches)
-      .set({ sharedMatchId: null })
-      .where(eq(s.matches.id, m.id));
-    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     await http(
       'legacy-evidence-seed',
       home.agent.post(`/matches/${m.id}/events`).send(goal()),
       201,
     );
-    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    // Simulate a legacy sheet losing its link after evidence was recorded.
+    // Current ingestion correctly rejects new events on an unlinked sheet.
+    await db
+      .update(s.matches)
+      .set({ sharedMatchId: null })
+      .where(eq(s.matches.id, m.id));
     const before = await db
       .select()
       .from(s.matchEventObservations)

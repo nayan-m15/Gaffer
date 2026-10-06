@@ -636,13 +636,14 @@ describe('Shared competitions (e2e)', () => {
       expect(opponentLineup.body).toMatchObject({
         available: true,
         formation: '4-4-2',
+        source: 'confirmed',
         starters: expect.arrayContaining([
-          { name: 'Away0 Fixture Player', shirtNumber: null },
+          { name: 'Away0 Fixture Player', shirtNumber: null, slotId: null },
         ]) as unknown,
         bench: [],
       });
       expect(Object.keys(opponentLineup.body as object).sort()).toEqual(
-        ['available', 'bench', 'formation', 'starters'].sort(),
+        ['available', 'bench', 'formation', 'source', 'starters'].sort(),
       );
 
       const identity = {

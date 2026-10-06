@@ -88,7 +88,7 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
       expect(Object.keys(player).sort()).toEqual(['name', 'shirtNumber']);
   }
 
-  it('captures flag-off snapshot deletion and enabled post-start fallback without private fields', async () => {
+  it('retains flag-off fixture snapshots and supports legacy post-start fallback without private fields', async () => {
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     const a = await coach('phase16-a');
     const b = await coach('phase16-b');
@@ -135,10 +135,20 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
     narrow(snapshot.body, '4-3-3');
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     const sheetB = (await start(b, accepted.event.id)).body as { id: string };
-    const retired = await b.agent
+    const retained = await b.agent
       .get(`/events/${accepted.event.id}/lineup`)
       .expect(200);
-    expect(retired.text).toBe('');
+    expect(retained.body).toMatchObject(lineup(b));
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    const afterKickoff = await a.agent
+      .get(`/events/${event.id}/opponent-lineup`)
+      .expect(200);
+    expect(afterKickoff.body).toEqual(snapshot.body);
+    // Older sheets may have no retained snapshot; exercise that fallback explicitly.
+    await db
+      .delete(s.eventLineups)
+      .where(eq(s.eventLineups.eventId, accepted.event.id));
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     const legacySquad = await a.agent
       .get(`/events/${event.id}/opponent-lineup`)
       .expect(200);
@@ -165,10 +175,11 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
       (match.body as { friendlyOpponentLineup: unknown })
         .friendlyOpponentLineup,
     ).toEqual(fallback.body);
-    // Complete only the fresh legacy sheet under its original flag-off mode.
-    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+    // Reconcile the legacy sheet before writing to the newly shared fixture.
+    expect((await start(b, accepted.event.id)).body).toMatchObject({
+      id: sheetB.id,
+    });
     await b.agent.post(`/matches/${sheetB.id}/finish`).expect(201);
-    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     const completed = await a.agent
       .get(`/events/${event.id}/opponent-lineup`)
       .expect(200);

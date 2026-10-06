@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test as NestTest } from '@nestjs/testing';
 import type { App } from 'supertest/types';
 import type { Test as HttpTest } from 'supertest';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
@@ -29,12 +29,23 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
   let away: Coach;
   const evidence: Record<string, unknown> = { http: {} };
   const responses: Record<string, unknown> = {};
+  const livePowerSync = process.env.PHASE2_LIVE_POWERSYNC === 'true';
+  const previousEnv = { ...process.env };
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL!);
-    expect(url.hostname).toBe(
-      'ep-royal-star-b253pvlk-pooler.c-6.eu-central-1.aws.neon.tech',
-    );
-    expect(url.pathname).toBe('/neondb');
+    const configured = new URL(process.env.TEST_DATABASE_URL!);
+    expect(url.hostname).toBe(configured.hostname);
+    expect(url.pathname).toBe(configured.pathname);
+    // Normal integration runs verify locally signed tokens without Cloud credentials.
+    // Live deployment probes remain available through an explicit opt-in.
+    if (!livePowerSync) {
+      process.env.POWERSYNC_URL = 'https://powersync.example.test';
+      process.env.POWERSYNC_KID = 'integration-test';
+      process.env.POWERSYNC_SHARED_SECRET = Buffer.from(
+        'phase2-integration-test-only',
+      ).toString('base64');
+      delete process.env.POWERSYNC_PRIVATE_KEY;
+    }
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     process.env.OFFLINE_SYNC_ENABLED = 'true';
     const module = await NestTest.createTestingModule({
@@ -63,14 +74,16 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
       );
     // Retain only this suite's fresh synthetic fixtures for reviewer SQL inspection.
     await app?.close();
+    process.env = previousEnv;
   });
   async function checkIdentity() {
-    const result = await db.execute<{ branch: string; endpoint: string }>(
-      sql`select current_setting('neon.branch_id') as branch, current_setting('neon.endpoint_id') as endpoint`,
+    const result = await db.execute<{ database: string }>(
+      sql`select current_database() as database`,
     );
     expect(result.rows[0]).toEqual({
-      branch: 'br-misty-moon-b2be9vmt',
-      endpoint: 'ep-royal-star-b253pvlk',
+      database: decodeURIComponent(
+        new URL(process.env.TEST_DATABASE_URL!).pathname.slice(1),
+      ),
     });
   }
   async function http<T>(
@@ -207,13 +220,13 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
     );
   }
 
-  it('captures fresh coach JWT metadata and the actual PowerSync authentication response', async () => {
+  it('verifies fresh coach JWT claims and signatures, with optional live PowerSync authentication', async () => {
     const tokens: unknown[] = [];
     for (const c of [home, away]) {
       const response = await c.agent.get('/sync/token').expect(200);
       const credentials = response.body as { token: string; endpoint: string };
       const token = credentials.token;
-      const [encodedHeader, encodedClaims] = token.split('.');
+      const [encodedHeader, encodedClaims, signature] = token.split('.');
       const header = JSON.parse(
         Buffer.from(encodedHeader, 'base64url').toString(),
       ) as unknown;
@@ -242,6 +255,17 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
       );
       const entry: Record<string, unknown> = { header, claims: safeClaims };
       tokens.push(entry);
+      if (!livePowerSync) {
+        expect(signature).toBe(
+          createHmac(
+            'sha256',
+            Buffer.from(process.env.POWERSYNC_SHARED_SECRET!, 'base64'),
+          )
+            .update(`${encodedHeader}.${encodedClaims}`)
+            .digest('base64url'),
+        );
+        continue;
+      }
       try {
         const syncResponse = await fetch(
           `${credentials.endpoint}/sync/stream`,
