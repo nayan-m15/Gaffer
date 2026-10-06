@@ -1147,9 +1147,9 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     if(scene.fog instanceof THREE.Fog){scene.fog.near=THREE.MathUtils.lerp(18,30,stadiumReveal);scene.fog.far=THREE.MathUtils.lerp(lowPower?126:164,lowPower?156:206,stadiumReveal);}
   };
   applyEnvironmentTheme();
-  let animatedShirt: THREE.Group | null = null;
-  scene.traverse(object => { if (!animatedShirt && object instanceof THREE.Group && object.name === "Dressing room shirt") animatedShirt = object; });
-  const shirtBaseRoll = (animatedShirt as THREE.Group | null)?.rotation.z ?? 0;
+  const shirtObject = scene.getObjectByName("Dressing room shirt");
+  const animatedShirt = shirtObject instanceof THREE.Group ? shirtObject : null;
+  const shirtBaseRoll = animatedShirt?.rotation.z ?? 0;
   const flagBaseYaw = cornerFlag.pivot.rotation.y;
   // Static geometry dominates this scene. Stop Three.js from rebuilding local
   // matrices for every static mesh on every rendered scroll frame.

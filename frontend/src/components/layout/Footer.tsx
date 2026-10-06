@@ -25,7 +25,7 @@ export function Footer({ variant = "coach", className }: FooterProps) {
   const returnTo = variant === "player" ? "/player/dashboard" : "/dashboard";
 
   return (
-    <footer className={cn("mx-auto mt-3 w-full max-w-[1600px] border-t border-border px-3 py-2 text-[10px] text-muted-foreground sm:mt-8 sm:px-10 sm:py-6 sm:text-sm", className)}>
+    <footer className={cn("mx-auto mt-3 hidden w-full max-w-[1600px] border-t border-border px-3 py-2 text-[10px] text-muted-foreground sm:mt-8 sm:px-10 sm:py-6 sm:text-sm lg:block", className)}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-center justify-between gap-2 sm:hidden">
           <div className="flex items-center gap-1.5">
