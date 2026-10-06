@@ -13,8 +13,11 @@ an already enrolled shared fixture. Local rules also remove the current bucket
 overflow using the trigger-maintained privacy gate in new migration `0055`.
 Apply `0055` to the verified target before deploying the backend or updated
 PowerSync rules, deploy both apps, and align both coaches' API flags/credentials.
-The development/hosted migration and rules deployment has not been performed
-in this assessment. Today's recorded unlinked history needs separate reviewed
+After the user's migration retry, `0055` is installed on the configured development
+database. The runner now skips exact recorded SQL whose journal timestamp moved
+after merging; historical records are preserved. Hosted target migration status
+must be verified independently. PowerSync rules and application deployments have
+not been performed in this assessment. Today's recorded unlinked history needs separate reviewed
 reconciliation. See [the regression assessment](live-logger-regression-2026-10-06.md)
 for evidence, exact local checks and deployment limitations.
 

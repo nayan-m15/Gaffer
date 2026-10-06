@@ -78,8 +78,9 @@ not equivalent if their APIs use different versions or flags. See
 Apply `0055` to the verified target through the normal reviewed migration
 process before deploying the backend or updated PowerSync rules. Its columns
 are required by both. `0054` remains a prerequisite for one shared clock anchor.
-The new migration passed against PGlite and the separate dedicated test database;
-it has not been applied to the inspected development database. The release
+The new migration passed against PGlite and the separate dedicated test database.
+Following the user's migration retry, it is also installed on the configured
+development database; see the migration-runner follow-up below. The release
 diagnostic now checks the new columns and enabled privacy triggers/function
 bodies. Do not replay old migrations to clear historical journal drift.
 
@@ -87,8 +88,8 @@ Retest with a fresh accepted friendly and a generated competition fixture.
 Today's unlinked sheets already contain history; the integrity guard deliberately
 does not reinterpret that evidence. Review them with the
 [historical repair procedure](two-sided-test-data-repair.md) before relinking.
-No development records, deployed PowerSync rules, or hosted settings were changed
-during this assessment. The local rule file changed. The dedicated test database
+The initial assessment changed no development records, deployed PowerSync rules,
+or hosted settings. The local rule file changed. The dedicated test database
 was reset using the guarded test-only migration command, then `0055` was applied
 to it without another reset; no reset ran concurrently with browser tests.
 
@@ -154,3 +155,28 @@ replication target; it has no source publication/grants. Browser verification
 therefore covers real API delivery and rendering, while the compiled rules and
 SQL checks separately cover sync visibility/budgets. Deployed Cloud transport and
 offline disconnect/reconnect remain release checks on the intended target.
+
+## Migration-runner follow-up, 6 October
+
+The user's `db:migrate` retry failed adding `long_free_kick_taker_id`. A read-only
+review proved that `0045_game_plan_set_piece_roles`, `0046_match_tactical_change_enum`,
+`0047_match_tactical_change_ingest`, and `0048_game_plan_player_instructions`
+already have matching SQL hashes recorded at their older timestamps. The merged
+file journal moved those entries past installed migration `0054`, so the runner's
+timestamp-only pending check attempted to replay them.
+
+The runner now recognises recorded content, including LF/CRLF equivalents, for
+entries beyond its existing timestamp boundary. It preserves historical rows
+and does not infer completed migrations from column presence. Older unmatched
+history remains unchanged. `--dry-run` previews pending work without database
+writes, and unexpected options fail before writes. Seven migration-runner tests
+pass, including real PGlite execution proving an existing column is skipped and
+the next migration applies once.
+
+`npm.cmd --prefix backend run db:migrate -- --dry-run` identified only `0055` as
+pending. The normal migration command then applied that one migration to the
+configured development database. A second run reports no pending migrations.
+Post-migration checks verify exactly one added migration record, unchanged
+historical journal rows, confirmations, sheet links, sides and clocks, correct
+visibility backfill, and installed privacy triggers with matching function bodies.
+PowerSync rule and application deployments were not performed by this retry.
