@@ -836,7 +836,7 @@ function SavedGamePlanSection({
                   selected ? "border-primary bg-primary/5" : "border-border",
                 )}
               >
-                <MiniPitch formationId={plan.formationId} />
+                <MiniPitch formationId={plan.formationId} customPositions={plan.customPositions} />
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{plan.name}</span>
@@ -954,6 +954,7 @@ function StartingSquadSection({
   onSuggest,
   onToggle,
   formationId,
+  customPositions,
   assignments,
   athletes,
 }: {
@@ -970,6 +971,7 @@ function StartingSquadSection({
   onSuggest: () => void;
   onToggle: (athleteId: string) => void;
   formationId: string;
+  customPositions?: BackendGamePlan["customPositions"];
   assignments: PitchAssignments;
   athletes: BackendAthlete[];
 }) {
@@ -1049,6 +1051,7 @@ function StartingSquadSection({
         <SquadFormationPreview
           className="lg:sticky lg:top-4"
           formationId={formationId}
+          customPositions={customPositions}
           assignments={assignments}
           athletes={athletes}
         />
@@ -1537,6 +1540,7 @@ export default function ConfirmSquadPage() {
     getDefaultFormationIdForPlayerCount(startingTarget);
   const previewCustomPositions =
     selectedPlan?.customPositions ??
+    selectedPlanSummary?.customPositions ??
     (!selectedGamePlanId ? confirmedLineup?.customPositions : null) ??
     null;
   const previewAssignments = useMemo(() => {
@@ -1548,12 +1552,14 @@ export default function ConfirmSquadPage() {
       [...startingIds],
       (id) => athleteById.get(id)?.position ?? null,
       selectedPlan?.assignments ??
+        selectedPlanSummary?.assignments ??
         (!selectedGamePlanId ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
       previewCustomPositions,
     );
   }, [
     athletes,
     selectedPlan?.assignments,
+    selectedPlanSummary?.assignments,
     selectedGamePlanId,
     confirmedLineup?.pitchAssignments,
     previewCustomPositions,
@@ -2086,7 +2092,7 @@ export default function ConfirmSquadPage() {
       <SavedGamePlanSection
         gamePlans={compatibleGamePlans}
         selectedGamePlanId={selectedGamePlanId}
-        loading={gamePlanQuery.isFetching}
+        loading={gamePlanQuery.isLoading && !gamePlanQuery.data}
         error={gamePlanQuery.isError
           ? gamePlanQuery.error instanceof Error
             ? gamePlanQuery.error.message
@@ -2109,6 +2115,7 @@ export default function ConfirmSquadPage() {
         onSuggest={handleSuggestXI}
         onToggle={toggleStarter}
         formationId={previewFormationId}
+        customPositions={previewCustomPositions}
         assignments={previewAssignments}
         athletes={athletes}
       />
