@@ -83,12 +83,13 @@ export interface PlannedFixture {
 export function planFixtures(
   competition: typeof competitions.$inferSelect,
   participantIds: string[],
+  now = new Date(),
 ): PlannedFixture[] {
   const { size, format } = validateFixtureParticipants(
     competition,
     participantIds,
   );
-  const nextDate = createFixtureDatePicker(competition);
+  const nextDate = createFixtureDatePicker(competition, now);
   const add = createFixtureFactory(format);
   if (format === 'knockout') {
     return planKnockoutFixtures(size, participantIds, nextDate, add);
@@ -155,6 +156,7 @@ function validateFixtureParticipants(
 
 function createFixtureDatePicker(
   competition: typeof competitions.$inferSelect,
+  now: Date,
 ): NextFixtureDate {
   const date = new Date(
     `${competition.startDate}T${competition.defaultKickoffTime}:00.000Z`,
@@ -167,8 +169,13 @@ function createFixtureDatePicker(
     throw new BadRequestException('Invalid fixture schedule settings.');
   }
   return () => {
-    while (!days.includes(date.getUTCDay()))
+    while (
+      !days.includes(date.getUTCDay()) ||
+      (date.toISOString().slice(0, 10) === now.toISOString().slice(0, 10) &&
+        date.getTime() < now.getTime())
+    ) {
       date.setUTCDate(date.getUTCDate() + 1);
+    }
     const scheduled = date.toISOString();
     date.setUTCDate(date.getUTCDate() + 1);
     return scheduled;

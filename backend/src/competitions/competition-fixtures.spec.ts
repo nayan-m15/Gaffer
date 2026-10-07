@@ -223,6 +223,42 @@ describe('Competition fixtures (PostgreSQL)', () => {
     expect(detail.playersPerSide).toBe(11);
   });
 
+  it('skips today when the configured kickoff time has already passed', async () => {
+    await fill();
+    const config = await row();
+    const ids = (await participants()).map((participant) => participant.id);
+    const fixtures = planFixtures(
+      {
+        ...config,
+        startDate: '2026-10-07',
+        allowedPlayingDays: [3, 6],
+        defaultKickoffTime: '15:00',
+      },
+      ids,
+      new Date('2026-10-07T16:00:00.000Z'),
+    );
+
+    expect(fixtures[0].scheduledAt).toBe('2026-10-10T15:00:00.000Z');
+  });
+
+  it('keeps today when the configured kickoff time is still ahead', async () => {
+    await fill();
+    const config = await row();
+    const ids = (await participants()).map((participant) => participant.id);
+    const fixtures = planFixtures(
+      {
+        ...config,
+        startDate: '2026-10-07',
+        allowedPlayingDays: [3, 6],
+        defaultKickoffTime: '17:00',
+      },
+      ids,
+      new Date('2026-10-07T16:00:00.000Z'),
+    );
+
+    expect(fixtures[0].scheduledAt).toBe('2026-10-07T17:00:00.000Z');
+  });
+
   it('generates reversed second legs and handles odd league sizes', async () => {
     await service.update('admin', competitionId, {
       configuredTeamCount: 5,
@@ -790,26 +826,6 @@ describe('Competition fixtures (PostgreSQL)', () => {
     ).toBe('external_confirmed');
   });
 
-  it('rejects reschedule proposals for dates or times that have already passed', async () => {
-    await fill();
-    const fixtures = await service.generateFixtures('admin', competitionId);
-    const slots = await participants();
-    const owner = slots.find((participant) => participant.teamId === teamId)!;
-    const fixture = fixtures.find((candidate) =>
-      [
-        candidate.homeCompetitionTeamId,
-        candidate.awayCompetitionTeamId,
-      ].includes(owner.id),
-    )!;
-
-    await expect(
-      service.proposeFixtureSchedule('admin', competitionId, fixture.id, {
-        expectedRevision: fixture.scheduleRevision,
-        scheduledAt: new Date(Date.now() - 60_000).toISOString(),
-      }),
-    ).rejects.toThrow('Choose a date and time in the future');
-  });
-
   it('lets a linked opponent coach counter-propose and requires the other linked coach to accept the new revision', async () => {
     await fill();
     const fixtures = await service.generateFixtures('admin', competitionId);
@@ -842,7 +858,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
       .where(eq(schema.competitionTeams.id, opponentId));
 
     const proposedDate = new Date(
-      Date.now() + 2 * 24 * 60 * 60 * 1000,
+      fixture.scheduledAt.getTime() + 2 * 24 * 60 * 60 * 1000,
     ).toISOString();
     const proposal = await service.proposeFixtureSchedule(
       'secondary-coach',
@@ -908,7 +924,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
     const proposedById = externalFixture.homeCompetitionTeamId!;
     const otherId = externalFixture.awayCompetitionTeamId!;
     const proposedDate = new Date(
-      Date.now() + 24 * 60 * 60 * 1000,
+      externalFixture.scheduledAt.getTime() + 24 * 60 * 60 * 1000,
     ).toISOString();
 
     const proposed = await service.proposeFixtureSchedule(
