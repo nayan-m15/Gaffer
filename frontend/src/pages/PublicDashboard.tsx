@@ -27,7 +27,7 @@ import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
 import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
 import { getPositionGroup, type PositionGroup } from "@/components/roster/position";
-import CircularCarousel from "@/components/ui/CircularCarousel";
+import DepthCarousel from "@/components/ui/DepthCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
@@ -539,25 +539,28 @@ export default function PublicDashboard() {
 
 {/* ─── Component: Public player showcase ────────────────────────────────── */}
 function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
+  const items = useMemo(() => players.map((player) => ({
+    id: player.id,
+    alt: player.firstName + ' ' + player.lastName,
+    content: <PublicDashboardPlayerCard player={player} />,
+  })), [players]);
+
   return (
-    <div className="relative mt-4 h-[560px] min-w-0">
-      <CircularCarousel
-        preset="cylinder"
-        intro="rise"
-        cardWidth={240}
-        aspectRatio={240 / 390}
-        speed={14}
-        cornerRadius={24}
-        fadeColor="var(--background)"
-        focusOnClick
-        captions
+    <div className="mt-4 min-w-0" style={{ height: '500px', position: 'relative' }}>
+      <DepthCarousel
+        items={items}
+        depth={230}
+        spread={110}
+        tilt={12}
+        tiltDirection="right"
+        perspective={1650}
+        visibleCards={5}
+        falloff={0.14}
+        blur={4}
+        autoplay
+        loop
+        radius={23}
         ariaLabel="Squad showcase player cards"
-        items={players.map((player) => ({
-          id: player.id,
-          title: `${player.firstName} ${player.lastName}`,
-          subtitle: player.team.name,
-          content: <PublicDashboardPlayerCard player={player} />,
-        }))}
       />
     </div>
   );
