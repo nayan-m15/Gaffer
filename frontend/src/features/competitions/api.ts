@@ -86,7 +86,10 @@ export const fetchCompetitionFixtures = (id: string) =>
 export const generateCompetitionFixtures = (id: string, regenerate = false) =>
   apiFetch<CompetitionFixture[]>(`/competitions/${encodeURIComponent(id)}/fixtures/generate`, {
     method: "POST",
-    body: JSON.stringify({ regenerate }),
+    body: JSON.stringify({
+      regenerate,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    }),
   });
 export const acceptCompetitionFixtureSchedule = (
   competitionId: string,

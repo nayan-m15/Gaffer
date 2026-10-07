@@ -235,14 +235,14 @@ function CompetitionScheduleFields({
       </label>
       <div className="space-y-2"><p className="text-sm font-medium">Allowed playing days</p><div className="flex flex-wrap gap-2">{weekdayOptions.map((day) => { const selected = allowedPlayingDays.includes(day.value); return <button key={day.value} type="button" disabled={locked} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-sm ${selected ? "border-primary/45 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/40"}`} onClick={() => onAllowedDaysChange(selected ? allowedPlayingDays.filter((value) => value !== day.value) : [...allowedPlayingDays, day.value])}>{day.label}</button>; })}</div>{!allowedPlayingDays.length && <p className="text-sm text-destructive">Choose at least one playing day.</p>}</div>
       <div className="grid gap-2 text-sm">
-        <span>Default kickoff time (UTC)</span>
+        <span>Default kickoff time</span>
         <CompetitionTimePicker
           disabled={locked}
           value={defaultKickoffTime}
           onChange={setDefaultKickoffTime}
         />
       </div>
-      <p className="text-xs text-muted-foreground">The fixture generator moves each round to the next allowed playing day and uses this kickoff time. If today is an allowed playing day but this kickoff has already passed, generation starts on the next allowed day.</p>
+      <p className="text-xs text-muted-foreground">The fixture generator uses this kickoff time in your local timezone and moves each round to the next allowed playing day. If today is an allowed playing day but this kickoff has already passed, generation starts on the next allowed day.</p>
     </>
   );
 }

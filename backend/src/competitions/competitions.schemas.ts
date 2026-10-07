@@ -30,7 +30,7 @@ export const createCompetitionSchema = z.object({
   accumulatedYellowThreshold: z.number().int().min(1).max(99).optional(),
   yellowSuspensionMatches: z.number().int().min(0).max(99).optional(),
   startDate: z.iso.date().optional(),
-  // Weekdays and kickoff use UTC, independent of the server's timezone.
+  // Weekdays and kickoff are entered as local competition schedule values.
   allowedPlayingDays: z
     .array(z.number().int().min(0).max(6))
     .min(1)
@@ -122,8 +122,23 @@ export type UpdateCompetitionResultDto = z.infer<
   typeof updateCompetitionResultSchema
 >;
 
+const fixtureTimezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: value }).format();
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Enter a valid IANA timezone such as Africa/Johannesburg.');
+
 export const generateFixturesSchema = z.object({
   regenerate: z.boolean().optional().default(false),
+  timezone: fixtureTimezoneSchema.optional().default('UTC'),
 });
 
 export const fixtureScheduleAcceptSchema = z.object({

@@ -84,12 +84,13 @@ export function planFixtures(
   competition: typeof competitions.$inferSelect,
   participantIds: string[],
   now = new Date(),
+  timezone = 'UTC',
 ): PlannedFixture[] {
   const { size, format } = validateFixtureParticipants(
     competition,
     participantIds,
   );
-  const nextDate = createFixtureDatePicker(competition, now);
+  const nextDate = createFixtureDatePicker(competition, now, timezone);
   const add = createFixtureFactory(format);
   if (format === 'knockout') {
     return planKnockoutFixtures(size, participantIds, nextDate, add);
@@ -157,28 +158,114 @@ function validateFixtureParticipants(
 function createFixtureDatePicker(
   competition: typeof competitions.$inferSelect,
   now: Date,
+  timezone: string,
 ): NextFixtureDate {
-  const date = new Date(
-    `${competition.startDate}T${competition.defaultKickoffTime}:00.000Z`,
-  );
+  let date = competition.startDate ?? '';
   const days = competition.allowedPlayingDays ?? [];
+  const kickoff = competition.defaultKickoffTime;
   if (
-    !Number.isFinite(date.getTime()) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(kickoff) ||
     days.some((day) => day < 0 || day > 6)
   ) {
     throw new BadRequestException('Invalid fixture schedule settings.');
   }
+  assertValidTimezone(timezone);
+
   return () => {
-    while (
-      !days.includes(date.getUTCDay()) ||
-      (date.toISOString().slice(0, 10) === now.toISOString().slice(0, 10) &&
-        date.getTime() < now.getTime())
-    ) {
-      date.setUTCDate(date.getUTCDate() + 1);
+    while (true) {
+      const weekday = weekdayForCalendarDate(date);
+      if (days.includes(weekday)) {
+        const scheduled = localScheduleToUtc(date, kickoff, timezone);
+        if (scheduled.getTime() >= now.getTime()) {
+          const value = scheduled.toISOString();
+          date = addCalendarDays(date, 1);
+          return value;
+        }
+      }
+      date = addCalendarDays(date, 1);
     }
-    const scheduled = date.toISOString();
-    date.setUTCDate(date.getUTCDate() + 1);
-    return scheduled;
+  };
+}
+
+function assertValidTimezone(timezone: string): void {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
+  } catch {
+    throw new BadRequestException('Invalid fixture timezone.');
+  }
+}
+
+function weekdayForCalendarDate(value: string): number {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function addCalendarDays(value: string, amount: number): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + amount));
+  return date.toISOString().slice(0, 10);
+}
+
+function localScheduleToUtc(
+  dateValue: string,
+  timeValue: string,
+  timezone: string,
+): Date {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const [hour, minute] = timeValue.split(':').map(Number);
+  const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
+
+  // Resolve the timezone offset for this specific fixture date, rather than
+  // using the server timezone or today's browser offset. Two passes handle
+  // DST boundaries where the initial UTC guess lands on the other offset.
+  let candidate = wallClockUtc;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const parts = zonedParts(new Date(candidate), timezone);
+    const representedAsUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+    );
+    candidate = wallClockUtc - (representedAsUtc - candidate);
+  }
+
+  const resolved = new Date(candidate);
+  const parts = zonedParts(resolved, timezone);
+  if (
+    parts.year !== year ||
+    parts.month !== month ||
+    parts.day !== day ||
+    parts.hour !== hour ||
+    parts.minute !== minute
+  ) {
+    throw new BadRequestException(
+      'The selected kickoff time does not exist in the chosen timezone.',
+    );
+  }
+  return resolved;
+}
+
+function zonedParts(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const value = (type: 'year' | 'month' | 'day' | 'hour' | 'minute') =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    hour: value('hour'),
+    minute: value('minute'),
   };
 }
 

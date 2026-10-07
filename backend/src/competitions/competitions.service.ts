@@ -1119,12 +1119,15 @@ export class CompetitionsService {
     userId: string,
     competitionId: string,
     regenerate = false,
+    timezone = 'UTC',
   ) {
     const competition = await this.requireAdmin(userId, competitionId);
     const participants = await this.listParticipants(competitionId);
     const plan = planFixtures(
       competition,
       participants.map((row) => row.id),
+      new Date(),
+      timezone,
     );
     // The function locks the competition, rechecks the inputs and writes the
     // whole plan atomically. This works with Neon's HTTP driver.

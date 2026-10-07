@@ -223,7 +223,28 @@ describe('Competition fixtures (PostgreSQL)', () => {
     expect(detail.playersPerSide).toBe(11);
   });
 
-  it('skips today when the configured kickoff time has already passed', async () => {
+  it('stores the selected local kickoff at the correct UTC instant', async () => {
+    await fill();
+    const config = await row();
+    const ids = (await participants()).map((participant) => participant.id);
+    const fixtures = planFixtures(
+      {
+        ...config,
+        startDate: '2026-10-07',
+        allowedPlayingDays: [3],
+        defaultKickoffTime: '15:00',
+      },
+      ids,
+      new Date('2026-10-07T10:00:00.000Z'),
+      'Africa/Johannesburg',
+    );
+
+    // 15:00 in Johannesburg is 13:00 UTC, so a browser formatting this in
+    // Africa/Johannesburg displays the exact 15:00 the coach selected.
+    expect(fixtures[0].scheduledAt).toBe('2026-10-07T13:00:00.000Z');
+  });
+
+  it('skips today when the local configured kickoff time has already passed', async () => {
     await fill();
     const config = await row();
     const ids = (await participants()).map((participant) => participant.id);
@@ -235,13 +256,14 @@ describe('Competition fixtures (PostgreSQL)', () => {
         defaultKickoffTime: '15:00',
       },
       ids,
-      new Date('2026-10-07T16:00:00.000Z'),
+      new Date('2026-10-07T14:00:00.000Z'), // 16:00 in Johannesburg
+      'Africa/Johannesburg',
     );
 
-    expect(fixtures[0].scheduledAt).toBe('2026-10-10T15:00:00.000Z');
+    expect(fixtures[0].scheduledAt).toBe('2026-10-10T13:00:00.000Z');
   });
 
-  it('keeps today when the configured kickoff time is still ahead', async () => {
+  it('keeps today when the local configured kickoff time is still ahead', async () => {
     await fill();
     const config = await row();
     const ids = (await participants()).map((participant) => participant.id);
@@ -253,10 +275,11 @@ describe('Competition fixtures (PostgreSQL)', () => {
         defaultKickoffTime: '17:00',
       },
       ids,
-      new Date('2026-10-07T16:00:00.000Z'),
+      new Date('2026-10-07T14:00:00.000Z'), // 16:00 in Johannesburg
+      'Africa/Johannesburg',
     );
 
-    expect(fixtures[0].scheduledAt).toBe('2026-10-07T17:00:00.000Z');
+    expect(fixtures[0].scheduledAt).toBe('2026-10-07T15:00:00.000Z');
   });
 
   it('generates reversed second legs and handles odd league sizes', async () => {
