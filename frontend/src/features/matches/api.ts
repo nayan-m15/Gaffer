@@ -562,6 +562,7 @@ export function resumeMatch(matchId: string, expectedClockRevision: number) {
     method: "POST",
     body: JSON.stringify({ expectedClockRevision }),
   });
+}
 
 export function updateMatchClock(
   matchId: string,

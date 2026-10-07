@@ -372,6 +372,112 @@ function stubApi(apiFetch, offline) {
     name === "@/lib/api" ? { ApiError, apiFetch } : offline);
   return compiled;
 }
+
+function queueHarness(fetch, initial = []) {
+  const rows = initial.map(row => ({ state: "queued", canonical_event_id: null, ...row }));
+  return { rows, api: stubApi(fetch, {
+    getOfflineDeviceId: () => "device",
+    enqueueEvent: async (matchId, payload) => rows.push({ id: payload.clientRequestId, match_id: matchId,
+      kind: "observation", payload: JSON.stringify(payload), state: "queued" }),
+    listQueuedEvents: async () => rows.map(row => ({ ...row })),
+    queuedEventAsTimelineRow: row => ({ ...JSON.parse(row.payload), id: row.id, syncStatus: row.state }),
+    setQueuedEventState: async (id, state) => Object.assign(rows.find(row => row.id === id), { state }),
+    setQueuedItemOutcome: async (id, state, canonical_event_id, error) =>
+      Object.assign(rows.find(row => row.id === id), { state, canonical_event_id, error }),
+    rejectQueuedEvent: async (id, error) => Object.assign(rows.find(row => row.id === id), { state: "rejected", error }),
+  }) };
+}
+
+test("a malformed offline item is retained with its error while the valid goal uploads", async () => {
+  const queue = ["bad", "goal"].map(id => ({ id, match_id: "sheet", kind: "observation",
+    payload: JSON.stringify({ clientRequestId: id }) }));
+  const { api, rows } = queueHarness(async (_url, options) => {
+    const { items } = JSON.parse(options.body);
+    if (items.some(item => item.payload.clientRequestId === "bad")) throw new ApiError(400);
+    return { receipts: items.map(item => ({ id: item.payload.clientRequestId, outcome: "accepted" })) };
+  }, queue);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "rejected");
+  assert.equal(rows[0].error, "request failed");
+  assert.equal(rows[1].state, "accepted");
+});
+
+test("an interrupted reconnect leaves the goal retriable and a later flush accepts it", async () => {
+  let attempt = 0;
+  const { api, rows } = queueHarness(async () => {
+    if (++attempt === 1) throw new TypeError("offline");
+    return { receipts: [{ id: "goal", outcome: "accepted" }] };
+  }, [{ id: "goal", match_id: "sheet", payload: "{}" }]);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "queued");
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "accepted");
+});
+
+test("local acknowledgement precedes a slow upload and queued goal/assist uploads remain ordered", async t => {
+  const previousOnline = Object.getOwnPropertyDescriptor(navigator, "onLine");
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  t.after(() => {
+    if (previousOnline) Object.defineProperty(navigator, "onLine", previousOnline);
+    else delete navigator.onLine;
+  });
+  let release;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const requests = [];
+  const { api, rows } = queueHarness(async (_url, options) => {
+    const { items } = JSON.parse(options.body);
+    requests.push(items.map(item => item.payload.clientRequestId));
+    if (requests.length === 1) await waiting;
+    return { receipts: items.map(item => ({ id: item.payload.clientRequestId, outcome: "accepted" })) };
+  });
+  const created = await api.createMatchLogEvent("sheet", { clientRequestId: "goal", eventType: "goal" }, { backgroundUpload: true });
+  assert.equal(created.id, "goal");
+  assert.equal(created.syncStatus, "queued");
+  await api.createMatchLogEvent("sheet", { clientRequestId: "assist", eventType: "assist", detail: "goal" }, { backgroundUpload: true });
+  const first = api.flushOfflineMatchEvents(), second = api.flushOfflineMatchEvents();
+  assert.equal(first, second, "concurrent flushes share one upload worker");
+  assert.equal(rows[0].state, "uploading");
+  release();
+  await first;
+  assert.deepEqual(requests, [["goal"], ["assist"]]);
+  assert.deepEqual(rows.map(row => row.state), ["accepted", "accepted"]);
+});
+
+test("replayed review votes use the dedicated endpoint with their original ID and parents", async () => {
+  const operation = { kind: "operation", operationType: "resolve_review", id: "vote", matchId: "sheet",
+    reviewId: "review", resolution: "same_event", explanation: "Same goal", causalParentIds: ["parent"] };
+  const requests = [];
+  const { api, rows } = queueHarness(async (url, options) => {
+    requests.push([url, JSON.parse(options.body)]);
+    return { id: "review", canonicalEventId: "goal", teamDecisions: { home: "same_event" } };
+  }, [{ id: "vote", match_id: "sheet", kind: "operation", payload: JSON.stringify(operation) }]);
+  await api.flushOfflineMatchEvents();
+  assert.deepEqual(requests, [["/matches/sheet/event-reviews/review/resolve", {
+    operationId: "vote", resolution: "same_event", explanation: "Same goal", causalParentIds: ["parent"],
+  }]]);
+  assert.equal(rows[0].state, "accepted");
+});
+
+test("rejected review votes remain visible locally and do not block later observations", async () => {
+  const operation = { id: "vote", kind: "operation", operationType: "resolve_review", matchId: "sheet",
+    reviewId: "review", resolution: "same_event", causalParentIds: [] };
+  const { api, rows } = queueHarness(async url => {
+    if (url.includes("/resolve")) throw new ApiError(409);
+    return { receipts: [{ id: "goal", outcome: "accepted" }] };
+  }, [{ id: "vote", match_id: "sheet", kind: "operation", payload: JSON.stringify(operation) },
+      { id: "goal", match_id: "sheet", kind: "observation", payload: "{}" }]);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "rejected");
+  assert.equal(rows[1].state, "accepted");
+});
+
+test("a resumed shared clock overrides a completed sheet before its slower poll catches up", () => {
+  const sheet = { id: "sheet", isHome: true, eventStatus: "completed", clockRevision: 4, clockPeriod: "full_time" };
+  const resumed = { ...report, finalStatus: "open", clock: { period: "second_half", elapsedMs: 5500000,
+    startedAt: "2026-10-07T10:00:00Z", revision: 5 } };
+  assert.equal(applySessionReport(sheet, resumed).eventStatus, "scheduled");
+  assert.equal(applySessionReport(sheet, resumed).clockPeriod, "second_half");
+});
 test("older and equal synced clock revisions retain the API anchor; newer revisions replace it completely", async () => {
   const match = { clockRevision: 8, clockPeriod: "second_half", clockElapsedMs: 1000, clockStartedAt: "fresh" };
   for (const revision of [7, 8, 9]) {

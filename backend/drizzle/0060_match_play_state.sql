@@ -97,7 +97,14 @@ BEGIN
   IF p_period = 'full_time' AND NOT EXISTS (SELECT 1 FROM match_clock_operations WHERE id = p_operation_id) THEN
     SELECT max(clock_revision) INTO v_revision FROM matches
       WHERE id = p_match_id OR (v_session IS NOT NULL AND shared_match_id = v_session);
-    IF p_base_revision < v_revision THEN
+    IF p_base_revision < v_revision AND EXISTS (
+      SELECT 1 FROM match_clock_operations
+      WHERE (match_id = p_match_id OR (v_session IS NOT NULL AND session_id = v_session))
+        AND period IN ('first_half', 'second_half')
+        AND payload_hash = md5(id::text)
+        AND applied_revision > p_base_revision
+        AND created_at > p_client_created_at
+    ) THEN
       RAISE EXCEPTION 'The match clock changed. Refresh and confirm full time again.' USING ERRCODE = '22000';
     END IF;
   END IF;

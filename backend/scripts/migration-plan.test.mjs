@@ -123,6 +123,7 @@ for (const targetTag of [
   '0057_shared_report_approvals',
   '0058_duplicate_review_lifecycle',
   '0059_manual_unknown_player_candidates',
+  '0060_match_play_state',
 ]) {
   test(`${targetTag} supports prepared queries and records successful application once`, async () => {
     const pg = new PGlite();

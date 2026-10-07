@@ -169,7 +169,11 @@ export class MatchesController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(resumeMatchSchema, body);
-    return this.matchesService.resume(user.id, matchId, dto.expectedClockRevision);
+    return this.matchesService.resume(
+      user.id,
+      matchId,
+      dto.expectedClockRevision,
+    );
   }
 
   @Post(':matchId/finalise')

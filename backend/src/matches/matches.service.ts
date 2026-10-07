@@ -772,11 +772,17 @@ export class MatchesService {
         )})`,
       );
     // Fetch review evidence in batches rather than one query per review.
-    const observationIds = [...new Set(rows.flatMap((row) => row.observationIds))];
+    const observationIds = [
+      ...new Set(rows.flatMap((row) => row.observationIds)),
+    ];
     const legacyCanonicalIds = rows
       .filter((row) => row.observationIds.length === 0)
       .map((row) => row.canonicalEventId);
-    const [directObservations, legacyObservations] = await Promise.all([
+    type ReviewObservation = typeof matchEventObservations.$inferSelect;
+    const [directObservations, legacyObservations]: [
+      ReviewObservation[],
+      { canonicalEventId: string; observation: ReviewObservation }[],
+    ] = await Promise.all([
       observationIds.length > 0
         ? this.databaseService.database
             .select()
@@ -792,106 +798,114 @@ export class MatchesService {
             .from(matchEventObservations)
             .innerJoin(
               matchEventMemberships,
-              eq(matchEventMemberships.observationId, matchEventObservations.id),
+              eq(
+                matchEventMemberships.observationId,
+                matchEventObservations.id,
+              ),
             )
-            .where(inArray(matchEventMemberships.canonicalEventId, legacyCanonicalIds))
+            .where(
+              inArray(
+                matchEventMemberships.canonicalEventId,
+                legacyCanonicalIds,
+              ),
+            )
         : Promise.resolve([]),
     ]);
-    const observationsById = new Map(directObservations.map((row) => [row.id, row]));
-    const results = await Promise.all(
-      rows.map(async (review) => {
-        const observations =
-          review.observationIds.length > 0
-            ? review.observationIds.flatMap((id) => {
-                const observation = observationsById.get(id);
-                return observation ? [observation] : [];
-              })
-            : legacyObservations
-                .filter((row) => row.canonicalEventId === review.canonicalEventId)
-                .map((row) => row.observation);
-        const sourceTeams = new Set(
-          observations.map(
-            (observation) =>
-              sheetSources.find((sheet) => sheet.id === observation.matchId)
-                ?.teamId,
-          ),
-        );
-        const currentSide = report?.participants.find(
-          (participant) => participant.teamId === team.id,
-        )?.side;
-        const labelled = observations.map((observation) => {
-          const player = ownSheetIds.has(observation.matchId)
-            ? ownAthletes.find((player) => player.id === observation.athleteId)
-            : null;
-          return {
-            ...observation,
-            sourceTeamName:
-              sheetSources.find((sheet) => sheet.id === observation.matchId)
-                ?.teamName ?? 'Recording team',
-            eventTeamName:
-              report?.participants.find(
-                (participant) => participant.side === observation.side,
-              )?.teamName ??
-              (observation.team === 'own' ? team.name : 'Opponent'),
-            observerName:
-              observers.find(
-                (observer) => observer.id === observation.loggedByUserId,
-              )?.name ?? 'Team member',
-            playerLabel: player
-              ? [
-                  player.squadNumber == null ? '' : '#' + player.squadNumber,
-                  player.firstName,
-                  player.lastName,
-                ]
-                  .filter(Boolean)
-                  .join(' ')
-              : (observation.opponentLabel ??
-                report?.timeline.find((row) => row.id === observation.id)
-                  ?.player?.name ??
-                null),
-          };
-        });
-        return {
-          ...review,
-          crossTeam: sourceTeams.size > 1,
-          currentSide,
-          locked: Boolean(report?.finalisedAt),
-          teamNames: Object.fromEntries(
-            (report?.participants ?? []).map((participant) => [
-              participant.side,
-              participant.teamName ?? participant.side,
-            ]),
-          ),
-          observations: labelled.map((observation) =>
-            ownSheetIds.has(observation.matchId)
-              ? observation
-              : {
-                  sourceTeamName: observation.sourceTeamName,
-                  eventTeamName: observation.eventTeamName,
-                  observerName: observation.observerName,
-                  playerLabel: observation.playerLabel,
-                  id: observation.id,
-                  matchId: observation.matchId,
-                  sessionId: observation.sessionId,
-                  side: observation.side,
-                  loggedByUserId: observation.loggedByUserId,
-                  eventType: observation.eventType,
-                  team: observation.team,
-                  opponentLabel: observation.opponentLabel,
-                  period: observation.period,
-                  matchElapsedMs: observation.matchElapsedMs,
-                  clientCreatedAt: observation.clientCreatedAt,
-                  serverReceivedAt: observation.serverReceivedAt,
-                  athleteId: null,
-                  opponentPlayerId: null,
-                  detail: null,
-                  payload: null,
-                  payloadHash: null,
-                },
-          ),
-        };
-      }),
+    const observationsById = new Map<string, ReviewObservation>(
+      directObservations.map((row) => [row.id, row] as const),
     );
+    const results = rows.map((review) => {
+      const observations =
+        review.observationIds.length > 0
+          ? review.observationIds.flatMap((id) => {
+              const observation = observationsById.get(id);
+              return observation ? [observation] : [];
+            })
+          : legacyObservations
+              .filter((row) => row.canonicalEventId === review.canonicalEventId)
+              .map((row) => row.observation);
+      const sourceTeams = new Set(
+        observations.map(
+          (observation) =>
+            sheetSources.find((sheet) => sheet.id === observation.matchId)
+              ?.teamId,
+        ),
+      );
+      const currentSide = report?.participants.find(
+        (participant) => participant.teamId === team.id,
+      )?.side;
+      const labelled = observations.map((observation) => {
+        const player = ownSheetIds.has(observation.matchId)
+          ? ownAthletes.find((player) => player.id === observation.athleteId)
+          : null;
+        return {
+          ...observation,
+          sourceTeamName:
+            sheetSources.find((sheet) => sheet.id === observation.matchId)
+              ?.teamName ?? 'Recording team',
+          eventTeamName:
+            report?.participants.find(
+              (participant) => participant.side === observation.side,
+            )?.teamName ??
+            (observation.team === 'own' ? team.name : 'Opponent'),
+          observerName:
+            observers.find(
+              (observer) => observer.id === observation.loggedByUserId,
+            )?.name ?? 'Team member',
+          playerLabel: player
+            ? [
+                player.squadNumber == null ? '' : '#' + player.squadNumber,
+                player.firstName,
+                player.lastName,
+              ]
+                .filter(Boolean)
+                .join(' ')
+            : (observation.opponentLabel ??
+              report?.timeline.find((row) => row.id === observation.id)?.player
+                ?.name ??
+              null),
+        };
+      });
+      return {
+        ...review,
+        crossTeam: sourceTeams.size > 1,
+        currentSide,
+        locked: Boolean(report?.finalisedAt),
+        teamNames: Object.fromEntries(
+          (report?.participants ?? []).map((participant) => [
+            participant.side,
+            participant.teamName ?? participant.side,
+          ]),
+        ),
+        observations: labelled.map((observation) =>
+          ownSheetIds.has(observation.matchId)
+            ? observation
+            : {
+                sourceTeamName: observation.sourceTeamName,
+                eventTeamName: observation.eventTeamName,
+                observerName: observation.observerName,
+                playerLabel: observation.playerLabel,
+                id: observation.id,
+                matchId: observation.matchId,
+                sessionId: observation.sessionId,
+                side: observation.side,
+                loggedByUserId: observation.loggedByUserId,
+                eventType: observation.eventType,
+                team: observation.team,
+                opponentLabel: observation.opponentLabel,
+                period: observation.period,
+                matchElapsedMs: observation.matchElapsedMs,
+                clientCreatedAt: observation.clientCreatedAt,
+                serverReceivedAt: observation.serverReceivedAt,
+                athleteId: null,
+                opponentPlayerId: null,
+                detail: null,
+                payload: null,
+                payloadHash: null,
+              },
+        ),
+      };
+    });
     return results.filter(
       (review) =>
         !review.observations.some(
@@ -1532,6 +1546,8 @@ export class MatchesService {
     assertMatchSessionIdentity(
       await resolveMatchSessionIdentity(this.databaseService, event, match),
     );
+    // The opposing coach may already have ended this shared match.
+    if (event.status === 'completed') return this.findOne(userId, matchId);
     this.assertLive(event.status);
 
     await this.sharedCommand(sql`select change_match_play_state(

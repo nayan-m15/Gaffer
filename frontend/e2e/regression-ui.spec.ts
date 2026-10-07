@@ -62,6 +62,7 @@ async function mockAuthenticatedMatch(page: Page, completed = false, overrides: 
       opponentColor: "#FF5B5F",
       clockPeriod: completed ? "full_time" : "first_half",
       clockElapsedMs: 754000,
+      clockRevision: 0,
       clockStartedAt: null,
       createdAt: "2026-09-11T10:00:00.000Z",
       updatedAt: "2026-09-11T10:00:00.000Z",
@@ -75,6 +76,73 @@ async function mockAuthenticatedMatch(page: Page, completed = false, overrides: 
     }),
   );
 }
+
+test("ending a match requires confirmation and cancelling makes no finish request", async ({ page }) => {
+  await mockAuthenticatedMatch(page);
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  await page.route(`**/api/events/${EVENT_ID}/opponent-lineup`, route => json(route, { available: false }));
+  let finishes = 0;
+  await page.route(`**/api/matches/${MATCH_ID}/finish`, route => {
+    finishes++;
+    return json(route, { message: "Temporary failure" }, 503);
+  });
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "End Match", exact: true }).click();
+  await expect(page.getByText("END MATCH?", { exact: true })).toBeVisible();
+  expect(finishes).toBe(0);
+  await page.getByRole("button", { name: "NO, GO BACK", exact: true }).click();
+  await expect(page.getByText("END MATCH?", { exact: true })).toHaveCount(0);
+  expect(finishes).toBe(0);
+  await page.getByRole("button", { name: "End Match", exact: true }).click();
+  await page.getByRole("button", { name: "END MATCH & SAVE REPORT", exact: true }).click();
+  await expect.poll(() => finishes).toBe(1);
+  await expect(page.getByText("END MATCH?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").filter({ hasText: "END MATCH?" }).getByRole("alert")).toHaveText("Temporary failure");
+});
+
+test("an opponent report returns to live play when the shared match resumes", async ({ page }) => {
+  const sessionId = "44444444-4444-4444-8444-444444444444";
+  await mockAuthenticatedMatch(page, true, { sharedSessionId: sessionId });
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, route => json(route, []));
+  let resumed = false;
+  await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
+    sessionId, reportRevision: resumed ? 4 : 3, participants: [], score: { home: 1, away: 0 },
+    clock: { period: resumed ? "second_half" : "full_time", elapsedMs: 5400000,
+      startedAt: resumed ? new Date().toISOString() : null, running: resumed, revision: resumed ? 4 : 3 },
+    finalStatus: resumed ? "open" : "awaiting_confirmation", finalisedAt: null,
+    confirmations: { home: null, away: null }, timeline: [], reviews: [],
+  }));
+  await page.goto(`/matches/${MATCH_ID}/report`);
+  await expect(page.getByRole("button", { name: "Resume match", exact: true })).toBeVisible();
+  resumed = true;
+  await expect(page).toHaveURL(new RegExp(`/matches/${MATCH_ID}/live`), { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "End Match", exact: true })).toBeVisible();
+});
+
+test("resuming from the report requires confirmation and submits the current clock revision", async ({ page }) => {
+  await mockAuthenticatedMatch(page, true, { clockRevision: 8 });
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, route => json(route, []));
+  let requests = 0;
+  await page.route(`**/api/matches/${MATCH_ID}/resume`, route => {
+    requests++;
+    expect(route.request().postDataJSON()).toEqual({ expectedClockRevision: 8 });
+    return json(route, { message: "The match changed. Refresh and retry." }, 409);
+  });
+  await page.goto(`/matches/${MATCH_ID}/report`);
+  await page.getByRole("button", { name: "Resume match", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Resume match?" });
+  await expect(dialog).toBeVisible();
+  expect(requests).toBe(0);
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(requests).toBe(0);
+  await page.getByRole("button", { name: "Resume match", exact: true }).click();
+  await dialog.getByRole("button", { name: "Resume match", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("The match changed. Refresh and retry.");
+  expect(requests).toBe(1);
+  await expect(page).toHaveURL(new RegExp(`/matches/${MATCH_ID}/report`));
+});
 
 test("account switching clears private dashboard cache", async ({ page }) => {
   let active = "a";
@@ -646,6 +714,17 @@ test("cross-team duplicate review shows both positions and explanations", async 
   await expect(dialog.getByText(/Teams disagree/)).toBeVisible();
   await expect(dialog.getByText(/recorded by Rivals FC \(Rival coach\)/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Count as one event" })).toBeEnabled();
+  let posted: Record<string, unknown> | undefined;
+  await page.route(`**/api/matches/${MATCH_ID}/event-reviews/${LOG_ID}/resolve`, route => {
+    posted = route.request().postDataJSON();
+    review.teamDecisions.away = "same_event";
+    return json(route, review);
+  });
+  await dialog.getByRole("button", { name: "Count as one event" }).click();
+  await expect.poll(() => posted?.resolution).toBe("same_event");
+  expect(posted?.operationId).toEqual(expect.any(String));
+  await expect(dialog.getByText("Rivals FC: Count as one event - Two different attacks")).toBeVisible();
+  await expect(dialog.getByText(/Teams disagree/)).toHaveCount(0);
 });
 
 for (const completed of [false, true]) {

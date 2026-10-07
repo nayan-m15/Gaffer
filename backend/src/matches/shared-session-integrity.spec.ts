@@ -18,6 +18,7 @@ import { MatchesService } from './matches.service';
 jest.mock('../auth/auth.guard', () => ({ AuthGuard: class AuthGuard {} }));
 
 import { SyncController } from '../sync/sync.controller';
+import { MatchesController } from './matches.controller';
 
 // Real SQL/functions and service paths; no external database or user records.
 describe('Phase 1 shared-session integrity', () => {
@@ -1637,6 +1638,162 @@ describe('Phase 1 shared-session integrity', () => {
       )[0].status,
     ).toBe('completed');
   });
+  it.each(['friendly', 'competition'] as const)(
+    '%s: either coach can resume both sheets without resetting time or losing events',
+    async (kind) => {
+      const f = await fixture(kind);
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.updateClock(f.home.id, a.id, {
+        operationId: randomUUID(),
+        baseRevision: 0,
+        period: 'second_half',
+        elapsedMs: 5_400_000,
+        running: true,
+      });
+      const logged = await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+      });
+      await matches.finish(f.home.id, a.id);
+      const stopped = await sheet(a.id);
+      await matches.finish(f.away.id, b.id);
+      expect((await sheet(b.id)).clockRevision).toBe(stopped.clockRevision);
+      await confirm(
+        f.home.id,
+        a.id,
+        (await matches.findOne(f.home.id, a.id)).projection.revision,
+      );
+      for (const [actor, ownSheet] of [
+        [f.away, b],
+        [f.home, a],
+      ] as const) {
+        const before = await sheet(ownSheet.id);
+        await matches.resume(actor.id, ownSheet.id, before.clockRevision);
+        const homeSheet = await sheet(a.id);
+        const awaySheet = await sheet(b.id);
+        expect(homeSheet.clockPeriod).toBe('second_half');
+        expect(homeSheet.clockStartedAt).not.toBeNull();
+        expect(homeSheet.clockElapsedMs).toBe(before.clockElapsedMs);
+        expect(awaySheet.clockRevision).toBe(homeSheet.clockRevision);
+        expect(awaySheet.clockStartedAt).toEqual(homeSheet.clockStartedAt);
+        const report = await matches.getSessionReport(
+          actor.id,
+          a.sharedMatchId!,
+        );
+        expect(report.clock.running).toBe(true);
+        expect(report.timeline.some((row) => row.id === logged.id)).toBe(true);
+        expect(report.confirmations).toEqual({ home: null, away: null });
+        const statuses = await db
+          .select({ status: schema.events.status })
+          .from(schema.events)
+          .where(
+            sql`${schema.events.id} in (${f.homeEvent}::uuid, ${f.awayEvent}::uuid)`,
+          );
+        expect(statuses.every((row) => row.status === 'scheduled')).toBe(true);
+        await expect(
+          matches.updateClock(actor.id, ownSheet.id, {
+            operationId: randomUUID(),
+            baseRevision: before.clockRevision,
+            clientCreatedAt: '2000-01-01T00:00:00Z',
+            period: 'full_time',
+            running: false,
+            elapsedMs: before.clockElapsedMs,
+          }),
+        ).rejects.toThrow('confirm full time again');
+        expect((await sheet(a.id)).clockPeriod).toBe('second_half');
+        await expect(
+          matches.resume(actor.id, ownSheet.id, before.clockRevision),
+        ).rejects.toThrow('clock changed');
+        await matches.finish(actor.id, ownSheet.id);
+      }
+    },
+  );
+
+  it('a locked report and an outsider cannot resume the shared match', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.finish(f.home.id, a.id);
+    const outsider = await coach();
+    await expect(
+      matches.resume(outsider.id, a.id, (await sheet(a.id)).clockRevision),
+    ).rejects.toThrow('Match not found');
+    await confirm(
+      f.home.id,
+      a.id,
+      (await matches.findOne(f.home.id, a.id)).projection.revision,
+    );
+    await confirm(
+      f.away.id,
+      b.id,
+      (await matches.findOne(f.away.id, b.id)).projection.revision,
+    );
+    const before = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    await expect(
+      matches.resume(f.home.id, a.id, before.clock.revision),
+    ).rejects.toThrow('locked');
+    expect(await matches.getSessionReport(f.away.id, a.sharedMatchId!)).toEqual(
+      before,
+    );
+  });
+
+  it('online review decisions record both coach votes even when offline observation uploads are disabled', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.finish(f.home.id, a.id);
+    await matches.logEvent(f.home.id, a.id, { ...goal(), team: 'own' });
+    await matches.logEvent(f.away.id, b.id, goal());
+    const [review] = await matches.listEventReviews(f.home.id, a.id);
+    process.env.OFFLINE_SYNC_ENABLED = 'false';
+    const controller = new MatchesController(matches);
+    const first = { operationId: randomUUID(), resolution: 'same_event' };
+    await controller.resolveEventReview(
+      { id: f.home.id } as never,
+      a.id,
+      review.id,
+      first,
+    );
+    const [pending] = await matches.listEventReviews(f.away.id, b.id);
+    expect(pending.teamDecisions).toEqual({ home: 'same_event' });
+    expect(pending.status).toBe('open');
+    await controller.resolveEventReview(
+      { id: f.away.id } as never,
+      b.id,
+      review.id,
+      { operationId: randomUUID(), resolution: 'same_event' },
+    );
+    await controller.resolveEventReview(
+      { id: f.home.id } as never,
+      a.id,
+      review.id,
+      first,
+    );
+    const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews[0].status).toBe('resolved');
+    expect(report.score.home).toBe(1);
+  });
+
+  it('an offline goal uploaded after the peer goal creates a duplicate review', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, { ...goal(), team: 'own' });
+    const offlineGoal = goal();
+    const result = await sync.upload({ id: f.away.id } as never, {
+      items: [{ kind: 'observation', matchId: b.id, payload: offlineGoal }],
+    });
+    expect(result.receipts[0]).toMatchObject({
+      id: offlineGoal.clientRequestId,
+      outcome: 'accepted',
+    });
+    expect((await matches.listEventReviews(f.away.id, b.id))[0]).toMatchObject({
+      status: 'open',
+      crossTeam: true,
+    });
+  });
+
   it.each(['manual', 'flag-off'] as const)(
     'preserves %s legacy ingestion',
     async (kind) => {
