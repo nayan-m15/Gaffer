@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api";
-import type { BackendAthlete } from "./athletes";
+import type { Athlete } from "@/components/roster/data";
+import { STATUS_LABELS, type AthleteStatusValue } from "./athletes";
 import type { CompetitionWithStandings } from "@/features/statistics/types";
 import type { AthleteStatistics } from "@/features/statistics/types";
 import type { FriendlyFixtureStatus } from "@/features/events/types";
@@ -59,10 +60,66 @@ export async function fetchPlayerMe(athleteId?: string): Promise<AthleteStatisti
   return apiFetch<AthleteStatistics>(`${PLAYER_PATH}/me${query}`);
 }
 
+/**
+ * A teammate on the claimed athlete's team roster, as returned by
+ * `GET /player/team`.
+ *
+ * A deliberately minimal player-facing contract: no date of birth (age is
+ * derived server-side), no account linkage, no internal timestamps — the
+ * backend projects exactly these fields.
+ */
+export interface PlayerRosterAthlete {
+  id: string;
+  firstName: string;
+  lastName: string;
+  position: string | null;
+  squadNumber: number | null;
+  status: AthleteStatusValue;
+  /** Whole years since the date of birth, or null when unknown. */
+  age: number | null;
+  appearances: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+}
+
 /** GET /player/team — the claimed athlete's team roster (read-only). */
-export async function fetchPlayerTeam(athleteId?: string): Promise<BackendAthlete[]> {
+export async function fetchPlayerTeam(
+  athleteId?: string,
+): Promise<PlayerRosterAthlete[]> {
   const query = athleteId ? `?athleteId=${athleteId}` : "";
-  return apiFetch<BackendAthlete[]>(`${PLAYER_PATH}/team${query}`);
+  return apiFetch<PlayerRosterAthlete[]>(`${PLAYER_PATH}/team${query}`);
+}
+
+/**
+ * Converts a player-roster entry into the UI shape used by the roster
+ * components. The player view has no joined date, claim state or archive
+ * state, so those UI-only fields get display-safe defaults.
+ */
+export function toUiRosterAthlete(entry: PlayerRosterAthlete): Athlete {
+  const position = entry.position ?? "UN";
+
+  return {
+    id: entry.id,
+    jerseyNumber: entry.squadNumber ?? 0,
+    name: `${entry.firstName} ${entry.lastName}`,
+    position,
+    positionLong: position,
+    status: STATUS_LABELS[entry.status],
+    appearances: entry.appearances,
+    goals: entry.goals,
+    assists: entry.assists,
+    age: entry.age ?? 0,
+    joinedDate: "—",
+    preferredFoot: "Right",
+    yellowCards: entry.yellowCards,
+    redCards: entry.redCards,
+    recentAppearances: [],
+    initials: `${entry.firstName.charAt(0)}${entry.lastName.charAt(0)}`.toUpperCase(),
+    isArchived: false,
+    claimStatus: "Unclaimed",
+  };
 }
 
 /** GET /player/events — team events with the player's RSVP annotations. */

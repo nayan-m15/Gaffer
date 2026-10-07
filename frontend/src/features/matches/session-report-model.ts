@@ -97,6 +97,12 @@ export function sessionTimeline(
         (row.player.shirtNumber == null || row.player.shirtNumber === athlete.squadNumber));
     }) : [];
     const athlete = candidates.length === 1 ? candidates[0] : null;
+    const incoming = own && row.eventType === "substitution" && row.incomingPlayerLabel
+      ? squad.filter((candidate) => row.incomingPlayerLabel === [
+          candidate.squadNumber == null ? "" : `#${candidate.squadNumber}`,
+          `${candidate.firstName} ${candidate.lastName}`.trim(),
+        ].filter(Boolean).join(" "))
+      : [];
     return {
       ...row,
       matchId: sheet.id,
@@ -106,7 +112,9 @@ export function sessionTimeline(
       opponentPlayerId: null,
       opponentPlayer: null,
       opponentLabel: label,
-      detail: row.eventType === "substitution" ? row.incomingPlayerLabel ?? null : null,
+      detail: row.eventType === "substitution"
+        ? (incoming.length === 1 ? incoming[0].id : row.incomingPlayerLabel ?? null)
+        : null,
       loggedByUserId: "",
       syncStatus: "synced",
       pending: false,

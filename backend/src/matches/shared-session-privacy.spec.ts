@@ -273,6 +273,49 @@ describe('Phase 2 shared privacy and clock', () => {
     });
   });
 
+  it.each(['home', 'away'] as const)(
+    '%s own substitution shares both player labels without private IDs',
+    async (side) => {
+      const f = await fixture();
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      const owner = f[side];
+      const sheet = side === 'home' ? a : b;
+      const [incoming] = await db
+        .insert(schema.athletes)
+        .values({
+          teamId: owner.team.id,
+          firstName: 'Incoming',
+          lastName: 'Player',
+          squadNumber: 12,
+        })
+        .returning();
+      await db
+        .insert(schema.athleteMatchStats)
+        .values({ matchId: sheet.id, athleteId: incoming.id });
+      await matches.logEvent(owner.id, sheet.id, {
+        clientRequestId: randomUUID(),
+        team: 'own',
+        eventType: 'substitution',
+        athleteId: owner.athletes[0].id,
+        detail: incoming.id,
+        minute: 10,
+        period: 'first_half',
+        matchElapsedMs: 600000,
+      });
+      const home = await matches.getSessionReportForSheet(f.home.id, a.id);
+      const away = await matches.getSessionReportForSheet(f.away.id, b.id);
+      expect(home.timeline).toEqual(away.timeline);
+      expect(home.timeline[0]).toMatchObject({
+        side,
+        player: { name: 'Player0 Test' },
+        incomingPlayerLabel: '#12 Incoming Player',
+      });
+      expect(JSON.stringify(home.timeline)).not.toContain(incoming.id);
+      expect(JSON.stringify(home.timeline)).not.toContain(owner.athletes[0].id);
+    },
+  );
+
   it('both reports retain public opponent and substitution labels without roster identities', async () => {
     const f = await fixture();
     const a = await f.start(f.home, f.homeEvent);

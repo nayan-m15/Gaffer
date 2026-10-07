@@ -6,8 +6,9 @@
  * describes the contract from the source of truth (the controllers,
  * schemas and static catalogs under `src/public-api/`) so the examples
  * shown here are hand-kept in sync with that code, not fetched live.
- * For a guaranteed-live view of the deployed contract, see the running
- * Swagger UI at `/api/docs` instead.
+ * For an interactive view of the local contract, use the development-only
+ * Swagger UI at http://localhost:3000/api/docs (NODE_ENV=development).
+ * Production Swagger is disabled under docs/swagger-policy.md.
  *
  *   node backend/scripts/generate-public-api-reference.mjs
  *
@@ -379,8 +380,9 @@ drawParagraph(
   PAGE_MARGIN,
   y,
   contentWidth,
-  `A live, testable Swagger UI documenting these routes (grouped under the ` +
-    `"Public API" tag) is served directly by the backend at ${BACKEND_BASE_URL}/api/docs.`,
+  `Swagger UI documents these routes under the "Public API" tag at ` +
+    `http://localhost:3000/api/docs when NODE_ENV=development. Production ` +
+    `Swagger is disabled; external consumers should use this reference and docs/public-api.md.`,
 );
 
 /* ── Page 2: GET /v1/formations ── */

@@ -64,9 +64,12 @@ asserted from `test/public-api.e2e-spec.ts`).
 
 ## Documentation
 
-Both controllers carry `@nestjs/swagger` decorators and are grouped under
-the "Public API" tag in the existing Swagger UI at `/api/docs` on the
-backend deployment (`https://gaffer-api-ynaf.onrender.com/api/docs`).
+The public API controllers carry `@nestjs/swagger` decorators and are grouped
+under the "Public API" tag in the local Swagger UI at
+`http://localhost:3000/api/docs` when `NODE_ENV=development`.
+Production Swagger, including raw JSON/YAML schemas, is disabled under the
+[Swagger policy](swagger-policy.md). Use this document and
+[the PDF reference](Gaffer-Public-API-Reference.pdf) for external API consumers.
 
 ## Out of scope here
 

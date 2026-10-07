@@ -3,6 +3,8 @@ import test from "node:test";
 import { sessionTimeline } from "./session-report-model.ts";
 import { friendlyLineupPlayers, markerStatsFor, publicOpponentTimeline, placeOppPlayers, effectiveGamePlan } from "./live-match-model.ts";
 import { FORMATIONS } from "../team-management/formations.ts";
+import { ownPitchState, opponentPitchState, friendlyLineupStarterIds } from "./live-match-model.ts";
+import { matchReportSubstitutions, matchReportTimeline } from "./live-match-report-model.ts";
 
 const squad = FORMATIONS['4-3-3'].positions.map((slot, index) => ({
   id: `private-${index}`, firstName: 'Player', lastName: String(index), squadNumber: index + 1,
@@ -18,6 +20,38 @@ const report = { timeline: ['goal', 'yellow_card', 'goalkeeper_save', 'assist'].
   id: `event-${index}`, side: 'home', eventType, minute: index + 1,
   createdAt: '2026-10-06T10:00:00.000Z', player: { name: 'Player 0', shirtNumber: 1 },
 })) };
+
+test('a shared substitution replaces the marker and names both players in each report', () => {
+  const incoming = { ...squad[0], id: 'private-bench', firstName: 'Bench', lastName: 'Player', squadNumber: 12, started: false };
+  const fullSquad = [...squad, incoming];
+  const fullLineup = { ...lineup, bench: [{ name: 'Bench Player', shirtNumber: 12 }] };
+  const publicPlayers = friendlyLineupPlayers(fullLineup);
+  for (const side of ['home', 'away']) {
+    const shared = { timeline: [{
+      id: 'sub', side, eventType: 'substitution', minute: 10,
+      lifecycleStatus: 'confirmed', createdAt: '2026-10-07T10:00:00Z',
+      player: { name: 'Player 0', shirtNumber: 1 }, incomingPlayerLabel: '#12 Bench Player',
+    }] };
+    const own = sessionTimeline(shared, { id: 'own', isHome: side === 'home' }, fullSquad);
+    const peer = publicOpponentTimeline(sessionTimeline(shared, { id: 'peer', isHome: side !== 'home' }), publicPlayers);
+    assert.equal(own[0].detail, incoming.id);
+    const ownState = ownPitchState(fullSquad, own);
+    const peerState = opponentPitchState(publicPlayers, peer, friendlyLineupStarterIds(fullLineup));
+    assert.equal(ownState.onPitch.length, 11);
+    assert.equal(peerState.onPitch.length, 11);
+    assert.ok(ownState.onPitch.some(player => player.id === incoming.id));
+    const placed = placeOppPlayers(peerState.onPitch, 'left', peer);
+    assert.equal(placed.length, 11);
+    assert.ok(placed.some(marker => marker.player.name === 'Bench Player'));
+    for (const [events, ownSquad, opponents] of [[own, fullSquad, []], [peer, [], publicPlayers]]) {
+      const data = { events, squad: ownSquad, match: { opponentSquad: opponents } };
+      const [sub] = matchReportSubstitutions(data);
+      assert.equal(sub.playerOff, '#1 Player 0');
+      assert.equal(sub.playerOn, '#12 Bench Player');
+      assert.equal(matchReportTimeline(data)[0].detail, 'On: #12 Bench Player');
+    }
+  }
+});
 
 test('shared goals/cards/saves/assists attach to both owning and opponent markers', () => {
   const own = sessionTimeline(report, { id: 'own', isHome: true }, squad);
