@@ -27,7 +27,7 @@ import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
 import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
 import { getPositionGroup, type PositionGroup } from "@/components/roster/position";
-import { FlexCarousel } from "@/components/ui/FlexCarousel";
+import CircularCarousel from "@/components/ui/CircularCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
@@ -540,19 +540,22 @@ export default function PublicDashboard() {
 {/* ─── Component: Public player showcase ────────────────────────────────── */}
 function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   return (
-    <div className="mt-4 min-w-0">
-      <FlexCarousel
-        preset="liquid"
+    <div className="relative mt-4 h-[560px] min-w-0">
+      <CircularCarousel
+        preset="cylinder"
         intro="rise"
-        gap={12}
-        squeeze={0.2}
-        liquid={0.26}
+        cardWidth={240}
+        aspectRatio={240 / 390}
+        speed={14}
+        cornerRadius={24}
+        fadeColor="var(--background)"
         focusOnClick
-        captions={false}
-        captureWheel={false}
+        captions
+        ariaLabel="Squad showcase player cards"
         items={players.map((player) => ({
           id: player.id,
-          label: `${player.firstName} ${player.lastName}`,
+          title: `${player.firstName} ${player.lastName}`,
+          subtitle: player.team.name,
           content: <PublicDashboardPlayerCard player={player} />,
         }))}
       />

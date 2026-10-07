@@ -1,14 +1,15 @@
-/** React Bits FlexCarousel adaptation: DOM cards retain accessible player stats while OGL renders the liquid accent. */
+/** React Bits FlexCarousel lens adapted for accessible public player cards. */
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Mesh, Program, Renderer, Triangle } from "ogl";
+import { FlexCarouselLens, type FlexCarouselPreset } from "./FlexCarouselLens";
 import "./FlexCarousel.css";
 
 export interface FlexCarouselItem {
@@ -19,7 +20,7 @@ export interface FlexCarouselItem {
 
 interface FlexCarouselProps {
   items: FlexCarouselItem[];
-  preset?: "liquid" | "ribbon" | "vortex" | "arch";
+  preset?: FlexCarouselPreset;
   intro?: "rise" | "none";
   gap?: number;
   squeeze?: number;
@@ -35,25 +36,19 @@ interface FlexCarouselProps {
   style?: CSSProperties;
 }
 
-const vertex = `#version 300 es
-in vec2 position;
-void main() {
-  gl_Position = vec4(position, 0.0, 1.0);
-}`;
-
-const fragment = `#version 300 es
-precision highp float;
-uniform vec2 uResolution;
-uniform vec2 uCenter;
-uniform float uMotion;
-out vec4 fragColor;
-void main() {
-  vec2 uv = gl_FragCoord.xy / uResolution;
-  vec2 p = (uv - uCenter) * vec2(uResolution.x / uResolution.y, 1.0);
-  float ring = exp(-pow((length(p / vec2(0.86, 0.76)) - 0.72) * 11.0, 2.0));
-  float alpha = ring * uMotion * 0.18;
-  fragColor = vec4(vec3(0.08, 0.75, 0.55) * alpha, alpha);
-}`;
+function Digits({ value }: { value: number }) {
+  return (
+    <span className="flex-carousel__digits" aria-label={String(value)}>
+      {String(value).padStart(2, "0").split("").map((digit, index) => (
+        <span key={index} className="flex-carousel__digit" aria-hidden="true">
+          <span className="flex-carousel__reel" style={{ transform: `translateY(${-Number(digit) * 10}%)` }}>
+            {"0123456789".split("").map((number) => <span key={number}>{number}</span>)}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
 
 const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -79,13 +74,22 @@ export function FlexCarousel({
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(0);
+  const dragRef = useRef<{
+    pointerId: number;
+    x: number;
+    left: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+  const itemIds = JSON.stringify(items.map((item) => item.id));
   const lastScrollRef = useRef({ left: 0, time: 0 });
   const renderLensRef = useRef<
-    ((motion: number, center: number) => void) | null
+    ((motion: number) => void) | null
   >(null);
   const callbacksRef = useRef({ onChange, onSelect });
   const [active, setActive] = useState(0);
   const [focusOpen, setFocusOpen] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(0);
   const [canScrollPrevious, setCanScrollPrevious] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
 
@@ -95,12 +99,19 @@ export function FlexCarousel({
 
   const updateTrack = useCallback(() => {
     const track = trackRef.current;
-    if (!track || !items.length) return;
+    if (!track) return;
+    if (!items.length) {
+      setCanScrollPrevious(false);
+      setCanScrollNext(false);
+      return;
+    }
     const cards = Array.from(track.children) as HTMLElement[];
     const first = cards[0];
     if (!first) return;
     const gapSize = Number.parseFloat(getComputedStyle(track).columnGap) || 0;
-    const step = first.offsetWidth + gapSize;
+    const step = cards[1]
+      ? cards[1].offsetLeft - first.offsetLeft
+      : first.offsetWidth + gapSize;
     const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
     const now = performance.now();
     const previous = lastScrollRef.current;
@@ -126,42 +137,12 @@ export function FlexCarousel({
 
     const reduced = prefersReducedMotion();
     const energy = Math.min(1, velocity / 2200);
-    const bend = preset === "vortex" ? 1.35 : preset === "arch" ? 0.8 : 1;
     for (const card of cards) {
-      if (reduced) {
-        card.style.transform = "";
-        continue;
-      }
-      const center = card.offsetLeft + card.offsetWidth / 2;
-      const distance = Math.max(
-        -1,
-        Math.min(
-          1,
-          (center - track.scrollLeft - track.clientWidth / 2) /
-            track.clientWidth,
-        ),
-      );
-      const rise = distance * liquid * 48 * bend;
-      const tilt = -distance * liquid * 10 * bend;
-      const scale = 1 - energy * squeeze * 0.16;
-      card.style.transform = `translate3d(0, ${rise.toFixed(2)}px, 0) rotate(${tilt.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+      const visual = card.firstElementChild as HTMLElement | null;
+      if (visual) visual.style.transform = reduced ? "" : `scale(${(1 - energy * squeeze * 0.16).toFixed(3)})`;
     }
-    const lensCard = cards[nextActive] ?? first;
-    if (!reduced)
-      renderLensRef.current?.(
-        energy,
-        Math.min(
-          1,
-          Math.max(
-            0,
-            (lensCard.offsetLeft +
-              lensCard.offsetWidth / 2 -
-              track.scrollLeft) /
-              track.clientWidth,
-          ),
-        ),
-      );
-  }, [items, liquid, preset, squeeze]);
+    if (!reduced) renderLensRef.current?.(energy);
+  }, [items, squeeze]);
 
   const scrollToIndex = useCallback((index: number) => {
     const track = trackRef.current;
@@ -174,11 +155,23 @@ export function FlexCarousel({
     });
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    // Reset even when a refetch replaces the squad with the same item count.
+    track.scrollTo({ left: 0, behavior: "instant" });
+    activeRef.current = 0;
+    lastScrollRef.current = { left: 0, time: 0 };
+    setActive(0);
+    setFocusOpen(false);
+  }, [itemIds]);
+
+  useLayoutEffect(() => {
     const track = trackRef.current;
     if (!track) return;
     const observer = new ResizeObserver(updateTrack);
     observer.observe(track);
+    if (track.firstElementChild) observer.observe(track.firstElementChild);
     updateTrack();
     return () => observer.disconnect();
   }, [updateTrack]);
@@ -222,84 +215,8 @@ export function FlexCarousel({
     return () => window.clearInterval(timer);
   }, [autoplay, canScrollNext, interval, items.length, scrollToIndex]);
 
-  useEffect(() => {
-    const host = viewportRef.current;
-    if (!host || items.length < 2 || prefersReducedMotion()) return;
-    let renderer: Renderer;
-    try {
-      renderer = new Renderer({
-        dpr: Math.min(window.devicePixelRatio || 1, 2),
-        alpha: true,
-        premultipliedAlpha: true,
-        antialias: false,
-        depth: false,
-      });
-    } catch {
-      return;
-    }
-    const gl = renderer.gl;
-    if (!renderer.isWebgl2) {
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
-      return;
-    }
-    const canvas = gl.canvas as HTMLCanvasElement;
-    canvas.className = "flex-carousel__lens";
-    canvas.setAttribute("aria-hidden", "true");
-    host.append(canvas);
-
-    const uniforms = {
-      uResolution: { value: [1, 1] },
-      uCenter: { value: [0.5, 0.5] },
-      uMotion: { value: 0 },
-    };
-    const mesh = new Mesh(gl, {
-      geometry: new Triangle(gl),
-      program: new Program(gl, {
-        vertex,
-        fragment,
-        uniforms,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    });
-    let frame = 0;
-    let strength = 0;
-    let center = 0.5;
-    const draw = () => {
-      frame = 0;
-      strength *= 0.83;
-      uniforms.uMotion.value = strength * liquid;
-      uniforms.uCenter.value = [center, 0.5];
-      renderer.render({ scene: mesh });
-      if (strength > 0.01) frame = requestAnimationFrame(draw);
-    };
-    renderLensRef.current = (motion, nextCenter) => {
-      strength = Math.max(strength, motion);
-      center = nextCenter;
-      if (!frame) frame = requestAnimationFrame(draw);
-    };
-    const resize = () => {
-      renderer.setSize(
-        Math.max(host.clientWidth, 1),
-        Math.max(host.clientHeight, 1),
-      );
-      uniforms.uResolution.value = [canvas.width, canvas.height];
-      renderer.render({ scene: mesh });
-    };
-    const observer = new ResizeObserver(resize);
-    observer.observe(host);
-    resize();
-    return () => {
-      renderLensRef.current = null;
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
-      canvas.remove();
-    };
-  }, [items.length, liquid]);
-
-  const selected = items[active];
+  const selectedIndex = focusOpen ? focusIndex : active;
+  const selected = items[selectedIndex];
   const carouselStyle = {
     ...style,
     "--flex-carousel-gap": `${gap}px`,
@@ -308,12 +225,14 @@ export function FlexCarousel({
   return (
     <div
       ref={rootRef}
-      className={`flex-carousel ${className}`.trim()}
+      className={`flex-carousel${focusOpen ? " is-focused" : ""} ${className}`.trim()}
       style={carouselStyle}
       role="group"
       aria-roledescription="carousel"
       aria-label="Players"
     >
+      <FlexCarouselLens viewportRef={viewportRef} motionRef={renderLensRef} preset={preset} liquid={liquid} disabled={focusOpen} itemCount={items.length} />
+      <div className="flex-carousel__stage">
       <div ref={viewportRef} className="flex-carousel__viewport">
         <div
           ref={trackRef}
@@ -321,6 +240,58 @@ export function FlexCarousel({
           tabIndex={items.length > 1 ? 0 : undefined}
           aria-label="Browse players"
           onScroll={updateTrack}
+          onDragStart={(event) => event.preventDefault()}
+          onClickCapture={(event) => {
+            if (suppressClickRef.current) {
+              event.preventDefault();
+              event.stopPropagation();
+              suppressClickRef.current = false;
+            }
+          }}
+          onPointerDown={(event) => {
+            suppressClickRef.current = false;
+            setFocusOpen(false);
+            if (event.pointerType !== "mouse" || event.button !== 0) return;
+            dragRef.current = {
+              pointerId: event.pointerId,
+              x: event.clientX,
+              left: event.currentTarget.scrollLeft,
+              moved: false,
+            };
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            const distance = event.clientX - drag.x;
+            if (!drag.moved && Math.abs(distance) < 5) return;
+            if (!drag.moved) {
+              drag.moved = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.currentTarget.dataset.dragging = "true";
+            }
+            event.preventDefault();
+            event.currentTarget.scrollLeft = drag.left - distance;
+          }}
+          onPointerUp={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            dragRef.current = null;
+            suppressClickRef.current = drag.moved;
+            if (drag.moved) updateTrack();
+            delete event.currentTarget.dataset.dragging;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            if (drag.moved) scrollToIndex(activeRef.current);
+          }}
+          onPointerCancel={(event) => {
+            dragRef.current = null;
+            delete event.currentTarget.dataset.dragging;
+          }}
+          onLostPointerCapture={(event) => {
+            dragRef.current = null;
+            delete event.currentTarget.dataset.dragging;
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
               event.preventDefault();
@@ -346,6 +317,7 @@ export function FlexCarousel({
                 activeRef.current,
                 items[activeRef.current],
               );
+              setFocusIndex(activeRef.current);
               setFocusOpen((open) => !open);
             } else if (event.key === "Escape" && focusOpen) {
               event.preventDefault();
@@ -356,43 +328,59 @@ export function FlexCarousel({
           {items.map((item, index) => (
             <div
               key={item.id}
-              className={`flex-carousel__card${intro === "rise" ? " flex-carousel__card--rise" : ""}${focusOpen && active === index ? " is-open" : ""}`}
-              style={{ animationDelay: `${Math.min(index, 8) * 55}ms` }}
+              className={`flex-carousel__card${focusOpen && active === index ? " is-open" : ""}`}
               role="group"
               aria-roledescription="slide"
               aria-label={`${item.label}, ${index + 1} of ${items.length}`}
               aria-current={active === index ? "true" : undefined}
               onClick={() => {
-                if (index !== activeRef.current) {
-                  scrollToIndex(index);
-                } else {
+                trackRef.current?.focus({ preventScroll: true });
+                if (focusOnClick) {
                   callbacksRef.current.onSelect?.(index, item);
-                  if (focusOnClick) setFocusOpen((open) => !open);
+                  setFocusIndex(index);
+                  setFocusOpen(true);
+                } else {
+                  scrollToIndex(index);
                 }
               }}
             >
-              {item.content}
+              <div
+                className={`flex-carousel__visual${intro === "rise" ? " flex-carousel__card--rise" : ""}`}
+                style={{ animationDelay: `${Math.min(index, 8) * 55}ms` }}
+              >
+                {item.content}
+              </div>
             </div>
           ))}
         </div>
       </div>
-      {items.length > 1 && (
+      {focusOpen && selected && (
+        <div className="flex-carousel__focus-card" aria-hidden="true" onClick={() => setFocusOpen(false)}>
+          {selected.content}
+        </div>
+      )}
+      </div>
+      {items.length > 0 && (
         <div className="flex-carousel__footer">
           {captions && selected ? (
             <p className="flex-carousel__caption" aria-live="polite">
-              {selected.label} <span aria-hidden="true">·</span> {active + 1} /{" "}
-              {items.length}
+              <span key={selected.id} className="flex-carousel__title">{selected.label}</span>
+              <span className="flex-carousel__count">
+                <Digits value={selectedIndex + 1} />
+                <span aria-hidden="true">/</span>
+                <span>{String(items.length).padStart(2, "0")}</span>
+              </span>
             </p>
           ) : (
             <p className="flex-carousel__caption">{items.length} players</p>
           )}
-          <div className="flex-carousel__controls">
+          {items.length > 1 && <div className="flex-carousel__controls">
             <button
               type="button"
               className="flex-carousel__arrow"
               aria-label="Previous players"
               disabled={!canScrollPrevious}
-              onClick={() => scrollToIndex(Math.max(0, activeRef.current - 1))}
+              onClick={() => { setFocusOpen(false); scrollToIndex(Math.max(0, activeRef.current - 1)); }}
             >
               <ChevronLeft aria-hidden="true" />
             </button>
@@ -401,13 +389,11 @@ export function FlexCarousel({
               className="flex-carousel__arrow"
               aria-label="Next players"
               disabled={!canScrollNext}
-              onClick={() =>
-                scrollToIndex(Math.min(items.length - 1, activeRef.current + 1))
-              }
+              onClick={() => { setFocusOpen(false); scrollToIndex(Math.min(items.length - 1, activeRef.current + 1)); }}
             >
               <ChevronRight aria-hidden="true" />
             </button>
-          </div>
+          </div>}
         </div>
       )}
     </div>
