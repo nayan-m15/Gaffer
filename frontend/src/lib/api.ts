@@ -1,4 +1,5 @@
 import { apiUrl } from "@/lib/api-url";
+import { notifyDataChange } from "@/lib/data-changes";
 
 /** Thrown when the backend responds with a non-2xx status. */
 export class ApiError extends Error {
@@ -48,6 +49,10 @@ export async function apiFetch<T>(
 
   if (body === undefined && response.status !== 204) {
     throw new ApiError("Invalid response from server", response.status);
+  }
+
+  if (!["GET", "HEAD", "OPTIONS"].includes((options.method ?? "GET").toUpperCase())) {
+    notifyDataChange(path);
   }
 
   return body as T;

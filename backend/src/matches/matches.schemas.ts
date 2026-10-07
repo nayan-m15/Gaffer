@@ -188,13 +188,20 @@ export type CreateMatchLogEventDto = z.infer<typeof createMatchLogEventSchema>;
 
 export const resolveMatchEventReviewSchema = z.object({
   resolution: z.enum(['same_event', 'separate_events']),
+  explanation: z.string().trim().max(500).optional(),
 });
+export const resolveMatchEventReviewRequestSchema =
+  resolveMatchEventReviewSchema.extend({
+    operationId: z.uuid().optional(),
+    causalParentIds: z.array(z.uuid()).max(50).default([]),
+  });
 export type ResolveMatchEventReviewDto = z.infer<
   typeof resolveMatchEventReviewSchema
 >;
 
 export const finaliseMatchProjectionSchema = z.object({
   expectedRevision: z.number().int().min(1),
+  expectedSessionRevision: z.number().int().min(1).optional(),
 });
 
 export const reopenMatchProjectionSchema = z.object({
@@ -279,4 +286,50 @@ export const updateMatchClockSchema = z.object({
     .min(0)
     .max(3 * 60 * 60 * 1000),
 });
+export const resumeMatchSchema = z.object({
+  expectedClockRevision: z.number().int().min(0),
+});
 export type UpdateMatchClockDto = z.infer<typeof updateMatchClockSchema>;
+
+export const requestMatchAmendmentSchema = z.discriminatedUnion('action', [
+  z.object({
+    id: z.uuid(),
+    expectedSessionRevision: z.number().int().min(1),
+    action: z.literal('add'),
+    reason: z.string().trim().min(3).max(500),
+    replacement: createMatchLogEventSchema,
+  }),
+  z.object({
+    id: z.uuid(),
+    expectedSessionRevision: z.number().int().min(1),
+    action: z.literal('correct'),
+    reason: z.string().trim().min(3).max(500),
+    canonicalEventId: z.uuid(),
+    replacement: updateMatchLogEventSchema,
+  }),
+  z.object({
+    id: z.uuid(),
+    expectedSessionRevision: z.number().int().min(1),
+    action: z.literal('void'),
+    reason: z.string().trim().min(3).max(500),
+    canonicalEventId: z.uuid(),
+  }),
+]);
+export type RequestMatchAmendmentDto = z.infer<
+  typeof requestMatchAmendmentSchema
+>;
+export const respondMatchAmendmentSchema = z
+  .object({
+    response: z.enum(['approve', 'reject', 'request_changes', 'withdraw']),
+    reason: z.string().trim().min(3).max(500).optional(),
+  })
+  .refine(
+    (value) =>
+      value.response === 'approve' ||
+      value.response === 'withdraw' ||
+      Boolean(value.reason),
+    {
+      message: 'Explain why this amendment needs changes or was rejected.',
+      path: ['reason'],
+    },
+  );

@@ -170,6 +170,7 @@ jobs:
     timeout-minutes: 50
     env:
       CI: "true"
+      TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100
@@ -241,6 +242,7 @@ jobs:
     timeout-minutes: 50
     env:
       CI: "true"
+      TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100

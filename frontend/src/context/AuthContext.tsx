@@ -10,6 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { subscribeToDataChanges } from "@/lib/data-changes";
 import { clearPendingClaimToken } from "@/services/claims";
 import { discardQueuedItems, setOfflineUserScope } from "@/offline/match-store";
 
@@ -126,9 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cachedSessionKey = "gaffer-offline-session";
   const rememberedSessionKey = "gaffer-remember-session";
 
-  const refresh = useCallback(async (): Promise<SessionPayload | null> => {
+  const refresh = useCallback(async (background = false): Promise<SessionPayload | null> => {
+    const startedForUserId = activeUserIdRef.current;
     try {
       const data = await apiFetch<SessionPayload>("/auth/session");
+      if (background && activeUserIdRef.current !== startedForUserId) return null;
       if (activeUserIdRef.current && activeUserIdRef.current !== data.user.id) {
         queryClient.clear();
       }
@@ -148,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return data;
     } catch (error) {
+      if (background && activeUserIdRef.current !== startedForUserId) return null;
       if (error instanceof ApiError && error.status === 401) {
         setUser(null);
         setTeam(null);
@@ -160,6 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
         return null;
       }
+
+      // A temporary background failure must not unmount the page or its drafts.
+      if (background && activeUserIdRef.current) return null;
 
       // Distinguish service transport/connectivity failure (network drop,
       // timeout, 503) from invalid credentials so users can retry without
@@ -197,6 +204,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const sessionUserId = user?.id;
+  useEffect(() => {
+    if (!sessionUserId) return;
+    let pending = false;
+    const refreshInBackground = () => {
+      if (pending || !navigator.onLine || document.visibilityState === "hidden") return;
+      pending = true;
+      void refresh(true).finally(() => { pending = false; });
+    };
+    const interval = window.setInterval(refreshInBackground, 15_000);
+    window.addEventListener("focus", refreshInBackground);
+    window.addEventListener("online", refreshInBackground);
+    document.addEventListener("visibilitychange", refreshInBackground);
+    const unsubscribe = subscribeToDataChanges((path) => {
+      if (/^\/(profile|teams|claims|team-invites)(\/|$)/.test(path)) refreshInBackground();
+    });
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshInBackground);
+      window.removeEventListener("online", refreshInBackground);
+      document.removeEventListener("visibilitychange", refreshInBackground);
+      unsubscribe();
+    };
+  }, [sessionUserId, refresh]);
 
   const signUp = useCallback(
     async (input: SignUpInput): Promise<SignUpResult> => {

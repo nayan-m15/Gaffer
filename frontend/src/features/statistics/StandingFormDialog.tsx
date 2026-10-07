@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { StandingFormValues } from "@/features/statistics/types";
@@ -40,10 +40,13 @@ export function StandingFormDialog({
   const title = isEditing ? "Edit Standing" : "Add Standing";
 
   const [values, setValues] = useState<StandingFormValues>(DEFAULT_VALUES);
+  const initialized = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) { initialized.current = false; return; }
+    if (initialized.current) return;
+    initialized.current = true;
     setValues(initialValues ?? DEFAULT_VALUES);
     setError(null);
   }, [initialValues, isOpen]);

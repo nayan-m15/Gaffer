@@ -66,7 +66,14 @@ export class TeamsService {
   async searchTeams(
     userId: string,
     term: string,
-  ): Promise<{ id: string; name: string; primaryColor: string | null }[]> {
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      primaryColor: string | null;
+      coachName: string | null;
+    }[]
+  > {
     const ownTeam = await this.findTeamForUser(userId);
     const pattern = `%${term}%`;
     const nameFilter = or(
@@ -74,22 +81,24 @@ export class TeamsService {
       ilike(user.name, pattern),
     );
 
-    // The joins only feed the coach-name half of the filter; selectDistinct
-    // keeps one row per team even if several memberships ever match.
+    // Only teams with a coach can accept requests. Group by identity so
+    // distinct teams with the same name remain selectable.
     return this.databaseService.database
-      .selectDistinct({
+      .select({
         id: teams.id,
         name: teams.name,
         primaryColor: teams.primaryColor,
+        coachName: sql<string | null>`min(${user.name})`,
       })
       .from(teams)
-      .leftJoin(
+      .innerJoin(
         teamMembers,
         and(eq(teamMembers.teamId, teams.id), eq(teamMembers.role, 'coach')),
       )
-      .leftJoin(user, eq(teamMembers.userId, user.id))
+      .innerJoin(user, eq(teamMembers.userId, user.id))
       .where(ownTeam ? and(ne(teams.id, ownTeam.id), nameFilter) : nameFilter)
-      .orderBy(asc(teams.name))
+      .groupBy(teams.id, teams.name, teams.primaryColor)
+      .orderBy(asc(teams.name), asc(teams.id))
       .limit(25);
   }
 
