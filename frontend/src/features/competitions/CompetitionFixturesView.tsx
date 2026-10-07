@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   CalendarClock,
   CheckCircle2,
@@ -20,6 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import {
@@ -64,9 +69,35 @@ function toLocalDateTime(value: string) {
   return local.toISOString().slice(0, 16);
 }
 
-function minimumRescheduleDateTime() {
-  return toLocalDateTime(new Date(Date.now() + 60_000).toISOString());
+function localDateValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
 }
+
+function timeValueFromLocalDateTime(value: string) {
+  return value.slice(11, 16);
+}
+
+function nextLocalMinuteValue(now = new Date()) {
+  const nextMinute = new Date(now);
+  nextMinute.setSeconds(0, 0);
+  nextMinute.setMinutes(nextMinute.getMinutes() + 1);
+
+  if (localDateValue(nextMinute) !== localDateValue(now)) return "";
+
+  return `${String(nextMinute.getHours()).padStart(2, "0")}:${String(
+    nextMinute.getMinutes(),
+  ).padStart(2, "0")}`;
+}
+
+
+const TIME_HOURS = Array.from({ length: 24 }, (_, hour) =>
+  String(hour).padStart(2, "0"),
+);
+
+const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) =>
+  String(minute).padStart(2, "0"),
+);
 
 function teamInitial(name: string) {
   if (name === "TBD") return "?";
@@ -292,6 +323,137 @@ type ProposalTarget = {
   external: boolean;
 };
 
+function TimePickerPopover({
+  value,
+  proposedDate,
+  now,
+  onChange,
+}: {
+  value: string;
+  proposedDate: string;
+  now: Date;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hour = "00", minute = "00"] = value.split(":");
+  const today = localDateValue(now);
+  const selectingToday = proposedDate === today;
+
+  const isTimePast = (nextHour: string, nextMinute: string) => {
+    if (!selectingToday) return false;
+    const candidate = new Date(`${proposedDate}T${nextHour}:${nextMinute}`);
+    return Number.isNaN(candidate.getTime()) || candidate.getTime() <= now.getTime();
+  };
+
+  const hourDisabled = (nextHour: string) =>
+    selectingToday && TIME_MINUTES.every((nextMinute) => isTimePast(nextHour, nextMinute));
+
+  const minuteDisabled = (nextMinute: string) =>
+    selectingToday && isTimePast(hour, nextMinute);
+
+  const selectHour = (nextHour: string) => {
+    if (hourDisabled(nextHour)) return;
+
+    const nextMinute = !isTimePast(nextHour, minute)
+      ? minute
+      : (TIME_MINUTES.find((candidateMinute) => !isTimePast(nextHour, candidateMinute)) ?? minute);
+    onChange(`${nextHour}:${nextMinute}`);
+  };
+
+  const selectMinute = (nextMinute: string) => {
+    if (minuteDisabled(nextMinute)) return;
+    onChange(`${hour}:${nextMinute}`);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger
+        type="button"
+        className="flex h-11 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-sm font-normal outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="flex items-center gap-2">
+          <Clock3 className="size-4 text-muted-foreground" />
+          <span className="tabular-nums">{value}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">Choose time</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-3">
+        <div className="mb-2 flex items-center justify-between gap-6 px-1">
+          <p className="text-xs font-medium">Kickoff time</p>
+          <p className="text-xs tabular-nums text-muted-foreground">{value}</p>
+        </div>
+        <div className="flex gap-2">
+          <TimePickerColumn
+            label="Hours"
+            options={TIME_HOURS}
+            selected={hour}
+            isDisabled={hourDisabled}
+            onSelect={selectHour}
+          />
+          <TimePickerColumn
+            label="Minutes"
+            options={TIME_MINUTES}
+            selected={minute}
+            isDisabled={minuteDisabled}
+            onSelect={selectMinute}
+          />
+        </div>
+        {selectingToday && (
+          <p className="mt-2 max-w-36 text-[11px] leading-4 text-muted-foreground">
+            Past times are unavailable.
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TimePickerColumn({
+  label,
+  options,
+  selected,
+  isDisabled,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  selected: string;
+  isDisabled: (value: string) => boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <div className="h-52 w-16 overflow-y-auto rounded-md border border-border bg-background p-1">
+        {options.map((option) => {
+          const disabled = isDisabled(option);
+          const selectedOption = option === selected;
+          return (
+            <button
+              key={option}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect(option)}
+              className={`flex h-8 w-full items-center justify-center rounded text-sm tabular-nums transition-colors ${
+                disabled
+                  ? "cursor-not-allowed text-muted-foreground opacity-30"
+                  : selectedOption
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted"
+              }`}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RescheduleDialog({
   target,
   busy,
@@ -303,28 +465,78 @@ function RescheduleDialog({
   onClose: () => void;
   onSubmit: (input: { scheduledAt: string; note?: string }) => Promise<void>;
 }) {
-  const [scheduledAt, setScheduledAt] = useState(
-    toLocalDateTime(target.fixture.scheduledAt),
+  const originalLocalDateTime = toLocalDateTime(target.fixture.scheduledAt);
+  const today = localDateValue();
+  const initialDate = originalLocalDateTime.slice(0, 10) < today
+    ? today
+    : originalLocalDateTime.slice(0, 10);
+  const originalTime = timeValueFromLocalDateTime(originalLocalDateTime);
+  const initialMinimumTime = initialDate === today ? nextLocalMinuteValue() : "";
+  const [proposedDate, setProposedDate] = useState(initialDate);
+  const [proposedTime, setProposedTime] = useState(
+    initialMinimumTime && originalTime < initialMinimumTime
+      ? initialMinimumTime
+      : originalTime,
   );
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setClockNow(new Date()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const minimumTime = proposedDate === localDateValue(clockNow)
+    ? nextLocalMinuteValue(clockNow)
+    : "";
+
+  useEffect(() => {
+    if (minimumTime && proposedTime < minimumTime) {
+      setProposedTime(minimumTime);
+    }
+  }, [minimumTime, proposedTime]);
+
+  const scheduledAt = proposedDate && proposedTime
+    ? `${proposedDate}T${proposedTime}`
+    : "";
+  const next = scheduledAt ? new Date(scheduledAt) : null;
+  const validDateTime = Boolean(
+    next && !Number.isNaN(next.getTime()) && next.getTime() > clockNow.getTime(),
+  );
+  const unchanged = Boolean(
+    next && next.getTime() === new Date(target.fixture.scheduledAt).getTime(),
+  );
+  const canSubmit = validDateTime && !unchanged && !busy;
+
+  const handleDateChange = (value: string) => {
+    setError(null);
+    setProposedDate(value);
+
+    const nextMinimum = value === localDateValue(clockNow)
+      ? nextLocalMinuteValue(clockNow)
+      : "";
+    if (nextMinimum && proposedTime < nextMinimum) {
+      setProposedTime(nextMinimum);
+    }
+  };
+
+  const handleTimeChange = (value: string) => {
+    setError(null);
+    setProposedTime(value);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    const next = new Date(scheduledAt);
-    if (!scheduledAt || Number.isNaN(next.getTime())) {
-      setError("Choose a valid date and time.");
+    if (!canSubmit || !next) return;
+
+    const submissionNow = new Date();
+    if (next.getTime() <= submissionNow.getTime()) {
+      setClockNow(submissionNow);
       return;
     }
-    if (next.getTime() <= Date.now()) {
-      setError("Choose a date and time in the future.");
-      return;
-    }
-    if (next.getTime() === new Date(target.fixture.scheduledAt).getTime()) {
-      setError("Choose a different date or time.");
-      return;
-    }
+
     try {
       await onSubmit({
         scheduledAt: next.toISOString(),
@@ -332,6 +544,13 @@ function RescheduleDialog({
       });
       onClose();
     } catch (caught) {
+      if (
+        caught instanceof ApiError &&
+        caught.message.toLowerCase().includes("future")
+      ) {
+        setClockNow(new Date());
+        return;
+      }
       setError(
         caught instanceof ApiError
           ? caught.message
@@ -354,17 +573,33 @@ function RescheduleDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-          <label className="grid gap-2 text-sm font-medium">
-            Proposed date and time
-            <input
-              type="datetime-local"
-              required
-              min={minimumRescheduleDateTime()}
-              value={scheduledAt}
-              onChange={(event) => setScheduledAt(event.target.value)}
-              className="h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium">
+              Proposed date
+              <input
+                type="date"
+                required
+                min={today}
+                value={proposedDate}
+                onChange={(event) => handleDateChange(event.target.value)}
+                className="h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+            <div className="grid gap-2 text-sm font-medium">
+              <span>Kickoff time</span>
+              <TimePickerPopover
+                value={proposedTime}
+                proposedDate={proposedDate}
+                now={clockNow}
+                onChange={handleTimeChange}
+              />
+            </div>
+          </div>
+          {unchanged && (
+            <p className="text-xs text-muted-foreground">
+              Choose a different date or kickoff time from the current fixture.
+            </p>
+          )}
           <label className="grid gap-2 text-sm font-medium">
             Note <span className="font-normal text-muted-foreground">(optional)</span>
             <Textarea
@@ -380,7 +615,7 @@ function RescheduleDialog({
             <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={!canSubmit}>
               {busy ? "Sending…" : "Propose new date"}
             </Button>
           </DialogFooter>
