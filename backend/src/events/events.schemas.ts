@@ -277,8 +277,10 @@ export const confirmLineupSchema = z
   .object({
     startingAthleteIds: z
       .array(z.uuid())
-      .length(11, 'A starting XI must contain exactly 11 athletes.')
-      .refine((ids) => new Set(ids).size === 11, {
+      .refine((ids) => [5, 7, 11].includes(ids.length), {
+        message: 'A starting lineup must contain exactly 5, 7 or 11 athletes.',
+      })
+      .refine((ids) => new Set(ids).size === ids.length, {
         message: 'Starting athletes must be unique.',
       }),
     formationId: z.string().min(1).max(100).optional(),

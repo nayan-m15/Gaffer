@@ -141,6 +141,9 @@ export interface StartMatchInput {
   isHome: boolean;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
+  formationId?: string;
+  pitchAssignments?: Record<string, string | null>;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   gamePlanId?: string;
   opponentSquadVisibility?: OpponentSquadVisibility;
   opponentSquad?: OpponentMatchPlayer[];

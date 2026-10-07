@@ -1329,6 +1329,16 @@ export default function ConfirmSquadPage() {
   const competitionPlayerCount = eventQuery.data?.competitionId
     ? (competitionQuery.data?.playersPerSide ?? null)
     : null;
+  const compatibleGamePlans = useMemo(
+    () =>
+      competitionPlayerCount
+        ? gamePlans.filter(
+            (plan) =>
+              getFormationPlayerCount(plan.formationId) === competitionPlayerCount,
+          )
+        : gamePlans,
+    [competitionPlayerCount, gamePlans],
+  );
   const selectedPlanSummary = useMemo(
     () =>
       selectedGamePlanId
@@ -1795,6 +1805,9 @@ export default function ConfirmSquadPage() {
                 ...(player.position ? { position: player.position } : {}),
               })),
             }),
+        formationId: previewFormationId,
+        pitchAssignments: previewAssignments,
+        customPositions: previewCustomPositions,
         ...(selectedGamePlanId
           ? { gamePlanId: selectedGamePlanId }
           : {}),
@@ -1827,7 +1840,7 @@ export default function ConfirmSquadPage() {
     eventQuery.isLoading ||
     athletesQuery.isLoading ||
     gamePlansQuery.isLoading ||
-    Boolean(eventQuery.data?.competitionFixtureId && competitionQuery.isLoading)
+    Boolean(eventQuery.data?.competitionId && competitionQuery.isLoading)
   ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1843,7 +1856,7 @@ export default function ConfirmSquadPage() {
     eventQuery.isError ||
     athletesQuery.isError ||
     gamePlansQuery.isError ||
-    (eventQuery.data?.competitionFixtureId && competitionQuery.isError)
+    (eventQuery.data?.competitionId && competitionQuery.isError)
   ) {
     const error =
       eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error ??
@@ -2071,7 +2084,7 @@ export default function ConfirmSquadPage() {
       </div>
 
       <SavedGamePlanSection
-        gamePlans={gamePlans}
+        gamePlans={compatibleGamePlans}
         selectedGamePlanId={selectedGamePlanId}
         loading={gamePlanQuery.isFetching}
         error={gamePlanQuery.isError

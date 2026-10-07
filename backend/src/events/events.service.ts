@@ -510,6 +510,36 @@ export class EventsService {
       );
     }
 
+    const formationPlayerCount = dto.formationId
+      ? getFormationPlayerCount(dto.formationId)
+      : null;
+    if (dto.formationId && !formationPlayerCount) {
+      throw new BadRequestException('Formation is not supported.');
+    }
+
+    const competition = event.competitionId
+      ? await this.requireTeamCompetition(team.id, event.competitionId)
+      : null;
+    const requiredStarterCount =
+      competition?.playersPerSide ??
+      formationPlayerCount ??
+      dto.startingAthleteIds.length;
+
+    if (
+      competition &&
+      formationPlayerCount &&
+      formationPlayerCount !== requiredStarterCount
+    ) {
+      throw new BadRequestException(
+        `This competition is ${requiredStarterCount}-a-side. Choose a compatible formation.`,
+      );
+    }
+    if (dto.startingAthleteIds.length !== requiredStarterCount) {
+      throw new BadRequestException(
+        `This match format requires exactly ${requiredStarterCount} starting athletes.`,
+      );
+    }
+
     await this.loadSelectableTeamAthletes(
       team.id,
       dto.startingAthleteIds,
@@ -993,24 +1023,32 @@ export class EventsService {
     if (gamePlan && !gamePlanPlayerCount) {
       throw new BadRequestException('Formation is not supported.');
     }
+    const submittedFormationPlayerCount = dto.formationId
+      ? getFormationPlayerCount(dto.formationId)
+      : null;
+    if (dto.formationId && !submittedFormationPlayerCount) {
+      throw new BadRequestException('Formation is not supported.');
+    }
 
     const competition = event.competitionId
       ? await this.requireTeamCompetition(team.id, event.competitionId)
       : null;
+    const selectedFormationPlayerCount =
+      gamePlanPlayerCount ?? submittedFormationPlayerCount;
     const requiredStarterCount =
       competition?.playersPerSide ??
-      gamePlanPlayerCount ??
+      selectedFormationPlayerCount ??
       getFormationPlayerCount(DEFAULT_FORMATION_ID);
     if (!requiredStarterCount) {
       throw new BadRequestException('Match format is not supported.');
     }
     if (
       competition &&
-      gamePlanPlayerCount &&
-      gamePlanPlayerCount !== requiredStarterCount
+      selectedFormationPlayerCount &&
+      selectedFormationPlayerCount !== requiredStarterCount
     ) {
       throw new BadRequestException(
-        `This competition is ${requiredStarterCount}-a-side. Choose a compatible game plan.`,
+        `This competition is ${requiredStarterCount}-a-side. Choose a compatible formation.`,
       );
     }
     if (dto.startingAthleteIds.length !== requiredStarterCount) {
@@ -1062,7 +1100,30 @@ export class EventsService {
             rightCornerTakerId: gamePlan.rightCornerTakerId,
             playerInstructions: gamePlan.playerInstructions,
           }
-        : null,
+        : dto.formationId
+          ? {
+              name: 'Matchday lineup',
+              formationId: dto.formationId,
+              assignments: dto.pitchAssignments ?? {},
+              customPositions: dto.customPositions ?? null,
+              substituteIds: dto.benchAthleteIds ?? [],
+              defensiveStyle: 'balanced' as const,
+              defensiveWidth: 5,
+              defensiveDepth: 5,
+              offensiveStyle: 'balanced' as const,
+              offensiveWidth: 5,
+              playersInBox: 4,
+              cornersCommitment: 3,
+              freeKicksCommitment: 3,
+              captainId: null,
+              freeKickTakerId: null,
+              longFreeKickTakerId: null,
+              penaltyTakerId: null,
+              cornerTakerId: null,
+              rightCornerTakerId: null,
+              playerInstructions: {},
+            }
+          : null,
       opponentSquadVisibility: dto.opponentSquadVisibility,
       teamColor,
       opponentColor: dto.opponentColor ?? null,
