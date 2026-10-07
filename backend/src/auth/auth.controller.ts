@@ -324,7 +324,7 @@ export class AuthController {
       await auth.api.changeEmail({
         body: {
           newEmail: dto.newEmail,
-          callbackURL: `${FRONTEND_URL}/login?emailChanged=1`,
+          callbackURL: `${FRONTEND_URL}/email-change/approved?email=${encodeURIComponent(dto.newEmail)}`,
         },
         headers: fromNodeHeaders(req.headers),
       });

@@ -20,6 +20,8 @@ const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'))
 const SignUpPage = lazy(() => import('@/pages/SignUpPage'))
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'))
+const EmailChangeApprovedPage = lazy(() => import('@/pages/EmailChangeApprovedPage'))
+const EmailChangeCompletePage = lazy(() => import('@/pages/EmailChangeCompletePage'))
 const ClaimPage = lazy(() => import('@/pages/ClaimPage'))
 const JoinCompetitionPage = lazy(() => import('@/pages/JoinCompetitionPage'))
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage'))
@@ -97,6 +99,8 @@ function App() {
       pathname === '/signup' ||
       pathname === '/forgot-password' ||
       pathname === '/reset-password' ||
+      pathname === '/email-change/approved' ||
+      pathname === '/email-change/complete' ||
       pathname === '/public-dashboard' ||
       pathname.startsWith('/claim/') ||
       pathname.startsWith('/join-team/') ||
@@ -144,6 +148,8 @@ function App() {
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/email-change/approved" element={<EmailChangeApprovedPage />} />
+        <Route path="/email-change/complete" element={<EmailChangeCompletePage />} />
         <Route path="/claim/:token" element={<ClaimPage />} />
         <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
         <Route path="/join-team/:token" element={<JoinTeamPage />} />
