@@ -553,7 +553,11 @@ describe('Shared competitions (e2e)', () => {
             lastName: 'Fixture Player',
           })),
         )
-        .returning({ id: athletes.id });
+        .returning({
+          id: athletes.id,
+          firstName: athletes.firstName,
+          lastName: athletes.lastName,
+        });
       const awayAthletes = await database
         .insert(athletes)
         .values(
@@ -778,7 +782,7 @@ describe('Shared competitions (e2e)', () => {
           clientRequestId: randomUUID(),
           team: 'opponent',
           eventType: 'goal',
-          opponentLabel: 'Home scorer',
+          opponentLabel: `${homeAthletes[0].firstName} ${homeAthletes[0].lastName}`,
           minute: 7,
           period: 'first_half',
           matchElapsedMs: 7 * 60_000,

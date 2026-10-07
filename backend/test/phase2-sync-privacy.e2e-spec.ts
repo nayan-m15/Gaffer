@@ -111,6 +111,7 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
           teamId: c.team.id,
           firstName: `${prefix}${i}`,
           lastName: 'Synthetic',
+          squadNumber: i + 1,
         })),
       )
       .returning({ id: s.athletes.id });
@@ -393,7 +394,8 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
         201,
       );
       // A separate internal opponent identity deliberately differs from the
-      // originating side's athlete ID. The matcher must use actual side/time.
+      // originating side's athlete ID. The matcher uses public shirt number,
+      // actual side and time to recognise the same scorer across sheets.
       const [opponent] = await db
         .select()
         .from(s.opponentMatchPlayers)

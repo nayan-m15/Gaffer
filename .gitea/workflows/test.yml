@@ -74,6 +74,9 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Run migration regression tests
+        run: npm run test:migrations
+
       # Every job that touches a database gets its own throwaway one, created
       # next to the TEST_DATABASE_URL database. Runs from different branches
       # and PRs used to share that one database and reset or migrate it under
