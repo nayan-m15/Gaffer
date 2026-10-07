@@ -27,7 +27,7 @@ import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
 import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
 import { getPositionGroup, type PositionGroup } from "@/components/roster/position";
-import { DepthCarousel } from "@/components/ui/DepthCarousel";
+import { FlexCarousel } from "@/components/ui/FlexCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
@@ -541,7 +541,15 @@ export default function PublicDashboard() {
 function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   return (
     <div className="mt-4 min-w-0">
-      <DepthCarousel
+      <FlexCarousel
+        preset="liquid"
+        intro="rise"
+        gap={12}
+        squeeze={0.2}
+        liquid={0.26}
+        focusOnClick
+        captions={false}
+        captureWheel={false}
         items={players.map((player) => ({
           id: player.id,
           label: `${player.firstName} ${player.lastName}`,
