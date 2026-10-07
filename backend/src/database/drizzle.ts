@@ -1,62 +1,84 @@
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 
 import './environment';
 import * as schema from './schema';
 
 /**
- * Resilient fetch wrapper with automatic retry and exponential backoff.
- * Handles transient network timeouts (UND_ERR_CONNECT_TIMEOUT, ConnectTimeoutError, etc.)
- * common on slow connections, mobile data, or when serverless instances cold-start.
+ * Whether a fetch failed while opening the connection, before any of the
+ * request was sent. undici reports these as "fetch failed" with the socket
+ * error as the cause; with happy-eyeballs (autoSelectFamily) that cause is an
+ * AggregateError holding one error per address tried.
  */
-async function resilientFetch(
+function failedBeforeRequestWasSent(cause: unknown): boolean {
+  if (cause instanceof AggregateError) {
+    return (
+      cause.errors.length > 0 && cause.errors.every(failedBeforeRequestWasSent)
+    );
+  }
+  if (typeof cause !== 'object' || cause === null) return false;
+  const { code, syscall } = cause as { code?: unknown; syscall?: unknown };
+  return (
+    code === 'UND_ERR_CONNECT_TIMEOUT' ||
+    syscall === 'connect' ||
+    syscall === 'getaddrinfo'
+  );
+}
+
+/**
+ * Fetch for Neon's HTTP driver that retries connection failures with
+ * exponential backoff. Slow or distant networks (mobile data, CI runners far
+ * from the database region) intermittently time out while connecting.
+ *
+ * Only failures to connect are retried: Neon's SQL requests are POSTs, and
+ * replaying one after an ambiguous failure (a reset or timeout once the
+ * request was sent) could apply a write twice. Callers retry idempotent
+ * operations explicitly.
+ */
+export async function resilientFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  // Retrying Neon's POST-based SQL requests after an ambiguous network failure
-  // can replay writes. Let callers retry idempotent operations explicitly.
-  const maxRetries = 1;
+  const maxAttempts = 4;
   const timeoutMs = 15000;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(input, {
+      return await fetch(input, {
         ...init,
         signal: init?.signal ?? controller.signal,
       });
-      clearTimeout(timer);
-      return response;
     } catch (err: unknown) {
-      clearTimeout(timer);
-      const isLastAttempt = attempt === maxRetries;
-      const isRetryable =
-        err instanceof Error &&
-        (err.name === 'AbortError' ||
-          err.name === 'TimeoutError' ||
-          err.message.includes('fetch failed') ||
-          err.message.includes('ConnectTimeoutError') ||
-          err.message.includes('UND_ERR_CONNECT_TIMEOUT') ||
-          err.message.includes('ECONNRESET') ||
-          err.message.includes('ETIMEDOUT'));
-
-      if (isLastAttempt || !isRetryable) {
+      const retryable =
+        err instanceof Error && failedBeforeRequestWasSent(err.cause);
+      if (attempt >= maxAttempts || !retryable) {
         throw err;
       }
 
       // Exponential backoff: 300ms, 600ms, 1200ms
-      const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300 * Math.pow(2, attempt - 1)),
+      );
+    } finally {
+      clearTimeout(timer);
     }
   }
-
-  throw new Error('Database request failed after retries.');
 }
 
 // Attach the resilient fetch handler to Neon serverless
 neonConfig.fetchFunction = resilientFetch;
+
+// Node tries each resolved address for only 250ms before moving to the next
+// (happy eyeballs). The database host resolves to several IPv4 and IPv6
+// addresses; where a TCP handshake takes longer than that (high-latency links,
+// busy CI runners) every IPv4 attempt is abandoned, the IPv6 ones fail on
+// hosts without IPv6, and the request fails as "fetch failed" with an
+// AggregateError of ETIMEDOUT/ENETUNREACH. Give each address time to answer.
+setDefaultAutoSelectFamilyAttemptTimeout(2500);
 
 /**
  * Helper to determine if an error is due to a database connection/timeout failure.
