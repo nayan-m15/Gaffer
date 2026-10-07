@@ -6,6 +6,15 @@ on:
   push:
     branches: [main, develop, development]
 
+env:
+  # Node gives each address a host resolves to only 250ms to connect before
+  # trying the next. Neon's hosts resolve to several IPv4 and IPv6 addresses;
+  # when a handshake to the EU region takes longer than that, every IPv4
+  # attempt is abandoned, IPv6 is unreachable on the runners, and database
+  # calls fail with "fetch failed" (ETIMEDOUT/ENETUNREACH). Applies to every
+  # Node process: migrations, Jest, the backend and Playwright.
+  NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
+
 jobs:
   quality-and-build:
     name: Code quality and build
@@ -65,10 +74,23 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      # Every job that touches a database gets its own throwaway one, created
+      # next to the TEST_DATABASE_URL database. Runs from different branches
+      # and PRs used to share that one database and reset or migrate it under
+      # each other mid-run (backend/scripts/ci-test-database.mjs).
+      - name: Provision isolated test database
+        run: node backend/scripts/ci-test-database.mjs create api
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
       - name: Run integration tests
         run: npm run test:integration
+
+      - name: Drop isolated test database
+        if: always()
+        run: node backend/scripts/ci-test-database.mjs drop
         env:
-          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
 
   sonarqube:
     name: SonarQube analysis
@@ -148,8 +170,6 @@ jobs:
     timeout-minutes: 50
     env:
       CI: "true"
-      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100
@@ -174,8 +194,14 @@ jobs:
           npm --prefix frontend ci
           npm --prefix backend ci
 
+      # A private database per shard; see the api-tests job.
+      - name: Provision isolated test database
+        run: node backend/scripts/ci-test-database.mjs create ui_1
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
       - name: Migrate the test database
-        run: npm --prefix backend run db:migrate
+        run: npm --prefix backend run db:migrate:test
 
       - name: Build application for browser tests
         id: browser-build
@@ -190,6 +216,12 @@ jobs:
       - name: Run production PWA tests
         if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: npm run test:e2e:pwa
+
+      - name: Drop isolated test database
+        if: always()
+        run: node backend/scripts/ci-test-database.mjs drop
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
 
       - name: Upload Playwright failure artifacts
         if: failure()
@@ -209,8 +241,6 @@ jobs:
     timeout-minutes: 50
     env:
       CI: "true"
-      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100
@@ -235,8 +265,14 @@ jobs:
           npm --prefix frontend ci
           npm --prefix backend ci
 
+      # A private database per shard; see the api-tests job.
+      - name: Provision isolated test database
+        run: node backend/scripts/ci-test-database.mjs create ui_2
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
       - name: Migrate the test database
-        run: npm --prefix backend run db:migrate
+        run: npm --prefix backend run db:migrate:test
 
       - name: Build application for browser tests
         run: npm run build
@@ -246,6 +282,12 @@ jobs:
 
       - name: Run browser tests
         run: npm run test:e2e:ui -- --shard=2/2
+
+      - name: Drop isolated test database
+        if: always()
+        run: node backend/scripts/ci-test-database.mjs drop
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
 
       - name: Upload Playwright failure artifacts
         if: failure()
