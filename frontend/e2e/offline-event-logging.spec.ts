@@ -211,7 +211,7 @@ test("all live event workflows remain usable and visible offline", async ({
   await page.getByRole("button", { name: /13.*Player13/i }).click();
   await expect(page.getByText(/12' Injury/i)).toBeVisible();
 
-  await expect(page.getByText("9 waiting", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: /^9 waiting/ })).toBeVisible();
 });
 
 test("generic opponent events do not request unavailable players", async ({
@@ -246,7 +246,7 @@ test("generic opponent events do not request unavailable players", async ({
   await openOpponentEvent();
   await page.getByRole("button", { name: "Injury" }).click();
   await expect(page.locator('[data-callout="mandatory-sub"]')).toHaveCount(0);
-  await expect(page.getByText("3 waiting", { exact: true })).toBeVisible(UI_WAIT);
+  await expect(page.getByRole("status", { name: /^3 waiting/ })).toBeVisible(UI_WAIT);
 });
 
 test("storage exhaustion fails visibly without claiming an event was saved", async ({
@@ -268,6 +268,58 @@ test("storage exhaustion fails visibly without claiming an event was saved", asy
   await expect(page.getByText(/Goal saved on this device/i)).toHaveCount(0);
 });
 
+test("goal and assist acknowledge locally before a slow upload settles", async ({ page }) => {
+  await mockLiveMatch(page);
+  let release!: () => void;
+  const heldUpload = new Promise<void>(resolve => { release = resolve; });
+  const uploaded: string[] = [];
+  await page.route("**/api/sync/upload", async route => {
+    const body = route.request().postDataJSON() as {
+      items: Array<{ payload: { clientRequestId: string; eventType: string } }>;
+    };
+    uploaded.push(...body.items.map(item => item.payload.eventType));
+    await heldUpload;
+    return json(route, { receipts: body.items.map(item => ({
+      id: item.payload.clientRequestId, outcome: "accepted",
+    })) });
+  });
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.locator('[data-callout="assist-pick"]')).toBeVisible();
+  await player(page, 10).click();
+  await expect(page.getByText(/Assist saved on this device/i)).toBeVisible();
+  await expect.poll(() => uploaded).toEqual(["goal"]);
+  release();
+  await expect.poll(() => uploaded).toEqual(["goal", "assist"]);
+  await expect(page.getByRole("status", { name: /^2 accepted/ })).toBeVisible();
+});
+
+test("an offline goal uploads automatically after reconnecting", async ({ page, context }) => {
+  await mockLiveMatch(page);
+  let accepted = 0;
+  await page.route("**/api/sync/upload", route => {
+    const body = route.request().postDataJSON() as {
+      items: Array<{ payload: { clientRequestId: string } }>;
+    };
+    accepted += body.items.length;
+    return json(route, { receipts: body.items.map(item => ({
+      id: item.payload.clientRequestId, outcome: "accepted",
+    })) });
+  });
+  await page.goto(`/matches/${MATCH_ID}/live`);
+  await page.getByRole("button", { name: "RESUME Match paused" }).click();
+  await context.setOffline(true);
+  await openEventPicker(page, 9);
+  await page.getByRole("button", { name: "Goal" }).click();
+  await expect(page.getByRole("status", { name: /^1 waiting/ })).toBeVisible();
+  expect(accepted).toBe(0);
+  await context.setOffline(false);
+  await expect.poll(() => accepted).toBe(1);
+  await expect(page.getByRole("status", { name: /^1 accepted/ })).toBeVisible();
+});
+
 test("expired sessions retain queued work for a later retry", async ({
   page,
 }) => {
@@ -280,7 +332,7 @@ test("expired sessions retain queued work for a later retry", async ({
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
   await expect(page.getByText(/Goal saved on this device/i)).toBeVisible();
-  await expect(page.getByText("1 waiting", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: /^1 waiting/ })).toBeVisible();
 });
 
 test("membership revocation quarantines work instead of deleting it", async ({
@@ -307,7 +359,7 @@ test("membership revocation quarantines work instead of deleting it", async ({
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Goal" }).click();
   await expect(
-    page.getByText("1 access blocked", { exact: true }),
+    page.getByRole("status", { name: /^1 access blocked/ }),
   ).toBeVisible();
   await expect(page.getByText(/retained on this device/i)).toBeVisible();
 });
@@ -336,7 +388,7 @@ test("two tabs observe the same durable pending queue", async ({
   // The writer may still be attempting a sync started just before the
   // browser went offline; both labels confirm the same queued item exists.
   await expect(
-    page.getByRole("status", { name: /^(?:Syncing 1|1 waiting)/ }),
+    page.getByRole("status", { name: /^(?:Uploading 1|1 waiting)/ }),
   ).toBeVisible(UI_WAIT);
   await expect(
     second.getByRole("status", { name: /^1 waiting/ }),

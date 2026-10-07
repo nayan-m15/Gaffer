@@ -1,19 +1,32 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import {
+  resolveMatchSessionIdentity,
+  assertMatchSessionIdentity,
+  sharedMatchConflict,
+} from '../matches/match-session-integrity';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import { and, asc, eq, gte, or, sql } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
 import { DatabaseService } from '../database/database.service';
+import {
+  ensureCompetitionFixtureSession,
+  twoSidedLiveLoggingEnabled,
+} from '../matches/match-sessions';
 import {
   competitionFixtures,
   competitionMatches,
   competitions,
   competitionTeams,
   events,
-  matchEvents,
   matchProjectionState,
+  matchEvents,
+  matchSessionParticipants,
+  matchSessions,
   matches,
   standings,
 } from '../database/schema';
 import { planFixtures } from './competition-fixtures';
+import { fixtureResultSourceMatches } from '../matches/session-finalisation';
+import { sessionHasTimedOutConfirmation } from '../matches/session-finalisation';
 
 export interface FixtureResultInput {
   homeCompetitionTeamId: string;
@@ -22,10 +35,140 @@ export interface FixtureResultInput {
   awayScore: number;
 }
 
+/** Finalise one-confirmation sessions lazily when a report or standings view is read. */
+export async function finaliseTimedOutSession(
+  databaseService: DatabaseService,
+  sessionId: string,
+  now = new Date(),
+): Promise<boolean> {
+  if (!twoSidedLiveLoggingEnabled()) return false;
+  const [session] = await databaseService.database
+    .select()
+    .from(matchSessions)
+    .where(eq(matchSessions.id, sessionId))
+    .limit(1);
+  if (!session || !sessionHasTimedOutConfirmation(session, now)) return false;
+  const [row] = await databaseService.database
+    .select({ match: matches, event: events, projection: matchProjectionState })
+    .from(matches)
+    .innerJoin(events, eq(events.id, matches.eventId))
+    .innerJoin(
+      matchProjectionState,
+      eq(matchProjectionState.matchId, matches.id),
+    )
+    .where(eq(matches.sharedMatchId, sessionId))
+    .limit(1);
+  if (row) {
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(databaseService, row.event, row.match),
+    );
+    const blocked = await databaseService.database.execute<{
+      blocked: boolean;
+    }>(
+      sql`select exists(select 1 from match_event_reviews where session_id = ${sessionId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
+    );
+    if (blocked.rows[0]?.blocked) return false;
+  }
+  const actorId =
+    session.homeConfirmedByUserId ?? session.awayConfirmedByUserId;
+  if (
+    !row ||
+    row.event.status !== 'completed' ||
+    row.projection.unresolvedReviewCount > 0 ||
+    !actorId
+  )
+    return false;
+  const finalised = await databaseService.database.execute<{
+    accepted: boolean;
+  }>(sql`
+    select finalise_match_projection(${row.match.id}::uuid, ${row.projection.revision}::integer, ${actorId}::text) as accepted`);
+  if (!finalised.rows[0]?.accepted) return false;
+  await databaseService.database
+    .update(matchSessions)
+    .set({ finalisedAt: now, finalisedByUserId: actorId, updatedAt: now })
+    .where(
+      and(
+        eq(matchSessions.id, sessionId),
+        sql`${matchSessions.finalisedAt} is null`,
+      ),
+    );
+
+  const [fixture] = await databaseService.database
+    .select()
+    .from(competitionFixtures)
+    .where(eq(competitionFixtures.sharedSessionId, sessionId))
+    .limit(1);
+  if (
+    fixture?.competitionId &&
+    fixture.homeCompetitionTeamId &&
+    fixture.awayCompetitionTeamId
+  ) {
+    const [participant] = await databaseService.database
+      .select({ side: matchSessionParticipants.side })
+      .from(matchSessionParticipants)
+      .where(
+        and(
+          eq(matchSessionParticipants.sessionId, sessionId),
+          eq(matchSessionParticipants.teamId, row.event.teamId),
+        ),
+      )
+      .limit(1);
+    if (!participant) return false;
+    const [score] = await databaseService.database
+      .select({
+        homeScore: sql<number>`count(*) filter (where ${matchEvents.side} = 'home')::int`,
+        awayScore: sql<number>`count(*) filter (where ${matchEvents.side} = 'away')::int`,
+      })
+      .from(matchEvents)
+      .where(
+        and(
+          eq(matchEvents.sessionId, sessionId),
+          eq(matchEvents.eventType, 'goal'),
+          sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+        ),
+      );
+    await syncFixtureResult(
+      databaseService,
+      fixture.competitionId,
+      { kind: 'live', id: row.match.id, sessionId },
+      {
+        homeCompetitionTeamId: fixture.homeCompetitionTeamId,
+        awayCompetitionTeamId: fixture.awayCompetitionTeamId,
+        homeScore: score.homeScore,
+        awayScore: score.awayScore,
+      },
+    );
+  }
+  return true;
+}
+
+export async function finaliseTimedOutCompetitionSessions(
+  databaseService: DatabaseService,
+  competitionId: string,
+  now = new Date(),
+) {
+  if (!twoSidedLiveLoggingEnabled()) return;
+  const rows = await databaseService.database
+    .select({ sessionId: competitionFixtures.sharedSessionId })
+    .from(competitionFixtures)
+    .where(
+      and(
+        eq(competitionFixtures.competitionId, competitionId),
+        sql`${competitionFixtures.sharedSessionId} is not null`,
+      ),
+    );
+  for (const row of rows) {
+    if (row.sessionId)
+      await finaliseTimedOutSession(databaseService, row.sessionId, now);
+  }
+}
+
 type ResultSource =
-  { kind: 'manual'; id: string } | { kind: 'live'; id: string };
+  | { kind: 'manual'; id: string }
+  | { kind: 'live'; id: string; sessionId?: string };
 
 type FixtureRow = typeof competitionFixtures.$inferSelect;
+const logger = new Logger('CompetitionFixtureResults');
 
 function hasActivity(fixture: FixtureRow) {
   return (
@@ -41,7 +184,7 @@ function hasActivity(fixture: FixtureRow) {
 function sourceMatches(fixture: FixtureRow, source: ResultSource) {
   return source.kind === 'manual'
     ? fixture.legacyResultId === source.id
-    : fixture.linkedMatchId === source.id;
+    : fixtureResultSourceMatches(fixture, source);
 }
 
 function sourcePatch(source: ResultSource) {
@@ -160,6 +303,14 @@ export async function validateFixtureResult(
     );
   }
 
+  if (fixture.sharedSessionId && (source.kind !== 'live' || !source.sessionId))
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+  if (
+    fixture.sharedSessionId &&
+    source.kind === 'live' &&
+    source.sessionId !== fixture.sharedSessionId
+  )
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
   if (hasActivity(fixture) && !sourceMatches(fixture, source)) {
     throw new ConflictException('This fixture already has a recorded result.');
   }
@@ -194,7 +345,7 @@ function seedOrder(size: number) {
   return seeds;
 }
 
-async function ensureHybridKnockoutStage(
+export async function ensureHybridKnockoutStage(
   databaseService: DatabaseService,
   competitionId: string,
 ) {
@@ -256,70 +407,65 @@ async function ensureHybridKnockoutStage(
       .where(eq(competitionMatches.competitionId, competitionId)),
     databaseService.database
       .select({
-        ownCompetitionTeamId: competitionTeams.id,
-        opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
-        isHome: matches.isHome,
-        teamScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-          case when ${matches.isHome} then ${competitionFixtures.homeScore} else ${competitionFixtures.awayScore} end
-          else count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
-        opponentScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-          case when ${matches.isHome} then ${competitionFixtures.awayScore} else ${competitionFixtures.homeScore} end
-          else count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
+        fixtureId: competitionFixtures.id,
+        homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+        awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
+        homeScore: competitionFixtures.homeScore,
+        awayScore: competitionFixtures.awayScore,
       })
       .from(matches)
       .innerJoin(events, eq(matches.eventId, events.id))
-      .innerJoin(
-        competitionTeams,
-        and(
-          eq(competitionTeams.competitionId, matches.competitionId),
-          eq(competitionTeams.teamId, events.teamId),
-        ),
-      )
-      .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
-      .leftJoin(
-        matchProjectionState,
-        eq(matchProjectionState.matchId, matches.id),
-      )
       .leftJoin(
         competitionFixtures,
-        eq(competitionFixtures.linkedMatchId, matches.id),
+        or(
+          eq(competitionFixtures.linkedMatchId, matches.id),
+          and(
+            sql`${matches.sharedMatchId} is not null`,
+            eq(competitionFixtures.sharedSessionId, matches.sharedMatchId),
+          ),
+        ),
       )
       .where(
         and(
           eq(matches.competitionId, competitionId),
           eq(events.status, 'completed'),
           gte(matches.createdAt, competition.resultTrackingStartedAt),
-          sql`${matches.opponentCompetitionTeamId} is not null`,
-          sql`(${matchProjectionState.matchId} is null
-            or ${matchProjectionState.finalisationState} = 'finalised'
-            or ${competitionFixtures.status} = 'completed')`,
+          sql`${competitionFixtures.id} is not null`,
+          eq(competitionFixtures.status, 'completed'),
         ),
       )
       .groupBy(
         matches.id,
-        competitionTeams.id,
-        matchProjectionState.finalisationState,
+        competitionFixtures.id,
+        competitionFixtures.homeCompetitionTeamId,
+        competitionFixtures.awayCompetitionTeamId,
         competitionFixtures.homeScore,
         competitionFixtures.awayScore,
-        competitionFixtures.status,
       ),
   ]);
 
-  const liveResults = liveRows
-    .filter(
-      (row): row is typeof row & { opponentCompetitionTeamId: string } =>
-        row.opponentCompetitionTeamId !== null,
-    )
-    .map((row) => ({
-      homeCompetitionTeamId: row.isHome
-        ? row.ownCompetitionTeamId
-        : row.opponentCompetitionTeamId,
-      awayCompetitionTeamId: row.isHome
-        ? row.opponentCompetitionTeamId
-        : row.ownCompetitionTeamId,
-      homeScore: row.isHome ? row.teamScore : row.opponentScore,
-      awayScore: row.isHome ? row.opponentScore : row.teamScore,
-    }));
+  const liveByFixture = new Map<string, (typeof liveRows)[number]>();
+  for (const row of liveRows) {
+    if (row.fixtureId && !liveByFixture.has(row.fixtureId)) {
+      liveByFixture.set(row.fixtureId, row);
+    }
+  }
+  const liveResults = [...liveByFixture.values()].flatMap((row) =>
+    row.fixtureId &&
+    row.homeCompetitionTeamId &&
+    row.awayCompetitionTeamId &&
+    row.homeScore !== null &&
+    row.awayScore !== null
+      ? [
+          {
+            homeCompetitionTeamId: row.homeCompetitionTeamId,
+            awayCompetitionTeamId: row.awayCompetitionTeamId,
+            homeScore: row.homeScore,
+            awayScore: row.awayScore,
+          },
+        ]
+      : [],
+  );
 
   const table = calculateCompetitionStandings(
     competitionId,
@@ -370,7 +516,7 @@ async function ensureHybridKnockoutStage(
   );
 
   if (!plan.length) return;
-  await databaseService.database
+  const inserted = await databaseService.database
     .insert(competitionFixtures)
     .values(
       plan.map((fixture) => ({
@@ -379,7 +525,13 @@ async function ensureHybridKnockoutStage(
         competitionId,
       })),
     )
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: competitionFixtures.id });
+  if (twoSidedLiveLoggingEnabled()) {
+    for (const fixture of inserted) {
+      await ensureCompetitionFixtureSession(databaseService, fixture.id);
+    }
+  }
 }
 
 export async function syncFixtureResult(
@@ -395,6 +547,58 @@ export async function syncFixtureResult(
     input,
   );
   if (!fixture) return;
+  if (fixture.sharedSessionId) {
+    if (source.kind !== 'live' || !source.sessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+    if (source.sessionId !== fixture.sharedSessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    const [row] = await databaseService.database
+      .select({ match: matches, event: events })
+      .from(matches)
+      .innerJoin(events, eq(events.id, matches.eventId))
+      .where(eq(matches.id, source.id))
+      .limit(1);
+    if (!row || row.event.competitionFixtureId !== fixture.id)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    if (!row.match.sharedMatchId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
+    if (row.match.sharedMatchId !== source.sessionId)
+      throw sharedMatchConflict('SHARED_MATCH_SESSION_CONFLICT');
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(databaseService, row.event, row.match, {
+        ignoreFeatureFlag: true,
+      }),
+    );
+    const [session] = await databaseService.database
+      .select()
+      .from(matchSessions)
+      .where(eq(matchSessions.id, source.sessionId))
+      .limit(1);
+    const confirmed = session?.homeConfirmedAt && session?.awayConfirmedAt;
+    const reviews = await databaseService.database.execute<{
+      blocked: boolean;
+    }>(
+      sql`select exists(select 1 from match_event_reviews where session_id = ${source.sessionId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
+    );
+    if (
+      !session?.finalisedAt ||
+      !confirmed ||
+      reviews.rows[0]?.blocked ||
+      row.event.status !== 'completed'
+    )
+      throw sharedMatchConflict('SHARED_MATCH_RESULT_NOT_FINALISED');
+  }
+  if (
+    source.kind === 'live' &&
+    source.sessionId &&
+    fixture.status === 'completed' &&
+    (fixture.homeScore !== input.homeScore ||
+      fixture.awayScore !== input.awayScore)
+  ) {
+    logger.error(
+      `Fixture/session result disagreement: fixture=${fixture.id} session=${source.sessionId} fixtureScore=${fixture.homeScore}-${fixture.awayScore} sessionScore=${input.homeScore}-${input.awayScore}`,
+    );
+  }
 
   const winner =
     input.homeScore === input.awayScore
@@ -440,6 +644,8 @@ export async function resetManualFixtureResult(
   const fixtures = await listFixtureRows(databaseService, competitionId);
   const fixture = fixtures.find((row) => row.legacyResultId === resultId);
   if (!fixture) return;
+  if (fixture.sharedSessionId)
+    throw sharedMatchConflict('SHARED_MATCH_SESSION_REQUIRED');
 
   await assertCanChangeFixtureResult(
     databaseService,

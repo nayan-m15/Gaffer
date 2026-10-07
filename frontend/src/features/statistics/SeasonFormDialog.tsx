@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SeasonFormValues } from "@/features/statistics/types";
@@ -41,9 +41,13 @@ export function SeasonFormDialog({
   const title = isEditing ? "Edit Season" : "Add Season";
 
   const [values, setValues] = useState<SeasonFormValues>(DEFAULT_VALUES);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) { initialized.current = false; return; }
+    // Background data updates must not overwrite a draft in an open form.
+    if (initialized.current) return;
+    initialized.current = true;
     setValues(initialValues ?? defaultValues ?? DEFAULT_VALUES);
   }, [defaultValues, initialValues, isOpen]);
 

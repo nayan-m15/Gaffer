@@ -14,6 +14,7 @@ import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TeamsService } from '../teams/teams.service';
 import { MatchesService } from '../matches/matches.service';
+import { twoSidedLiveLoggingEnabled } from '../matches/match-sessions';
 import { DatabaseService } from '../database/database.service';
 import {
   matchEventOperations,
@@ -64,6 +65,8 @@ export class SyncController {
         exp: expiresAt,
         team_id: team?.id ?? null,
         team_role: team?.role ?? null,
+        user_id: user.id,
+        two_sided_live_logging: twoSidedLiveLoggingEnabled() ? 'true' : 'false',
       }),
     ).toString('base64url');
     const unsigned = `${header}.${payload}`;
@@ -253,6 +256,9 @@ export class SyncController {
       if (!(error instanceof HttpException) || error.getStatus() >= 500) {
         throw error;
       }
+      this.logger.warn(
+        `Offline upload rejected: item=${id} status=${error.getStatus()}`,
+      );
       return this.recordRejectedUpload(
         userId,
         item,
@@ -298,7 +304,7 @@ export class SyncController {
       userId,
       item.matchId,
       item.reviewId,
-      { resolution: item.resolution },
+      { resolution: item.resolution, explanation: item.explanation },
       item.id,
       item.causalParentIds,
     );
@@ -365,10 +371,23 @@ export class SyncController {
     error: HttpException,
     startedAt: number,
   ) {
+    const response = error.getResponse();
+    const code =
+      typeof response === 'object' && response !== null && 'code' in response
+        ? String(response.code)
+        : null;
     const safeErrorCode =
-      error instanceof ForbiddenException
-        ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
-        : 'INVALID_OR_UNAUTHORISED';
+      code &&
+      [
+        'SHARED_MATCH_SESSION_REQUIRED',
+        'SHARED_MATCH_SESSION_CONFLICT',
+        'SHARED_MATCH_RECONCILIATION_REQUIRED',
+        'SHARED_MATCH_RESULT_NOT_FINALISED',
+      ].includes(code)
+        ? code
+        : error instanceof ForbiddenException
+          ? 'MEMBERSHIP_REVOKED_OR_FORBIDDEN'
+          : 'INVALID_OR_UNAUTHORISED';
     const fallback = { id, outcome: 'rejected', safeErrorCode };
     try {
       const [committed] = await this.databaseService.database
