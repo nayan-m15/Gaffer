@@ -379,6 +379,13 @@
       "when": 1791100110000,
       "tag": "0048_game_plan_player_instructions",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791100210000,
+      "tag": "0049_auth_rate_limits",
+      "breakpoints": true
     }
   ]
 }

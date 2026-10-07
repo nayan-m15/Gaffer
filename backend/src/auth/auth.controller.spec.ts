@@ -40,9 +40,11 @@ jest.mock('better-auth/node', () => ({
 }));
 
 import { APIError } from 'better-auth/api';
-import type { Response } from 'express';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthController } from './auth.controller';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import { AthletesService } from '../athletes/athletes.service';
 import { TeamsService } from '../teams/teams.service';
@@ -51,6 +53,15 @@ const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
 const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
+
+// Stand-in for the Express request the limiter keys on. Unit tests only
+// exercise the wiring (which policy, which identity) —
+// `resolveRateLimitIdentity` itself has its own dedicated spec.
+const makeReq = (headers: Record<string, string> = {}): Request =>
+  ({
+    headers,
+    socket: { remoteAddress: '203.0.113.7' },
+  }) as unknown as Request;
 
 // Mirrors the controller's own fallback so expectations track whatever the
 // environment actually resolved FRONTEND_URL to.
@@ -96,9 +107,13 @@ describe('AuthController', () => {
     getHeader: jest.fn((name: string) => responseHeaders.get(name)),
   } as unknown as Response;
 
+  const enforceRateLimit = jest.fn();
+
   beforeEach(async () => {
     jest.clearAllMocks();
     responseHeaders = new Map<string, string | string[]>();
+    enforceRateLimit.mockReset();
+    enforceRateLimit.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -106,6 +121,10 @@ describe('AuthController', () => {
         { provide: TeamsService, useValue: {} },
         { provide: AuthService, useValue: {} },
         { provide: AthletesService, useValue: {} },
+        {
+          provide: AuthRateLimitService,
+          useValue: { enforce: enforceRateLimit },
+        },
       ],
     }).compile();
 
@@ -117,6 +136,74 @@ describe('AuthController', () => {
   });
 
   describe('signUp', () => {
+    it('enforces the email rate limit policy against the request identity before anything else', async () => {
+      signUpEmail.mockResolvedValue(signUpResponse(false));
+      const req = makeReq({ 'x-forwarded-for': '198.51.100.9' });
+
+      await controller.signUp(
+        {
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          password: 'password123',
+        },
+        req,
+        res,
+      );
+
+      // No x-vercel-forwarded-for: the single unforgeable bucket keyed on the
+      // edge-observed IP (rightmost XFF entry here) is the whole identity.
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '198.51.100.9',
+      });
+    });
+
+    it('passes the two-tier Vercel-path identity through to the limiter', async () => {
+      signUpEmail.mockResolvedValue(signUpResponse(false));
+      const req = makeReq({
+        'x-vercel-forwarded-for': '203.0.113.10',
+        'cf-connecting-ip': '198.51.100.50',
+      });
+
+      await controller.signUp(
+        {
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          password: 'password123',
+        },
+        req,
+        res,
+      );
+
+      // Per-user bucket keyed on what Vercel reported, backstop bucket keyed
+      // on the edge-observed IP — the controller must forward both tiers.
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '203.0.113.10',
+        edgeIp: '198.51.100.50',
+      });
+    });
+
+    it('surfaces the limiter 429 without touching Better Auth', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.signUp(
+          {
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+            password: 'password123',
+          },
+          makeReq(),
+          res,
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(signUpEmail).not.toHaveBeenCalled();
+    });
+
     it('sends the standard verified-login callbackURL and reports the verification requirement', async () => {
       signUpEmail.mockResolvedValue(signUpResponse(false));
 
@@ -126,6 +213,7 @@ describe('AuthController', () => {
           email: 'ada@example.com',
           password: 'password123',
         },
+        makeReq(),
         res,
       );
 
@@ -154,6 +242,7 @@ describe('AuthController', () => {
           password: 'password123',
           inviteToken: INVITE_TOKEN,
         },
+        makeReq(),
         res,
       );
 
@@ -178,6 +267,7 @@ describe('AuthController', () => {
           inviteToken: INVITE_TOKEN,
           inviteKind: 'competition',
         },
+        makeReq(),
         res,
       );
       expect(signUpEmail).toHaveBeenCalledWith(
@@ -199,6 +289,7 @@ describe('AuthController', () => {
             inviteToken: INVITE_TOKEN,
             inviteKind: 'other',
           },
+          makeReq(),
           res,
         ),
       ).rejects.toThrow();
@@ -214,6 +305,7 @@ describe('AuthController', () => {
             password: 'password123',
             inviteToken: 'not-a-token',
           },
+          makeReq(),
           res,
         ),
       ).rejects.toThrow('This invite link is no longer valid.');
@@ -242,11 +334,49 @@ describe('AuthController', () => {
     const finalSetCookie = (): string | string[] | undefined =>
       responseHeaders.get('Set-Cookie');
 
+    it('enforces the password rate limit policy against the request IP before anything else', async () => {
+      signInEmail.mockResolvedValue(
+        signInResponse([
+          'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+        ]),
+      );
+
+      await controller.signIn(
+        { email: 'ada@example.com', password: 'password123' },
+        makeReq({ 'x-forwarded-for': '198.51.100.9' }),
+        res,
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('password', {
+        primaryIp: '198.51.100.9',
+      });
+      expect(signInEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces the limiter 429 without attempting authentication', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.signIn(
+          { email: 'ada@example.com', password: 'password123' },
+          makeReq(),
+          res,
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(signInEmail).not.toHaveBeenCalled();
+    });
+
     it('honours rememberMe: true and expires any stale dont_remember flag', async () => {
       signInEmail.mockResolvedValue(signInResponse([sessionCookie]));
 
       const result = await controller.signIn(
         { email: 'ada@example.com', password: 'password123', rememberMe: true },
+        makeReq(),
         res,
       );
 
@@ -281,6 +411,7 @@ describe('AuthController', () => {
           password: 'password123',
           rememberMe: false,
         },
+        makeReq(),
         res,
       );
 
@@ -310,6 +441,7 @@ describe('AuthController', () => {
 
       await controller.signIn(
         { email: 'ada@example.com', password: 'password123' },
+        makeReq(),
         res,
       );
 
@@ -329,10 +461,46 @@ describe('AuthController', () => {
   });
 
   describe('sendVerificationEmail', () => {
-    it('sends the standard verified-login callbackURL', async () => {
-      const result = await controller.sendVerificationEmail({
-        email: 'ada@example.com',
+    it('enforces the email rate limit policy against the request identity before anything else', async () => {
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq({ 'x-forwarded-for': '198.51.100.9' }),
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '198.51.100.9',
       });
+      expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces the limiter 429 without triggering a send', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+          },
+          makeReq(),
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(sendVerificationEmail).not.toHaveBeenCalled();
+    });
+
+    it('sends the standard verified-login callbackURL', async () => {
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq(),
+      );
 
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
@@ -344,11 +512,14 @@ describe('AuthController', () => {
     });
 
     it('routes competition verification resends back to the competition invite', async () => {
-      await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-        inviteToken: INVITE_TOKEN,
-        inviteKind: 'competition',
-      });
+      await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+          inviteToken: INVITE_TOKEN,
+          inviteKind: 'competition',
+        },
+        makeReq(),
+      );
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
           email: 'ada@example.com',
@@ -358,10 +529,13 @@ describe('AuthController', () => {
     });
 
     it('routes the resend back to the pending team invite', async () => {
-      await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-        inviteToken: INVITE_TOKEN,
-      });
+      await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+          inviteToken: INVITE_TOKEN,
+        },
+        makeReq(),
+      );
 
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
@@ -373,10 +547,13 @@ describe('AuthController', () => {
 
     it('rejects a malformed invite token', async () => {
       await expect(
-        controller.sendVerificationEmail({
-          email: 'ada@example.com',
-          inviteToken: 'not-a-token',
-        }),
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+            inviteToken: 'not-a-token',
+          },
+          makeReq(),
+        ),
       ).rejects.toThrow('This invite link is no longer valid.');
       expect(sendVerificationEmail).not.toHaveBeenCalled();
     });
@@ -386,9 +563,12 @@ describe('AuthController', () => {
         new APIError('USER_NOT_FOUND', { message: 'User not found.' }),
       );
 
-      const result = await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-      });
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq(),
+      );
 
       expect(result).toEqual({ status: true });
     });
@@ -399,9 +579,12 @@ describe('AuthController', () => {
       );
 
       await expect(
-        controller.sendVerificationEmail({
-          email: 'ada@example.com',
-        }),
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+          },
+          makeReq(),
+        ),
       ).rejects.toThrow('Too many requests.');
     });
   });

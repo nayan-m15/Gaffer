@@ -15,6 +15,10 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
+import {
+  AuthRateLimitService,
+  resolveRateLimitIdentity,
+} from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import {
   resendVerificationEmailSchema,
@@ -145,13 +149,24 @@ export class AuthController {
     private readonly teamsService: TeamsService,
     private readonly authService: AuthService,
     private readonly athletesService: AthletesService,
+    private readonly rateLimiter: AuthRateLimitService,
   ) {}
 
   @Post('sign-up')
   async signUp(
     @Body() body: unknown,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Sign-up spends a verification email (and a user row), not a credential
+    // attempt, so it draws from the email policy alongside the resend route.
+    // The identity carries both tiers: the per-user IP Vercel reports and the
+    // edge-observed IP the backstop is keyed on.
+    await this.rateLimiter.enforce(
+      'email',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(signUpSchema, body);
 
     // Only the Better Auth call is wrapped: an error here really is an auth
@@ -182,7 +197,12 @@ export class AuthController {
   }
 
   @Post('send-verification-email')
-  async sendVerificationEmail(@Body() body: unknown) {
+  async sendVerificationEmail(@Body() body: unknown, @Req() req: Request) {
+    await this.rateLimiter.enforce(
+      'email',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(resendVerificationEmailSchema, body);
 
     try {
@@ -216,8 +236,14 @@ export class AuthController {
   @Post('sign-in')
   async signIn(
     @Body() body: unknown,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    await this.rateLimiter.enforce(
+      'password',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(signInSchema, body);
 
     try {
