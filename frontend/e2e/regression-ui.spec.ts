@@ -849,10 +849,13 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
     },
   );
 
+  // A cold load of the report can take ~20s on a shared CI runner; allow for
+  // it on the first load and again after the reload.
+  const pageLoad = { timeout: process.env.CI ? 30_000 : 10_000 };
   await page.goto(`/matches/${MATCH_ID}/report`);
   await expect(
     page.getByRole("heading", { name: "Match Events" }),
-  ).toBeVisible({ timeout: process.env.CI ? 30_000 : 10_000 });
+  ).toBeVisible(pageLoad);
   await page.getByRole("button", { name: /10' Goal/i }).click();
   await page.getByLabel("Minute").fill("12");
   await page.getByLabel("Event type").selectOption("yellow_card");
@@ -863,6 +866,6 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("Manually adjusted")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: /12' Yellow Card/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /12' Yellow Card/i })).toBeVisible(pageLoad);
   await expect(page.getByText("Manually adjusted")).toBeVisible();
 });
