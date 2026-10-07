@@ -6,9 +6,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
+import { finaliseTimedOutCompetitionSessions } from './competition-fixture-results';
 import { DatabaseService } from '../database/database.service';
+import {
+  ensureCompetitionFixtureSession,
+  twoSidedLiveLoggingEnabled,
+} from '../matches/match-sessions';
 import {
   athletes,
   competitionMatches,
@@ -16,8 +32,6 @@ import {
   competitions,
   competitionTeams,
   events,
-  matchEvents,
-  matchProjectionState,
   matches,
   standings,
   teams,
@@ -783,6 +797,10 @@ export class CompetitionsService {
   }
 
   private async loadCompetitionResults(competitionId: string) {
+    await finaliseTimedOutCompetitionSessions(
+      this.databaseService,
+      competitionId,
+    );
     const [manualRows, liveRows] = await Promise.all([
       this.databaseService.database
         .select()
@@ -791,57 +809,47 @@ export class CompetitionsService {
       this.databaseService.database
         .select({
           matchId: matches.id,
-          ownCompetitionTeamId: competitionTeams.id,
-          opponentCompetitionTeamId: matches.opponentCompetitionTeamId,
-          isHome: matches.isHome,
+          fixtureId: competitionFixtures.id,
+          fixtureHomeId: competitionFixtures.homeCompetitionTeamId,
+          fixtureAwayId: competitionFixtures.awayCompetitionTeamId,
+          fixtureHomeScore: competitionFixtures.homeScore,
+          fixtureAwayScore: competitionFixtures.awayScore,
+          fixtureLinkedMatchId: competitionFixtures.linkedMatchId,
           playedAt: events.scheduledAt,
           createdAt: matches.createdAt,
-          teamScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-            case when ${matches.isHome} then ${competitionFixtures.homeScore} else ${competitionFixtures.awayScore} end
-            else count(*) filter (where ${matchEvents.team} = 'own' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
-          opponentScore: sql<number>`case when ${matchProjectionState.finalisationState} <> 'finalised' and ${competitionFixtures.status} = 'completed' then
-            case when ${matches.isHome} then ${competitionFixtures.awayScore} else ${competitionFixtures.homeScore} end
-            else count(*) filter (where ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal' and ${matchEvents.lifecycleStatus} <> 'voided')::int end`,
         })
         .from(matches)
         .innerJoin(events, eq(matches.eventId, events.id))
         .innerJoin(competitions, eq(matches.competitionId, competitions.id))
-        .innerJoin(
-          competitionTeams,
-          and(
-            eq(competitionTeams.competitionId, matches.competitionId),
-            eq(competitionTeams.teamId, events.teamId),
-          ),
-        )
-        .leftJoin(matchEvents, eq(matchEvents.matchId, matches.id))
-        .leftJoin(
-          matchProjectionState,
-          eq(matchProjectionState.matchId, matches.id),
-        )
         .leftJoin(
           competitionFixtures,
-          eq(competitionFixtures.linkedMatchId, matches.id),
+          or(
+            eq(competitionFixtures.linkedMatchId, matches.id),
+            and(
+              sql`${matches.sharedMatchId} is not null`,
+              eq(competitionFixtures.sharedSessionId, matches.sharedMatchId),
+            ),
+          ),
         )
         .where(
           and(
             eq(matches.competitionId, competitionId),
             eq(events.status, 'completed'),
             gte(matches.createdAt, competitions.resultTrackingStartedAt),
-            sql`${matches.opponentCompetitionTeamId} is not null`,
-            sql`(${matchProjectionState.matchId} is null
-              or ${matchProjectionState.finalisationState} = 'finalised'
-              or ${competitionFixtures.status} = 'completed')`,
+            sql`${competitionFixtures.id} is not null`,
+            eq(competitionFixtures.status, 'completed'),
           ),
         )
         .groupBy(
           matches.id,
-          competitionTeams.id,
           events.scheduledAt,
           matches.createdAt,
-          matchProjectionState.finalisationState,
+          competitionFixtures.id,
+          competitionFixtures.homeCompetitionTeamId,
+          competitionFixtures.awayCompetitionTeamId,
           competitionFixtures.homeScore,
           competitionFixtures.awayScore,
-          competitionFixtures.status,
+          competitionFixtures.linkedMatchId,
         ),
     ]);
 
@@ -857,26 +865,33 @@ export class CompetitionsService {
       createdAt: row.createdAt,
     }));
 
-    const live = liveRows
-      .filter(
-        (row): row is typeof row & { opponentCompetitionTeamId: string } =>
-          row.opponentCompetitionTeamId !== null,
-      )
-      .map((row) => ({
-        id: `match:${row.matchId}`,
-        homeCompetitionTeamId: row.isHome
-          ? row.ownCompetitionTeamId
-          : row.opponentCompetitionTeamId,
-        awayCompetitionTeamId: row.isHome
-          ? row.opponentCompetitionTeamId
-          : row.ownCompetitionTeamId,
-        homeScore: row.isHome ? row.teamScore : row.opponentScore,
-        awayScore: row.isHome ? row.opponentScore : row.teamScore,
-        playedAt: row.playedAt,
-        source: 'live_logged' as const,
-        linkedMatchId: row.matchId,
-        createdAt: row.createdAt,
-      }));
+    const liveByFixture = new Map<string, (typeof liveRows)[number]>();
+    for (const row of liveRows) {
+      if (row.fixtureId && !liveByFixture.has(row.fixtureId)) {
+        liveByFixture.set(row.fixtureId, row);
+      }
+    }
+    const live = [...liveByFixture.values()].flatMap((row) =>
+      row.fixtureId &&
+      row.fixtureHomeId &&
+      row.fixtureAwayId &&
+      row.fixtureHomeScore !== null &&
+      row.fixtureAwayScore !== null
+        ? [
+            {
+              id: `fixture:${row.fixtureId}`,
+              homeCompetitionTeamId: row.fixtureHomeId,
+              awayCompetitionTeamId: row.fixtureAwayId,
+              homeScore: row.fixtureHomeScore,
+              awayScore: row.fixtureAwayScore,
+              playedAt: row.playedAt,
+              source: 'live_logged' as const,
+              linkedMatchId: row.fixtureLinkedMatchId ?? row.matchId,
+              createdAt: row.createdAt,
+            },
+          ]
+        : [],
+    );
 
     return [...manual, ...live].sort((a, b) => {
       const dateDifference = a.playedAt.getTime() - b.playedAt.getTime();
@@ -1141,7 +1156,14 @@ export class CompetitionsService {
         throw new ConflictException('Fixtures already exist.');
       throw error;
     }
-    return this.listFixtures(userId, competitionId);
+    const fixtures = await this.listFixtures(userId, competitionId);
+    if (twoSidedLiveLoggingEnabled()) {
+      for (const fixture of fixtures) {
+        await ensureCompetitionFixtureSession(this.databaseService, fixture.id);
+      }
+      return this.listFixtures(userId, competitionId);
+    }
+    return fixtures;
   }
 
   private async requireFixtureScheduleContext(

@@ -30,7 +30,12 @@ jest.mock('better-auth/api', () => {
 
     constructor(status: string, body?: { message?: string }) {
       super(body?.message ?? 'Authentication request failed.');
-      this.statusCode = status === 'TOO_MANY_REQUESTS' ? 429 : 400;
+      this.statusCode =
+        status === 'TOO_MANY_REQUESTS'
+          ? 429
+          : status === 'FORBIDDEN'
+            ? 403
+            : 400;
       this.body = body;
     }
   }
@@ -42,8 +47,10 @@ jest.mock('better-auth/node', () => ({
   toNodeHandler: jest.fn(),
 }));
 
+import { HttpException } from '@nestjs/common';
 import { APIError } from 'better-auth/api';
-import type { Response } from 'express';
+import { fromNodeHeaders } from 'better-auth/node';
+import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -57,6 +64,20 @@ const setPassword = auth.api.setPassword as unknown as jest.Mock;
 const listAccounts = auth.api.listAccounts as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
+const fromNodeHeadersMock = fromNodeHeaders as unknown as jest.Mock;
+
+/**
+ * Minimal Express request shape `signIn`'s CSRF wiring reads: headers for the
+ * `auth.api` call, protocol/host/originalUrl/method for the rebuilt web
+ * `Request` handed to Better Auth.
+ */
+const signInRequest = (headers: Record<string, string> = {}) =>
+  ({
+    headers,
+    protocol: 'http',
+    originalUrl: '/auth/sign-in',
+    method: 'POST',
+  }) as unknown as Request;
 
 // Mirrors the controller's own fallback so expectations track whatever the
 // environment actually resolved FRONTEND_URL to.
@@ -105,6 +126,11 @@ describe('AuthController', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     responseHeaders = new Map<string, string | string[]>();
+    // The controller builds the web Request it forwards to Better Auth from
+    // these headers, so the mock mirrors the real adapter's behaviour.
+    fromNodeHeadersMock.mockImplementation(
+      (headers: Record<string, string>) => new Headers(headers),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -253,17 +279,21 @@ describe('AuthController', () => {
 
       const result = await controller.signIn(
         { email: 'ada@example.com', password: 'password123', rememberMe: true },
+        signInRequest({ origin: 'http://localhost:5173' }),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: true,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: true,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       expect(result).toEqual({
         user: { id: 'user-id', email: 'ada@example.com' },
       });
@@ -287,17 +317,21 @@ describe('AuthController', () => {
           password: 'password123',
           rememberMe: false,
         },
+        signInRequest(),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: false,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: false,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       // Browser-session semantics: Better Auth's own cookies are forwarded
       // verbatim and nothing is expired or synthesised.
       expect(finalSetCookie()).toEqual([
@@ -316,21 +350,80 @@ describe('AuthController', () => {
 
       await controller.signIn(
         { email: 'ada@example.com', password: 'password123' },
+        signInRequest(),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: false,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: false,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       expect(finalSetCookie()).toEqual([
         'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
         dontRememberCookie,
       ]);
+    });
+
+    it('forwards the incoming request so Better Auth can validate it for login CSRF', async () => {
+      signInEmail.mockResolvedValue(signInResponse([sessionCookie]));
+
+      await controller.signIn(
+        { email: 'ada@example.com', password: 'password123' },
+        signInRequest({
+          origin: 'http://localhost:5173',
+          'sec-fetch-site': 'same-site',
+          'sec-fetch-mode': 'cors',
+        }),
+        res,
+      );
+
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.any(Headers) as Headers,
+          request: expect.any(Request) as Request,
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
+      const calls = signInEmail.mock.calls as {
+        request: { method: string; headers: Headers };
+      }[][];
+      const call = calls[0][0];
+      // The rebuilt request must carry the browser's CSRF signals through to
+      // Better Auth's `formCsrfMiddleware`; without them it silently no-ops.
+      expect(call.request.method).toBe('POST');
+      expect(call.request.headers.get('origin')).toBe('http://localhost:5173');
+      expect(call.request.headers.get('sec-fetch-site')).toBe('same-site');
+      expect(call.request.headers.get('sec-fetch-mode')).toBe('cors');
+    });
+
+    it('surfaces Better Auth CSRF rejections as 403 without issuing cookies', async () => {
+      // `formCsrfMiddleware` throws APIError(FORBIDDEN) for cross-site or
+      // untrusted-origin logins; the wrapper must map that faithfully and
+      // forward nothing — no session cookie can leak out of a rejected login.
+      signInEmail.mockRejectedValueOnce(
+        new APIError('FORBIDDEN', { message: 'Invalid origin' }),
+      );
+
+      const rejection = await controller
+        .signIn(
+          { email: 'ada@example.com', password: 'password123' },
+          signInRequest({ origin: 'https://attacker.example' }),
+          res,
+        )
+        .catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(HttpException);
+      expect((rejection as HttpException).getStatus()).toBe(403);
+      expect((rejection as HttpException).message).toBe('Invalid origin');
+      expect(finalSetCookie()).toBeUndefined();
     });
   });
 

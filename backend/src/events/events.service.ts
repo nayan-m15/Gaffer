@@ -1,4 +1,10 @@
 import {
+  assertMatchSessionIdentity,
+  resolveMatchSessionIdentity,
+  sharedMatchConflict,
+  SharedMatchErrorCode,
+} from '../matches/match-session-integrity';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -18,6 +24,7 @@ import {
 import { alias } from 'drizzle-orm/pg-core';
 import { AthletesService } from '../athletes/athletes.service';
 import { DatabaseService } from '../database/database.service';
+import { twoSidedLiveLoggingEnabled } from '../matches/match-sessions';
 import {
   athleteMatchStats,
   athletes,
@@ -347,6 +354,9 @@ export class EventsService {
         fixtureScheduleConfirmedAt: null,
         fixtureOpponentCompetitionTeamId: null,
         fixtureOpponentName: null,
+        fixtureIsHome: friendlyContext
+          ? friendlyContext.requester?.id === team.id
+          : null,
         ...friendlyFields,
         ...lineupFields,
       };
@@ -363,8 +373,82 @@ export class EventsService {
       fixtureScheduleConfirmedAt: fixtureContext.scheduleConfirmedAt,
       fixtureOpponentCompetitionTeamId: fixtureContext.opponent?.id ?? null,
       fixtureOpponentName: fixtureContext.opponent?.displayName ?? null,
+      fixtureIsHome:
+        fixtureContext.ownCompetitionTeamId ===
+        fixtureContext.homeCompetitionTeamId,
       ...friendlyFields,
       ...lineupFields,
+    };
+  }
+
+  async getEventLinkDiagnostic(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    const [event] = await this.databaseService.database
+      .select()
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    if (!event) throw new NotFoundException('Event not found.');
+
+    const [owningMatch] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      owningMatch,
+      { ignoreFeatureFlag: true },
+    );
+    if (
+      event.teamId !== team.id &&
+      !identity.participants.some((p) => p.teamId === team.id)
+    )
+      throw new NotFoundException('Event not found.');
+    const sheets = identity.fixtureId
+      ? await this.databaseService.database
+          .select({ teamId: events.teamId, matchId: matches.id })
+          .from(events)
+          .innerJoin(matches, eq(matches.eventId, events.id))
+          .where(
+            event.competitionFixtureId
+              ? eq(events.competitionFixtureId, identity.fixtureId)
+              : eq(events.friendlyFixtureId, identity.fixtureId),
+          )
+      : [];
+    const matchSheets = identity.participants.map((p) => ({
+      ...p,
+      matchId:
+        sheets.find((sheet) => sheet.teamId === p.teamId)?.matchId ?? null,
+    }));
+    const sheetSessionMatchesFixture = identity.state === 'shared_valid';
+    const status =
+      identity.state === 'legacy_allowed'
+        ? 'legacy'
+        : !identity.fixtureSharedSessionId
+          ? 'missing_fixture_session'
+          : identity.state === 'shared_conflict'
+            ? 'conflicting_sheet_link'
+            : sheetSessionMatchesFixture
+              ? 'correctly_linked'
+              : 'missing_sheet_link';
+    return {
+      eventId: event.id,
+      teamId: event.teamId,
+      fixtureType: identity.fixtureType,
+      fixtureId: identity.fixtureId,
+      fixtureSharedSessionId: identity.fixtureSharedSessionId,
+      sharedSessionId: identity.fixtureSharedSessionId,
+      owningMatchId: owningMatch?.id ?? null,
+      owningMatchSharedSessionId: owningMatch?.sharedMatchId ?? null,
+      participantTeamId: identity.participantTeamId,
+      participantSide: identity.participantSide,
+      expectedSessionId: identity.fixtureSharedSessionId,
+      sheetSessionMatchesFixture,
+      status,
+      participants: identity.participants,
+      matchSheets,
     };
   }
 
@@ -398,7 +482,7 @@ export class EventsService {
    * squad is on record before kickoff — in particular for accepted friendly
    * fixtures, where the opponent sees it through the friendly-opponent
    * lookup. Open to every team member, mirroring the start-match access
-   * model; once the match starts, its own squad supersedes this record.
+   * model; once the match starts, this confirmed snapshot becomes read-only.
    */
   async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
     const team = await this.requireTeam(userId);
@@ -837,6 +921,26 @@ export class EventsService {
       throw new NotFoundException('Event not found.');
     }
 
+    const [retryMatch] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.eventId, event.id))
+      .limit(1);
+    if (retryMatch && twoSidedLiveLoggingEnabled()) {
+      const retryIdentity = await resolveMatchSessionIdentity(
+        this.databaseService,
+        event,
+        retryMatch,
+        { ensureSession: true },
+      );
+      if (retryIdentity.state !== 'legacy_allowed') {
+        assertMatchSessionIdentity(retryIdentity, true);
+        return this.attachMatchToSession(
+          retryMatch,
+          retryIdentity.fixtureSharedSessionId,
+        );
+      }
+    }
     if (event.status !== 'scheduled') {
       throw new BadRequestException('Only scheduled matches can be started.');
     }
@@ -847,6 +951,18 @@ export class EventsService {
     const friendlyFixtureOpponent = event.friendlyFixtureId
       ? await this.getAcceptedFriendlyOpponent(team.id, event.friendlyFixtureId)
       : null;
+
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      undefined,
+      { ensureSession: true },
+    );
+    assertMatchSessionIdentity(identity, true);
+    const sharedMatchId =
+      identity.state === 'legacy_allowed'
+        ? null
+        : identity.fixtureSharedSessionId;
 
     if (this.isBeforeMatchDay(event.scheduledAt)) {
       throw new ForbiddenException(
@@ -916,7 +1032,12 @@ export class EventsService {
       opponentName,
       opponentCompetitionTeamId: competitionOpponent?.id ?? null,
       opponentTeamId: friendlyFixtureOpponent?.id ?? null,
-      isHome: dto.isHome,
+      // Fixture orientation is authoritative for generated and accepted
+      // friendlies. Keep client orientation only for standalone manual events.
+      isHome:
+        generatedFixtureOpponent?.isHome ??
+        friendlyFixtureOpponent?.isHome ??
+        dto.isHome,
       gamePlanId: dto.gamePlanId ?? null,
       gamePlanSnapshot: gamePlan
         ? {
@@ -955,17 +1076,23 @@ export class EventsService {
       .limit(1);
 
     if (existingMatch) {
-      // The live match squad supersedes any pre-match lineup record.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
-      return existingMatch;
+      if (
+        !twoSidedLiveLoggingEnabled() &&
+        !event.friendlyFixtureId &&
+        !event.competitionFixtureId
+      ) {
+        await this.databaseService.database
+          .delete(eventLineups)
+          .where(eq(eventLineups.eventId, event.id));
+      }
+      return this.attachMatchToSession(existingMatch, sharedMatchId);
     }
 
     const [match] = await this.databaseService.database
       .insert(matches)
       .values({
         eventId: event.id,
+        sharedMatchId,
         competitionId: event.competitionId,
         opponentCompetitionTeamId: matchValues.opponentCompetitionTeamId,
         opponentTeamId: matchValues.opponentTeamId,
@@ -986,7 +1113,9 @@ export class EventsService {
         .from(matches)
         .where(eq(matches.eventId, event.id))
         .limit(1);
-      if (concurrentMatch) return concurrentMatch;
+      if (concurrentMatch) {
+        return this.attachMatchToSession(concurrentMatch, sharedMatchId);
+      }
       throw new ConflictException('This match could not be started safely.');
     }
 
@@ -1027,12 +1156,17 @@ export class EventsService {
 
       await this.replaceOpponentSquad(match.id, dto);
 
-      // The match's own squad (athlete_match_stats) is now the source of
-      // truth; the pre-match lineup record is retired so the lineup
-      // endpoint and event details stop reporting a stale pre-kickoff XI.
-      await this.databaseService.database
-        .delete(eventLineups)
-        .where(eq(eventLineups.eventId, event.id));
+      // Keep the confirmed lineup snapshot for the opponent's read-only view.
+      // confirmLineup rejects changes once this match row exists.
+      if (
+        !twoSidedLiveLoggingEnabled() &&
+        !event.friendlyFixtureId &&
+        !event.competitionFixtureId
+      ) {
+        await this.databaseService.database
+          .delete(eventLineups)
+          .where(eq(eventLineups.eventId, event.id));
+      }
     } catch (error) {
       // Compensate for Neon HTTP's lack of interactive transactions so a
       // partially-created match can be retried from the confirmation screen.
@@ -1074,7 +1208,12 @@ export class EventsService {
         'The opponent is fixed by this generated competition fixture.',
       );
     }
-    return opponent;
+    return {
+      ...opponent,
+      isHome:
+        fixtureContext.ownCompetitionTeamId ===
+        fixtureContext.homeCompetitionTeamId,
+    };
   }
 
   private async getAcceptedFriendlyOpponent(teamId: string, fixtureId: string) {
@@ -1102,7 +1241,10 @@ export class EventsService {
     if (!opponentTeam) {
       throw new BadRequestException('Opponent team not found on Gaffer.');
     }
-    return opponentTeam;
+    return {
+      ...opponentTeam,
+      isHome: fixture.requesterTeamId === teamId,
+    };
   }
 
   private async replaceOpponentSquad(matchId: string, dto: StartMatchDto) {
@@ -1174,6 +1316,8 @@ export class EventsService {
     eventCompetitionId: string | null,
   ): Promise<{
     scheduleConfirmedAt: Date | null;
+    ownCompetitionTeamId: string;
+    homeCompetitionTeamId: string | null;
     opponent: { id: string; displayName: string } | null;
   }> {
     const [fixture] = await this.databaseService.database
@@ -1223,6 +1367,8 @@ export class EventsService {
     if (!opponentId) {
       return {
         scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+        ownCompetitionTeamId: ownParticipant.id,
+        homeCompetitionTeamId: fixture.homeCompetitionTeamId,
         opponent: null,
       };
     }
@@ -1243,6 +1389,8 @@ export class EventsService {
 
     return {
       scheduleConfirmedAt: fixture.scheduleConfirmedAt,
+      ownCompetitionTeamId: ownParticipant.id,
+      homeCompetitionTeamId: fixture.homeCompetitionTeamId,
       opponent: opponent ?? null,
     };
   }
@@ -1435,6 +1583,42 @@ export class EventsService {
     }
 
     return event;
+  }
+
+  private async attachMatchToSession(
+    match: typeof matches.$inferSelect,
+    sharedSessionId: string | null,
+  ) {
+    if (!sharedSessionId) return match;
+    const [event] = await this.databaseService.database
+      .select()
+      .from(events)
+      .where(eq(events.id, match.eventId))
+      .limit(1);
+    if (!event) throw new NotFoundException('Event not found.');
+    const identity = await resolveMatchSessionIdentity(
+      this.databaseService,
+      event,
+      match,
+    );
+    assertMatchSessionIdentity(identity, true);
+    if (identity.state === 'shared_valid') return match;
+    const result = await this.databaseService.database.execute<{
+      result: string;
+    }>(
+      sql`select attach_match_session_if_safe(${match.id}::uuid, ${sharedSessionId}::uuid, ${identity.participantSide === 'home'}::boolean) as result`,
+    );
+    const outcome = result.rows[0]?.result;
+    if (outcome !== 'attached' && outcome !== 'already_linked')
+      throw sharedMatchConflict(
+        (outcome ?? 'SHARED_MATCH_SESSION_CONFLICT') as SharedMatchErrorCode,
+      );
+    const [attached] = await this.databaseService.database
+      .select()
+      .from(matches)
+      .where(eq(matches.id, match.id))
+      .limit(1);
+    return attached;
   }
 
   private isBeforeMatchDay(scheduledAt: Date) {

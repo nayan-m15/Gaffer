@@ -80,9 +80,9 @@ export function opponentPlayerLabel(
   visibility: OpponentSquadVisibility,
 ) {
   if (visibility === "full" && player.name) {
-    return `#${player.shirtNumber} ${player.name}`;
+    return [player.shirtNumber == null ? "" : `#${player.shirtNumber}`, player.name].filter(Boolean).join(" ");
   }
-  return `#${player.shirtNumber}`;
+  return player.shirtNumber == null ? "Unassigned" : `#${player.shirtNumber}`;
 }
 
 export function emptyEventDraft(
@@ -163,7 +163,7 @@ export function draftFromLoggedEvent(
     incomingAthleteId:
       event.team === "own" && looksLikeId(incomingRaw) ? incomingRaw ?? "" : "",
     incomingOpponentPlayerId:
-      event.team === "opponent" && options.roster && looksLikeId(incomingRaw)
+      event.team === "opponent" && options.roster && (looksLikeId(incomingRaw) || incomingRaw?.startsWith("public-lineup:"))
         ? incomingRaw ?? ""
         : "",
     incomingOpponentLabel:
@@ -387,7 +387,18 @@ export function planAddEvent(
     });
   }
 
-  return ops;
+  return withReportTiming(ops);
+}
+
+function withReportTiming(ops: PlannedOp[]): PlannedOp[] {
+  return ops.map((op): PlannedOp => op.kind === "create" ? {
+    ...op,
+    input: {
+      ...op.input,
+      period: op.input.minute < 45 ? "first_half" as const : "second_half" as const,
+      matchElapsedMs: op.input.minute * 60_000,
+    },
+  } : op);
 }
 
 export function planEditEvent({
@@ -458,7 +469,7 @@ export function planEditEvent({
     }
   }
 
-  return ops;
+  return withReportTiming(ops);
 }
 
 function appendLinkedAssistEdits(

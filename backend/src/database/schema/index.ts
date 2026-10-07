@@ -122,6 +122,64 @@ export const teams = pgTable('teams', {
   ...timestamps,
 });
 
+export const matchSessionSide = pgEnum('match_session_side', ['home', 'away']);
+export const matchSessionConfirmationState = pgEnum(
+  'match_session_confirmation_state',
+  ['pending', 'confirmed'],
+);
+
+// Canonical shared timeline identity. Team-specific match sheets remain in
+// `matches`; this row only represents the fixture/session they may share.
+export const matchSessions = pgTable('match_sessions', {
+  reportRevision: integer('report_revision').default(1).notNull(),
+  id: uuid('id').defaultRandom().primaryKey(),
+  homeConfirmedAt: timestamp('home_confirmed_at', { withTimezone: true }),
+  homeConfirmedByUserId: text('home_confirmed_by_user_id').references(
+    () => user.id,
+  ),
+  awayConfirmedAt: timestamp('away_confirmed_at', { withTimezone: true }),
+  awayConfirmedByUserId: text('away_confirmed_by_user_id').references(
+    () => user.id,
+  ),
+  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
+  ...timestamps,
+});
+
+export const matchSessionParticipants = pgTable(
+  'match_session_participants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => matchSessions.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+    competitionTeamId: uuid('competition_team_id').references(
+      () => competitionTeams.id,
+      { onDelete: 'cascade' },
+    ),
+    side: matchSessionSide('side').notNull(),
+    confirmationState: matchSessionConfirmationState('confirmation_state')
+      .default('pending')
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('match_session_participants_session_side_unique').on(
+      table.sessionId,
+      table.side,
+    ),
+    index('match_session_participants_team_id_index').on(table.teamId),
+    index('match_session_participants_competition_team_id_index').on(
+      table.competitionTeamId,
+    ),
+    check(
+      'match_session_participants_identity_check',
+      sql`${table.teamId} is not null or ${table.competitionTeamId} is not null`,
+    ),
+  ],
+);
+
 export const teamMembers = pgTable(
   'team_members',
   {
@@ -417,6 +475,10 @@ export const friendlyFixtures = pgTable(
       .references(() => user.id),
     respondedByUserId: text('responded_by_user_id').references(() => user.id),
     respondedAt: timestamp('responded_at', { withTimezone: true }),
+    sharedSessionId: uuid('shared_session_id').references(
+      () => matchSessions.id,
+      { onDelete: 'set null' },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -427,6 +489,9 @@ export const friendlyFixtures = pgTable(
     index('friendly_fixtures_opponent_status_index').on(
       table.opponentTeamId,
       table.status,
+    ),
+    uniqueIndex('friendly_fixtures_shared_session_unique').on(
+      table.sharedSessionId,
     ),
   ],
 );
@@ -526,9 +591,8 @@ export const eventRsvps = pgTable(
 // The coach's confirmed pre-match lineup for one event (one row per event).
 // Confirming a lineup is a separate step from starting the match: the XI is
 // stored here so an accepted Gaffer friendly opponent can see it before
-// kickoff. startMatch keeps its own athlete_match_stats squad and clears this
-// row once the match exists, so the live match squad stays the single source
-// for everything after kickoff.
+// kickoff. Linked fixtures retain this public tactical snapshot after kickoff;
+// athlete_match_stats remains the source for the team's live match squad.
 export const eventLineups = pgTable(
   'event_lineups',
   {
@@ -810,6 +874,9 @@ export const matches = pgTable(
       .notNull()
       .unique()
       .references(() => events.id, { onDelete: 'cascade' }),
+    sharedMatchId: uuid('shared_match_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),
@@ -855,6 +922,7 @@ export const matches = pgTable(
     ),
     index('matches_opponent_team_id_index').on(table.opponentTeamId),
     index('matches_game_plan_id_index').on(table.gamePlanId),
+    index('matches_shared_match_id_index').on(table.sharedMatchId),
   ],
 );
 
@@ -1032,6 +1100,10 @@ export const matchEvents = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    side: matchSessionSide('side'),
     athleteId: uuid('athlete_id').references(() => athletes.id, {
       onDelete: 'set null',
     }),
@@ -1060,6 +1132,12 @@ export const matchEvents = pgTable(
   },
   (table) => [
     index('match_events_match_id_index').on(table.matchId),
+    index('match_events_session_side_index').on(
+      table.sessionId,
+      table.side,
+      table.period,
+      table.matchElapsedMs,
+    ),
     index('match_events_opponent_player_id_index').on(table.opponentPlayerId),
     // Serves the per-athlete event counts in StatisticsService, which filter on
     // (match_id, athlete_id, team, event_type) once per athlete_match_stats row.
@@ -1274,6 +1352,10 @@ export const matchEventObservations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    side: matchSessionSide('side'),
     deviceId: uuid('device_id').notNull(),
     loggedByUserId: text('logged_by_user_id')
       .notNull()
@@ -1303,6 +1385,12 @@ export const matchEventObservations = pgTable(
   (table) => [
     index('match_event_observations_match_index').on(
       table.matchId,
+      table.period,
+      table.matchElapsedMs,
+    ),
+    index('match_event_observations_session_side_index').on(
+      table.sessionId,
+      table.side,
       table.period,
       table.matchElapsedMs,
     ),
@@ -1339,6 +1427,9 @@ export const matchEventOperations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     actorUserId: text('actor_user_id')
       .notNull()
       .references(() => user.id),
@@ -1351,6 +1442,10 @@ export const matchEventOperations = pgTable(
       () => matchEvents.id,
       { onDelete: 'set null' },
     ),
+    // Derived by database triggers; never trust a client-supplied privacy flag.
+    publicCanonicalEvent: boolean('public_canonical_event')
+      .default(false)
+      .notNull(),
     causalParentIds: jsonb('causal_parent_ids')
       .$type<string[]>()
       .default([])
@@ -1368,6 +1463,11 @@ export const matchEventOperations = pgTable(
       table.createdAt,
     ),
     index('match_event_operations_actor_index').on(table.actorUserId),
+    index('match_event_operations_session_index').on(
+      table.sessionId,
+      table.createdAt,
+    ),
+    index('match_event_operations_canonical_index').on(table.canonicalEventId),
   ],
 );
 
@@ -1381,6 +1481,9 @@ export const matchClockOperations = pgTable(
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     actorUserId: text('actor_user_id')
       .notNull()
       .references(() => user.id),
@@ -1404,19 +1507,38 @@ export const matchClockOperations = pgTable(
       table.appliedRevision,
     ),
     index('match_clock_operations_actor_index').on(table.actorUserId),
+    index('match_clock_operations_session_index').on(
+      table.sessionId,
+      table.appliedRevision,
+    ),
   ],
 );
 
 export const matchEventReviews = pgTable(
   'match_event_reviews',
   {
+    teamDecisionNotes: jsonb('team_decision_notes')
+      .$type<Record<string, string | null>>()
+      .default({})
+      .notNull(),
+    teamDecisions: jsonb('team_decisions')
+      .$type<Record<string, string>>()
+      .default({})
+      .notNull(),
     id: uuid('id').defaultRandom().primaryKey(),
     matchId: uuid('match_id')
       .notNull()
       .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
     canonicalEventId: uuid('canonical_event_id')
       .notNull()
       .references(() => matchEvents.id, { onDelete: 'cascade' }),
+    // Enables session-scoped sync without one bucket per canonical event.
+    publicCanonicalEvent: boolean('public_canonical_event')
+      .default(false)
+      .notNull(),
     observationIds: jsonb('observation_ids')
       .$type<string[]>()
       .default([])
@@ -1427,6 +1549,8 @@ export const matchEventReviews = pgTable(
     resolution: text('resolution'),
     resolvedByUserId: text('resolved_by_user_id').references(() => user.id),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    disputedByUserId: text('disputed_by_user_id').references(() => user.id),
+    disputedAt: timestamp('disputed_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -1434,6 +1558,11 @@ export const matchEventReviews = pgTable(
       table.matchId,
       table.status,
     ),
+    index('match_event_reviews_session_status_index').on(
+      table.sessionId,
+      table.status,
+    ),
+    index('match_event_reviews_canonical_index').on(table.canonicalEventId),
   ],
 );
 
@@ -1461,6 +1590,10 @@ export const competitionFixtures = pgTable(
     nextFixtureId: uuid('next_fixture_id'),
     nextFixtureSlot: text('next_fixture_slot'),
     linkedMatchId: uuid('linked_match_id').references(() => matches.id),
+    sharedSessionId: uuid('shared_session_id').references(
+      () => matchSessions.id,
+      { onDelete: 'set null' },
+    ),
     legacyResultId: uuid('legacy_result_id').references(
       () => competitionMatches.id,
     ),
@@ -1511,6 +1644,9 @@ export const competitionFixtures = pgTable(
     ),
     uniqueIndex('competition_fixtures_linked_match_unique').on(
       table.linkedMatchId,
+    ),
+    uniqueIndex('competition_fixtures_shared_session_unique').on(
+      table.sharedSessionId,
     ),
     uniqueIndex('competition_fixtures_legacy_result_unique').on(
       table.legacyResultId,
@@ -1570,37 +1706,48 @@ export const competitionFixtures = pgTable(
 );
 
 /** One authoritative projection revision for every consumer of a match. */
-export const matchProjectionState = pgTable('match_projection_state', {
-  matchId: uuid('match_id')
-    .primaryKey()
-    .references(() => matches.id, { onDelete: 'cascade' }),
-  revision: integer('revision').default(0).notNull(),
-  inputDigest: text('input_digest').notNull(),
-  rulesVersion: integer('rules_version').default(1).notNull(),
-  confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
-  confirmedOpponentScore: integer('confirmed_opponent_score')
-    .default(0)
-    .notNull(),
-  provisionalTeamScore: integer('provisional_team_score').default(0).notNull(),
-  provisionalOpponentScore: integer('provisional_opponent_score')
-    .default(0)
-    .notNull(),
-  possibleEffects: jsonb('possible_effects')
-    .$type<Record<string, unknown>>()
-    .default({})
-    .notNull(),
-  disciplinaryProjection: jsonb('disciplinary_projection')
-    .$type<Record<string, unknown>>()
-    .default({})
-    .notNull(),
-  unresolvedReviewCount: integer('unresolved_review_count')
-    .default(0)
-    .notNull(),
-  finalisationState: text('finalisation_state').default('open').notNull(),
-  finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
-  finalisedAt: timestamp('finalised_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const matchProjectionState = pgTable(
+  'match_projection_state',
+  {
+    matchId: uuid('match_id')
+      .primaryKey()
+      .references(() => matches.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => matchSessions.id, {
+      onDelete: 'set null',
+    }),
+    revision: integer('revision').default(0).notNull(),
+    inputDigest: text('input_digest').notNull(),
+    rulesVersion: integer('rules_version').default(1).notNull(),
+    confirmedTeamScore: integer('confirmed_team_score').default(0).notNull(),
+    confirmedOpponentScore: integer('confirmed_opponent_score')
+      .default(0)
+      .notNull(),
+    provisionalTeamScore: integer('provisional_team_score')
+      .default(0)
+      .notNull(),
+    provisionalOpponentScore: integer('provisional_opponent_score')
+      .default(0)
+      .notNull(),
+    possibleEffects: jsonb('possible_effects')
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    disciplinaryProjection: jsonb('disciplinary_projection')
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    unresolvedReviewCount: integer('unresolved_review_count')
+      .default(0)
+      .notNull(),
+    finalisationState: text('finalisation_state').default('open').notNull(),
+    finalisedByUserId: text('finalised_by_user_id').references(() => user.id),
+    finalisedAt: timestamp('finalised_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index('match_projection_state_session_index').on(table.sessionId),
+  ],
+);
 
 export const matchInsightStatus = pgEnum('match_insight_status', [
   'pending',
@@ -1736,3 +1883,52 @@ export const syncClientTelemetry = pgTable(
     index('sync_client_telemetry_team_index').on(table.teamId, table.updatedAt),
   ],
 );
+
+/** Proposed public changes; the official timeline changes only after both teams approve. */
+export const matchAmendments = pgTable('match_amendments', {
+  id: uuid('id').primaryKey(),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => matchSessions.id, { onDelete: 'cascade' }),
+  matchId: uuid('match_id')
+    .notNull()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  proposedByUserId: text('proposed_by_user_id')
+    .notNull()
+    .references(() => user.id),
+  proposedByTeamId: uuid('proposed_by_team_id')
+    .notNull()
+    .references(() => teams.id),
+  baseRevision: integer('base_revision').notNull(),
+  action: text('action').notNull(),
+  canonicalEventId: uuid('canonical_event_id').references(() => matchEvents.id),
+  observationId: uuid('observation_id').references(
+    () => matchEventObservations.id,
+  ),
+  replacement: jsonb('replacement')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  beforeEvent: jsonb('before_event').$type<{
+    eventType: string;
+    minute: number;
+    playerLabel: string | null;
+  }>(),
+  afterEvent: jsonb('after_event').$type<{
+    eventType: string;
+    minute: number;
+    playerLabel: string | null;
+  }>(),
+  proposedScore: jsonb('proposed_score')
+    .$type<{ home: number; away: number }>()
+    .notNull(),
+  reason: text('reason').notNull(),
+  approvals: jsonb('approvals')
+    .$type<Record<string, string>>()
+    .default({})
+    .notNull(),
+  status: text('status').default('pending').notNull(),
+  responseReason: text('response_reason'),
+  respondedByUserId: text('responded_by_user_id').references(() => user.id),
+  ...timestamps,
+});

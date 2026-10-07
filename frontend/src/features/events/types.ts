@@ -34,6 +34,8 @@ export interface TeamEvent {
   /** Present on the single-event response for generated competition fixtures. */
   fixtureOpponentCompetitionTeamId?: string | null;
   fixtureOpponentName?: string | null;
+  /** Authoritative side for linked fixtures; null on manual events. */
+  fixtureIsHome?: boolean | null;
   /**
    * Friendly-fixture link. `friendlyFixtureId` is the raw column value;
    * the status and opponent team fields are resolved per side, so each

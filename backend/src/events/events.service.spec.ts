@@ -23,6 +23,15 @@ const teamEvent = {
 
 describe('EventsService', () => {
   let service: EventsService;
+  let previousTwoSidedFlag: string | undefined;
+
+  afterEach(() => {
+    if (previousTwoSidedFlag === undefined) {
+      delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    } else {
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousTwoSidedFlag;
+    }
+  });
 
   const mockTeamsService = {
     findTeamForUser: jest.fn(),
@@ -71,6 +80,8 @@ describe('EventsService', () => {
   };
 
   beforeEach(async () => {
+    previousTwoSidedFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     jest.clearAllMocks();
 
     mockTeamsService.findTeamForUser.mockResolvedValue(team);

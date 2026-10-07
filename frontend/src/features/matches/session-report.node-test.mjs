@@ -1,0 +1,542 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  sessionPlayerLabel,
+  sessionReportKey,
+  applySessionReport,
+  sessionTimeline,
+} from "./session-report-model.ts";
+const report = {
+  sessionId: "session",
+  participants: [],
+  score: { home: 2, away: 1 },
+  clock: {
+    period: "full_time",
+    elapsedMs: 5400000,
+    startedAt: null,
+    revision: 4,
+  },
+  finalStatus: "finalised",
+  confirmations: { home: "yes", away: "yes" },
+  timeline: [
+    {
+      id: "goal",
+      side: "home",
+      eventType: "goal",
+      minute: 12,
+      player: { name: "Shared Player", shirtNumber: 9 },
+    },
+  ],
+  reviews: [],
+};
+test("an older shared poll cannot undo an acknowledged second-half clock", () => {
+  const sheet = { id: 'sheet', isHome: true, eventStatus: 'scheduled', clockRevision: 6,
+    clockPeriod: 'second_half', clockElapsedMs: 2700000, clockStartedAt: '2026-10-06T12:00:00Z' };
+  const stale = { ...report, finalStatus: 'open', clock: { period: 'half_time', elapsedMs: 2700000, startedAt: null, revision: 5 } };
+  assert.equal(applySessionReport(sheet, stale).clockPeriod, 'second_half');
+  assert.equal(applySessionReport(sheet, stale).clockStartedAt, sheet.clockStartedAt);
+  const fresh = { ...stale, clock: { ...stale.clock, revision: 7 } };
+  assert.equal(applySessionReport(sheet, fresh).clockPeriod, 'half_time');
+});
+test("both owning sheets resolve one shared cache, score, clock and timeline while private fields survive", () => {
+  const home = {
+    id: "sheet-a",
+    isHome: true,
+    gamePlanId: "private-a",
+    eventNotes: "notes-a",
+  };
+  const away = {
+    id: "sheet-b",
+    isHome: false,
+    gamePlanId: "private-b",
+    eventNotes: "notes-b",
+  };
+  assert.deepEqual(sessionReportKey(report.sessionId), [
+    "match-sessions",
+    "session",
+    "report",
+  ]);
+  const a = applySessionReport(home, report),
+    b = applySessionReport(away, report);
+  assert.equal(a.teamScore, b.opponentScore);
+  assert.equal(a.opponentScore, b.teamScore);
+  assert.equal(a.clockPeriod, b.clockPeriod);
+  assert.equal(a.projection.finalisationState, b.projection.finalisationState);
+  assert.equal(a.gamePlanId, "private-a");
+  assert.equal(b.eventNotes, "notes-b");
+  assert.equal(
+    sessionTimeline(report, home)[0].side,
+    sessionTimeline(report, away)[0].side,
+  );
+  assert.equal(sessionTimeline(report, away)[0].team, "opponent");
+  assert.equal(sessionTimeline(report, away)[0].detail, null);
+});
+test("awaiting bilateral confirmation stays open and disputed decisions require amendment", () => {
+  assert.equal(
+    applySessionReport(
+      { isHome: true },
+      { ...report, finalStatus: "awaiting_confirmation" },
+    ).projection.finalisationState,
+    "open",
+  );
+  assert.equal(
+    applySessionReport(
+      { isHome: true },
+      {
+        ...report,
+        finalStatus: "amendment_required",
+        reviews: [{ status: "resolved", disputedAt: "now" }],
+      },
+    ).projection.unresolvedReviewCount,
+    1,
+  );
+});
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+const apiSource = readFileSync(new URL("./api.ts", import.meta.url), "utf8");
+const apiJs = ts.transpileModule(apiSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText;
+class ApiError extends Error {
+  constructor(status) {
+    super("request failed");
+    this.status = status;
+  }
+}
+function apiHarness() {
+  const calls = [],
+    cache = new Map();
+  let failure;
+  const offline = {
+    cacheResponse: async (key, value) => {
+      calls.push(key);
+      cache.set(key, value);
+    },
+    readCachedResponse: async (key) => cache.get(key),
+    readSyncedSessionReport: async (id, sheet, value) => {
+      calls.push(["synced", id, sheet]);
+      return value;
+    },
+  };
+  const compiled = {};
+  new Function("exports", "require", apiJs)(compiled, (name) =>
+    name === "@/lib/api"
+      ? {
+          ApiError,
+          apiFetch: async (url) => {
+            calls.push(url);
+            if (failure) throw failure;
+            return report;
+          },
+        }
+      : offline,
+  );
+  return {
+    api: compiled,
+    calls,
+    fail: (error) => {
+      failure = error;
+    },
+  };
+}
+test("confirmation refuses a stale revision after adding a goal, then succeeds after review", async () => {
+  const compiled = {}, calls = [];
+  let revision = 7;
+  let failure;
+  new Function("exports", "require", apiJs)(compiled, (name) => name === "@/lib/api" ? {
+    ApiError,
+    apiFetch: async (url, options) => {
+      calls.push({ url, options });
+      if (failure) throw failure;
+      return url.endsWith("/finalise") ? { confirmed: true } : { projection: { revision } };
+    },
+  } : {});
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 6), /Review the updated result/);
+  assert.equal(calls.length, 1, "stale confirmation must not POST or retry unseen results");
+  assert.deepEqual(await compiled.finaliseMatchProjection("sheet", 7), { confirmed: true });
+  assert.equal(calls.at(-1).options.body, JSON.stringify({ expectedRevision: 7 }));
+  failure = new ApiError(403);
+  const count = calls.length;
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 7), /request failed/);
+  assert.equal(calls.length, count + 1, "authorization failure must not POST");
+  failure = undefined;
+  revision = 8;
+  await assert.rejects(compiled.finaliseMatchProjection("sheet", 7), /result changed/);
+});
+test("post-match event creation waits for the projection refresh and completed shared sheets keep polling", async () => {
+  const hookJs = ts.transpileModule(readFileSync(new URL("./hooks.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const compiled = {};
+  let release;
+  const refreshed = new Promise(resolve => { release = resolve; });
+  const client = {
+    getQueryData: () => ({ sharedSessionId: "session" }),
+    setQueryData: (_key, update) => update([]),
+    invalidateQueries: ({ queryKey }) => queryKey.length === 2 && queryKey[0] === "matches" ? refreshed : Promise.resolve(),
+  };
+  new Function("exports", "require", "navigator", hookJs)(compiled, name =>
+    name === "@tanstack/react-query" ? { useMutation: options => options, useQueryClient: () => client, useQuery: options => options }
+      : name === "./session-report-model" ? { sessionReportKey } : {}, { onLine: true });
+  let finished = false;
+  const save = compiled.useLogMatchEvent("sheet").onSuccess({}, {}, {}).then(() => { finished = true; });
+  await Promise.resolve();
+  assert.equal(finished, false, "confirmation must wait for the revision refresh");
+  release(); await save;
+  assert.equal(finished, true);
+  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed", sharedSessionId: "session" } } }), 10000);
+  assert.equal(compiled.useMatch("sheet").refetchInterval({ state: { data: { eventStatus: "completed" } } }), false);
+});
+test("both access handles fetch and persist one session DTO; offline uses synced session data", async () => {
+  const h = apiHarness();
+  await h.api.fetchSessionReport("session", "sheet-a");
+  await h.api.fetchSessionReport("session", "sheet-b");
+  assert.deepEqual(
+    h.calls.filter((x) => typeof x === "string"),
+    [
+      "/matches/sessions/session/report",
+      "session-report:session",
+      "/matches/sessions/session/report",
+      "session-report:session",
+    ],
+  );
+  h.fail(new TypeError("offline"));
+  assert.equal(await h.api.fetchSessionReport("session", "sheet-b"), report);
+  assert.deepEqual(h.calls.at(-1), ["synced", "session", "sheet-b"]);
+  h.fail(new ApiError(403));
+  await assert.rejects(
+    h.api.fetchSessionReport("session", "sheet-b"),
+    /request failed/,
+  );
+  h.fail(new ApiError(404));
+  await assert.rejects(
+    h.api.fetchSessionReport("session", "sheet-b"),
+    /request failed/,
+  );
+});
+const storeSource = readFileSync(
+  new URL("../../offline/match-store.ts", import.meta.url),
+  "utf8",
+);
+const readerSource = storeSource.slice(
+  storeSource.indexOf("export async function readSyncedSessionReport("),
+  storeSource.indexOf(
+    "export async function subscribeToSyncedSessionReportChanges(",
+  ),
+);
+const readerJs = ts.transpileModule(readerSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText;
+test("offline report retains cached public formation geometry without copying private tactical payloads", async () => {
+  const cached = { ...report, timeline: [{
+    id:'tactic', side:'home', eventType:'tactical_change',
+    tacticalChange:{formationId:'4-4-2'}, player:null,
+  }] };
+  const db = {
+    getAll: async () => [],
+    getOptional: async (sql) => sql.includes('competition_fixtures') ? null : {},
+  };
+  const compiled = {};
+  new Function('exports', 'database', 'readSyncedMatchEvents', 'readSyncedMatchReviews', 'readSyncedSessionClockOperation', readerJs)(
+    compiled, async () => db,
+    async () => [{id:'tactic', side:'home', eventType:'tactical_change', tacticalChange:{formationId:'4-4-2', captainId:'private', defensiveWidth:9}}],
+    async () => [], async () => null,
+  );
+  const offline = await compiled.readSyncedSessionReport('session', 'own', cached);
+  assert.deepEqual(offline.timeline[0].tacticalChange, {formationId:'4-4-2'});
+  assert.doesNotMatch(JSON.stringify(offline.timeline), /captainId|defensiveWidth|private/);
+});
+
+test("synced report reconstructs canonical score, full time, bilateral confirmation and disputed decisions", async () => {
+  const calls = [];
+  const db = {
+    getAll: async () => [],
+    getOptional: async (sql, args) => {
+      calls.push(args);
+      return sql.includes("competition_fixtures")
+        ? null
+        : {
+            home_confirmed_at: "yes",
+            away_confirmed_at: "yes",
+            finalised_at: "now",
+          };
+    },
+  };
+  const compiled = {};
+  new Function(
+    "exports",
+    "database",
+    "readSyncedMatchEvents",
+    "readSyncedMatchReviews",
+    "readSyncedSessionClockOperation",
+    readerJs,
+  )(
+    compiled,
+    async () => db,
+    async () => [
+      { id: "canonical-goal", side: "away", eventType: "goal", minute: 5 },
+    ],
+    async () => [
+      {
+        id: "review",
+        status: "resolved",
+        resolution: "same_event",
+        disputedAt: "now",
+      },
+    ],
+    async () => ({
+      period: "full_time",
+      elapsed_ms: 5400000,
+      running: 0,
+      applied_revision: 7,
+    }),
+  );
+  const synced = await compiled.readSyncedSessionReport(
+    "session",
+    "sheet-b",
+    report,
+  );
+  assert.deepEqual(calls, [["session"], ["session"]]);
+  assert.deepEqual(synced.score, { home: 0, away: 1 });
+  assert.equal(synced.finalStatus, "amendment_required");
+  assert.equal(synced.clock.running, false);
+  assert.equal(synced.reviews[0].resolution, "same_event");
+});
+
+test("offline published fixture score wins over timeline and a peer finish stops every clock", async () => {
+  const db = {
+    getOptional: async (sql) =>
+      sql.includes("competition_fixtures")
+        ? { home_score: 3, away_score: 1, status: "completed" }
+        : {
+            home_confirmed_at: "yes",
+            away_confirmed_at: "yes",
+            finalised_at: "now",
+          },
+    getAll: async () => [
+      {
+        id: "sheet-a",
+        clock_period: "first_half",
+        clock_elapsed_ms: 60000,
+        clock_started_at: "now",
+        clock_revision: 8,
+      },
+      {
+        id: "sheet-b",
+        clock_period: "full_time",
+        clock_elapsed_ms: 5400000,
+        clock_started_at: null,
+        clock_revision: 7,
+      },
+    ],
+  };
+  const compiled = {};
+  new Function(
+    "exports",
+    "database",
+    "readSyncedMatchEvents",
+    "readSyncedMatchReviews",
+    "readSyncedSessionClockOperation",
+    readerJs,
+  )(
+    compiled,
+    async () => db,
+    async () => [],
+    async () => [],
+    async () => null,
+  );
+  const synced = await compiled.readSyncedSessionReport(
+    "session",
+    "sheet-a",
+    report,
+  );
+  assert.deepEqual(synced.score, { home: 3, away: 1 });
+  assert.equal(synced.finalStatus, "finalised");
+  assert.equal(synced.clock.period, "full_time");
+  assert.equal(synced.clock.startedAt, null);
+  assert.equal(synced.clock.elapsedMs, 5400000);
+});
+
+test('canonical player labels ignore viewer-private identity and legacy labels stay unchanged', () => {
+  const a = sessionTimeline(report, {id:'a', isHome:true})[0];
+  const b = sessionTimeline(report, {id:'b', isHome:false})[0];
+  a.athlete = {firstName:'Private', lastName:'Name', squadNumber:99};
+  assert.equal(sessionPlayerLabel(a), '#9 Shared Player');
+  assert.equal(sessionPlayerLabel(b), sessionPlayerLabel(a));
+  assert.equal(sessionPlayerLabel({athlete:a.athlete}), null);
+});
+
+function stubApi(apiFetch, offline) {
+  const compiled = {};
+  new Function("exports", "require", apiJs)(compiled, (name) =>
+    name === "@/lib/api" ? { ApiError, apiFetch } : offline);
+  return compiled;
+}
+
+function queueHarness(fetch, initial = []) {
+  const rows = initial.map(row => ({ state: "queued", canonical_event_id: null, ...row }));
+  return { rows, api: stubApi(fetch, {
+    getOfflineDeviceId: () => "device",
+    enqueueEvent: async (matchId, payload) => rows.push({ id: payload.clientRequestId, match_id: matchId,
+      kind: "observation", payload: JSON.stringify(payload), state: "queued" }),
+    listQueuedEvents: async () => rows.map(row => ({ ...row })),
+    queuedEventAsTimelineRow: row => ({ ...JSON.parse(row.payload), id: row.id, syncStatus: row.state }),
+    setQueuedEventState: async (id, state) => Object.assign(rows.find(row => row.id === id), { state }),
+    setQueuedItemOutcome: async (id, state, canonical_event_id, error) =>
+      Object.assign(rows.find(row => row.id === id), { state, canonical_event_id, error }),
+    rejectQueuedEvent: async (id, error) => Object.assign(rows.find(row => row.id === id), { state: "rejected", error }),
+  }) };
+}
+
+test("a malformed offline item is retained with its error while the valid goal uploads", async () => {
+  const queue = ["bad", "goal"].map(id => ({ id, match_id: "sheet", kind: "observation",
+    payload: JSON.stringify({ clientRequestId: id }) }));
+  const { api, rows } = queueHarness(async (_url, options) => {
+    const { items } = JSON.parse(options.body);
+    if (items.some(item => item.payload.clientRequestId === "bad")) throw new ApiError(400);
+    return { receipts: items.map(item => ({ id: item.payload.clientRequestId, outcome: "accepted" })) };
+  }, queue);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "rejected");
+  assert.equal(rows[0].error, "request failed");
+  assert.equal(rows[1].state, "accepted");
+});
+
+test("an interrupted reconnect leaves the goal retriable and a later flush accepts it", async () => {
+  let attempt = 0;
+  const { api, rows } = queueHarness(async () => {
+    if (++attempt === 1) throw new TypeError("offline");
+    return { receipts: [{ id: "goal", outcome: "accepted" }] };
+  }, [{ id: "goal", match_id: "sheet", payload: "{}" }]);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "queued");
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "accepted");
+});
+
+test("local acknowledgement precedes a slow upload and queued goal/assist uploads remain ordered", async t => {
+  const previousOnline = Object.getOwnPropertyDescriptor(navigator, "onLine");
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  t.after(() => {
+    if (previousOnline) Object.defineProperty(navigator, "onLine", previousOnline);
+    else delete navigator.onLine;
+  });
+  let release;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const requests = [];
+  const { api, rows } = queueHarness(async (_url, options) => {
+    const { items } = JSON.parse(options.body);
+    requests.push(items.map(item => item.payload.clientRequestId));
+    if (requests.length === 1) await waiting;
+    return { receipts: items.map(item => ({ id: item.payload.clientRequestId, outcome: "accepted" })) };
+  });
+  const created = await api.createMatchLogEvent("sheet", { clientRequestId: "goal", eventType: "goal" }, { backgroundUpload: true });
+  assert.equal(created.id, "goal");
+  assert.equal(created.syncStatus, "queued");
+  await api.createMatchLogEvent("sheet", { clientRequestId: "assist", eventType: "assist", detail: "goal" }, { backgroundUpload: true });
+  const first = api.flushOfflineMatchEvents(), second = api.flushOfflineMatchEvents();
+  assert.equal(first, second, "concurrent flushes share one upload worker");
+  assert.equal(rows[0].state, "uploading");
+  release();
+  await first;
+  assert.deepEqual(requests, [["goal"], ["assist"]]);
+  assert.deepEqual(rows.map(row => row.state), ["accepted", "accepted"]);
+});
+
+test("replayed review votes use the dedicated endpoint with their original ID and parents", async () => {
+  const operation = { kind: "operation", operationType: "resolve_review", id: "vote", matchId: "sheet",
+    reviewId: "review", resolution: "same_event", explanation: "Same goal", causalParentIds: ["parent"] };
+  const requests = [];
+  const { api, rows } = queueHarness(async (url, options) => {
+    requests.push([url, JSON.parse(options.body)]);
+    return { id: "review", canonicalEventId: "goal", teamDecisions: { home: "same_event" } };
+  }, [{ id: "vote", match_id: "sheet", kind: "operation", payload: JSON.stringify(operation) }]);
+  await api.flushOfflineMatchEvents();
+  assert.deepEqual(requests, [["/matches/sheet/event-reviews/review/resolve", {
+    operationId: "vote", resolution: "same_event", explanation: "Same goal", causalParentIds: ["parent"],
+  }]]);
+  assert.equal(rows[0].state, "accepted");
+});
+
+test("rejected review votes remain visible locally and do not block later observations", async () => {
+  const operation = { id: "vote", kind: "operation", operationType: "resolve_review", matchId: "sheet",
+    reviewId: "review", resolution: "same_event", causalParentIds: [] };
+  const { api, rows } = queueHarness(async url => {
+    if (url.includes("/resolve")) throw new ApiError(409);
+    return { receipts: [{ id: "goal", outcome: "accepted" }] };
+  }, [{ id: "vote", match_id: "sheet", kind: "operation", payload: JSON.stringify(operation) },
+      { id: "goal", match_id: "sheet", kind: "observation", payload: "{}" }]);
+  await api.flushOfflineMatchEvents();
+  assert.equal(rows[0].state, "rejected");
+  assert.equal(rows[1].state, "accepted");
+});
+
+test("a resumed shared clock overrides a completed sheet before its slower poll catches up", () => {
+  const sheet = { id: "sheet", isHome: true, eventStatus: "completed", clockRevision: 4, clockPeriod: "full_time" };
+  const resumed = { ...report, finalStatus: "open", clock: { period: "second_half", elapsedMs: 5500000,
+    startedAt: "2026-10-07T10:00:00Z", revision: 5 } };
+  assert.equal(applySessionReport(sheet, resumed).eventStatus, "scheduled");
+  assert.equal(applySessionReport(sheet, resumed).clockPeriod, "second_half");
+});
+test("older and equal synced clock revisions retain the API anchor; newer revisions replace it completely", async () => {
+  const match = { clockRevision: 8, clockPeriod: "second_half", clockElapsedMs: 1000, clockStartedAt: "fresh" };
+  for (const revision of [7, 8, 9]) {
+    const api = stubApi(async () => match, {
+      cacheResponse: async () => {},
+      readSyncedSessionClockOperation: async () => ({ applied_revision: revision, period: "first_half", elapsed_ms: 10, running: 1, created_at: "old" }),
+    });
+    const actual = await api.fetchMatch("sheet");
+    assert.deepEqual(actual, revision <= 8 ? match : { clockRevision: 9, clockPeriod: "first_half", clockElapsedMs: 10, clockStartedAt: "old" });
+  }
+});
+test("protected match and squad reads never fall back after HTTP denial", async () => {
+  for (const status of [401, 403, 404]) {
+    const api = stubApi(async () => { throw new ApiError(status); }, new Proxy({}, {
+      get: () => async () => { assert.fail("protected cache was read after denial"); },
+    }));
+    for (const method of ["fetchMatch", "fetchMatchSquad", "fetchMatchOpponentSquad", "fetchMatchEvents"])
+      await assert.rejects(api[method]("sheet"), /request failed/);
+  }
+});
+test("batch success applies individual receipts and leaves missing acknowledgements queued with a reason", async () => {
+  const outcomes = [], states = [], rejected = [];
+  const queue = ["accepted", "rejected", "pending", "missing"].map((id) => ({ id, match_id: "sheet", kind: "operation", state: "queued", payload: JSON.stringify({ id }) }));
+  const api = stubApi(async () => ({ receipts: [
+    { id: "accepted", outcome: "accepted", canonicalEventId: "canonical" },
+    { id: "rejected", outcome: "rejected", safeErrorCode: "SHARED_SESSION_CONFLICT" },
+    { id: "pending", outcome: "dependency_pending" },
+  ] }), {
+    listQueuedEvents: async () => queue,
+    setQueuedEventState: async (...args) => states.push(args),
+    setQueuedItemOutcome: async (...args) => outcomes.push(args),
+    rejectQueuedEvent: async (...args) => rejected.push(args),
+  });
+  await api.flushOfflineMatchEvents();
+  assert.deepEqual(rejected, [["rejected", "SHARED_SESSION_CONFLICT"]]);
+  assert.equal(outcomes.find(([id]) => id === "accepted")[1], "accepted");
+  assert.equal(outcomes.find(([id]) => id === "pending")[1], "dependency_pending");
+  assert.match(outcomes.find(([id]) => id === "missing")[3], /did not acknowledge/);
+  assert.equal(outcomes.find(([id]) => id === "missing")[1], "queued");
+});
+test("a report for another session fails visibly without using cached scores", async () => {
+  const api = stubApi(async () => ({ ...report, sessionId: "wrong" }), {
+    cacheResponse: async () => assert.fail("wrong report cached"),
+    readCachedResponse: async () => assert.fail("private fallback used"),
+  });
+  await assert.rejects(api.fetchSessionReport("session", "sheet"), /different session/);
+});
+
+test("clock retry payload retains original elapsed time and identity while the display advances", async () => {
+  const source = storeSource.slice(storeSource.indexOf("export async function readClockAnchor("), storeSource.indexOf("export function queuedEventAsTimelineRow("));
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const compiled = {};
+  new Function("exports", "database", js)(compiled, async () => ({ getOptional: async () => ({
+    period: "first_half", elapsed_ms: 1000, running: 1, authority_revision: "4", wall_clock_ms: Date.now() - 5000,
+    uncertain: 0, operation_id: "immutable", client_created_at: "original", updated_at: "version",
+  }) }));
+  const anchor = await compiled.readClockAnchor("sheet");
+  assert.ok(anchor.elapsedMs >= 6000);
+  assert.equal(anchor.operationElapsedMs, 1000);
+  assert.equal(anchor.operationId, "immutable");
+  assert.equal(anchor.clientCreatedAt, "original");
+});

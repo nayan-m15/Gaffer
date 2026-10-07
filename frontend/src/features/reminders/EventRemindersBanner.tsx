@@ -30,7 +30,13 @@ const TYPE_LABEL: Record<ReminderEvent["type"], string> = {
  * Dashboard banner for scheduled events starting within the next 24 hours.
  * Renders nothing when there are no active reminders.
  */
-export function EventRemindersBanner({ events }: { events: ReminderEvent[] }) {
+export function EventRemindersBanner({
+  events,
+  compact = false,
+}: {
+  events: ReminderEvent[];
+  compact?: boolean;
+}) {
   const [extraDismissed, setExtraDismissed] = useState<string[]>([]);
 
   const reminders = useMemo(() => {
@@ -52,26 +58,32 @@ export function EventRemindersBanner({ events }: { events: ReminderEvent[] }) {
   return (
     <section
       aria-label="Upcoming event reminders"
-      className="rounded-xl border border-primary/30 bg-card p-5"
+      className={cn(
+        "rounded-xl border border-primary/30",
+        compact ? "mb-3 bg-primary/5 px-3 py-2" : "bg-card p-5",
+      )}
     >
-      <div className="mb-4 flex items-center gap-2">
+      <div className={cn("flex items-center gap-2", compact ? "mb-1" : "mb-4")}>
         <Bell className="size-4 text-primary" aria-hidden="true" />
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Reminders · Next 24 hours
         </h2>
       </div>
 
-      <ul className="-my-1">
+      <ul className={compact ? "max-h-32 overflow-y-auto [scrollbar-width:thin]" : "-my-1"}>
         {reminders.map((event) => (
           <li
             key={event.id}
-            className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0 last:pb-0"
+            className={cn(
+              "flex items-center justify-between gap-3 border-b border-border last:border-b-0 last:pb-0",
+              compact ? "py-1" : "py-3",
+            )}
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
                 {event.title}
               </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+              <div className={cn("mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground", compact && "hidden")}>
                 <span
                   className={cn(
                     "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",

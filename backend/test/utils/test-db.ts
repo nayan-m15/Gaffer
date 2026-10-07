@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, or } from 'drizzle-orm';
+import { eq, inArray, or } from 'drizzle-orm';
 import {
   createDatabaseClient,
   isDatabaseConnectionError,
@@ -7,6 +7,8 @@ import {
 import {
   injuries,
   injuryTimelineEntries,
+  matchSessionParticipants,
+  matchSessions,
   playerClaimInvites,
   teamInvites,
   teams,
@@ -34,7 +36,9 @@ export function uniqueTestIdentity(prefix = 's1-07'): TestIdentity {
 /**
  * Deletes a test-created user and (if it created one) their team.
  *
- * The team goes first: deleting it cascades `team_members`, `athletes`,
+ * Shared sessions go first so confirmed-report locks do not block cascades,
+ * and their confirmation audit references do not retain deleted test users.
+ * Deleting the team then cascades `team_members`, `athletes`,
  * `events`, `team_invites` and `injuries` (which in turn cascades
  * `injury_timeline_entries`). Those last two matter because
  * `team_invites.created_by_user_id`, `injuries.created_by_user_id` and
@@ -52,6 +56,30 @@ export async function cleanupUser({
     .from(user)
     .where(eq(user.email, email))
     .limit(1);
+
+  // Only sessions belonging to this synthetic team/user are removed. Delete
+  // them before their events, which remain locked while the session exists.
+  await testDb
+    .delete(matchSessions)
+    .where(
+      or(
+        inArray(
+          matchSessions.id,
+          testDb
+            .select({ id: matchSessionParticipants.sessionId })
+            .from(matchSessionParticipants)
+            .innerJoin(teams, eq(teams.id, matchSessionParticipants.teamId))
+            .where(eq(teams.name, teamName)),
+        ),
+        ...(existingUser
+          ? [
+              eq(matchSessions.homeConfirmedByUserId, existingUser.id),
+              eq(matchSessions.awayConfirmedByUserId, existingUser.id),
+              eq(matchSessions.finalisedByUserId, existingUser.id),
+            ]
+          : []),
+      ),
+    );
 
   if (existingUser) {
     await testDb

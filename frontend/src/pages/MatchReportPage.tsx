@@ -1,4 +1,7 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { sessionPlayerLabel } from "@/features/matches/session-report-model";
+import { MatchAmendmentPanel } from '@/features/matches/MatchAmendmentPanel';
+import { SessionReportStatus } from '@/features/matches/SessionReportStatus';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftRight,
@@ -30,8 +33,7 @@ import {
   useDeleteMatchEvent,
   useFinaliseMatchProjection,
   useLogMatchEvent,
-  useMatch,
-  useMatchEvents,
+  useMatchView,
   useMatchInsight,
   useMatchSquad,
   useReopenMatchProjection,
@@ -78,12 +80,15 @@ import {
 } from "@/features/matches/match-report-charts";
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
 import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
+import { EventReviewPanel } from "@/offline/EventReviewPanel";
+import { ResumeMatchDialog } from "@/features/matches/ResumeMatchDialog";
 import {
   LiveBenchRow,
   LivePitch,
   LivePitchPlayers,
 } from "@/features/matches/live-tactical-view";
 import {
+  publicOpponentTimeline,
   friendlyLineupPlayers,
   friendlyLineupStarterIds,
   opponentPitchState,
@@ -131,6 +136,8 @@ function shirtLabel(athlete: MatchSquadAthlete) {
 }
 
 function whoLabel(event: MatchLogEvent, squad: MatchSquadAthlete[]) {
+  const sharedLabel = sessionPlayerLabel(event);
+  if (sharedLabel) return sharedLabel;
   if (event.athlete) {
     return shirtLabel(event.athlete);
   }
@@ -195,6 +202,7 @@ function MatchReportTimelinePanel({
   oppName,
   assistsByGoal,
   deletePending,
+  readOnly,
   onAdd,
   onEdit,
   onDelete,
@@ -205,6 +213,7 @@ function MatchReportTimelinePanel({
   oppName: string;
   assistsByGoal: ReturnType<typeof pairAssistsToGoals>;
   deletePending: boolean;
+  readOnly: boolean;
   onAdd: () => void;
   onEdit: (event: MatchLogEvent) => void;
   onDelete: (event: MatchLogEvent) => void;
@@ -215,7 +224,7 @@ function MatchReportTimelinePanel({
         <h2 className="font-oswald text-sm font-semibold uppercase tracking-wider text-white">Match Events</h2>
         <p className="text-[11px] text-[#8e9ba8]">{events.length} {events.length === 1 ? "event" : "events"} logged</p>
       </div>
-      <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[#16d99a]/40 bg-[#16d99a]/10 px-3 py-1.5 font-oswald text-xs tracking-wider text-[#16d99a] transition-colors hover:bg-[#16d99a]/20" onClick={onAdd}>
+      <button type="button" disabled={readOnly} hidden={readOnly} className="inline-flex items-center gap-1.5 rounded-lg border border-[#16d99a]/40 bg-[#16d99a]/10 px-3 py-1.5 font-oswald text-xs tracking-wider text-[#16d99a] transition-colors hover:bg-[#16d99a]/20" onClick={onAdd}>
         <Plus className="size-3.5" />Add Event
       </button>
     </div>
@@ -239,6 +248,7 @@ function MatchReportTimelinePanel({
               oppName={oppName}
               assist={assistsByGoal.get(event.id)}
               deletePending={deletePending}
+              readOnly={readOnly}
               onEdit={() => onEdit(event)}
               onDelete={() => onDelete(event)}
             />,
@@ -256,6 +266,7 @@ function MatchReportTimelineRow({
   oppName,
   assist,
   deletePending,
+  readOnly,
   onEdit,
   onDelete,
 }: {
@@ -265,6 +276,7 @@ function MatchReportTimelineRow({
   oppName: string;
   assist?: MatchLogEvent;
   deletePending: boolean;
+  readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -276,7 +288,8 @@ function MatchReportTimelineRow({
     <button
       type="button"
       className="min-w-0 flex-1 rounded-xl border border-[#2a2e31] bg-[#0d0f10] px-3 py-2.5 text-left transition-colors hover:border-[#16d99a]/40 hover:bg-[#111315]"
-      onClick={() => { if (!event.pending) onEdit(); }}
+      disabled={readOnly}
+      onClick={() => { if (!readOnly && !event.pending) onEdit(); }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2">
@@ -294,7 +307,8 @@ function MatchReportTimelineRow({
       type="button"
       aria-label="Delete event"
       className="shrink-0 self-center rounded-md p-1.5 text-[#8e9ba8] hover:bg-white/5 hover:text-[#ff5b5f] disabled:opacity-40"
-      disabled={event.pending || deletePending}
+      hidden={readOnly}
+      disabled={readOnly || event.pending || deletePending}
       onClick={onDelete}
     ><Trash2 className="size-3.5" /></button>
   </div>;
@@ -320,11 +334,10 @@ export default function MatchReportPage() {
   const navigate = useNavigate();
   const { team } = useAuth();
 
-  const matchQuery = useMatch(matchId);
+  const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
   const squadQuery = useMatchSquad(matchId);
-  const eventsQuery = useMatchEvents(matchId);
   const insightQuery = useMatchInsight(
-    matchId,
+    sessionReport ? undefined : matchId,
     matchQuery.data?.projection?.finalisationState !== undefined &&
       matchQuery.data.projection.finalisationState !== "open",
   );
@@ -354,10 +367,36 @@ export default function MatchReportPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [amendmentPanelOpen, setAmendmentPanelOpen] = useState(() => new URLSearchParams(window.location.search).has("amendments"));
 
+  const previousPlayState = useRef<{ matchId: string; finished: boolean } | null>(null);
+  useEffect(() => {
+    const current = matchQuery.data;
+    if (!current) return;
+    const finished = current.eventStatus === "completed" || current.clockPeriod === "full_time";
+    const previous = previousPlayState.current;
+    previousPlayState.current = { matchId: current.id, finished };
+    if (previous?.matchId === current.id && previous.finished && !finished) {
+      navigate(`/matches/${current.id}/live`, { replace: true });
+    }
+  }, [matchQuery.data, navigate]);
+
+  const previousReport = useRef({ revision: sessionReport?.reportRevision, confirmed: false });
+  useEffect(() => {
+    const own = Boolean(sessionReport?.confirmations[matchQuery.data?.isHome ? 'home' : 'away']);
+    if (previousReport.current.confirmed && previousReport.current.revision !== sessionReport?.reportRevision && !sessionReport?.finalisedAt) {
+      setResultActionNote('The shared report changed. Review the updated score and timeline, then confirm again.');
+    }
+    previousReport.current = { revision: sessionReport?.reportRevision, confirmed: own };
+    if (sessionReport?.finalisedAt) { setAdding(false); setEditing(null); setDeleting(null); }
+  }, [sessionReport?.reportRevision, sessionReport?.finalisedAt, sessionReport?.confirmations, matchQuery.data?.isHome]);
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
   const timeline = useMemo(() => {
-    const rows = uniqueTimelineEvents(eventsQuery.data ?? []);
+    const publicPlayers = matchQuery.data?.opponentSquad?.length ? [] : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup);
+    const originals = uniqueTimelineEvents(eventsQuery.data ?? []);
+    const rows = publicOpponentTimeline(originals, publicPlayers).map((row, index) => ({ ...row, detail: originals[index].detail }));
     return [...rows].sort((a, b) => {
       const byMinute = a.minute - b.minute;
       if (byMinute !== 0) {
@@ -365,7 +404,7 @@ export default function MatchReportPage() {
       }
       return a.createdAt.localeCompare(b.createdAt);
     });
-  }, [eventsQuery.data]);
+  }, [eventsQuery.data, matchQuery.data?.opponentSquad, matchQuery.data?.friendlyOpponentLineup]);
 
   /**
    * The plan the team finished under: the one it kicked off with, plus every
@@ -381,12 +420,13 @@ export default function MatchReportPage() {
   const match = matchQuery.data;
   const oppName = match?.opponentName ?? "OPP";
   const isHome = match?.isHome ?? true;
-  const visibility = match?.opponentSquadVisibility ?? "none";
+  const visibility = !match?.opponentSquad?.length && friendlyLineupPlayers(match?.friendlyOpponentLineup).length
+    ? "full" : match?.opponentSquadVisibility ?? "none";
   const ownColor = resolveOwnColor(match?.teamColor, team?.primaryColor);
   const oppColor = resolveOppColor(match?.opponentColor);
   const ownHalf = isHome ? "left" : "right";
   const oppHalf = isHome ? "right" : "left";
-  const teamScore = eventsQuery.isSuccess
+  const teamScore = sessionReport ? (isHome ? sessionReport.score.home : sessionReport.score.away) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "own" &&
@@ -394,7 +434,7 @@ export default function MatchReportPage() {
           event.lifecycleStatus !== "voided",
       ).length
     : (match?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
+  const oppScore = sessionReport ? (isHome ? sessionReport.score.away : sessionReport.score.home) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "opponent" &&
@@ -418,8 +458,8 @@ export default function MatchReportPage() {
   const oppAbbrev = teamAbbrev(oppName);
 
   const ownState = useMemo(
-    () => ownPitchState(squad, timeline),
-    [squad, timeline],
+    () => ownPitchState(squad, privateEventsQuery.data ?? timeline),
+    [squad, timeline, privateEventsQuery.data],
   );
   const matchPlayerCount: FormationPlayerCount = gamePlan
     ? getFormationPlayerCount(gamePlan.formationId)
@@ -437,7 +477,7 @@ export default function MatchReportPage() {
     () =>
       opponentPitchState(
         opponentDisplaySquad,
-        timeline,
+        publicOpponentTimeline(timeline, opponentDisplaySquad),
         matchPlayerCount,
         (match?.opponentSquad ?? []).length > 0
           ? undefined
@@ -539,8 +579,8 @@ export default function MatchReportPage() {
   const finaliseResult = () => {
     if (!match?.projection) return;
     setResultActionError(null);
-    finaliseProjection.mutate(match.projection.revision, {
-      onSuccess: () => setResultActionNote("Result finalised"),
+    finaliseProjection.mutate({ expectedRevision: match.projection.revision, expectedSessionRevision: sessionReport?.reportRevision }, {
+      onSuccess: () => setResultActionNote(match.sharedSessionId ? "Your team confirmed the score and shared timeline." : "Result finalised"),
       onError: (err) =>
         setResultActionError(
           err instanceof Error ? err.message : "Could not finalise the result.",
@@ -551,9 +591,9 @@ export default function MatchReportPage() {
   const reopenResult = () => {
     setResultActionError(null);
     reopenProjection.mutate(
-      "Coach reopened the published result for amendment.",
+      "Coach withdrew their team confirmation.",
       {
-        onSuccess: () => setResultActionNote("Result reopened"),
+        onSuccess: () => setResultActionNote(match?.sharedSessionId ? "Your team confirmation was withdrawn." : "Result reopened"),
         onError: (err) =>
           setResultActionError(
             err instanceof Error ? err.message : "Could not reopen the result.",
@@ -626,7 +666,7 @@ export default function MatchReportPage() {
       squad,
       opponentSquad,
       ownOnPitchIds: new Set(
-        ownPitchState(squad, timeline).onPitch.map((athlete) => athlete.id),
+        ownPitchState(squad, privateEventsQuery.data ?? timeline).onPitch.map((athlete) => athlete.id),
       ),
       opponentOnPitchIds: new Set(
         opponentPitchState(opponentSquad, timeline).onPitch.map(
@@ -667,7 +707,7 @@ export default function MatchReportPage() {
       setDeleting(null);
     } catch (err) {
       setDeleteError(
-        err instanceof ApiError ? err.message : "Could not delete this event.",
+        err instanceof Error ? err.message : "Could not delete this event.",
       );
     }
   };
@@ -763,6 +803,10 @@ export default function MatchReportPage() {
     match.eventStatus === "completed" &&
     Boolean(projection);
   const isFinalised = projection?.finalisationState !== "open";
+  const sharedLocked = Boolean(match.sharedSessionId && sessionReport?.finalisedAt);
+  const ownConfirmed = Boolean(sessionReport?.confirmations[match.isHome ? "home" : "away"]);
+  const resultActionLabel = sharedLocked ? "Request amendment" : match.sharedSessionId
+    ? ownConfirmed ? "Withdraw confirmation" : "Confirm report" : isFinalised ? "Reopen Result" : "Finalise Result";
 
   return (
     <div className="match-report min-h-full overflow-x-hidden">
@@ -786,6 +830,22 @@ export default function MatchReportPage() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {team?.role === "coach" && match.eventStatus === "completed" && !sharedLocked &&
+                (!projection || projection.finalisationState === "open") ? (
+                <button type="button" onClick={() => setResumeOpen(true)}
+                  className="rounded-lg bg-[#00d99a] px-3 py-2 text-xs font-semibold text-[#06120e]">
+                  Resume match
+                </button>
+              ) : null}
+              {match.sharedSessionId ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-warning/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warning transition-colors hover:bg-warning/10"
+                  onClick={() => setReviewPanelOpen(true)}
+                >
+                  Review queue
+                </button>
+              ) : null}
               {team?.role === "coach" && (
                 <button
                   type="button"
@@ -801,15 +861,15 @@ export default function MatchReportPage() {
                 <button
                   type="button"
                   className="inline-flex items-center gap-1.5 rounded-lg border border-[#233747] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#c5ced6] transition-colors hover:text-white disabled:opacity-60"
-                  onClick={isFinalised ? reopenResult : finaliseResult}
-                  disabled={finaliseProjection.isPending || reopenProjection.isPending}
+                  onClick={sharedLocked ? () => setAmendmentPanelOpen(true) : ownConfirmed || (!match.sharedSessionId && isFinalised) ? reopenResult : finaliseResult}
+                  disabled={finaliseProjection.isPending || reopenProjection.isPending || (!sharedLocked && !ownConfirmed && (projection?.unresolvedReviewCount ?? 0) > 0)}
                 >
                   {isFinalised ? (
                     <Unlock className="size-3.5" />
                   ) : (
                     <Lock className="size-3.5" />
                   )}
-                  {isFinalised ? "Reopen Result" : "Finalise Result"}
+                  {resultActionLabel}
                 </button>
               )}
               <button
@@ -841,6 +901,8 @@ export default function MatchReportPage() {
       </header>
 
       <div className="w-full px-4 pb-12 pt-4 sm:px-6 sm:pt-5 lg:px-8">
+        <SessionReportStatus report={sessionReport} />
+        {sharedLocked ? <p className="px-4 py-2 text-sm text-[#9ca39f]">Both teams confirmed this report. Shared events are locked. Request an amendment to propose changes.</p> : sessionReport ? <p className="px-4 py-2 text-xs text-[#9ca39f]">Confirmation approves the score and shared timeline shown here. Any shared change before final confirmation clears existing approvals.</p> : null}
         <div className="mb-5 flex w-full max-w-md justify-center rounded-xl border border-[#2a2e31] bg-[#111315] p-1 shadow-inner">
           {TABS.map((item) => (
             <button
@@ -993,6 +1055,7 @@ export default function MatchReportPage() {
                 oppName={oppName}
                 assistsByGoal={assistsByGoal}
                 deletePending={deleteEvent.isPending}
+                readOnly={sharedLocked || team?.role !== "coach"}
                 onAdd={() => {
                   setAddError(null);
                   setAdding(true);
@@ -1017,7 +1080,7 @@ export default function MatchReportPage() {
           ownPlaced={ownPlaced}
           oppPlaced={oppPlaced}
           visibility={visibility}
-          timeline={timeline}
+          timeline={publicOpponentTimeline(timeline, opponentDisplaySquad)}
           ownAbbrev={ownAbbrev}
           oppAbbrev={oppAbbrev}
           ownBench={ownBench}
@@ -1031,7 +1094,7 @@ export default function MatchReportPage() {
       {adding && (
         <AddEventOverlay
           squad={squad}
-          opponentSquad={match.opponentSquad}
+          opponentSquad={opponentDisplaySquad}
           visibility={visibility}
           ownName={ownName}
           oppName={oppName}
@@ -1090,7 +1153,7 @@ export default function MatchReportPage() {
         <EditEventOverlay
           event={editing}
           squad={squad}
-          opponentSquad={match.opponentSquad}
+          opponentSquad={opponentDisplaySquad}
           visibility={visibility}
           linkedAssist={linkedAssistsForGoal(timeline, editing)[0] ?? null}
           linkedSub={linkedSubstitutionForInjury(timeline, editing) ?? null}
@@ -1132,6 +1195,16 @@ export default function MatchReportPage() {
           }}
         />
       )}
+      {amendmentPanelOpen && sessionReport ? <MatchAmendmentPanel match={match} report={sessionReport} events={timeline.filter(event => !event.pending)} squad={squad} onClose={() => setAmendmentPanelOpen(false)} /> : null}
+      {resumeOpen ? <ResumeMatchDialog match={match} onClose={() => setResumeOpen(false)}
+        onResumed={() => navigate(`/matches/${match.id}/live`, { replace: true })} /> : null}
+      {reviewPanelOpen && match.sharedSessionId ? (
+        <EventReviewPanel
+          matchId={match.id}
+          expectedReviewCount={projection?.unresolvedReviewCount ?? 0}
+          onClose={() => setReviewPanelOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1427,13 +1500,14 @@ function createComposerDraft(input: {
     }),
     incomingAthleteId: ownTeamValue(input.team, input.incomingAthleteId),
     incomingOpponentPlayerId: opponentRosterValue(isOpponent, input.roster, input.incomingOpponentPlayerId),
-    incomingOpponentLabel: freeOpponentLabel(isOpponent, input.roster, input.incomingOpponentLabel),
+    incomingOpponentLabel: input.incomingOpponentPlayerId.startsWith("public-lineup:")
+      ? input.incomingOpponentLabel : freeOpponentLabel(isOpponent, input.roster, input.incomingOpponentLabel),
     injuryLedToSub: input.injuryLedToSub,
   });
 }
 
 function opponentRosterValue(isOpponent: boolean, roster: boolean, value: string) {
-  return isOpponent && roster ? value : "";
+  return isOpponent && roster && !value.startsWith("public-lineup:") ? value : "";
 }
 
 function ownTeamValue(team: MatchEventTeam, value: string) {
@@ -1758,7 +1832,9 @@ function EventComposerOverlay({
     selectedAssistOpponent,
     incomingAthleteId,
     incomingOpponentPlayerId,
-    incomingOpponentLabel,
+    incomingOpponentLabel: opponentSquad.find((player) => player.publicLineup && player.id === incomingOpponentPlayerId)
+      ? opponentPlayerLabel(opponentSquad.find((player) => player.id === incomingOpponentPlayerId)!, visibility)
+      : incomingOpponentLabel,
     roster,
     visibility,
     injuryLedToSub,

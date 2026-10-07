@@ -63,6 +63,26 @@ function forwardSetCookie(res: Response, headers: Headers): void {
 }
 
 /**
+ * Rebuilds the incoming Express request as the web-standard `Request` Better
+ * Auth's request-aware middlewares expect. Only the method, URL and headers
+ * matter here — the body travels separately in the `auth.api` call — but the
+ * URL mirrors what Better Auth's own Node adapter derives for `toNodeHandler`
+ * (`x-forwarded-proto`, then the host header, then the original path) so the
+ * request looks the same as one that arrived through the native handler.
+ */
+function toWebRequest(req: Request, headers: Headers) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol =
+    (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ??
+    req.protocol;
+  const host = req.headers.host ?? 'localhost';
+  return new Request(`${protocol}://${host}${req.originalUrl}`, {
+    method: req.method,
+    headers,
+  });
+}
+
+/**
  * Expires Better Auth's `dont_remember` cookie.
  *
  * Better Auth only ever *writes* this flag when a sign-in declines persistence
@@ -271,17 +291,31 @@ export class AuthController {
   @Post('sign-in')
   async signIn(
     @Body() body: unknown,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const dto = zodValidate(signInSchema, body);
 
     try {
+      // The originating request rides along so Better Auth's
+      // `formCsrfMiddleware` — the request-aware login CSRF protection it
+      // applies on its own /auth/sign-in/email endpoint — sees the real
+      // Origin/Fetch Metadata headers and rejects cross-site logins before
+      // a session is created. The internal API call alone carries no request
+      // context, which is exactly how this custom wrapper bypassed that
+      // protection (SEC-003). `asResponse: false` keeps the current
+      // `{ headers, response }` return shape, which a passed `request`
+      // would otherwise flip to a raw `Response`.
+      const requestHeaders = fromNodeHeaders(req.headers);
       const { headers, response } = await auth.api.signInEmail({
         body: {
           email: dto.email,
           password: dto.password,
           rememberMe: dto.rememberMe,
         },
+        headers: requestHeaders,
+        request: toWebRequest(req, requestHeaders),
+        asResponse: false,
         returnHeaders: true,
       });
       forwardSetCookie(res, headers);
