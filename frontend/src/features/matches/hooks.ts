@@ -785,7 +785,8 @@ export function useMatchView(matchId: string | undefined) {
                         ...row,
                         athleteId: own.athleteId ?? row.athleteId,
                         athlete: own.athlete ?? row.athlete,
-                        detail: own.detail,
+                        detail: row.eventType === "red_card" && own.eventType === "yellow_card"
+                          ? row.detail : own.detail,
                         tacticalChange: own.tacticalChange ?? row.tacticalChange,
                       }
                     : row;

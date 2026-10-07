@@ -87,7 +87,7 @@ export function sessionTimeline(
   sheet: MatchRecord,
   squad: MatchSquadAthlete[] = [],
 ): MatchLogEvent[] {
-  return report.timeline.map((row) => {
+  const timeline: MatchLogEvent[] = report.timeline.map((row) => {
     const own = row.side === (sheet.isHome ? "home" : "away");
     const label = sessionPlayerLabel(row);
     const candidates = own && row.player ? squad.filter((athlete) => {
@@ -112,6 +112,33 @@ export function sessionTimeline(
       pending: false,
     };
   });
+  // Concurrent bookings can become distinct only after both coaches review
+  // them. Derive the dismissal from the resolved timeline on every refresh,
+  // without altering the original observations or creating another event.
+  const bookings = new Map<string, number>();
+  const secondBookings = new Set<string>();
+  const seen = new Set<string>();
+  const ordered = [...timeline].sort((left, right) =>
+    (left.matchElapsedMs ?? left.minute * 60_000) -
+      (right.matchElapsedMs ?? right.minute * 60_000) ||
+    String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) ||
+    left.id.localeCompare(right.id),
+  );
+  for (const event of ordered) {
+    if (seen.has(event.id) || event.lifecycleStatus !== "confirmed" ||
+      event.eventType !== "yellow_card") continue;
+    seen.add(event.id);
+    const name = event.player?.name?.trim().toLowerCase();
+    const number = event.player?.shirtNumber;
+    if ((!name || name === "unassigned") && number == null) continue;
+    const key = JSON.stringify([event.team, number ?? null, name ?? ""]);
+    const count = (bookings.get(key) ?? 0) + 1;
+    bookings.set(key, count);
+    if (count === 2) secondBookings.add(event.id);
+  }
+  return timeline.map(event => secondBookings.has(event.id)
+    ? { ...event, eventType: "red_card", detail: "Second yellow card" }
+    : event);
 }
 
 export function sessionPlayerLabel(event: Pick<MatchLogEvent, "player">): string | null {
