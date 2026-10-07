@@ -271,6 +271,10 @@ async function queuedTimelineRow(matchId: string, clientRequestId: string) {
 export async function createMatchLogEvent(
   matchId: string,
   input: CreateMatchLogEventInput,
+  options: {
+    backgroundUpload?: boolean;
+    onUploadSettled?: () => void;
+  } = {},
 ) {
   const enriched = {
     ...input,
@@ -278,6 +282,21 @@ export async function createMatchLogEvent(
     clientCreatedAt: input.clientCreatedAt ?? new Date().toISOString(),
   };
   await enqueueEvent(matchId, enriched);
+
+  if (options.backgroundUpload) {
+    const queued = await queuedTimelineRow(matchId, enriched.clientRequestId);
+    if (!queued) throw new Error("The saved event could not be read locally.");
+    if (typeof navigator === "undefined" || navigator.onLine) {
+      // Return the durable row immediately so live follow-ups can open. Use
+      // the ordered queue for uploads so a goal precedes its assist or undo.
+      void flushOfflineMatchEvents()
+        .then(options.onUploadSettled)
+        .catch((error: unknown) => {
+          console.warn("Could not finish the background match upload.", error);
+        });
+    }
+    return queued;
+  }
 
   // Once the operation is in SQLite it is safe to release the live logger.
   // Attempting fetch while the browser already knows it is offline can leave
@@ -391,7 +410,7 @@ async function uploadQueuedBatch(
   }
 }
 
-export async function flushOfflineMatchEvents() {
+async function flushQueuedMatchEvents() {
   const queued = (await listQueuedEvents()).filter((row) =>
     ["queued", "dependency_pending", "uploading"].includes(row.state),
   );
@@ -402,6 +421,24 @@ export async function flushOfflineMatchEvents() {
       break;
     }
   }
+}
+
+let offlineFlushPromise: Promise<void> | undefined;
+let offlineFlushRequested = false;
+
+export function flushOfflineMatchEvents(): Promise<void> {
+  offlineFlushRequested = true;
+  if (!offlineFlushPromise) {
+    offlineFlushPromise = (async () => {
+      do {
+        offlineFlushRequested = false;
+        await flushQueuedMatchEvents();
+      } while (offlineFlushRequested);
+    })().finally(() => {
+      offlineFlushPromise = undefined;
+    });
+  }
+  return offlineFlushPromise;
 }
 
 async function storedEvent(matchId: string, eventId: string) {

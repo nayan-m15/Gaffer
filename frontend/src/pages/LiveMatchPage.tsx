@@ -413,7 +413,7 @@ export default function LiveMatchPage() {
     gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
   );
   const gamePlan = gamePlanSnapshot ?? gamePlanQuery.data;
-  const logEvent = useLogMatchEvent(matchId ?? "");
+  const logEvent = useLogMatchEvent(matchId ?? "", { backgroundUpload: true });
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");

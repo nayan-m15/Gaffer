@@ -287,7 +287,10 @@ type DeleteMutateContext = {
   scoreTeam: MatchEventTeam | null;
 };
 
-export function useLogMatchEvent(matchId: string) {
+export function useLogMatchEvent(
+  matchId: string,
+  { backgroundUpload = false }: { backgroundUpload?: boolean } = {},
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -296,7 +299,18 @@ export function useLogMatchEvent(matchId: string) {
     // it before createMatchLogEvent can reach the durable local queue.
     networkMode: "always",
     mutationFn: (input: CreateMatchLogEventInput) =>
-      createMatchLogEvent(matchId, input),
+      createMatchLogEvent(matchId, input, {
+        // Injury details need the uploaded event; ordinary live actions only
+        // need a durable local save before the coach can keep logging.
+        backgroundUpload: backgroundUpload && input.eventType !== "injury",
+        onUploadSettled: () => {
+          invalidateSheetSession(queryClient, matchId);
+          void queryClient.invalidateQueries({ queryKey: eventsKey(matchId) });
+          void queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
+          void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+          void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
+        },
+      }),
     onMutate: async (input) => {
       const affectsScore = input.eventType === "goal";
       const offline = typeof navigator !== "undefined" && !navigator.onLine;
@@ -368,7 +382,6 @@ export function useLogMatchEvent(matchId: string) {
       }
     },
     onSuccess: async (created, _input, context) => {
-      invalidateSheetSession(queryClient, matchId);
       queryClient.setQueryData<MatchLogEvent[]>(
         eventsKey(matchId),
         (current) => {
@@ -382,6 +395,11 @@ export function useLogMatchEvent(matchId: string) {
           );
         },
       );
+      // The live logger can continue from this durable row. Refresh server
+      // projections when the background upload settles, rather than fetching
+      // them before the new observation has reached the server.
+      if (backgroundUpload && _input.eventType !== "injury") return;
+      invalidateSheetSession(queryClient, matchId);
       // Every event changes the projection, including edits after full time.
       // Keep the add dialog pending until the revision used to confirm is fresh.
       const refresh = queryClient.invalidateQueries({ queryKey: matchKey(matchId) });
