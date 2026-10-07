@@ -6,15 +6,6 @@ on:
   push:
     branches: [main, develop, development]
 
-env:
-  # Node gives each address a host resolves to only 250ms to connect before
-  # trying the next. Neon's hosts resolve to several IPv4 and IPv6 addresses;
-  # when a handshake to the EU region takes longer than that, every IPv4
-  # attempt is abandoned, IPv6 is unreachable on the runners, and database
-  # calls fail with "fetch failed" (ETIMEDOUT/ENETUNREACH). Applies to every
-  # Node process: migrations, Jest, the backend and Playwright.
-  NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
-
 jobs:
   quality-and-build:
     name: Code quality and build
@@ -54,6 +45,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       BETTER_AUTH_URL: http://localhost:3000
       FRONTEND_URL: http://localhost:5173
@@ -174,6 +170,11 @@ jobs:
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100
@@ -246,6 +247,11 @@ jobs:
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
       PORT: "3100"
       BETTER_AUTH_URL: http://localhost:3100
