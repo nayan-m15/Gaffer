@@ -101,9 +101,30 @@ test("CSV neutralizes =, +, - and @ formula triggers in user-controlled fields",
   assert.ok(!csv.includes(`,${escapeCsv(data.overview.trends[0].opponent)},Home,`));
   assert.ok(!csv.includes(`,${escapeCsv(data.overview.players[0].name)},2,2,1,1,0`));
 
-  // Negative numbers also begin with "-" and export as literal text.
+  // Numbers are exempt from the guard: a negative goal difference must stay
+  // a plain numeric cell so spreadsheet calculations keep working.
   const negative = buildTeamReportCsv(report({ goalDifference: -3 }));
-  assert.ok(negative.includes("Team summary,Goal difference,'-3,"));
+  assert.ok(negative.includes("Team summary,Goal difference,-3,"));
+  assert.ok(!negative.includes("Team summary,Goal difference,'-3,"));
+  // Positive and zero numbers round-trip unchanged too.
+  assert.ok(negative.includes("Team summary,Matches played,2,"));
+  assert.ok(negative.includes("Team summary,Goals for,3,"));
+});
+
+test("a string beginning with '-' is still guarded, unlike a numeric -3", () => {
+  const data = report();
+  // seasonName is a user-controlled string cell: the same characters that
+  // are harmless as a number are a formula trigger as text.
+  data.context.seasonName = "-3";
+
+  const csv = buildTeamReportCsv(data);
+
+  assert.ok(
+    csv.includes(`Team summary,Season,${guardedCell("-3")},`),
+    "string '-3' is guarded with the text marker",
+  );
+  // The unguarded text form must never reach the file.
+  assert.ok(!csv.includes("Team summary,Season,-3,"));
 });
 
 test("leading whitespace or control characters cannot bypass the formula guard", () => {

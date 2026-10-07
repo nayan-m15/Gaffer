@@ -102,12 +102,16 @@ function needsFormulaGuard(text: string): boolean {
 }
 
 function csvCell(value: string | number): string {
-  const text = String(value);
-  // CSV-formula-injection guard: user-controlled values (team, competition,
+  // CSV-formula-injection guard: user-controlled strings (team, competition,
   // season, opponent and player names) that a spreadsheet could execute are
   // prefixed with a text-marker apostrophe so they open as literal text.
-  // Guarded before CSV quoting so the escaping still round-trips.
-  const guarded = needsFormulaGuard(text) ? `'${text}` : text;
+  // Guarded before CSV quoting so the escaping still round-trips. Numbers are
+  // exempt — a numeric cell (-3) is never a formula and must stay numeric so
+  // spreadsheet calculations keep working.
+  const guarded =
+    typeof value === "string" && needsFormulaGuard(value)
+      ? `'${value}`
+      : String(value);
   return /[",\r\n]/.test(guarded)
     ? `"${guarded.replaceAll('"', '""')}"`
     : guarded;
