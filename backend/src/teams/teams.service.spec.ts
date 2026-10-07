@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
-import { teamMembers } from '../database/schema';
+import { teamMembers, teams } from '../database/schema';
 import { TeamsService } from './teams.service';
 
 /**
@@ -88,6 +88,121 @@ describe('TeamsService', () => {
       await expect(rejection).rejects.toThrow(
         'No team associated with this account.',
       );
+    });
+  });
+
+  describe('updateTeamForUser', () => {
+    it('lets a coach rename the team through the competition-syncing batch', async () => {
+      const coachChain = selectChain([
+        { id: 'team-id', name: 'Old Name', role: 'coach' },
+      ]);
+      const freshChain = selectChain([
+        { id: 'team-id', name: 'New Name', primaryColor: null },
+      ]);
+      const batch = jest.fn().mockResolvedValue([]);
+      const updateBuilder = {
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockReturnThis(),
+      };
+      const update = jest.fn().mockReturnValue(updateBuilder);
+      mockDatabaseService.database = {
+        select: jest
+          .fn()
+          .mockReturnValueOnce(coachChain)
+          .mockReturnValueOnce(freshChain),
+        update,
+        execute: jest.fn().mockReturnThis(),
+        batch,
+      };
+
+      const team = await service.updateTeamForUser('coach-user-id', {
+        name: 'New Name',
+      });
+
+      expect(team).toEqual({
+        id: 'team-id',
+        name: 'New Name',
+        role: 'coach',
+        primaryColor: null,
+      });
+      expect(update).toHaveBeenCalledWith(teams);
+      expect(batch).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a coach update the team colour', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'coach' },
+      ]);
+      const returning = jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'team-id', name: 'Test Team', primaryColor: '#1A2B3C' },
+        ]);
+      const where = jest.fn().mockReturnValue({ returning });
+      const set = jest.fn().mockReturnValue({ where });
+      const update = jest.fn().mockReturnValue({ set });
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+      };
+
+      await expect(
+        service.updateTeamForUser('coach-user-id', {
+          primaryColor: '#1A2B3C',
+        }),
+      ).resolves.toEqual({
+        id: 'team-id',
+        name: 'Test Team',
+        role: 'coach',
+        primaryColor: '#1A2B3C',
+      });
+      expect(update).toHaveBeenCalledWith(teams);
+    });
+
+    it('rejects an assistant with 403 before touching the database', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'assistant' },
+      ]);
+      const update = jest.fn();
+      const batch = jest.fn();
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+        batch,
+      };
+
+      const rejection = service.updateTeamForUser('assistant-user-id', {
+        name: 'Hijacked FC',
+        primaryColor: '#FF0000',
+      });
+      await expect(rejection).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(rejection).rejects.toThrow(
+        'Only coaches can perform this action.',
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a user with no team membership before any write', async () => {
+      const chain = selectChain([]);
+      const update = jest.fn();
+      const batch = jest.fn();
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+        batch,
+      };
+
+      const rejection = service.updateTeamForUser('teamless-user-id', {
+        name: 'Any FC',
+      });
+      await expect(rejection).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(rejection).rejects.toThrow(
+        'No team associated with this account.',
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
     });
   });
 
