@@ -106,7 +106,7 @@ export class TeamsService {
    * Resolves the caller's team and rejects unless they are a coach on it.
    * Team-less users and assistants both get 403 — the single server-side
    * gate every coach-only operation (roster mutations, assistant-invite
-   * management) routes through.
+   * management, team identity updates) routes through.
    */
   async requireCoachTeam(userId: string): Promise<TeamSummary> {
     const team = await this.findTeamForUser(userId);
@@ -186,10 +186,10 @@ export class TeamsService {
     userId: string,
     input: UpdateTeamDto,
   ): Promise<TeamSummary> {
-    const existing = await this.findTeamForUser(userId);
-    if (!existing) {
-      throw new NotFoundException('Team not found.');
-    }
+    // Coach-only: team identity changes route through the shared coach gate
+    // so an assistant is rejected with 403 before any write — including the
+    // competition_teams label sync below — can run.
+    const existing = await this.requireCoachTeam(userId);
 
     // Keep competition labels in sync with the registered team name atomically.
     // Existing unlinked labels remain untouched. A collision rolls everything back.

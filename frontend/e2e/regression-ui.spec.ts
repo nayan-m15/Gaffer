@@ -215,12 +215,17 @@ test("authenticated sidebar navigates on mobile and preserves history", async ({
   await page.route("**/api/events**", (route) => json(route, []));
 
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Open navigation menu" }).click();
-  const mobileSidebar = page.locator("aside:visible");
-  await expect(
-    mobileSidebar.getByRole("navigation", { name: "Main navigation" }),
-  ).toBeVisible();
-  await mobileSidebar.getByRole("link", { name: "Events" }).click();
+  // Coaches navigate on phones with the bottom dock; its Menu button opens
+  // the remaining destinations.
+  const dock = page.getByRole("navigation", { name: "Primary navigation" });
+  await expect(dock).toBeVisible();
+  await dock.getByRole("button", { name: "Menu" }).click();
+  const moreMenu = page.getByRole("group", { name: "More navigation" });
+  await expect(moreMenu.getByRole("link", { name: "Roster" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(moreMenu).toBeHidden();
+
+  await dock.getByRole("link", { name: "Events" }).click();
 
   await expect(page).toHaveURL(/\/events$/);
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
