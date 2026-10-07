@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { hasSoftwareWebGL } from "@/lib/software-webgl";
 import { buildStadium, disposeStadium } from "./stadium-architecture";
 
 /** Presentation-only environment shared by the coach and player dashboards. */
@@ -8,9 +9,12 @@ export function StadiumScene() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Software rendering gets a still, unshadowed, non-antialiased frame that
+    // only re-renders on resize or theme change, like reduced motion.
+    const software = hasSoftwareWebGL();
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "low-power" });
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: !software, powerPreference: "low-power" });
     } catch {
       return; // Keep the dashboard usable on devices without WebGL.
     }
@@ -18,7 +22,7 @@ export function StadiumScene() {
     // full-resolution bloom/composer targets on an always-present background.
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = !software;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
     const scene = new THREE.Scene();
@@ -67,6 +71,7 @@ export function StadiumScene() {
       return light;
     });
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const still = () => software || motionQuery.matches;
     let mobile = false;
     let pointerX = 0;
     let pointerY = 0;
@@ -88,12 +93,12 @@ export function StadiumScene() {
         lookTarget.set(-5, 6, -5);
       }
       // Keep the orbit inside the bowl; sweep 45 degrees in 60 seconds.
-      const angle = motionQuery.matches ? 0 : -Math.cos(panElapsed * Math.PI / 60) * Math.PI / 8;
+      const angle = still() ? 0 : -Math.cos(panElapsed * Math.PI / 60) * Math.PI / 8;
       const x = camera.position.x - lookTarget.x;
       const z = camera.position.z - lookTarget.z;
       camera.position.x = lookTarget.x + x * Math.cos(angle) - z * Math.sin(angle);
       camera.position.z = lookTarget.z + x * Math.sin(angle) + z * Math.cos(angle);
-      if (!mobile && !motionQuery.matches) {
+      if (!mobile && !still()) {
         camera.position.x += pointerX * 1.4;
         camera.position.y += pointerY * 0.7;
       }
@@ -121,7 +126,7 @@ export function StadiumScene() {
     const themeObserver = new MutationObserver(syncTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     const pointerMove = (event: PointerEvent) => {
-      if (mobile || motionQuery.matches) return;
+      if (mobile || still()) return;
       pointerX = event.clientX / window.innerWidth - 0.5;
       pointerY = event.clientY / window.innerHeight - 0.5;
     };
@@ -136,8 +141,8 @@ export function StadiumScene() {
         const delta = Math.min((time - lastTime) / 1000, 0.1);
         lastTime = time;
         lastRender = time;
-        if (!motionQuery.matches) panElapsed += delta;
-        night += (targetNight - night) * (motionQuery.matches ? 1 : 1 - Math.exp(-delta * 5));
+        if (!still()) panElapsed += delta;
+        night += (targetNight - night) * (still() ? 1 : 1 - Math.exp(-delta * 5));
         if (Math.abs(targetNight - night) < 0.002) night = targetNight;
         (skyMaterial.uniforms.top.value as THREE.Color).copy(dayTop).lerp(nightTop, night);
         (skyMaterial.uniforms.horizon.value as THREE.Color).copy(dayHorizon).lerp(nightHorizon, night);
@@ -153,7 +158,7 @@ export function StadiumScene() {
         renderer.render(scene, camera);
         canvas.dataset.ready = "true";
       }
-      if (!motionQuery.matches || night !== targetNight) animationFrame = requestAnimationFrame(render);
+      if (!still() || night !== targetNight) animationFrame = requestAnimationFrame(render);
     };
     function invalidate() {
       if (!animationFrame && !stopped && !document.hidden) {
