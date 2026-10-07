@@ -7,6 +7,30 @@ import type {
   OpponentMatchPlayer,
 } from "@/features/matches/types";
 import { apiUrl } from "@/lib/api-url";
+import { RemoteSyncLifecycle } from "./remote-sync";
+
+const remoteSync = new RemoteSyncLifecycle((signal, unauthorized) => ({
+  fetchCredentials: async () => {
+    const response = await fetch(apiUrl("/sync/token"), { credentials: "include", signal });
+    if (response.status === 401) {
+      unauthorized();
+      window.dispatchEvent(new Event("gaffer-session-expired"));
+      return null;
+    }
+    if (!response.ok) throw new Error("Could not authenticate PowerSync.");
+    const credentials = await response.json() as { endpoint: string; token: string; expiresAt: string };
+    return { endpoint: credentials.endpoint, token: credentials.token, expiresAt: new Date(credentials.expiresAt) };
+  },
+  uploadData: async syncDatabase => {
+    // Synced tables are server-owned; match capture uses the typed local queue.
+    const transaction = await syncDatabase.getNextCrudTransaction();
+    if (transaction) await transaction.complete();
+  },
+}));
+
+export async function setRemoteSyncAuthenticated(authenticated: boolean) {
+  await remoteSync.setAuthenticated(authenticated && Boolean(import.meta.env.VITE_POWERSYNC_URL));
+}
 
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
 let userScope =
@@ -46,6 +70,7 @@ export function subscribeToOfflineQueueChanges(onChange: () => void) {
 export async function setOfflineUserScope(userId: string | null) {
   const next = userId ?? "anonymous";
   if (next === userScope) return;
+  await remoteSync.detach();
   const previous = databasePromise;
   databasePromise = undefined;
   userScope = next;
@@ -60,6 +85,7 @@ export async function setOfflineUserScope(userId: string | null) {
 
 async function database() {
   if (!databasePromise) {
+    const databaseUserScope = userScope;
     databasePromise = (async () => {
       const { PowerSyncDatabase, Schema, Table, column } =
         await import("@powersync/web");
@@ -262,11 +288,11 @@ async function database() {
       const db = new PowerSyncDatabase({
         schema,
         database: {
-          dbFilename: `gaffer-${deploymentScope}-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
+          dbFilename: `gaffer-${deploymentScope}-${databaseUserScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
         },
       });
       await db.init();
-      const safeUserScope = userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      const safeUserScope = databaseUserScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
       if (safeUserScope && !localStorage.getItem(migrationKey)) {
         const legacy = new PowerSyncDatabase({
@@ -346,44 +372,7 @@ async function database() {
           await legacy.close();
         }
       }
-      if (import.meta.env.VITE_POWERSYNC_URL) {
-        // Local queue access must never wait for the remote sync connection.
-        // PowerSync can remain pending while a device is offline; awaiting it
-        // here would block enqueueEvent and leave the live logger locked.
-        void db
-          .connect({
-            fetchCredentials: async () => {
-              const response = await fetch(apiUrl("/sync/token"), {
-                credentials: "include",
-              });
-              if (response.status === 401) return null;
-              if (!response.ok)
-                throw new Error("Could not authenticate PowerSync.");
-              const credentials = (await response.json()) as {
-                endpoint: string;
-                token: string;
-                expiresAt: string;
-              };
-              return {
-                endpoint: credentials.endpoint,
-                token: credentials.token,
-                expiresAt: new Date(credentials.expiresAt),
-              };
-            },
-            uploadData: async (syncDatabase) => {
-              // Match capture uses the typed NestJS queue below. Synced tables
-              // are server-owned, so an unexpected direct write is discarded.
-              const transaction = await syncDatabase.getNextCrudTransaction();
-              if (transaction) await transaction.complete();
-            },
-          })
-          .catch((error: unknown) => {
-            console.warn(
-              "PowerSync connection is unavailable; using local storage.",
-              error,
-            );
-          });
-      }
+      if (import.meta.env.VITE_POWERSYNC_URL && databaseUserScope === userScope) await remoteSync.attach(db);
       return db;
     })();
   }

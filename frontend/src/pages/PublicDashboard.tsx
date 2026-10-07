@@ -62,8 +62,9 @@ const positionFilters: { id: PositionCategory; label: string }[] = [
 ];
 
 const dashboardSections = [
+  { id: "next-match", label: "Next Match" },
   { id: "players", label: "Squad Showcase" },
-  { id: "matches", label: "Match Center" },
+  { id: "matches", label: "Recent Results" },
   {
     id: "team-statistics",
     label: "League Standings",
@@ -71,14 +72,13 @@ const dashboardSections = [
 ] as const;
 
 export default function PublicDashboard() {
-  const mainRef = useRef<HTMLElement>(null);
-  const filterBarRef = useRef<HTMLDivElement>(null);
   const [teamId, setTeamId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
   const [matchStatus, setMatchStatus] = useState<PublicMatchStatus | "">("");
   const [positionFilter, setPositionFilter] = useState<PositionCategory>("all");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [squadView, setSquadView] = useState<"carousel" | "grid">("carousel");
 
   const filtersQuery = useQuery({
     queryKey: ["public-dashboard", "filters"],
@@ -156,11 +156,11 @@ export default function PublicDashboard() {
     for (const match of all) {
       if (match.status === "completed") {
         completed.push(match);
-      } else {
+      } else if (match.status === "scheduled") {
         upcoming.push(match);
       }
     }
-    return { upcomingMatches: upcoming, completedMatches: completed };
+    return { upcomingMatches: upcoming.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)), completedMatches: completed.sort((a, b) => Date.parse(b.scheduledAt) - Date.parse(a.scheduledAt)) };
   }, [matchesQuery.data]);
 
   // Apply the position filter first, then search the already loaded players.
@@ -215,23 +215,6 @@ export default function PublicDashboard() {
     };
   }, [statisticsQuery.data, matchesQuery.data]);
 
-  useLayoutEffect(() => {
-    const main = mainRef.current;
-    const filterBar = filterBarRef.current;
-    if (!main || !filterBar) return;
-
-    const updateSectionOffset = () => {
-      // The sticky bar starts below the 4rem site navbar. Keep an extra 1rem
-      // breathing room between it and a section heading after navigation.
-      const offset = Math.ceil(filterBar.getBoundingClientRect().height + 80);
-      main.style.setProperty("--public-dashboard-section-offset", `${offset}px`);
-    };
-    const observer = new ResizeObserver(updateSectionOffset);
-
-    updateSectionOffset();
-    observer.observe(filterBar);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <div className="public-dashboard-page relative isolate flex min-h-screen flex-col overflow-x-clip text-foreground selection:bg-brand/20 selection:text-brand">
@@ -239,14 +222,13 @@ export default function PublicDashboard() {
       <Navbar />
 
       <main
-        ref={mainRef}
         className="relative z-10 flex-1 pb-16 sm:pb-20"
         style={
-          { "--public-dashboard-section-offset": "18rem" } as CSSProperties
+          { "--public-dashboard-section-offset": "5rem" } as CSSProperties
         }
       >
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
-        <section className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
+        <section className="relative overflow-hidden py-6 sm:py-8">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--card)_82%,transparent)_0%,color-mix(in_srgb,var(--card)_45%,transparent)_38%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--background)_88%,transparent)_0%,color-mix(in_srgb,var(--background)_52%,transparent)_40%,transparent_74%)]"
             aria-hidden="true"
@@ -254,7 +236,7 @@ export default function PublicDashboard() {
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex justify-center text-center">
               <div className="max-w-3xl">
-                <h1 className="font-display text-4xl font-extrabold tracking-tight drop-shadow-sm sm:text-5xl lg:text-6xl">
+                <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
                   Gaffer Match Center
                 </h1>
                 <p className="mt-3 text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
@@ -269,8 +251,7 @@ export default function PublicDashboard() {
 
         {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
         <div
-          ref={filterBarRef}
-          className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
+          className="relative z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
         >
           <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:p-4 dark:bg-card/70">
               <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
@@ -318,6 +299,12 @@ export default function PublicDashboard() {
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
         <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
           
+          <DashboardSection id="next-match" title="Next Match" description="The next scheduled fixture for the selected filters." icon={<CalendarDays className="size-5" />}>
+            <SectionState loading={matchesQuery.isLoading} error={matchesQuery.isError} empty={upcomingMatches.length === 0} emptyMessage="No upcoming fixtures currently scheduled.">
+              <MatchList matches={upcomingMatches.slice(0, 1)} label="Next match" />
+            </SectionState>
+          </DashboardSection>
+
           {/* SECTION 1: Player Showcase */}
           <DashboardSection
             id="players"
@@ -363,6 +350,14 @@ export default function PublicDashboard() {
                 ))}
               </div>
 
+              <div role="group" aria-label="Squad view" className="flex shrink-0 gap-1 rounded-xl border border-border bg-card p-1">
+                {(["carousel", "grid"] as const).map(view => (
+                  <button key={view} type="button" aria-pressed={squadView === view} onClick={() => setSquadView(view)}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold capitalize focus-visible:outline-2 focus-visible:outline-brand ${squadView === view ? "bg-brand text-brand-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                    {view === "carousel" ? "Carousel" : "Grid"}
+                  </button>
+                ))}
+              </div>
               <div className="shrink-0 text-xs font-medium text-muted-foreground">
                 Showing <strong className="text-foreground">{filteredPlayers.length}</strong> players
               </div>
@@ -381,93 +376,31 @@ export default function PublicDashboard() {
                     : "No players found matching the selected filters."
                 }
               >
-                <PlayerShowcase key={[teamId, seasonId, competitionId, positionFilter, playerSearch].join("|")} players={filteredPlayers} />
+                <PlayerShowcase key={[teamId, seasonId, competitionId, positionFilter, playerSearch].join("|")} players={filteredPlayers} view={squadView} />
               </SectionState>
             )}
           </DashboardSection>
 
-          {/* SECTION 2: Match Center (Split Status Grid) */}
-          <DashboardSection
-            id="matches"
-            title="Match Center"
-            description="Upcoming fixtures paired alongside recent match results."
-            icon={<CalendarDays className="size-5" />}
-          >
-            <SectionState
-              loading={matchesQuery.isLoading}
-              error={matchesQuery.isError}
-              empty={(matchesQuery.data?.length ?? 0) === 0}
-              emptyMessage="No match events found for these filters."
-            >
-              <div className="grid gap-8 lg:grid-cols-2">
-                {/* Left Column: Scheduled / Upcoming Fixtures */}
-                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/75 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/65">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                    <div className="flex items-center gap-2 font-bold text-foreground">
-                      <span className="flex size-7 items-center justify-center rounded-lg bg-brand/10 text-brand">
-                        <Clock3 className="size-4" />
-                      </span>
-                      Upcoming Fixtures
-                    </div>
-                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
-                      {upcomingMatches.length} Scheduled
-                    </span>
-                  </div>
-
-                  {upcomingMatches.length === 0 ? (
-                    <div className="py-12 text-center text-sm text-muted-foreground">
-                      No upcoming fixtures currently scheduled.
-                    </div>
-                  ) : (
-                    <MatchList
-                      matches={upcomingMatches}
-                      label="Upcoming fixtures"
-                    />
-                  )}
-                </div>
-
-                {/* Right Column: Completed Match Results */}
-                <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card/75 p-4 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/65">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                    <div className="flex items-center gap-2 font-bold text-foreground">
-                      <span className="flex size-7 items-center justify-center rounded-lg bg-brand/10 text-brand">
-                        <Trophy className="size-4" />
-                      </span>
-                      Match Results
-                    </div>
-                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
-                      {completedMatches.length} Completed
-                    </span>
-                  </div>
-
-                  {completedMatches.length === 0 ? (
-                    <div className="py-12 text-center text-sm text-muted-foreground">
-                      No completed match results found.
-                    </div>
-                  ) : (
-                    <MatchList
-                      matches={completedMatches}
-                      label="Completed match results"
-                    />
-                  )}
-                </div>
-              </div>
+          <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <DashboardSection id="matches" title="Recent Results" description="Completed matches for the selected filters." icon={<Trophy className="size-5" />}>
+            <SectionState loading={matchesQuery.isLoading} error={matchesQuery.isError} empty={completedMatches.length === 0} emptyMessage="No completed match results found.">
+              <MatchList matches={completedMatches} label="Completed match results" />
             </SectionState>
           </DashboardSection>
 
           {/* SECTION 3: League Standings & Performance Analytics */}
           <DashboardSection
             id="team-statistics"
-            title="League Standings & Performance Telemetry"
+            title="League Standings"
             description="Official competition rankings alongside high-level season metrics."
             icon={<Trophy className="size-5" />}
           >
             {statisticsQuery.isError ? (
               <ErrorState />
             ) : (
-              <div className="grid items-start gap-5 sm:gap-8 lg:grid-cols-12">
+              <div className="grid items-start gap-5 sm:gap-8 2xl:grid-cols-12">
                 {/* Left (65%): Standings Table */}
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card/80 p-2.5 shadow-sm backdrop-blur-md sm:p-5 lg:col-span-8 dark:bg-card/70">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card/80 p-2.5 shadow-sm backdrop-blur-md sm:p-5 2xl:col-span-8 dark:bg-card/70">
                   <div className="mb-3 flex flex-col items-center gap-1 text-center sm:mb-4 sm:flex-row sm:justify-between sm:text-left">
                     <h3 className="text-base font-bold sm:text-lg">
                       Competition Table
@@ -485,7 +418,7 @@ export default function PublicDashboard() {
                 </div>
 
                 {/* Right (35%): Performance Telemetry Cards */}
-                <div className="flex min-w-0 flex-col gap-3 sm:gap-4 lg:col-span-4">
+                <div className="flex min-w-0 flex-col gap-3 sm:gap-4 2xl:col-span-4">
                   <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-sm backdrop-blur-md sm:p-5 dark:bg-card/70">
                     <h3 className="mb-3 flex items-center justify-center gap-2 text-base font-bold text-foreground sm:mb-4 sm:justify-start">
                       <BarChart3 className="size-4 text-brand" />
@@ -528,6 +461,7 @@ export default function PublicDashboard() {
               </div>
             )}
           </DashboardSection>
+          </div>
 
         </div>
       </main>
@@ -538,32 +472,19 @@ export default function PublicDashboard() {
 }
 
 {/* ─── Component: Public player showcase ────────────────────────────────── */}
-function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
+function PlayerShowcase({ players, view }: { players: PublicPlayer[]; view: "carousel" | "grid" }) {
   const items = useMemo(() => players.map((player) => ({
     id: player.id,
     alt: player.firstName + ' ' + player.lastName,
     content: <PublicDashboardPlayerCard player={player} />,
   })), [players]);
 
-  return (
-    <div className="mt-4 min-w-0" style={{ height: '500px', position: 'relative' }}>
-      <DepthCarousel
-        items={items}
-        depth={230}
-        spread={110}
-        tilt={12}
-        tiltDirection="right"
-        perspective={1650}
-        visibleCards={5}
-        falloff={0.14}
-        blur={4}
-        autoplay
-        loop
-        radius={23}
-        ariaLabel="Squad showcase player cards"
-      />
+  if (view === "grid") return (
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Squad grid">
+      {players.map(player => <PublicDashboardPlayerCard key={player.id} player={player} />)}
     </div>
   );
+  return <DepthCarousel items={items} className="mt-4" ariaLabel="Squad showcase player cards" />;
 }
 
 function PlayerShowcaseSkeleton() {
