@@ -333,42 +333,72 @@ export async function createMatchLogEvent(
   }
 }
 
+async function uploadQueuedBatch(
+  batch: Awaited<ReturnType<typeof listQueuedEvents>>,
+) {
+  try {
+    await Promise.all(
+      batch.map((row) => setQueuedEventState(row.id, "uploading")),
+    );
+    const response = await uploadSyncItems(batch.map(syncItemForRow));
+    const receipts = new Map(
+      response.receipts.map((receipt) => [receipt.id, receipt]),
+    );
+    for (const row of batch) {
+      const receipt = receipts.get(row.id);
+      if (receipt) await applyReceipt(receipt);
+      else await setQueuedItemOutcome(row.id, "queued", row.canonical_event_id, "The server did not acknowledge this item. Retry upload.");
+    }
+  } catch (error) {
+    // Upload validation applies to the entire request. Isolate invalid items
+    // so an older queued change cannot block unrelated match observations.
+    if (error instanceof ApiError && error.status === 400) {
+      if (batch.length > 1) {
+        const middle = Math.ceil(batch.length / 2);
+        await uploadQueuedBatch(batch.slice(0, middle));
+        await uploadQueuedBatch(batch.slice(middle));
+      } else {
+        await rejectQueuedEvent(batch[0].id, error.message);
+      }
+      return;
+    }
+    if (error instanceof ApiError && error.status === 403) {
+      await Promise.all(
+        batch.map((row) =>
+          setQueuedItemOutcome(
+            row.id,
+            "quarantined",
+            row.canonical_event_id,
+            "Team access was revoked. Sign in with the original authorised account to recover this item.",
+          ),
+        ),
+      );
+      return;
+    }
+    await Promise.all(
+      batch.map((row) =>
+        setQueuedItemOutcome(
+          row.id,
+          "queued",
+          row.canonical_event_id,
+          error instanceof ApiError && error.status === 401
+            ? "Sign in again to upload this item."
+            : "Upload interrupted. This item is saved and will retry when online.",
+        ),
+      ),
+    );
+    throw error;
+  }
+}
+
 export async function flushOfflineMatchEvents() {
   const queued = (await listQueuedEvents()).filter((row) =>
     ["queued", "dependency_pending", "uploading"].includes(row.state),
   );
   for (let offset = 0; offset < queued.length; offset += 50) {
-    const batch = queued.slice(offset, offset + 50);
     try {
-      await Promise.all(
-        batch.map((row) => setQueuedEventState(row.id, "uploading")),
-      );
-      const response = await uploadSyncItems(batch.map(syncItemForRow));
-      const receipts = new Map(
-        response.receipts.map((receipt) => [receipt.id, receipt]),
-      );
-      for (const row of batch) {
-        const receipt = receipts.get(row.id);
-        if (receipt) await applyReceipt(receipt);
-        else await setQueuedItemOutcome(row.id, "queued", row.canonical_event_id, "The server did not acknowledge this item. Retry upload.");
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 403) {
-        await Promise.all(
-          batch.map((row) =>
-            setQueuedItemOutcome(
-              row.id,
-              "quarantined",
-              row.canonical_event_id,
-              "Team access was revoked. Sign in with the original authorised account to recover this item.",
-            ),
-          ),
-        );
-        continue;
-      }
-      await Promise.all(
-        batch.map((row) => setQueuedEventState(row.id, "queued")),
-      );
+      await uploadQueuedBatch(queued.slice(offset, offset + 50));
+    } catch {
       break;
     }
   }

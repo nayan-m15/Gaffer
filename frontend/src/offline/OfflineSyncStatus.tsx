@@ -50,6 +50,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
 
   useEffect(() => {
     let active = true;
+    let uploadInProgress = false;
     const refresh = async () => {
       const [rows, peerStatus] = await Promise.all([
         listQueuedEvents(matchId),
@@ -93,6 +94,8 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
       }
     };
     const reconnect = async () => {
+      if (!active || !navigator.onLine || uploadInProgress) return;
+      uploadInProgress = true;
       setOnline(true);
       setSyncing(true);
       try {
@@ -112,6 +115,7 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
           if (active) setLastSync(syncedAt);
         }
       } finally {
+        uploadInProgress = false;
         if (active) setSyncing(false);
         await refresh();
       }
@@ -120,12 +124,23 @@ export function OfflineSyncStatus({ matchId }: { matchId: string }) {
     void refresh();
     const unsubscribeQueue = subscribeToOfflineQueueChanges(() => void refresh());
     const timer = window.setInterval(() => void refresh(), 1_000);
+    // The first reconnect can race the network becoming usable. Keep retrying
+    // pending uploads without requiring another offline/online transition.
+    const retryTimer = window.setInterval(() => {
+      if (!navigator.onLine || uploadInProgress) return;
+      void listQueuedEvents(matchId).then((rows) => {
+        if (rows.some((row) => PENDING_STATES.includes(row.state))) {
+          void reconnect();
+        }
+      });
+    }, 10_000);
     window.addEventListener("online", reconnect);
     window.addEventListener("offline", disconnect);
     if (navigator.onLine) void reconnect();
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.clearInterval(retryTimer);
       window.removeEventListener("online", reconnect);
       window.removeEventListener("offline", disconnect);
       unsubscribeQueue();
