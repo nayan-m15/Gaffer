@@ -9,6 +9,7 @@ import { cleanupUser, uniqueTestIdentity } from '../../backend/test/utils/test-d
 import {
   BACKEND_URL,
   registerVerifiedUser,
+  signInThroughApi,
 } from './utils/auth';
 
 const PASSWORD = 'password123';
@@ -52,12 +53,7 @@ async function seedCoachWithTeamAndAthlete(
   teamName: string,
 ) {
   await registerVerifiedUser(request, email, 'Injury Test Coach');
-  await expectApiOk(
-    await request.post(`${BACKEND_URL}/auth/sign-in`, {
-      data: { email, password: PASSWORD },
-    }),
-    'coach sign-in',
-  );
+  await signInThroughApi(request, email, PASSWORD);
   await expectApiOk(
     await request.post(`${BACKEND_URL}/teams`, {
       data: { name: teamName },
