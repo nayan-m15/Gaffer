@@ -1,5 +1,7 @@
 ALTER TABLE match_sessions ADD COLUMN report_revision integer NOT NULL DEFAULT 1;
+--> statement-breakpoint
 ALTER TABLE match_event_reviews ADD COLUMN team_decisions jsonb NOT NULL DEFAULT '{}'::jsonb;
+--> statement-breakpoint
 ALTER TABLE match_event_reviews ADD COLUMN team_decision_notes jsonb NOT NULL DEFAULT '{}'::jsonb;
 --> statement-breakpoint
 CREATE TABLE match_amendments (
@@ -24,6 +26,7 @@ CREATE TABLE match_amendments (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+--> statement-breakpoint
 CREATE INDEX match_amendments_session_index ON match_amendments(session_id, created_at);
 --> statement-breakpoint
 -- A session lock serialises confirmation, reconciliation and amendments.
@@ -73,6 +76,7 @@ BEGIN
   RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END;
 $$;
+--> statement-breakpoint
 CREATE TRIGGER guard_final_shared_event BEFORE INSERT OR UPDATE OR DELETE ON match_events
   FOR EACH ROW EXECUTE FUNCTION guard_final_shared_event();
 --> statement-breakpoint
@@ -92,6 +96,7 @@ BEGIN
   RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END;
 $$;
+--> statement-breakpoint
 CREATE TRIGGER guard_final_shared_review BEFORE INSERT OR UPDATE OR DELETE ON match_event_reviews FOR EACH ROW EXECUTE FUNCTION guard_final_shared_review();
 --> statement-breakpoint
 CREATE FUNCTION propose_match_amendment(p_id uuid, p_match uuid, p_actor text, p_action text,
@@ -152,6 +157,7 @@ $$;
 -- Preserve late observations as evidence without inserting into the official timeline.
 ALTER FUNCTION ingest_match_session_event_observation(uuid,uuid,uuid,match_session_side,uuid,text,match_event_type,match_event_team,uuid,text,uuid,text,integer,integer,text,jsonb,text,timestamptz,boolean)
   RENAME TO ingest_match_session_event_observation_unlocked;
+--> statement-breakpoint
 CREATE FUNCTION ingest_match_session_event_observation(
   p_observation_id uuid, p_match_id uuid, p_session_id uuid, p_side match_session_side,
   p_device_id uuid, p_actor_id text, p_event_type match_event_type, p_team match_event_team,
@@ -186,6 +192,7 @@ $$;
 --> statement-breakpoint
 -- A cross-team review records each team's position before applying a decision.
 DROP FUNCTION resolve_match_session_event_candidate(uuid,uuid,uuid,text,uuid,text,jsonb);
+--> statement-breakpoint
 CREATE FUNCTION resolve_match_session_event_candidate(
   p_review_id uuid, p_match_id uuid, p_session_id uuid, p_actor_id text,
   p_operation_id uuid, p_resolution text, p_causal_parents jsonb, p_note text DEFAULT NULL
@@ -338,6 +345,7 @@ END;
 $$;
 --> statement-breakpoint
 ALTER FUNCTION apply_match_event_mutation(uuid,uuid,text,uuid,text,jsonb,jsonb,jsonb,text) RENAME TO apply_match_event_mutation_unlocked;
+--> statement-breakpoint
 CREATE FUNCTION apply_match_event_mutation(p_id uuid,p_match uuid,p_actor text,p_event uuid,p_type text,
   p_decision jsonb,p_effective jsonb,p_parents jsonb,p_reason text) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE v_session uuid;
@@ -358,6 +366,7 @@ END;
 $$;
 --> statement-breakpoint
 ALTER FUNCTION void_match_session_event(uuid,uuid,text,uuid,jsonb,text) RENAME TO void_match_session_event_unlocked;
+--> statement-breakpoint
 CREATE FUNCTION void_match_session_event(p_id uuid,p_match uuid,p_actor text,p_event uuid,p_parents jsonb,p_reason text)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE v_session uuid;
