@@ -57,7 +57,10 @@ npm run test:e2e:ui
 
 Frontend runs on `http://localhost:5173`.
 Backend runs on `http://localhost:3000`.
+With `NODE_ENV=development` in your local `.env` (as in `.env.example`),
 Swagger docs are available at `http://localhost:3000/api/docs`.
+Production Swagger is disabled, including the JSON/YAML schemas. See the
+[Swagger policy](docs/swagger-policy.md) for deployment and verification details.
 
 ### Demo account
 

@@ -1,25 +1,42 @@
 /**
- * The Tactics tab — the core defensive / offensive sliders and style
- * dropdowns, laid out as two cards (Defence, Offence) exactly like FIFA's
- * Custom Tactics screen.
+ * The Tactics tab — a two-column workspace: the defensive and attacking
+ * controls on the left, and a live explanation plus tactical mini pitch on the
+ * right that follows whichever control the coach last touched.
+ *
+ * The controls still edit the same `GamePlanTactics` object on the backend's
+ * stored 1–10 / 0–10 scale; the preview normalises those values to 0–100 for its
+ * own maths and captions.
  */
 
+import { useState } from "react";
+import type { Formation } from "@/features/team-management/types";
 import type { GamePlanTactics } from "@/services/gamePlans";
 import { StyleField } from "./StyleField";
+import { TacticalRow } from "./TacticalRow";
 import { TacticsSlider } from "./TacticsSlider";
+import { tacticValueLabel } from "./preview/tacticalDescriptions";
+import { TacticalPreviewPanel } from "./preview/TacticalPreviewPanel";
+import type { ActiveTacticalSetting } from "./preview/tacticalTypes";
 import {
   DEFENSIVE_STYLE_OPTIONS,
   OFFENSIVE_STYLE_OPTIONS,
+  SETTING_SLIDER_META,
   SLIDER_META,
+  type SliderMeta,
 } from "./tactics-options";
+
+/** The tactical settings edited with a slider rather than a dropdown. */
+type SliderSetting = keyof typeof SETTING_SLIDER_META;
 
 interface TacticsTabProps {
   content: GamePlanTactics;
+  /** The plan's selected formation — the shape the preview draws. */
+  formation: Formation;
   onChange: (patch: Partial<GamePlanTactics>) => void;
   disabled?: boolean;
 }
 
-function SectionCard({
+function TacticalSection({
   title,
   children,
 }: {
@@ -28,88 +45,135 @@ function SectionCard({
 }) {
   return (
     <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-      <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         {title}
       </h2>
-      <div className="space-y-5">{children}</div>
+      <div className="space-y-2">{children}</div>
     </section>
   );
 }
 
-export function TacticsTab({ content, onChange, disabled }: TacticsTabProps) {
-  return (
-    <div className="space-y-6">
-      <SectionCard title="Defence">
-        <StyleField
-          label="Defensive style"
-          value={content.defensiveStyle}
-          options={DEFENSIVE_STYLE_OPTIONS}
-          onChange={(defensiveStyle) => onChange({ defensiveStyle })}
-          disabled={disabled}
-        />
-        <TacticsSlider
-          label="Width"
-          value={content.defensiveWidth}
-          meta={SLIDER_META.width}
-          onChange={(defensiveWidth) => onChange({ defensiveWidth })}
-          disabled={disabled}
-        />
-        <TacticsSlider
-          label="Depth"
-          value={content.defensiveDepth}
-          meta={SLIDER_META.depth}
-          onChange={(defensiveDepth) => onChange({ defensiveDepth })}
-          disabled={disabled}
-        />
-      </SectionCard>
+export function TacticsTab({
+  content,
+  formation,
+  onChange,
+  disabled,
+}: TacticsTabProps) {
+  const [activeSetting, setActiveSetting] =
+    useState<ActiveTacticalSetting>("defensiveStyle");
 
-      <SectionCard title="Offence">
-        <StyleField
-          label="Offensive style"
-          value={content.offensiveStyle}
-          options={OFFENSIVE_STYLE_OPTIONS}
-          onChange={(offensiveStyle) => onChange({ offensiveStyle })}
-          disabled={disabled}
-        />
-        <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-          <TacticsSlider
-            label="Width"
-            value={content.offensiveWidth}
-            meta={SLIDER_META.width}
-            onChange={(offensiveWidth) => onChange({ offensiveWidth })}
-            disabled={disabled}
-          />
-          <TacticsSlider
-            label="Players in box"
-            value={content.playersInBox}
-            meta={SLIDER_META.playersInBox}
-            onChange={(playersInBox) => onChange({ playersInBox })}
-            disabled={disabled}
-          />
-          <TacticsSlider
-            label="Corners"
-            value={content.cornersCommitment}
-            meta={SLIDER_META.commitment}
-            onChange={(cornersCommitment) => onChange({ cornersCommitment })}
-            disabled={disabled}
-          />
-          <TacticsSlider
-            label="Free kicks"
-            value={content.freeKicksCommitment}
-            meta={SLIDER_META.commitment}
-            onChange={(freeKicksCommitment) =>
-              onChange({ freeKicksCommitment })
-            }
-            disabled={disabled}
-          />
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Higher Corners / Free kicks commitment sends more players forward for
-          set pieces — more bodies in the box, but more exposure to the
-          counter if the ball is cleared. Assign your takers on the{" "}
-          <span className="font-medium text-foreground">Roles</span> tab.
-        </p>
-      </SectionCard>
+  /** Shared wiring for one slider row: highlight, preview focus, band caption. */
+  const sliderRow = (
+    setting: SliderSetting,
+    label: string,
+    ariaLabel: string,
+    meta: SliderMeta,
+    onSliderChange: (value: number) => void,
+  ) => (
+    <TacticalRow
+      key={setting}
+      active={activeSetting === setting}
+      onActivate={() => setActiveSetting(setting)}
+    >
+      <TacticsSlider
+        label={label}
+        ariaLabel={ariaLabel}
+        value={content[setting]}
+        meta={meta}
+        valueLabel={tacticValueLabel(content, setting)}
+        onChange={onSliderChange}
+        showEndLabels
+        disabled={disabled}
+      />
+    </TacticalRow>
+  );
+
+  return (
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      {/* ── Controls ──────────────────────────────────────────────────────── */}
+      <div className="min-w-0 space-y-6">
+        <TacticalSection title="Defensive tactics">
+          <TacticalRow
+            active={activeSetting === "defensiveStyle"}
+            onActivate={() => setActiveSetting("defensiveStyle")}
+          >
+            <StyleField
+              label="Defensive style"
+              value={content.defensiveStyle}
+              options={DEFENSIVE_STYLE_OPTIONS}
+              onChange={(defensiveStyle) => onChange({ defensiveStyle })}
+              disabled={disabled}
+              hideDescription
+            />
+          </TacticalRow>
+          {sliderRow(
+            "defensiveWidth",
+            "Width",
+            "Defensive width",
+            SLIDER_META.width,
+            (defensiveWidth) => onChange({ defensiveWidth }),
+          )}
+          {sliderRow(
+            "defensiveDepth",
+            "Depth",
+            "Defensive depth",
+            SLIDER_META.depth,
+            (defensiveDepth) => onChange({ defensiveDepth }),
+          )}
+        </TacticalSection>
+
+        <TacticalSection title="Attacking tactics">
+          <TacticalRow
+            active={activeSetting === "offensiveStyle"}
+            onActivate={() => setActiveSetting("offensiveStyle")}
+          >
+            <StyleField
+              label="Build-up style"
+              value={content.offensiveStyle}
+              options={OFFENSIVE_STYLE_OPTIONS}
+              onChange={(offensiveStyle) => onChange({ offensiveStyle })}
+              disabled={disabled}
+              hideDescription
+            />
+          </TacticalRow>
+          {sliderRow(
+            "offensiveWidth",
+            "Width",
+            "Attacking width",
+            SLIDER_META.width,
+            (offensiveWidth) => onChange({ offensiveWidth }),
+          )}
+          {sliderRow(
+            "playersInBox",
+            "Players in box",
+            "Players in box",
+            SLIDER_META.playersInBox,
+            (playersInBox) => onChange({ playersInBox }),
+          )}
+          {sliderRow(
+            "cornersCommitment",
+            "Corners",
+            "Corner commitment",
+            SLIDER_META.commitment,
+            (cornersCommitment) => onChange({ cornersCommitment }),
+          )}
+          {sliderRow(
+            "freeKicksCommitment",
+            "Free kicks",
+            "Free kick commitment",
+            SLIDER_META.commitment,
+            (freeKicksCommitment) => onChange({ freeKicksCommitment }),
+          )}
+        </TacticalSection>
+      </div>
+
+      {/* ── Live preview ──────────────────────────────────────────────────── */}
+      <TacticalPreviewPanel
+        formation={formation}
+        tactics={content}
+        activeSetting={activeSetting}
+        className="min-w-0 lg:sticky lg:top-6 lg:self-start"
+      />
     </div>
   );
 }

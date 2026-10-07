@@ -10,6 +10,7 @@ export const EVENT_COLOR: Record<MatchEventType, string> = {
   penalty: "#48e3af",
   injury: "#fb923c",
   goalkeeper_save: "#67e8f9",
+  tactical_change: "#94a3b8",
 };
 
 export const SECOND_YELLOW_DETAIL = "Second yellow card";
@@ -27,6 +28,7 @@ export const EVENT_LABEL: Record<MatchEventType, string> = {
   penalty: "Penalty",
   injury: "Injury",
   goalkeeper_save: "Save",
+  tactical_change: "Tactical Change",
 };
 
 /**

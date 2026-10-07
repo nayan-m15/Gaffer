@@ -157,7 +157,7 @@ function opening(side: Side, along: number, row: number, tier: number) {
   return false;
 }
 
-function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>, textures: THREE.Texture[]) {
+function makeStand(spec: StandSpec, lowPower: boolean, materials: ReturnType<typeof makeMaterials>) {
   const stand = new THREE.Group();
   stand.name = `Gaffer ${spec.name} stand`;
   standTransform(stand, spec.side);
@@ -502,7 +502,7 @@ export function createGafferStadium(lowPower: boolean) {
     { side: "north", name: "Kop", length: 79, tiers: [{ rows: 20, start: 0, rise: .68, depth: 1.13, base: .5 }], roof: 19.7, columns: 8 },
     { side: "south", name: "South", length: 79, tiers: [{ rows: 9, start: 0, rise: .58, depth: 1.13, base: .5 }, { rows: 8, start: 12, rise: .75, depth: 1.12, base: 7.1 }], roof: 18.6, columns: 8 },
   ];
-  specs.forEach(spec => group.add(makeStand(spec, lowPower, materials, textures)));
+  specs.forEach(spec => group.add(makeStand(spec, lowPower, materials)));
 
   // Corner circulation towers and connecting roof edges close the rectangular skyline.
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {

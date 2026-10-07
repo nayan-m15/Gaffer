@@ -1,7 +1,11 @@
 /**
- * A single 1–10 (or 0–10) tactics slider: caption + current value on one row,
- * a discrete range track below. Modeled on FIFA's segmented tactics sliders —
- * the underlying value is always an integer.
+ * A single 1–10 (or 0–10) tactics slider: caption plus the current value and its
+ * plain-English band on one row, a discrete range track below, and the two
+ * endpoint captions beneath that.
+ *
+ * The underlying value is always an integer on the backend's stored scale — the
+ * band caption ("Wide", "Very deep") comes from the caller, which normalises the
+ * value onto 0–100 first.
  */
 
 import { useId } from "react";
@@ -13,6 +17,13 @@ interface TacticsSliderProps {
   value: number;
   meta: SliderMeta;
   onChange: (value: number) => void;
+  /**
+   * Accessible name, when the visible caption is only meaningful under its
+   * section heading — "Width" inside Defence reads as "Defensive width".
+   */
+  ariaLabel?: string;
+  /** Plain-English band for the current value, shown next to the number. */
+  valueLabel?: string;
   /** Show "Narrow / Wide"-style captions under the track. */
   showEndLabels?: boolean;
   disabled?: boolean;
@@ -24,6 +35,8 @@ export function TacticsSlider({
   value,
   meta,
   onChange,
+  ariaLabel,
+  valueLabel,
   showEndLabels = false,
   disabled = false,
   className,
@@ -34,7 +47,7 @@ export function TacticsSlider({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-2">
         <label
           htmlFor={id}
           className="text-sm font-medium text-muted-foreground"
@@ -43,6 +56,11 @@ export function TacticsSlider({
         </label>
         <span className="text-sm font-semibold tabular-nums text-foreground">
           {value}
+          {valueLabel && (
+            <span className="ml-1.5 font-medium text-muted-foreground">
+              · {valueLabel}
+            </span>
+          )}
         </span>
       </div>
 
@@ -55,7 +73,10 @@ export function TacticsSlider({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        aria-valuetext={`${value} of ${max}`}
+        aria-label={ariaLabel ?? label}
+        aria-valuetext={
+          valueLabel ? `${value} of ${max}, ${valueLabel}` : `${value} of ${max}`
+        }
         className="tactics-slider"
         style={
           {

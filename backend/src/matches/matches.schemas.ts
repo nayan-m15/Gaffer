@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { matchEventTeam, matchEventType } from '../database/schema';
+import { FORMATION_IDS } from '../common/formations';
+import {
+  DEFENSIVE_STYLES,
+  OFFENSIVE_STYLES,
+} from '../game-plans/game-plans.schemas';
 
 export const matchEventTeamSchema = z.enum(matchEventTeam.enumValues);
 export const matchEventTypeSchema = z.enum(matchEventType.enumValues);
@@ -12,6 +17,53 @@ export const matchEventTypeSchema = z.enum(matchEventType.enumValues);
  */
 export const PENALTY_SCORED_DETAIL = 'Penalty';
 export const PENALTY_MISSED_DETAIL = 'Penalty missed';
+
+const scaleTen = z.number().int().min(1).max(10);
+const commitment = z.number().int().min(0).max(10);
+
+/**
+ * What a `tactical_change` event carries: the parts of the game plan the coach
+ * switched to at that minute, and nothing else. Folding these over the match's
+ * starting plan gives the shape in force at any point in the timeline, so the
+ * plan the match kicked off with is never overwritten.
+ *
+ * Every field is optional because the event records a delta; `superRefine`
+ * below rejects an empty one.
+ */
+export const matchTacticalChangeSchema = z
+  .object({
+    formationId: z.enum(FORMATION_IDS).optional(),
+    customPositions: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          role: z.enum(['GK', 'DEF', 'MID', 'FWD']),
+          x: z.number().min(0).max(100),
+          y: z.number().min(0).max(100),
+        }),
+      )
+      .max(11)
+      .nullable()
+      .optional(),
+    defensiveStyle: z.enum(DEFENSIVE_STYLES).optional(),
+    defensiveWidth: scaleTen.optional(),
+    defensiveDepth: scaleTen.optional(),
+    offensiveStyle: z.enum(OFFENSIVE_STYLES).optional(),
+    offensiveWidth: scaleTen.optional(),
+    playersInBox: commitment.optional(),
+    cornersCommitment: commitment.optional(),
+    freeKicksCommitment: commitment.optional(),
+    // Roles may move during a match — the armband passes with no ceremony.
+    captainId: z.uuid().nullable().optional(),
+    freeKickTakerId: z.uuid().nullable().optional(),
+    longFreeKickTakerId: z.uuid().nullable().optional(),
+    penaltyTakerId: z.uuid().nullable().optional(),
+    cornerTakerId: z.uuid().nullable().optional(),
+    rightCornerTakerId: z.uuid().nullable().optional(),
+  })
+  .strict();
+export type MatchTacticalChangeDto = z.infer<typeof matchTacticalChangeSchema>;
 
 export const createMatchLogEventSchema = z
   .object({
@@ -53,8 +105,41 @@ export const createMatchLogEventSchema = z
       .trim()
       .max(500, 'Detail must be 500 characters or fewer.')
       .optional(),
+    tacticalChange: matchTacticalChangeSchema.optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.eventType === 'tactical_change') {
+      if (value.team !== 'own') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['team'],
+          message: 'A tactical change can only be logged for your own team.',
+        });
+      }
+      if (value.athleteId) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['athleteId'],
+          message: 'A tactical change is not attributed to a player.',
+        });
+      }
+      if (
+        !value.tacticalChange ||
+        Object.keys(value.tacticalChange).length === 0
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tacticalChange'],
+          message: 'A tactical change must alter at least one setting.',
+        });
+      }
+    } else if (value.tacticalChange) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['tacticalChange'],
+        message: 'Only a tactical_change event may carry tactical settings.',
+      });
+    }
     if (
       value.team === 'own' &&
       (value.opponentPlayerId || value.opponentLabel)

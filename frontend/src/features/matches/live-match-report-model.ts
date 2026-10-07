@@ -62,6 +62,7 @@ const EVENT_LABEL: Record<MatchEventType, string> = {
   substitution: "Substitution",
   penalty: "Penalty",
   injury: "Injury",
+  tactical_change: "Tactical change",
   goalkeeper_save: "Save",
 };
 

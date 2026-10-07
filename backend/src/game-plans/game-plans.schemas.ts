@@ -40,6 +40,32 @@ const customPositionSchema = z.object({
   y: z.number().min(0).max(100),
 });
 
+/**
+ * Per-player instructions: athlete ID -> category ID -> option ID. The IDs are
+ * checked against the registry in `player-instructions.ts` once the plan's
+ * formation is known; this schema only enforces the shape and keeps a payload
+ * from growing without bound.
+ */
+const instructionIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(60)
+  .regex(/^[a-z0-9_]+$/, 'Instruction IDs must be lower-case identifiers.');
+
+const playerInstructionsSchema = z
+  .record(
+    z.string().uuid(),
+    z
+      .record(instructionIdSchema, instructionIdSchema)
+      .refine((entries) => Object.keys(entries).length <= 12, {
+        message: 'A player may hold at most 12 instructions.',
+      }),
+  )
+  .refine((entries) => Object.keys(entries).length <= 60, {
+    message: 'Player instructions may cover at most 60 athletes.',
+  });
+
 const gamePlanContentSchema = z.object({
   formationId: z.enum(FORMATION_IDS, { error: 'Formation is not supported.' }),
   // Squad selection — position ID -> athlete ID (or null for an empty slot).
@@ -69,8 +95,11 @@ const gamePlanContentSchema = z.object({
   freeKicksCommitment: commitment,
   captainId: z.string().uuid().nullable(),
   freeKickTakerId: z.string().uuid().nullable(),
+  longFreeKickTakerId: z.string().uuid().nullable(),
   penaltyTakerId: z.string().uuid().nullable(),
   cornerTakerId: z.string().uuid().nullable(),
+  rightCornerTakerId: z.string().uuid().nullable(),
+  playerInstructions: playerInstructionsSchema,
 });
 
 /**

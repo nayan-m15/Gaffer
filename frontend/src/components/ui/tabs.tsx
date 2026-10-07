@@ -15,6 +15,12 @@ interface AnimatedTabsProps<T extends string> {
   onValueChange: (value: T) => void;
   ariaLabel: string;
   className?: string;
+  /**
+   * How the active tab is filled. "surface" (the default) raises it on the
+   * card surface; "primary" fills it with the brand accent, for pages where the
+   * tabs are the main way in rather than a sub-navigation.
+   */
+  variant?: "surface" | "primary";
 }
 
 /** Controlled, URL-friendly adaptation of Aceternity's animated tabs. */
@@ -24,6 +30,7 @@ export function AnimatedTabs<T extends string>({
   onValueChange,
   ariaLabel,
   className,
+  variant = "surface",
 }: AnimatedTabsProps<T>) {
   const layoutId = useId();
   const reduceMotion = useReducedMotion();
@@ -47,12 +54,22 @@ export function AnimatedTabs<T extends string>({
             <TabsPrimitive.Trigger
               key={item.value}
               value={item.value}
-              className="relative isolate inline-flex min-w-fit items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:text-foreground"
+              className={cn(
+                "relative isolate inline-flex min-w-fit items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                variant === "primary"
+                  ? "data-[state=active]:text-primary-foreground"
+                  : "data-[state=active]:text-foreground",
+              )}
             >
               {active && (
                 <motion.span
                   layoutId={layoutId}
-                  className="absolute inset-0 -z-10 rounded-md border border-border-default bg-surface-active shadow-sm"
+                  className={cn(
+                    "absolute inset-0 -z-10 rounded-md shadow-sm",
+                    variant === "primary"
+                      ? "bg-primary"
+                      : "border border-border-default bg-surface-active",
+                  )}
                   transition={
                     reduceMotion
                       ? { duration: 0 }

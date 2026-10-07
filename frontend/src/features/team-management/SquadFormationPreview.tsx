@@ -14,22 +14,10 @@ import {
   connectorSegments,
   groupPositionsIntoRows,
 } from "./squad-formation-connectors";
-import type {
-  FormationPosition,
-  PitchAssignments,
-  PositionRole,
-} from "./types";
+import { athleteShortName } from "./athlete-display";
+import { ROLE_MARKER } from "./role-colors";
+import type { FormationPosition, PitchAssignments } from "./types";
 import type { BackendAthlete } from "@/services/athletes";
-
-const ROLE_MARKER: Record<
-  PositionRole,
-  { fill: string; glow: string }
-> = {
-  GK: { fill: "#38bdf8", glow: "rgba(56, 189, 248, 0.55)" },
-  DEF: { fill: "#72a7d5", glow: "rgba(59, 130, 246, 0.55)" },
-  MID: { fill: "#8b5cf6", glow: "rgba(139, 92, 246, 0.55)" },
-  FWD: { fill: "#f97316", glow: "rgba(249, 115, 22, 0.55)" },
-};
 
 const LABEL_GAP_RATIO = 0.82;
 const LABEL_WIDTH_MIN = 11;
@@ -113,7 +101,7 @@ export function SquadFormationPreview({
             const marker = ROLE_MARKER[role];
             const labelsAbove = slot.y > 88;
             const widthPct = widthBySlotId.get(slot.id) ?? LABEL_WIDTH_MAX;
-            const name = athlete ? markerSurname(athlete) : null;
+            const name = athlete ? athleteShortName(athlete) : null;
             return (
               <div
                 key={slot.id}
@@ -235,20 +223,6 @@ export function SquadPitchMarkings() {
       />
     </svg>
   );
-}
-
-function markerSurname(athlete: BackendAthlete): string {
-  const last = athlete.lastName.trim();
-  const first = athlete.firstName.trim();
-  if (!last) return first;
-
-  const needsShort = last.length > 9 || last.includes("-");
-  if (!needsShort) return last;
-
-  const tail =
-    last.split(/[\s-]+/).filter(Boolean).at(-1) ?? last;
-  const initial = first.charAt(0).toUpperCase();
-  return initial ? `${initial}. ${tail}` : tail;
 }
 
 function labelWidthBySlot(

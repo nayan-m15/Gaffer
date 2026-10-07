@@ -89,6 +89,7 @@ import {
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
+  effectiveGamePlan,
   placeOwnPlayers,
   resolveOppColor,
   resolveOwnColor,
@@ -366,6 +367,16 @@ export default function MatchReportPage() {
     });
   }, [eventsQuery.data]);
 
+  /**
+   * The plan the team finished under: the one it kicked off with, plus every
+   * tactical change logged during the match. `gamePlan` stays the starting
+   * plan, so the squad size it was locked at never moves.
+   */
+  const effectivePlan = useMemo(
+    () => effectiveGamePlan(gamePlan, timeline),
+    [gamePlan, timeline],
+  );
+
   const ownName = team?.name ?? "US";
   const match = matchQuery.data;
   const oppName = match?.opponentName ?? "OPP";
@@ -438,12 +449,12 @@ export default function MatchReportPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        gamePlan,
+        effectivePlan,
         ownHalf,
         timeline,
         visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
+    [ownState.onPitch, effectivePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
     () => placeOppPlayers(
