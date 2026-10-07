@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isSameMonth, startOfWeek } from "date-fns";
+import { isBefore, isSameMonth, startOfDay, startOfWeek } from "date-fns";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -97,6 +97,11 @@ export default function EventsPage() {
     setSelectedDate(today);
   }, []);
 
+  const isPastCalendarDay = useCallback(
+    (date: Date) => isBefore(startOfDay(date), startOfDay(now)),
+    [now],
+  );
+
   /**
    * Clicking a date on the calendar:
    * - If the day has events, opens DayEventsDialog popup (Samsung style).
@@ -118,14 +123,16 @@ export default function EventsPage() {
 
       const dayEvents = getDayEvents(eventsByDay, date);
       if (dayEvents.length === 0) {
-        if (canManageEvents) {
+        if (canManageEvents && !isPastCalendarDay(date)) {
           setPanel({ kind: "create", date });
+        } else {
+          setPanel({ kind: "day", date });
         }
       } else {
         setPanel({ kind: "day", date });
       }
     },
-    [canManageEvents, cursor, eventsByDay, view],
+    [canManageEvents, cursor, eventsByDay, isPastCalendarDay, view],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
@@ -202,7 +209,10 @@ export default function EventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
-          readOnly={!canManageEvents}
+          readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
         />
       )}
       {view === "week" && (
@@ -219,7 +229,10 @@ export default function EventsPage() {
           month={cursor}
           events={visibleEvents}
           now={now}
-          readOnly={!canManageEvents}
+          readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
           onOpenEvent={handleOpenEvent}
           onCreateEvent={() => setPanel({ kind: "create" })}
         />
@@ -315,7 +328,10 @@ export default function EventsPage() {
             eventsByDay={eventsByDay}
             visibleEvents={visibleEvents}
             hiddenTypes={hiddenTypes}
-            readOnly={!canManageEvents}
+            readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
             onToggleType={handleToggleType}
             matchFilter={matchFilter}
             competitionOptions={competitionOptions}
@@ -337,7 +353,10 @@ export default function EventsPage() {
             view={view}
             label={label}
             hiddenTypes={hiddenTypes}
-            readOnly={!canManageEvents}
+            readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
             onToggleType={handleToggleType}
             matchFilter={matchFilter}
             competitionOptions={competitionOptions}
@@ -401,14 +420,21 @@ export default function EventsPage() {
         date={panel.kind === "day" ? panel.date : null}
         events={panel.kind === "day" ? getDayEvents(eventsByDay, panel.date) : []}
         now={now}
-        readOnly={!canManageEvents}
+        readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });
           }
         }}
         onSelectEvent={handleOpenEvent}
-        onAddEvent={(date) => setPanel({ kind: "create", date })}
+        onAddEvent={(date) => {
+          if (!isPastCalendarDay(date)) {
+            setPanel({ kind: "create", date });
+          }
+        }}
       />
 
       <EventFormDialog
@@ -416,7 +442,6 @@ export default function EventsPage() {
         event={panel.kind === "edit" ? (selectedEvent ?? undefined) : undefined}
         initialDate={panel.kind === "create" ? panel.date : undefined}
         initialType={panel.kind === "create" ? panel.type : undefined}
-        allowPastDate={panel.kind === "create" && panel.date !== undefined}
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });

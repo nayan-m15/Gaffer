@@ -1,8 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, ShieldCheck, Trophy } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompetitionMutation } from "./hooks";
 import { createCompetition, updateCompetition } from "./api";
 import type { CompetitionDetail, CompetitionFormat, CompetitionInput, CompetitionPlayersPerSide, CompetitionType } from "./types";
@@ -30,6 +31,24 @@ const weekdayOptions = [
   { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" }, { value: 0, label: "Sun" },
 ];
 const knockoutSizes = [4, 8, 16, 32] as const;
+const TIME_HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0"));
+
+function utcDateValue(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function firstFixtureTime(startDate: string, allowedPlayingDays: number[], kickoffTime: string) {
+  if (!startDate || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(kickoffTime) || !allowedPlayingDays.length) {
+    return null;
+  }
+  const candidate = new Date(`${startDate}T${kickoffTime}:00.000Z`);
+  if (Number.isNaN(candidate.getTime())) return null;
+  while (!allowedPlayingDays.includes(candidate.getUTCDay())) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+  return candidate;
+}
 
 type Step = 1 | 2 | 3;
 
@@ -211,13 +230,151 @@ function CompetitionScheduleFields({
   allowedPlayingDays: number[]; onAllowedDaysChange: (days: number[]) => void;
   defaultKickoffTime: string; setDefaultKickoffTime: (value: string) => void;
 }) {
+  const today = utcDateValue();
+
   return (
     <>
-      <label className="grid gap-2 text-sm">Competition start date<input className={fieldClass} type="date" disabled={locked} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+      <label className="grid gap-2 text-sm">
+        Competition start date
+        <input
+          className={fieldClass}
+          type="date"
+          disabled={locked}
+          min={locked ? undefined : today}
+          value={startDate}
+          onChange={(event) => setStartDate(event.target.value)}
+        />
+      </label>
       <div className="space-y-2"><p className="text-sm font-medium">Allowed playing days</p><div className="flex flex-wrap gap-2">{weekdayOptions.map((day) => { const selected = allowedPlayingDays.includes(day.value); return <button key={day.value} type="button" disabled={locked} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-sm ${selected ? "border-primary/45 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/40"}`} onClick={() => onAllowedDaysChange(selected ? allowedPlayingDays.filter((value) => value !== day.value) : [...allowedPlayingDays, day.value])}>{day.label}</button>; })}</div>{!allowedPlayingDays.length && <p className="text-sm text-destructive">Choose at least one playing day.</p>}</div>
-      <label className="grid gap-2 text-sm">Default kickoff time (UTC)<input className={fieldClass} type="time" disabled={locked} value={defaultKickoffTime} onChange={(event) => setDefaultKickoffTime(event.target.value)} /></label>
+      <div className="grid gap-2 text-sm">
+        <span>Default kickoff time (UTC)</span>
+        <CompetitionTimePicker
+          disabled={locked}
+          value={defaultKickoffTime}
+          startDate={startDate}
+          allowedPlayingDays={allowedPlayingDays}
+          onChange={setDefaultKickoffTime}
+        />
+      </div>
       <p className="text-xs text-muted-foreground">The fixture generator moves each round to the next allowed playing day and uses this kickoff time.</p>
     </>
+  );
+}
+
+function CompetitionTimePicker({
+  disabled,
+  value,
+  startDate,
+  allowedPlayingDays,
+  onChange,
+}: {
+  disabled: boolean;
+  value: string;
+  startDate: string;
+  allowedPlayingDays: number[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [hour = "00", minute = "00"] = value.split(":");
+  const today = utcDateValue(now);
+  const todayIsPlayingDay = allowedPlayingDays.includes(now.getUTCDay());
+  const selectingTodayFixture = startDate === today && todayIsPlayingDay;
+
+  useEffect(() => {
+    if (disabled) return;
+    const refreshNow = () => setNow(new Date());
+    refreshNow();
+    const interval = window.setInterval(refreshNow, 30_000);
+    return () => window.clearInterval(interval);
+  }, [disabled]);
+
+  const isTimePast = useCallback(
+    (nextHour: string, nextMinute: string) => {
+      if (!selectingTodayFixture) return false;
+      const candidate = new Date(`${startDate}T${nextHour}:${nextMinute}:00.000Z`);
+      return Number.isNaN(candidate.getTime()) || candidate.getTime() <= now.getTime();
+    },
+    [now, selectingTodayFixture, startDate],
+  );
+
+  const hourDisabled = (nextHour: string) =>
+    selectingTodayFixture && TIME_MINUTES.every((nextMinute) => isTimePast(nextHour, nextMinute));
+  const minuteDisabled = (nextMinute: string) => selectingTodayFixture && isTimePast(hour, nextMinute);
+
+  useEffect(() => {
+    if (!selectingTodayFixture || !value || !isTimePast(hour, minute)) return;
+    const nextTime = TIME_HOURS.flatMap((nextHour) =>
+      TIME_MINUTES.map((nextMinute) => `${nextHour}:${nextMinute}`),
+    ).find((candidate) => {
+      const [nextHour, nextMinute] = candidate.split(":");
+      return !isTimePast(nextHour, nextMinute);
+    });
+    onChange(nextTime ?? "");
+  }, [hour, isTimePast, minute, onChange, selectingTodayFixture, value]);
+
+  const selectHour = (nextHour: string) => {
+    if (hourDisabled(nextHour)) return;
+    const nextMinute = !isTimePast(nextHour, minute)
+      ? minute
+      : (TIME_MINUTES.find((candidate) => !isTimePast(nextHour, candidate)) ?? minute);
+    onChange(`${nextHour}:${nextMinute}`);
+  };
+
+  const selectMinute = (nextMinute: string) => {
+    if (minuteDisabled(nextMinute)) return;
+    onChange(`${hour}:${nextMinute}`);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger
+        type="button"
+        disabled={disabled}
+        className={`${fieldClass} flex items-center justify-between text-left font-normal`}
+      >
+        <span className="flex items-center gap-2">
+          <Clock3 className="size-4 text-muted-foreground" />
+          <span className="tabular-nums">{value || "Pick a time"}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">Choose time</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-3">
+        <div className="mb-2 flex items-center justify-between gap-6 px-1">
+          <p className="text-xs font-medium">Kickoff time (UTC)</p>
+          <p className="text-xs tabular-nums text-muted-foreground">{value || "Not selected"}</p>
+        </div>
+        <div className="flex gap-2">
+          <CompetitionTimeColumn label="Hours" options={TIME_HOURS} selected={value ? hour : undefined} isDisabled={hourDisabled} onSelect={selectHour} />
+          <CompetitionTimeColumn label="Minutes" options={TIME_MINUTES} selected={value ? minute : undefined} isDisabled={minuteDisabled} onSelect={selectMinute} />
+        </div>
+        {selectingTodayFixture && <p className="mt-2 max-w-40 text-[11px] leading-4 text-muted-foreground">Past kickoff times are unavailable.</p>}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CompetitionTimeColumn({
+  label, options, selected, isDisabled, onSelect,
+}: {
+  label: string;
+  options: string[];
+  selected: string | undefined;
+  isDisabled: (value: string) => boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="h-52 w-16 overflow-y-auto rounded-md border border-border bg-background p-1">
+        {options.map((option) => {
+          const selectedOption = option === selected;
+          const optionDisabled = isDisabled(option);
+          return <button key={option} type="button" disabled={optionDisabled} onClick={() => onSelect(option)} className={`flex h-8 w-full items-center justify-center rounded text-sm tabular-nums transition-colors ${optionDisabled ? "cursor-not-allowed opacity-30" : selectedOption ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}>{option}</button>;
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -286,10 +443,12 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
     });
   }, [accumulatedYellowThreshold, isLeaguePhase, maxSubstitutes, pointsDraw, pointsLoss, pointsWin, redCardSuspensionMatches, yellowSuspensionMatches]);
 
+  const firstFixture = firstFixtureTime(startDate, allowedPlayingDays, defaultKickoffTime);
   const scheduleValid = Boolean(
     startDate &&
-    /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(defaultKickoffTime) &&
-    allowedPlayingDays.length,
+    startDate >= utcDateValue() &&
+    firstFixture &&
+    firstFixture.getTime() > Date.now(),
   );
   const formValid = basicValid && rulesValid && scheduleValid;
   const stepValid = step === 1 ? basicValid : step === 2 ? rulesValid : scheduleValid;
