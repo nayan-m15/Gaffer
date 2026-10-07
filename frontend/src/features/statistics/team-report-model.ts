@@ -71,9 +71,46 @@ export function reportHighlights(
   return highlights;
 }
 
+/**
+ * Characters that make spreadsheet applications (Excel, LibreOffice,
+ * Google Sheets) interpret a cell as a formula when they lead the value.
+ */
+const FORMULA_TRIGGERS = new Set(["=", "+", "-", "@"]);
+
+/**
+ * True when the first character that is neither whitespace nor a control
+ * character is a formula trigger. Importers may skip leading blanks before
+ * the formula check, so `" =1+1"` and `"\t+2+2"` count as triggers too.
+ */
+function needsFormulaGuard(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    // Space, the C0 controls (up to 0x20), DEL and the BOM are characters
+    // some spreadsheet importers strip before the formula check; \s adds
+    // the remaining Unicode whitespace such as non-breaking spaces.
+    if (
+      code <= 0x20 ||
+      code === 0x7f ||
+      code === 0xfeff ||
+      /\s/.test(text[index])
+    ) {
+      continue;
+    }
+    return FORMULA_TRIGGERS.has(text[index]);
+  }
+  return false;
+}
+
 function csvCell(value: string | number): string {
   const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  // CSV-formula-injection guard: user-controlled values (team, competition,
+  // season, opponent and player names) that a spreadsheet could execute are
+  // prefixed with a text-marker apostrophe so they open as literal text.
+  // Guarded before CSV quoting so the escaping still round-trips.
+  const guarded = needsFormulaGuard(text) ? `'${text}` : text;
+  return /[",\r\n]/.test(guarded)
+    ? `"${guarded.replaceAll('"', '""')}"`
+    : guarded;
 }
 
 function csvRow(values: Array<string | number>): string {
