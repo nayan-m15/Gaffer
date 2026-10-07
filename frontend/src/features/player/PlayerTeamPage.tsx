@@ -6,8 +6,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { RosterTable } from "@/components/roster/RosterTable";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { fetchPlayerTeam } from "@/services/player";
-import { toUiAthlete } from "@/services/athletes";
+import { fetchPlayerTeam, toUiRosterAthlete } from "@/services/player";
 import type { Athlete } from "@/components/roster/data";
 import "@/features/team-management/team-background.css";
 
@@ -29,7 +28,7 @@ export default function PlayerTeamPage() {
   });
 
   const athletes: Athlete[] = useMemo(
-    () => (teamQuery.data ?? []).map(toUiAthlete),
+    () => (teamQuery.data ?? []).map(toUiRosterAthlete),
     [teamQuery.data],
   );
 
