@@ -752,6 +752,350 @@ describe('Phase 1 shared-session integrity', () => {
     },
   );
 
+  it.each([false, true])(
+    'deleting a duplicate clears the surviving warning and permits bilateral confirmation (finished=%s)',
+    async (finished) => {
+      const f = await fixture();
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      const first = await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      const second = await matches.logEvent(f.away.id, b.id, goal());
+      if (finished) await matches.finish(f.home.id, a.id);
+      const [review] = await matches.listEventReviews(f.home.id, a.id);
+      const operationId = randomUUID();
+      await matches.deleteEvent(f.home.id, a.id, second.id, operationId);
+      let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+      expect(report.score).toEqual({ home: 1, away: 0 });
+      expect(
+        report.timeline.find((row) => row.id === first.id)?.lifecycleStatus,
+      ).toBe('provisional');
+      expect(report.reviews[0]).toMatchObject({
+        status: 'resolved',
+        resolution: 'event_removed',
+      });
+      expect(
+        (await matches.findOne(f.home.id, a.id)).projection
+          .unresolvedReviewCount,
+      ).toBe(0);
+      expect(
+        (await matches.findOne(f.away.id, b.id)).projection
+          .unresolvedReviewCount,
+      ).toBe(0);
+      const revision = report.reportRevision;
+      await matches.deleteEvent(f.home.id, a.id, second.id, operationId);
+      expect(
+        (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+          .reportRevision,
+      ).toBe(revision);
+      await expect(
+        matches.resolveEventReview(f.home.id, a.id, review.id, {
+          resolution: 'same_event',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        matches.disputeEventReview(f.home.id, a.id, review.id),
+      ).rejects.toMatchObject({ status: 400 });
+      if (!finished) await matches.finish(f.home.id, a.id);
+      await matches.finish(f.away.id, b.id);
+      await confirm(
+        f.home.id,
+        a.id,
+        (await matches.findOne(f.home.id, a.id)).projection.revision,
+      );
+      await confirm(
+        f.away.id,
+        b.id,
+        (await matches.findOne(f.away.id, b.id)).projection.revision,
+      );
+      report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+      expect(report.finalStatus).toBe('finalised');
+    },
+  );
+
+  it('removing one of three observations preserves the remaining duplicate review', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    const first = await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.logEvent(f.away.id, b.id, goal());
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.deleteEvent(f.home.id, a.id, first.id);
+    const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews.filter((row) => row.status === 'open')).toHaveLength(
+      1,
+    );
+    expect(report.timeline).toHaveLength(2);
+    expect(
+      report.timeline.every((row) => row.lifecycleStatus === 'needs_review'),
+    ).toBe(true);
+  });
+
+  it('manual additions compare the same player and minute on the same sheet, excluding deleted events', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const first = await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+      matchElapsedMs: 104000,
+    });
+    await matches.finish(f.home.id, a.id);
+    await matches.logEvent(f.home.id, a.id, {
+      clientRequestId: randomUUID(),
+      team: 'own',
+      eventType: 'goal',
+      minute: 1,
+      athleteId: f.home.athletes[0].id,
+    });
+    let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews.filter((row) => row.status === 'open')).toHaveLength(
+      1,
+    );
+    expect(report.timeline.every((row) => row.period === 'first_half')).toBe(
+      true,
+    );
+    await matches.deleteEvent(f.home.id, a.id, first.id);
+    await matches.logEvent(f.home.id, a.id, {
+      clientRequestId: randomUUID(),
+      team: 'own',
+      eventType: 'goal',
+      minute: 1,
+      athleteId: f.home.athletes[1].id,
+    });
+    report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews.filter((row) => row.status === 'open')).toHaveLength(
+      0,
+    );
+    expect(report.score.home).toBe(2);
+  });
+
+  it('manual re-entry from the other sheet compares public player identity within a minute', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+      matchElapsedMs: 104000,
+    });
+    await matches.finish(f.away.id, b.id);
+    await matches.logEvent(f.away.id, b.id, {
+      clientRequestId: randomUUID(),
+      team: 'opponent',
+      eventType: 'goal',
+      minute: 1,
+      opponentLabel: 'Player0 Test',
+    });
+    const [review] = await matches.listEventReviews(f.home.id, a.id);
+    expect(review).toMatchObject({ crossTeam: true, status: 'open' });
+  });
+
+  it('correcting a goal closes obsolete reviews and detects a new matching minute', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    const first = await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.logEvent(f.away.id, b.id, goal());
+    await matches.updateEvent(f.home.id, a.id, first.id, { minute: 2 });
+    let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews[0]).toMatchObject({
+      status: 'resolved',
+      resolution: 'events_changed',
+    });
+    expect(
+      report.timeline.some((row) => row.lifecycleStatus === 'needs_review'),
+    ).toBe(false);
+    await matches.updateEvent(f.home.id, a.id, first.id, { minute: 1 });
+    report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews[0].status).toBe('open');
+    expect(
+      report.timeline.every((row) => row.lifecycleStatus === 'needs_review'),
+    ).toBe(true);
+  });
+
+  it('the migration repair closes historical stale reviews idempotently', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    const first = await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.logEvent(f.away.id, b.id, goal());
+    // Recreate the old deletion path, which left the review and survivor stale.
+    await db
+      .update(schema.matchEvents)
+      .set({ lifecycleStatus: 'voided' })
+      .where(eq(schema.matchEvents.id, first.id));
+    const migration = readFileSync(
+      resolve(__dirname, '../../drizzle/0058_duplicate_review_lifecycle.sql'),
+      'utf8',
+    );
+    const repair = migration.slice(migration.lastIndexOf('DO $$'));
+    await pg.exec(repair);
+    let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews[0]).toMatchObject({
+      status: 'resolved',
+      resolution: 'event_removed',
+    });
+    expect(report.timeline[0].lifecycleStatus).toBe('provisional');
+    const revision = report.reportRevision;
+    await pg.exec(repair);
+    report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reportRevision).toBe(revision);
+  });
+
+  it('live detection keeps the five-second window and distinguishes different players', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.logEvent(f.away.id, b.id, {
+      ...goal(),
+      opponentLabel: 'Player1 Test',
+    });
+    await matches.logEvent(f.away.id, b.id, {
+      ...goal(),
+      opponentLabel: 'Player0 Test',
+      matchElapsedMs: 90000,
+    });
+    expect(await matches.listEventReviews(f.home.id, a.id)).toHaveLength(0);
+  });
+
+  it('one coach can resolve a same-sheet duplicate and locked reports survive the repair', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    const [review] = await matches.listEventReviews(f.home.id, a.id);
+    expect(review.crossTeam).toBe(false);
+    await matches.resolveEventReview(f.home.id, a.id, review.id, {
+      resolution: 'same_event',
+    });
+    let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.score.home).toBe(1);
+    expect(report.reviews[0].status).toBe('resolved');
+    await matches.finish(f.home.id, a.id);
+    await matches.finish(f.away.id, b.id);
+    await confirm(
+      f.home.id,
+      a.id,
+      (await matches.findOne(f.home.id, a.id)).projection.revision,
+    );
+    await confirm(
+      f.away.id,
+      b.id,
+      (await matches.findOne(f.away.id, b.id)).projection.revision,
+    );
+    report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    const migration = readFileSync(
+      resolve(__dirname, '../../drizzle/0058_duplicate_review_lifecycle.sql'),
+      'utf8',
+    );
+    await pg.exec(migration.slice(migration.lastIndexOf('DO $$')));
+    expect(await matches.getSessionReport(f.home.id, a.sharedMatchId!)).toEqual(
+      report,
+    );
+  });
+
+  it('the migration detects historical manual re-entry that inherited full time', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+      matchElapsedMs: 104000,
+    });
+    await matches.finish(f.home.id, a.id);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+      period: 'full_time',
+    });
+    expect(await matches.listEventReviews(f.home.id, a.id)).toHaveLength(0);
+    const migration = readFileSync(
+      resolve(__dirname, '../../drizzle/0058_duplicate_review_lifecycle.sql'),
+      'utf8',
+    );
+    await pg.exec(migration.slice(migration.lastIndexOf('DO $$')));
+    const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews).toHaveLength(1);
+    expect(report.reviews[0].status).toBe('open');
+    expect(
+      report.timeline.every(
+        (row) =>
+          row.period === 'first_half' && row.lifecycleStatus === 'needs_review',
+      ),
+    ).toBe(true);
+  });
+
+  it('manual goals without a scorer are still candidates for a known goal on the same sheet', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      clientRequestId: 'f' + randomUUID().slice(1),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+      minute: 45,
+      period: 'second_half',
+      matchElapsedMs: 2702665,
+    });
+    await matches.finish(f.home.id, a.id);
+    await matches.logEvent(f.home.id, a.id, {
+      clientRequestId: '0' + randomUUID().slice(1),
+      team: 'own',
+      eventType: 'goal',
+      minute: 45,
+    });
+    let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.reviews).toHaveLength(1);
+    expect(report.reviews[0].status).toBe('open');
+    expect(
+      report.timeline.every((row) => row.lifecycleStatus === 'needs_review'),
+    ).toBe(true);
+    const [review] = await matches.listEventReviews(f.home.id, a.id);
+    await matches.resolveEventReview(f.home.id, a.id, review.id, {
+      resolution: 'same_event',
+    });
+    report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.score.home).toBe(1);
+    expect(report.timeline[0].player?.name).toBe('Player0 Test');
+  });
+
   it('refuses a stale shared revision even if the private sheet revision is current', async () => {
     const f = await fixture();
     const a = await f.start(f.home, f.homeEvent);

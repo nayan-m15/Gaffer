@@ -7,6 +7,7 @@ import {
   sessionReportKey,
   applySessionReport,
   sessionTimeline,
+  mergeSessionTimeline,
 } from "./session-report-model";
 import {
   subscribeToSyncedSessionReportChanges,
@@ -732,9 +733,9 @@ export function useMatchView(matchId: string | undefined) {
         ...reportQuery,
         data:
           sheet && report
-            ? [
-                ...(pendingQuery.data ?? []),
-                ...sessionTimeline(report, sheet, squadFromCache(queryClient, sheet.id)).map((row) => {
+            ? mergeSessionTimeline(
+                pendingQuery.data ?? [],
+                sessionTimeline(report, sheet, squadFromCache(queryClient, sheet.id)).map((row) => {
                   // Only the owning sheet supplies private athlete identity; shared text stays allowlisted.
                   const own =
                     row.team === "own"
@@ -753,7 +754,7 @@ export function useMatchView(matchId: string | undefined) {
                       }
                     : row;
                 }),
-              ]
+              )
             : undefined,
       }
     : legacyEvents;

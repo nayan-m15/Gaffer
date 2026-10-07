@@ -555,7 +555,13 @@ export class MatchesService {
       opponentLabel: dto.opponentLabel,
     });
 
-    const period = dto.period ?? match.clockPeriod;
+    const period =
+      dto.period ??
+      (event.status === 'completed'
+        ? dto.minute < 45
+          ? 'first_half'
+          : 'second_half'
+        : match.clockPeriod);
     const matchElapsedMs = dto.matchElapsedMs ?? dto.minute * 60_000;
     const opponentLabel =
       attribution.opponentLabel ?? dto.opponentLabel ?? null;
@@ -911,6 +917,11 @@ export class MatchesService {
       throw new NotFoundException('Event review not found.');
     }
     await this.assertReviewUnlocked(requester.match);
+    if (['event_removed', 'events_changed'].includes(review.resolution ?? '')) {
+      throw new BadRequestException(
+        'This review no longer applies because its events changed. Refresh the review queue.',
+      );
+    }
     const reviewMatchId = review.matchId;
     const { match, event } = await this.requireSharedMatch(
       team.id,
@@ -1012,6 +1023,11 @@ export class MatchesService {
       throw new NotFoundException('Event review not found.');
     }
     await this.assertReviewUnlocked(match);
+    if (['event_removed', 'events_changed'].includes(review.resolution ?? '')) {
+      throw new BadRequestException(
+        'This review no longer applies. Refresh the review queue.',
+      );
+    }
     if (review.status !== 'resolved') {
       throw new BadRequestException('Only a resolved review can be disputed.');
     }

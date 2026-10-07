@@ -119,41 +119,90 @@ test('real SQL skips an existing column, applies the new migration once and reta
   }
 });
 
-test('shared report migration supports prepared queries and records successful application once', async () => {
-  const pg = new PGlite();
-  try {
-    const folder = fileURLToPath(new URL('../drizzle/', import.meta.url));
-    const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, 'utf8'));
-    const migrations = readMigrationFiles({ migrationsFolder: folder }).map((entry, index) => ({
-      ...entry,
-      tag: journal.entries[index].tag,
-      source: readFileSync(`${folder}/${journal.entries[index].tag}.sql`, 'utf8'),
-    }));
-    const targetIndex = migrations.findIndex(entry => entry.tag === '0057_shared_report_approvals');
-    assert.notEqual(targetIndex, -1);
-    for (const previous of migrations.slice(0, targetIndex)) await pg.exec(previous.source);
-    await pg.exec('CREATE SCHEMA drizzle; CREATE TABLE drizzle.__drizzle_migrations (hash text NOT NULL, created_at bigint)');
-    for (const previous of migrations.slice(0, targetIndex)) {
-      await pg.query('INSERT INTO drizzle.__drizzle_migrations VALUES ($1, $2)', [previous.hash, previous.folderMillis]);
-    }
-    const target = migrations[targetIndex];
-    const { rows: before } = await pg.query('SELECT * FROM drizzle.__drizzle_migrations');
-    assert.deepEqual(planMigrations(migrations, before).pending[0], target);
-    await pg.transaction(async tx => {
-      // Match Neon: each breakpoint chunk is one prepared query, not exec().
-      for (const statement of target.sql.filter(statement => statement.trim())) await tx.query(statement);
-      await tx.query('INSERT INTO drizzle.__drizzle_migrations VALUES ($1, $2)', [target.hash, target.folderMillis]);
-    });
-    const { rows: after } = await pg.query('SELECT * FROM drizzle.__drizzle_migrations');
-    assert.equal(after.length, before.length + 1);
-    assert.equal(planMigrations(migrations, after).pending.some(entry => entry.tag === target.tag), false);
-    const { rows: objects } = await pg.query(`SELECT
+for (const targetTag of [
+  '0057_shared_report_approvals',
+  '0058_duplicate_review_lifecycle',
+  '0059_manual_unknown_player_candidates',
+]) {
+  test(`${targetTag} supports prepared queries and records successful application once`, async () => {
+    const pg = new PGlite();
+    try {
+      const folder = fileURLToPath(new URL('../drizzle/', import.meta.url));
+      const journal = JSON.parse(
+        readFileSync(`${folder}/meta/_journal.json`, 'utf8'),
+      );
+      const migrations = readMigrationFiles({ migrationsFolder: folder }).map(
+        (entry, index) => ({
+          ...entry,
+          tag: journal.entries[index].tag,
+          source: readFileSync(
+            `${folder}/${journal.entries[index].tag}.sql`,
+            'utf8',
+          ),
+        }),
+      );
+      const targetIndex = migrations.findIndex(
+        (entry) => entry.tag === targetTag,
+      );
+      assert.notEqual(targetIndex, -1);
+      for (const previous of migrations.slice(0, targetIndex))
+        await pg.exec(previous.source);
+      await pg.exec(
+        'CREATE SCHEMA drizzle; CREATE TABLE drizzle.__drizzle_migrations (hash text NOT NULL, created_at bigint)',
+      );
+      for (const previous of migrations.slice(0, targetIndex)) {
+        await pg.query(
+          'INSERT INTO drizzle.__drizzle_migrations VALUES ($1, $2)',
+          [previous.hash, previous.folderMillis],
+        );
+      }
+      const target = migrations[targetIndex];
+      const { rows: before } = await pg.query(
+        'SELECT * FROM drizzle.__drizzle_migrations',
+      );
+      assert.deepEqual(planMigrations(migrations, before).pending[0], target);
+      await pg.transaction(async (tx) => {
+        // Match Neon: each breakpoint chunk is one prepared query, not exec().
+        for (const statement of target.sql.filter((statement) =>
+          statement.trim(),
+        ))
+          await tx.query(statement);
+        await tx.query(
+          'INSERT INTO drizzle.__drizzle_migrations VALUES ($1, $2)',
+          [target.hash, target.folderMillis],
+        );
+      });
+      const { rows: after } = await pg.query(
+        'SELECT * FROM drizzle.__drizzle_migrations',
+      );
+      assert.equal(after.length, before.length + 1);
+      assert.equal(
+        planMigrations(migrations, after).pending.some(
+          (entry) => entry.tag === target.tag,
+        ),
+        false,
+      );
+      const { rows: objects } = await pg.query(`SELECT
       to_regclass('match_amendments') IS NOT NULL AS amendments,
       to_regclass('match_amendments_session_index') IS NOT NULL AS amendment_index,
       to_regprocedure('confirm_shared_report(uuid,text,integer)') IS NOT NULL AS confirmation,
       to_regprocedure('respond_match_amendment(uuid,text,text,text)') IS NOT NULL AS response`);
-    assert.deepEqual(objects, [{ amendments: true, amendment_index: true, confirmation: true, response: true }]);
-  } finally {
-    await pg.close();
-  }
-});
+      assert.deepEqual(objects, [
+        {
+          amendments: true,
+          amendment_index: true,
+          confirmation: true,
+          response: true,
+        },
+      ]);
+      if (targetTag === '0058_duplicate_review_lifecycle') {
+        const { rows } = await pg.query(
+          "SELECT to_regprocedure('reconcile_match_session_reviews(uuid,text)') IS NOT NULL AS review_cleanup",
+        );
+        assert.deepEqual(rows, [{ review_cleanup: true }]);
+      }
+    } finally {
+      await pg.close();
+    }
+  });
+}

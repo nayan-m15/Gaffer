@@ -1924,6 +1924,7 @@ export default function LiveMatchPage() {
       {reviewOpen && matchId ? (
         <EventReviewPanel
           matchId={matchId}
+          expectedReviewCount={projection?.unresolvedReviewCount ?? 0}
           onClose={() => setReviewOpen(false)}
         />
       ) : null}

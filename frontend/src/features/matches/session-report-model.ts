@@ -10,6 +10,14 @@ export type { SessionReport } from "./types";
 export const sessionReportKey = (sessionId: string) =>
   ["match-sessions", sessionId, "report"] as const;
 
+/** A server row replaces its queued preview as soon as it reaches the report. */
+export function mergeSessionTimeline(
+  pending: MatchLogEvent[],
+  synced: MatchLogEvent[],
+): MatchLogEvent[] {
+  return [...new Map([...pending, ...synced].map(event => [event.id, event])).values()];
+}
+
 export function applySessionReport(
   sheet: MatchRecord,
   report: SessionReport,

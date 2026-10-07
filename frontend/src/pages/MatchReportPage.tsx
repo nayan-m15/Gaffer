@@ -1178,6 +1178,7 @@ export default function MatchReportPage() {
       {reviewPanelOpen && match.sharedSessionId ? (
         <EventReviewPanel
           matchId={match.id}
+          expectedReviewCount={projection?.unresolvedReviewCount ?? 0}
           onClose={() => setReviewPanelOpen(false)}
         />
       ) : null}

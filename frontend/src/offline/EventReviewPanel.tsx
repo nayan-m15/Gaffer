@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { flushOfflineMatchEvents } from "@/features/matches/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { loadEventReviews } from "./event-review-loader";
 import {
   enqueueOperation,
   cacheResponse,
@@ -17,13 +19,17 @@ import {
 export function EventReviewPanel({
   matchId,
   onClose,
+  expectedReviewCount = 0,
 }: {
   matchId: string;
   onClose: () => void;
+  expectedReviewCount?: number;
 }) {
   const { team } = useAuth();
   const [reviews, setReviews] = useState<SyncedMatchReview[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const requestVersion = useRef(0);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [queuedDecisions, setQueuedDecisions] = useState<
@@ -31,21 +37,22 @@ export function EventReviewPanel({
   >({});
 
   const load = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setLoading(true);
     try {
-      const synced = await readSyncedMatchReviews(matchId);
-      const cached = await readCachedResponse<SyncedMatchReview[]>(`reviews:${matchId}`);
-      let rows: SyncedMatchReview[] = synced.map(row => {
-        const previous = cached?.find(previous => previous.id === row.id);
-        return { ...previous, ...row, locked: row.locked ?? previous?.locked, observations: row.observations.map(observation => ({
-          ...previous?.observations.find(previous => previous.id === observation.id), ...observation,
-        })) };
+      const result = await loadEventReviews({
+        online: navigator.onLine,
+        fetch: () => apiFetch<SyncedMatchReview[]>(`/matches/${matchId}/event-reviews`),
+        synced: () => readSyncedMatchReviews(matchId),
+        cached: () => readCachedResponse<SyncedMatchReview[]>(`reviews:${matchId}`),
+        cache: rows => cacheResponse(`reviews:${matchId}`, rows),
       });
-      if (navigator.onLine) {
-        try { rows = await apiFetch<SyncedMatchReview[]>(`/matches/${matchId}/event-reviews`); await cacheResponse(`reviews:${matchId}`, rows); }
-        catch (cause) { if (!(cause instanceof TypeError)) throw cause; }
-      }
-      setReviews(rows);
-      const queue = await listQueuedEvents(matchId);
+      if (version !== requestVersion.current) return;
+      setReviews(result.reviews);
+      setError(result.warning);
+      setLoading(false);
+      const queue = await listQueuedEvents(matchId).catch(() => []);
+      if (version !== requestVersion.current) return;
       const decisions: Record<string, { state: string; error: string | null }> =
         {};
       for (const item of queue) {
@@ -65,11 +72,14 @@ export function EventReviewPanel({
         }
       }
       setQueuedDecisions(decisions);
-      setError(null);
     } catch (cause) {
-      setError(
+      if (cause && typeof cause === "object" && "status" in cause &&
+        [401, 403, 404].includes(Number(cause.status)) && version === requestVersion.current) setReviews([]);
+      if (version === requestVersion.current) setError(
         cause instanceof Error ? cause.message : "Could not load reviews.",
       );
+    } finally {
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [matchId]);
 
@@ -82,11 +92,7 @@ export function EventReviewPanel({
         if (disposed) stop();
         else unsubscribe = stop;
       })
-      .catch((cause: unknown) => {
-        setError(
-          cause instanceof Error ? cause.message : "Could not watch reviews.",
-        );
-      });
+      .catch((cause: unknown) => console.warn("Could not watch reviews.", cause));
     return () => {
       disposed = true;
       unsubscribe?.();
@@ -97,9 +103,13 @@ export function EventReviewPanel({
     const stop = subscribeToOfflineQueueChanges(() => void load());
     const refresh = () => void load();
     window.addEventListener("online", refresh);
+    const interval = window.setInterval(() => {
+      if (navigator.onLine && document.visibilityState === "visible") refresh();
+    }, 5_000);
     return () => {
       stop();
       window.removeEventListener("online", refresh);
+      window.clearInterval(interval);
     };
   }, [load]);
 
@@ -167,20 +177,15 @@ export function EventReviewPanel({
   const openReviews = reviews.filter((review) => review.status === "open");
   const history = reviews.filter((review) => review.status === "resolved");
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="event-review-title"
-    >
-      <section className="themed-scrollbar max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border-default bg-popover p-5 text-popover-foreground shadow-2xl">
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent showCloseButton={false} className="themed-scrollbar block max-h-[85dvh] w-full overflow-y-auto rounded-2xl p-5 sm:max-w-lg">
         <div className="flex items-center justify-between gap-3">
-          <h2
-            id="event-review-title"
+          <DialogTitle
             className="font-oswald text-xl tracking-wide text-foreground"
           >
             Event review
-          </h2>
+          </DialogTitle>
+          <button type="button" onClick={() => void load()} disabled={loading} className="ml-auto rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-surface-hover disabled:opacity-50">Refresh</button>
           <button
             type="button"
             onClick={onClose}
@@ -194,7 +199,9 @@ export function EventReviewPanel({
             {error}
           </p>
         ) : null}
-        {openReviews.length === 0 ? (
+        {loading && reviews.length === 0 ? <p role="status" className="mt-5 text-sm text-muted-foreground">Loading reviews…</p> : null}
+        {!loading && expectedReviewCount > openReviews.length ? <p role="alert" className="mt-3 text-sm text-warning">The report lists {expectedReviewCount} unresolved reviews. Refresh to load the latest queue.</p> : null}
+        {!loading && !error && expectedReviewCount === 0 && openReviews.length === 0 ? (
           <p className="mt-5 text-sm text-muted-foreground">
             No events need review.
           </p>
@@ -304,7 +311,7 @@ export function EventReviewPanel({
                 >
                   <span>
                     {review.reason.replaceAll("_", " ")} ·{" "}
-                    {review.resolution?.replaceAll("_", " ") ?? "resolved"}
+                    {review.resolution === "event_removed" ? "Closed because an event was removed" : review.resolution === "events_changed" ? "Closed because the events changed" : review.resolution?.replaceAll("_", " ") ?? "resolved"}
                     {review.resolvedByUserId
                       ? ` · resolved by coach ${review.resolvedByUserId.slice(0, 8)}`
                       : ""}
@@ -312,7 +319,7 @@ export function EventReviewPanel({
                       ? ` · disputed by coach ${review.disputedByUserId.slice(0, 8)}`
                       : ""}
                   </span>
-                  {team?.role === "coach" && !review.disputedAt && !review.locked && !review.crossTeam ? (
+                  {team?.role === "coach" && !review.disputedAt && !review.locked && !review.crossTeam && ["same_event", "separate_events"].includes(review.resolution ?? "") ? (
                     <button
                       type="button"
                       disabled={!navigator.onLine}
@@ -325,7 +332,7 @@ export function EventReviewPanel({
                   {team?.role === "coach" &&
                   !review.locked &&
                   review.reviewVersion === 2 &&
-                  review.resolution ? (
+                  ["same_event", "separate_events"].includes(review.resolution ?? "") ? (
                     <button
                       type="button"
                       disabled={
@@ -355,7 +362,7 @@ export function EventReviewPanel({
             </ul>
           </section>
         ) : null}
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -387,7 +387,18 @@ export function planAddEvent(
     });
   }
 
-  return ops;
+  return withReportTiming(ops);
+}
+
+function withReportTiming(ops: PlannedOp[]): PlannedOp[] {
+  return ops.map((op): PlannedOp => op.kind === "create" ? {
+    ...op,
+    input: {
+      ...op.input,
+      period: op.input.minute < 45 ? "first_half" as const : "second_half" as const,
+      matchElapsedMs: op.input.minute * 60_000,
+    },
+  } : op);
 }
 
 export function planEditEvent({
@@ -458,7 +469,7 @@ export function planEditEvent({
     }
   }
 
-  return ops;
+  return withReportTiming(ops);
 }
 
 function appendLinkedAssistEdits(

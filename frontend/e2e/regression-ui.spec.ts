@@ -648,6 +648,70 @@ test("cross-team duplicate review shows both positions and explanations", async 
   await expect(dialog.getByRole("button", { name: "Count as one event" })).toBeEnabled();
 });
 
+for (const completed of [false, true]) {
+  test(`duplicate review dialog opens and reports loading and failures in ${completed ? "the report" : "the live logger"}`, async ({ page }, testInfo) => {
+    const sessionId = "44444444-4444-4444-8444-444444444444";
+    await mockAuthenticatedMatch(page, completed, { sharedSessionId: sessionId });
+    await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+    await page.route(`**/api/events/${EVENT_ID}/opponent-lineup`, route => json(route, { available: false }));
+    await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
+      sessionId, reportRevision: 1, participants: [], score: { home: 0, away: 0 },
+      clock: { period: completed ? "full_time" : "first_half", elapsedMs: 600000, startedAt: null, running: false, revision: 1 },
+      finalStatus: completed ? "awaiting_confirmation" : "open", finalisedAt: null,
+      confirmations: { home: null, away: null }, timeline: [], reviews: [],
+    }));
+    let release!: () => void;
+    const delayed = new Promise<void>(resolve => { release = resolve; });
+    let failed = true;
+    await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, async route => {
+      await delayed;
+      return failed ? json(route, { message: "Review service unavailable" }, 503) : json(route, []);
+    });
+    await page.goto(`/matches/${MATCH_ID}/${completed ? "report" : "live"}`);
+    if (completed) await page.getByRole("button", { name: "Review queue" }).click();
+    else {
+      await page.getByRole("button", { name: "Match settings" }).click();
+      await page.getByRole("button", { name: "Review duplicates" }).click();
+    }
+    const dialog = page.getByRole("dialog", { name: "Event review" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("status")).toHaveText("Loading reviews…");
+    await expect(dialog.getByText("No events need review.")).toHaveCount(0);
+    release();
+    await expect(dialog.getByRole("alert")).toContainText("Review service unavailable");
+    await expect(dialog.getByText("No events need review.")).toHaveCount(0);
+    failed = false;
+    await dialog.getByRole("button", { name: "Refresh" }).click();
+    await expect(dialog.getByText("No events need review.")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("review-dialog.png") });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+}
+
+test("removed duplicate reviews stay in history and no longer block the report", async ({ page }) => {
+  const sessionId = "44444444-4444-4444-8444-444444444444";
+  await mockAuthenticatedMatch(page, true, { sharedSessionId: sessionId });
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  const review = { id: LOG_ID, reviewVersion: 2, reason: "possible_duplicate", status: "resolved",
+    resolution: "event_removed", locked: false, observations: [] };
+  await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, route => json(route, [review]));
+  await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
+    sessionId, reportRevision: 2, participants: [], score: { home: 1, away: 0 },
+    clock: { period: "full_time", elapsedMs: 5400000, startedAt: null, running: false, revision: 1 },
+    finalStatus: "awaiting_confirmation", finalisedAt: null, confirmations: { home: null, away: null },
+    timeline: [], reviews: [review],
+  }));
+  await page.goto(`/matches/${MATCH_ID}/report`);
+  await expect(page.getByRole("button", { name: "Confirm report", exact: true })).toBeEnabled();
+  await expect(page.getByLabel("Shared session result")).not.toContainText("possible duplicate");
+  await page.getByRole("button", { name: "Review queue" }).click();
+  const dialog = page.getByRole("dialog", { name: "Event review" });
+  await expect(dialog.getByText(/Closed because an event was removed/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Reconsider" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Flag dispute" })).toHaveCount(0);
+});
+
 test("post-match correction updates the visible timeline", async ({ page }) => {
   await mockAuthenticatedMatch(page, true);
   let event = {
