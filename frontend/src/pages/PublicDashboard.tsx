@@ -26,6 +26,8 @@ import {
 import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
 import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
+import { getPositionGroup, type PositionGroup } from "@/components/roster/position";
+import { DepthCarousel } from "@/components/ui/DepthCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
@@ -49,7 +51,15 @@ import {
 const selectClassName =
   "h-10 w-full min-w-0 rounded-xl border border-input bg-background/85 px-3 text-sm text-foreground shadow-sm outline-none backdrop-blur-sm transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50 dark:bg-background/75";
 
-type PositionCategory = "ALL" | "FWD" | "MID" | "DEF" | "GK";
+type PositionCategory = "all" | PositionGroup;
+
+const positionFilters: { id: PositionCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "goalkeeper", label: "Goalkeepers" },
+  { id: "defender", label: "Defenders" },
+  { id: "midfielder", label: "Midfielders" },
+  { id: "forward", label: "Forwards" },
+];
 
 const dashboardSections = [
   { id: "players", label: "Squad Showcase" },
@@ -67,7 +77,7 @@ export default function PublicDashboard() {
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
   const [matchStatus, setMatchStatus] = useState<PublicMatchStatus | "">("");
-  const [positionFilter, setPositionFilter] = useState<PositionCategory>("ALL");
+  const [positionFilter, setPositionFilter] = useState<PositionCategory>("all");
   const [playerSearch, setPlayerSearch] = useState("");
 
   const filtersQuery = useQuery({
@@ -123,7 +133,7 @@ export default function PublicDashboard() {
     setSeasonId("");
     setCompetitionId("");
     setMatchStatus("");
-    setPositionFilter("ALL");
+    setPositionFilter("all");
     setPlayerSearch("");
   }
 
@@ -157,39 +167,9 @@ export default function PublicDashboard() {
   const filteredPlayers = useMemo(() => {
     const players = playersQuery.data ?? [];
     const positionFiltered =
-      positionFilter === "ALL"
+      positionFilter === "all"
         ? players
-        : players.filter((player) => {
-            const pos = (player.position ?? "").toUpperCase();
-            if (positionFilter === "FWD")
-              return (
-                pos.includes("FW") ||
-                pos.includes("ST") ||
-                pos.includes("ATT") ||
-                pos.includes("FORWARD")
-              );
-            if (positionFilter === "MID")
-              return (
-                pos.includes("MID") ||
-                pos.includes("CAM") ||
-                pos.includes("CDM") ||
-                pos.includes("CM")
-              );
-            if (positionFilter === "DEF")
-              return (
-                pos.includes("DEF") ||
-                pos.includes("CB") ||
-                pos.includes("LB") ||
-                pos.includes("RB")
-              );
-            if (positionFilter === "GK")
-              return (
-                pos.includes("GK") ||
-                pos.includes("KEEP") ||
-                pos.includes("GOAL")
-              );
-            return true;
-          });
+        : players.filter((player) => getPositionGroup(player.position) === positionFilter);
     const normalizedSearch = playerSearch.trim().toLocaleLowerCase();
 
     if (!normalizedSearch) return positionFiltered;
@@ -365,19 +345,20 @@ export default function PublicDashboard() {
               </div>
 
               {/* Position Filter Chips */}
-              <div className="flex flex-wrap items-center gap-1.5 lg:justify-center">
-                <span className="mr-2 text-xs font-semibold text-muted-foreground">Position:</span>
-                {(["ALL", "FWD", "MID", "DEF", "GK"] as const).map((cat) => (
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 lg:justify-center" role="group" aria-label="Filter players by position">
+                {positionFilters.map(({ id, label }) => (
                   <button
-                    key={cat}
-                    onClick={() => setPositionFilter(cat)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                      positionFilter === cat
+                    key={id}
+                    type="button"
+                    onClick={() => setPositionFilter(id)}
+                    aria-pressed={positionFilter === id}
+                    className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      positionFilter === id
                         ? "bg-brand text-brand-foreground shadow-sm"
                         : "bg-muted/70 text-muted-foreground hover:bg-accent hover:text-foreground"
                     }`}
                   >
-                    {cat === "ALL" ? "All Positions" : cat}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -400,7 +381,7 @@ export default function PublicDashboard() {
                     : "No players found matching the selected filters."
                 }
               >
-                <PlayerShowcase players={filteredPlayers} />
+                <PlayerShowcase key={[teamId, seasonId, competitionId, positionFilter, playerSearch].join("|")} players={filteredPlayers} />
               </SectionState>
             )}
           </DashboardSection>
@@ -559,10 +540,14 @@ export default function PublicDashboard() {
 {/* ─── Component: Public player showcase ────────────────────────────────── */}
 function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   return (
-    <div className="mt-4 grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {players.map((player) => (
-        <PublicDashboardPlayerCard key={player.id} player={player} />
-      ))}
+    <div className="mt-4 min-w-0">
+      <DepthCarousel
+        items={players.map((player) => ({
+          id: player.id,
+          label: `${player.firstName} ${player.lastName}`,
+          content: <PublicDashboardPlayerCard player={player} />,
+        }))}
+      />
     </div>
   );
 }
@@ -578,9 +563,9 @@ function PlayerShowcaseSkeleton() {
         <div
           key={index}
           aria-hidden="true"
-          className="h-[470px] animate-pulse overflow-hidden rounded-3xl border border-border/80 bg-card"
+          className="h-[350px] animate-pulse overflow-hidden rounded-3xl border border-border/80 bg-card"
         >
-          <div className="h-44 bg-muted/70" />
+          <div className="h-32 bg-muted/70" />
           <div className="space-y-4 p-5">
             <div className="h-3 w-1/3 rounded bg-muted" />
             <div className="h-6 w-2/3 rounded bg-muted" />
