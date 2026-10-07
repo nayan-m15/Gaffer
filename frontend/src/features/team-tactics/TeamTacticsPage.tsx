@@ -1,21 +1,23 @@
 /**
- * Team Tactics panel — a FIFA-style "Custom Tactics" editor rendered inside
- * the Team Management page's "Tactics" section. It edits the tactical half of
- * the selected game plan; the squad half lives on the board in the "Squad"
- * section and is saved with it.
+ * Team Tactics panel — the tactical editor rendered inside the Team Management
+ * page's "Tactics" section. It edits the tactical half of the selected game
+ * plan; the squad half lives on the board in the "Squad" section and is saved
+ * with it.
  *
- * The save controls and dialogs live on the page itself; this component
- * renders the tab strip and the active tab body. All state comes from the
- * shared `useGamePlanEditor` instance.
+ * The controls lay out beside a live mini pitch, so the panel is given the full
+ * width of the page.
+ *
+ * It used to carry its own tab strip, whose second tab was a placeholder for
+ * player instructions. Those now have a section of their own on the page, so
+ * what is left here is the tactical settings alone.
+ *
+ * The save controls and dialogs live on the page itself. All state comes from
+ * the shared `useGamePlanEditor` instance.
  */
 
-import { ClipboardList, Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { PlaceholderTab } from "./PlaceholderTab";
-import { RolesTab } from "./RolesTab";
 import { TacticsTab } from "./TacticsTab";
-import { TACTICS_TABS } from "./tactics-options";
 import type { GamePlanEditor } from "./useGamePlanEditor";
 
 interface TeamTacticsPanelProps {
@@ -32,14 +34,12 @@ export default function TeamTacticsPanel({
   readOnly = false,
 }: TeamTacticsPanelProps) {
   const {
-    athletes,
+    lineup,
     isPlansLoading,
     isError,
     refetch,
     content,
     patch,
-    activeTab,
-    setActiveTab,
     saving,
     saveError,
     clearSaveError,
@@ -67,29 +67,7 @@ export default function TeamTacticsPanel({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-        <nav
-          className="flex gap-1 overflow-x-auto"
-          aria-label="Tactics sections"
-        >
-          {TACTICS_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              aria-current={activeTab === tab ? "page" : undefined}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                activeTab === tab
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-
+    <div className="mx-auto w-full max-w-6xl space-y-4">
         {saveError && (
           <p
             role="alert"
@@ -115,30 +93,12 @@ export default function TeamTacticsPanel({
           </div>
         ) : (
           <>
-            {activeTab === "Tactics" && (
-              <TacticsTab
-                content={content}
-                onChange={patch}
-                disabled={saving || readOnly}
-              />
-            )}
-
-            {activeTab === "Roles" && (
-              <RolesTab
-                content={content}
-                athletes={athletes}
-                onChange={patch}
-                disabled={saving || readOnly}
-              />
-            )}
-
-            {activeTab === "Instructions" && (
-              <PlaceholderTab
-                icon={ClipboardList}
-                title="Player instructions"
-                description="Per-player instructions (attacking support, defensive behaviour, width, runs) will hang off each formation slot here in a future update."
-              />
-            )}
+            <TacticsTab
+              content={content}
+              formation={lineup.formation}
+              onChange={patch}
+              disabled={saving || readOnly}
+            />
           </>
         )}
     </div>
