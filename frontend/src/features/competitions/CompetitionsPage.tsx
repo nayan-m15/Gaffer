@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Plus, Search, Settings2, Trash2, Trophy } from "lucide-react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, CalendarClock, Clock3, Pencil, Plus, Search, Settings2, Trash2, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import { StandingsDisplay } from "@/components/standings/StandingsDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useCompetition, useCompetitionFixtures, useCompetitionInvites, useCompetitionSearch, useMyCompetitions, useCompetitionMutation } from "./hooks";
+import { useCompetition, useCompetitionFixtures, useCompetitionInvites, useCompetitionSearch, useMyCompetitions, useCompetitionMutation, useFixtureScheduleAlerts } from "./hooks";
 import { addParticipant, deleteCompetition, deleteCompetitionResult, generateCompetitionFixtures, inviteCoach, removeParticipant, renameParticipant, resolveTeamVerification, revokeInvite } from "./api";
 import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type ActionDialogConfig } from "./CompetitionDialogs";
 import { CompetitionResultDialog } from "./CompetitionResultDialog";
 import { CompetitionFixturesView } from "./CompetitionFixturesView";
-import type { CompetitionDetail, CompetitionFixture, CompetitionFormat, CompetitionInvite, CompetitionResult, CompetitionSummary, Participant } from "./types";
+import { FixtureScheduleAlertsBanner } from "./FixtureScheduleAlertsBanner";
+import type { CompetitionDetail, CompetitionFixture, CompetitionFixtureScheduleAlert, CompetitionFormat, CompetitionInvite, CompetitionResult, CompetitionSummary, Participant } from "./types";
 import "./competitions-background.css";
 
 const contentClass = "mx-auto w-full max-w-[1600px] space-y-6 px-6 pb-10 sm:px-8 lg:px-10";
@@ -47,15 +48,67 @@ export default function CompetitionsPage() {
   );
 }
 
-function CompetitionList({ rows, empty, basePath }: { rows: CompetitionSummary[]; empty: string; basePath: string }) {
+function CompetitionList({
+  rows,
+  empty,
+  basePath,
+  scheduleAlerts = [],
+}: {
+  rows: CompetitionSummary[];
+  empty: string;
+  basePath: string;
+  scheduleAlerts?: CompetitionFixtureScheduleAlert[];
+}) {
   if (!rows.length) return <p className="py-5 text-sm text-muted-foreground">{empty}</p>;
-  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => (
-    <Link key={row.id} to={`${basePath}/${row.id}`} className="rounded-xl border border-border p-4 transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <div className="flex items-start justify-between gap-3"><h3 className="break-words font-semibold">{row.name}</h3>{row.isAdmin && <span className={badgeClass}>Admin</span>}</div>
-      <p className="mt-2 text-sm text-muted-foreground">{formatLabel(row.type, row.format)}{row.season ? ` · ${row.season}` : ""}</p>
-      <p className="mt-3 text-sm">{row.participantCount}{row.configuredTeamCount ? ` / ${row.configuredTeamCount}` : ""} {row.participantCount === 1 ? "team" : "teams"}</p>
-    </Link>
-  ))}</div>;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {rows.map((row) => {
+        const competitionAlerts = scheduleAlerts.filter(
+          (alert) => alert.competitionId === row.id && alert.state !== "confirmed",
+        );
+        const actionRequiredCount = competitionAlerts.filter(
+          (alert) => alert.state === "action_required",
+        ).length;
+        const awaitingCount = competitionAlerts.filter(
+          (alert) => alert.state === "awaiting_response",
+        ).length;
+
+        return (
+          <Link
+            key={row.id}
+            to={`${basePath}/${row.id}`}
+            className="rounded-xl border border-border p-4 transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="break-words font-semibold">{row.name}</h3>
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                {actionRequiredCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-500">
+                    <CalendarClock className="size-3.5" aria-hidden="true" />
+                    {actionRequiredCount === 1 ? "Reschedule" : `${actionRequiredCount} reschedules`}
+                  </span>
+                )}
+                {actionRequiredCount === 0 && awaitingCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/35 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    <Clock3 className="size-3.5" aria-hidden="true" />
+                    Awaiting opponent
+                  </span>
+                )}
+                {row.isAdmin && <span className={badgeClass}>Admin</span>}
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {formatLabel(row.type, row.format)}{row.season ? ` · ${row.season}` : ""}
+            </p>
+            <p className="mt-3 text-sm">
+              {row.participantCount}{row.configuredTeamCount ? ` / ${row.configuredTeamCount}` : ""} {row.participantCount === 1 ? "team" : "teams"}
+            </p>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 function CompetitionWorkspace() {
@@ -65,6 +118,11 @@ function CompetitionWorkspace() {
   const basePath = competitionBasePath(accountKind);
   const canCreate = team?.role === "coach";
   const mine = useMyCompetitions();
+  const scheduleAlerts = useFixtureScheduleAlerts(canCreate);
+  const activeScheduleAlerts = useMemo(
+    () => (scheduleAlerts.data ?? []).filter((alert) => alert.state !== "confirmed"),
+    [scheduleAlerts.data],
+  );
   const [input, setInput] = useState("");
   const [term, setTerm] = useState("");
   const search = useCompetitionSearch(term);
@@ -81,12 +139,20 @@ function CompetitionWorkspace() {
     <PageHeader title="Leagues & Competitions" subtitle={canCreate ? "Find competitions, view standings or brackets, and manage the ones you administer." : "Find competitions and view their standings or knockout brackets."}
       actions={canCreate ? <Button onClick={() => setCreating(true)}><Plus className="size-4" />Create competition</Button> : undefined} />
     <div className={contentClass}>
+      {canCreate && <FixtureScheduleAlertsBanner showConfirmed={false} />}
       <AppCard className="space-y-5">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Trophy className="size-5 text-primary" />My Leagues & Competitions</h2>
         {mine.isPending && <p role="status" className="text-sm text-muted-foreground">Loading your competitions...</p>}
         <RequestError error={mine.error} />
         {mine.isError && <Button variant="outline" onClick={() => void mine.refetch()}>Retry</Button>}
-        {mine.data && <CompetitionList rows={mine.data} basePath={basePath} empty="Your team has no leagues or cups yet." />}
+        {mine.data && (
+          <CompetitionList
+            rows={mine.data}
+            basePath={basePath}
+            empty="Your team has no leagues or cups yet."
+            scheduleAlerts={activeScheduleAlerts}
+          />
+        )}
       </AppCard>
       <AppCard className="space-y-5">
         <div><h2 className="text-lg font-semibold">Find a League or Competition</h2><p className="mt-1 text-sm text-muted-foreground">Search by name to open the same shared competition view.</p></div>
@@ -661,6 +727,7 @@ function CompetitionManagementDialogs({
 
 function CompetitionDetails({ id }: { id: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { team, accountKind } = useAuth();
   const basePath = competitionBasePath(accountKind);
@@ -691,6 +758,17 @@ function CompetitionDetails({ id }: { id: string }) {
   );
   const hasGeneratedFixtures = fixtures.length > 0;
   const participantAddDisabled = !fixtureStateKnown || rosterLocked || (configuredCount != null && participantCount >= configuredCount);
+
+  useEffect(() => {
+    if (!fixturesQuery.isSuccess || !location.hash.startsWith("#fixture-")) return;
+    const id = window.setTimeout(() => {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [fixturesQuery.isSuccess, location.hash]);
 
   const manualFixtureByResult = useMemo(() => new Map(fixtures.filter((fixture) => fixture.legacyResultId).map((fixture) => [fixture.legacyResultId!, fixture])), [fixtures]);
 

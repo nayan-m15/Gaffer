@@ -54,6 +54,11 @@ export class CompetitionsController {
     return this.competitionsService.listMine(user.id);
   }
 
+  @Get('schedule-alerts')
+  async scheduleAlerts(@CurrentUser() user: SessionUser) {
+    return this.competitionsService.listFixtureScheduleAlerts(user.id);
+  }
+
   @Post()
   async create(@CurrentUser() user: SessionUser, @Body() body: unknown) {
     const dto = zodValidate(createCompetitionSchema, body);

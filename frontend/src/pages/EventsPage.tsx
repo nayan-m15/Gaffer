@@ -14,6 +14,7 @@ import { FixtureRequestsBanner } from "@/features/events/FixtureRequestsBanner";
 import { MobileCalendarView } from "@/features/events/MobileCalendarView";
 import { MonthCalendar } from "@/features/events/MonthCalendar";
 import { getCalendarCompetitionOptions, type MatchCompetitionFilter } from "@/features/events/match-competition-filter";
+import { FixtureScheduleAlertsBanner } from "@/features/competitions/FixtureScheduleAlertsBanner";
 import { useMyCompetitions } from "@/features/competitions/hooks";
 import { WeekView } from "@/features/events/WeekView";
 import {
@@ -304,6 +305,9 @@ export default function EventsPage() {
 
         {/* Coach inbox: inbound friendly-fixture requests awaiting a response */}
         {canManageEvents && <FixtureRequestsBanner />}
+
+        {/* Competition fixture reschedule proposals and responses */}
+        {canManageEvents && <FixtureScheduleAlertsBanner showConfirmed={false} />}
 
         {/* Mobile View: Samsung & Apple phone inspired calendar */}
         {events && (

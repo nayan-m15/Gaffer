@@ -154,3 +154,23 @@ export interface CompetitionInvite {
   proposedName?: string | null;
   requestedByUserId?: string | null;
 }
+export type CompetitionFixtureScheduleAlertState =
+  | "action_required"
+  | "awaiting_response"
+  | "confirmed";
+
+export interface CompetitionFixtureScheduleAlert {
+  id: string;
+  fixtureId: string;
+  competitionId: string;
+  competitionName: string;
+  opponentName: string;
+  scheduledAt: string;
+  scheduleRevision: number;
+  proposalNote: string | null;
+  proposedByOwnTeam: boolean;
+  state: CompetitionFixtureScheduleAlertState;
+  confirmedAt: string | null;
+  updatedAt: string;
+}
+
