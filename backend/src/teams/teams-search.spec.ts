@@ -19,10 +19,10 @@ describe('friendly opponent search SQL', () => {
     service = new TeamsService({
       database: drizzle(pg),
     } as unknown as DatabaseService);
-  });
+  }, 60000);
   afterAll(async () => {
     await pg?.close();
-  });
+  }, 30000);
   it('returns one row per coached team, excludes orphan/own teams, and preserves distinct same-name teams', async () => {
     const results = await service.searchTeams('viewer', 'Chelsea');
     expect(results.map((row) => row.id).sort()).toEqual(['live', 'other']);

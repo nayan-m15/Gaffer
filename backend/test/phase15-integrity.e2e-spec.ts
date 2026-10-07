@@ -502,11 +502,17 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
         c.agent.get(`/matches/${m.id}`),
         200,
       );
+      const sharedReport = await http<{ reportRevision: number }>(
+        'valid-shared-report-' + m.id,
+        c.agent.get(`/matches/${m.id}/session-report`),
+        200,
+      );
       await http(
         'valid-confirm-' + m.id,
-        c.agent
-          .post(`/matches/${m.id}/finalise`)
-          .send({ expectedRevision: report.projection.revision }),
+        c.agent.post(`/matches/${m.id}/finalise`).send({
+          expectedRevision: report.projection.revision,
+          expectedSessionRevision: sharedReport.reportRevision,
+        }),
         201,
       );
     }

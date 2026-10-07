@@ -111,8 +111,11 @@ describe('Shared competitions (e2e)', () => {
   });
 
   afterAll(async () => {
-    await cleanupUsers(identities);
-    await app.close();
+    try {
+      await cleanupUsers(identities);
+    } finally {
+      await app.close();
+    }
   });
 
   async function newCoach(prefix = 's3-01-competitions') {
@@ -209,7 +212,7 @@ describe('Shared competitions (e2e)', () => {
     expect(detail.participants).toHaveLength(2);
   });
 
-  it('creates one shared session for each newly generated competition fixture when enabled', async () => {
+  it('creates one shared session per generated fixture and keeps an expired single confirmation provisional', async () => {
     const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     try {
@@ -313,7 +316,7 @@ describe('Shared competitions (e2e)', () => {
           };
         }
       ).projection;
-      expect(projection.finalisationState).toBe('finalised');
+      expect(projection.finalisationState).toBe('open');
       const input = {
         homeCompetitionTeamId: fixture.homeCompetitionTeamId,
         awayCompetitionTeamId: fixture.awayCompetitionTeamId,
@@ -324,26 +327,23 @@ describe('Shared competitions (e2e)', () => {
           ? projection.confirmedOpponentScore
           : projection.confirmedTeamScore,
       };
-      await syncFixtureResult(
-        app.get(DatabaseService),
-        competition.id,
-        {
-          kind: 'live',
-          id: match.id,
-          sessionId: fixture.sharedSessionId!,
-        },
-        input,
-      );
-      await syncFixtureResult(
-        app.get(DatabaseService),
-        competition.id,
-        {
-          kind: 'live',
-          id: match.id,
-          sessionId: fixture.sharedSessionId!,
-        },
-        input,
-      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(
+          syncFixtureResult(
+            app.get(DatabaseService),
+            competition.id,
+            {
+              kind: 'live',
+              id: match.id,
+              sessionId: fixture.sharedSessionId!,
+            },
+            input,
+          ),
+        ).rejects.toMatchObject({
+          status: 409,
+          response: { code: 'SHARED_MATCH_RESULT_NOT_FINALISED' },
+        });
+      }
       const detail = (
         await agent.get(`/competitions/${competition.id}`).expect(200)
       ).body as {
@@ -354,15 +354,10 @@ describe('Shared competitions (e2e)', () => {
         }>;
         standings: Array<{ played: number }>;
       };
-      expect(detail.results).toHaveLength(1);
-      expect(detail.results[0]).toMatchObject({
-        linkedMatchId: match.id,
-        homeScore: input.homeScore,
-        awayScore: input.awayScore,
-      });
+      expect(detail.results).toHaveLength(0);
       expect(
         detail.standings.reduce((played, row) => played + row.played, 0),
-      ).toBe(2);
+      ).toBe(0);
       await database
         .update(matchSessions)
         .set({
@@ -722,6 +717,7 @@ describe('Shared competitions (e2e)', () => {
       expect(Object.keys(homeReport.body as object).sort()).toEqual(
         [
           'sessionId',
+          'reportRevision',
           'participants',
           'score',
           'clock',
@@ -796,6 +792,17 @@ describe('Shared competitions (e2e)', () => {
       await homeCoach.agent
         .post(
           `/matches/${homeSheet.id}/event-reviews/${(openReviewReport.body as SessionReport).reviews[0].id}/resolve`,
+        )
+        .send({ resolution: 'same_event' })
+        .expect(201);
+      const proposedReport = await awayCoach.agent.get(reportUrl).expect(200);
+      expect((proposedReport.body as SessionReport).reviews[0].status).toBe(
+        'open',
+      );
+      expect((proposedReport.body as SessionReport).timeline).toHaveLength(2);
+      await awayCoach.agent
+        .post(
+          `/matches/${awaySheet.id}/event-reviews/${(openReviewReport.body as SessionReport).reviews[0].id}/resolve`,
         )
         .send({ resolution: 'same_event' })
         .expect(201);

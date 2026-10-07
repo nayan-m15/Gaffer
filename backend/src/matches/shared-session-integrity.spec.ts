@@ -12,6 +12,11 @@ import { FriendlyFixturesService } from '../friendly-fixtures/friendly-fixtures.
 import { CompetitionsService } from '../competitions/competitions.service';
 import { syncFixtureResult } from '../competitions/competition-fixture-results';
 import { MatchesService } from './matches.service';
+
+// These tests call controller methods with explicit users; HTTP authentication
+// is covered by the e2e suites. Keep Better Auth's ESM out of this CJS suite.
+jest.mock('../auth/auth.guard', () => ({ AuthGuard: class AuthGuard {} }));
+
 import { SyncController } from '../sync/sync.controller';
 
 // Real SQL/functions and service paths; no external database or user records.

@@ -449,6 +449,19 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
           .send({ resolution: 'same_event' }),
         201,
       );
+      const proposed = await http<{ status: string }[]>(
+        'proposed-peer-' + b.id,
+        away.agent.get(`/matches/${b.id}/event-reviews`),
+        200,
+      );
+      expect(proposed[0].status).toBe('open');
+      await http(
+        'agree-' + b.id,
+        away.agent
+          .post(`/matches/${b.id}/event-reviews/${reviewsA[0].id}/resolve`)
+          .send({ resolution: 'same_event' }),
+        201,
+      );
       const resolved = await http<{ status: string }[]>(
         'resolved-peer-' + b.id,
         away.agent.get(`/matches/${b.id}/event-reviews`),
@@ -456,12 +469,29 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
       );
       expect(resolved[0].status).toBe('resolved');
       await http(
-        'dispute-' + b.id,
-        away.agent.post(
-          `/matches/${b.id}/event-reviews/${reviewsA[0].id}/dispute`,
-        ),
+        'reconsider-' + b.id,
+        away.agent
+          .post(`/matches/${b.id}/event-reviews/${reviewsA[0].id}/resolve`)
+          .send({
+            resolution: 'separate_events',
+            explanation: 'Review whether these were two separate attacks',
+          }),
         201,
       );
+      const reconsidered = await http<{ status: string }[]>(
+        'reconsidered-home-' + a.id,
+        home.agent.get(`/matches/${a.id}/event-reviews`),
+        200,
+      );
+      expect(reconsidered[0].status).toBe('open');
+      const pendingReport = await http<{
+        score: { home: number; away: number };
+      }>(
+        'reconsidered-report-' + a.id,
+        home.agent.get(`/matches/${a.id}/session-report`),
+        200,
+      );
+      expect(pendingReport.score).toEqual({ home: 1, away: 0 });
       await http(
         'injury-' + a.id,
         home.agent.post(`/matches/${a.id}/events`).send({
