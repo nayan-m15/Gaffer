@@ -56,6 +56,8 @@ client_auth:
   supabase: false
   # [optional] JWKS URL; instance fetches public keys to verify JWT signatures.
   jwks_uri: https://gaffer-api-ynaf.onrender.com/sync/jwks
+  # Public RSA key for the authorized local Development backend.
+  jwks: {"keys":[{"kty":"RSA","kid":"gaffer-phase25-validation-1","n":"k7czoeT52AB6T3fEgWLl8URi1u_wcvd4Eujlw3wCXT_Ondlz8E7Ybb7uvleIHgmsqRISjjnLouYeUugJ-HxOfb2lMtIjLrBL84SHf0819PxVyV0FRoo-HbSM6pbbHk-qcDFoEngq6Uiuh9j4ulo7EDI_mTS9rz879ZIAfLw-MCPd4j2AJ8G19K_xCnT2ydje6MVV43Q7TV-PkomoHccZJejaB28aWwryJvCjOl263WBwje8wX9yQrNbZyZ62PX0rE4odHe3pupN2nj7ccdijJ0bqE1eGbFAk14JpkIz389z0MiRc9LCSwMOtO2rfMmH3EMUiZb5tGfiKANQH27usPXiuzcc_NKd1cUuP-1eYtMksMdGPJsG0jS5AU0MZlR8_ELz4nF3T94zYMpIFEfF42b8FXPbb-uV-iQ3zOnYJP1_rivWDzFrQfrOj9NRdLVqasZXi8jSS1PwVrAhnHxRackv5V3Aed8-t7v6rKtkZNQnFlNKilw_89PqL8rqpmSoz","e":"AQAB","alg":"RS256","use":"sig"}]}
   # [optional] Additional audiences to accept (instance domain is always accepted). Default: [].
   additional_audiences: []
   # [optional] Allow development/temporary tokens. Default: false.

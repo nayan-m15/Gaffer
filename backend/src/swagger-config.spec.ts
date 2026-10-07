@@ -12,6 +12,11 @@ class FixtureController {
   }
 }
 
+// Each case boots a real Nest app and makes several HTTP requests; the first
+// one also pays for cold module loading, which can exceed Jest's 5s default
+// while the rest of the unit suite runs in parallel.
+jest.setTimeout(30_000);
+
 describe('Swagger exposure policy (HARD-002)', () => {
   let app: INestApplication;
 

@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import {
   athleteMatchStats,
@@ -17,6 +17,10 @@ import {
   teams,
 } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
+import {
+  twoSidedLiveLoggingEnabled,
+  ensureFriendlyFixtureSession,
+} from '../matches/match-sessions';
 
 export interface IncomingFriendlyFixture {
   id: string;
@@ -46,6 +50,19 @@ export interface FriendlyOpponentLineupPlayer {
  * or the opponent has not confirmed a squad yet; `teamId`/`teamName` are
  * null when the event is not a Gaffer-friendly at all.
  */
+export interface ConfirmedOpponentLineup {
+  available: boolean;
+  formation: string | null;
+  source?: 'confirmed' | 'squad';
+  customPositions?: Array<{ id: string; label: string; x: number; y: number }>;
+  starters: Array<{
+    name: string;
+    shirtNumber: number | null;
+    slotId?: string | null;
+  }>;
+  bench: Array<{ name: string; shirtNumber: number | null }>;
+}
+
 export interface FriendlyOpponentLineup {
   available: boolean;
   teamId: string | null;
@@ -58,7 +75,10 @@ export interface FriendlyOpponentLineup {
 }
 
 /** The neutral result for lookups where no shared lineup can exist. */
-export function unavailableFriendlyOpponentLineup(): FriendlyOpponentLineup {
+export function unavailableFriendlyOpponentLineup():
+  FriendlyOpponentLineup | ConfirmedOpponentLineup {
+  if (twoSidedLiveLoggingEnabled())
+    return { available: false, formation: null, starters: [], bench: [] };
   return { available: false, teamId: null, teamName: null, players: [] };
 }
 
@@ -96,7 +116,8 @@ export class FriendlyFixturesService {
         eventId: events.id,
         scheduledAt: events.scheduledAt,
         location: events.location,
-        notes: events.notes,
+        // Event notes belong to the requesting team's private calendar.
+        notes: sql<string | null>`NULL`,
         createdAt: friendlyFixtures.createdAt,
       })
       .from(friendlyFixtures)
@@ -197,12 +218,20 @@ export class FriendlyFixturesService {
           weatherLatitude: requesterEvent.weatherLatitude,
           weatherLongitude: requesterEvent.weatherLongitude,
           weatherTimezone: requesterEvent.weatherTimezone,
-          notes: requesterEvent.notes,
+          notes: null,
           friendlyFixtureId: fixture.id,
         })
         .returning();
 
-      return { fixture: accepted, event: opponentEvent };
+      const sharedSessionId = await ensureFriendlyFixtureSession(
+        this.databaseService,
+        fixture.id,
+      );
+
+      return {
+        fixture: { ...accepted, sharedSessionId },
+        event: opponentEvent,
+      };
     } catch (error) {
       // Neon HTTP has no interactive transactions: revert the flip so a
       // failed accept can simply be retried from the requests banner.
@@ -235,7 +264,7 @@ export class FriendlyFixturesService {
     fixtureId: string,
     ownTeamId: string,
     expectedOpponentTeamId?: string,
-  ): Promise<FriendlyOpponentLineup> {
+  ): Promise<FriendlyOpponentLineup | ConfirmedOpponentLineup> {
     const [fixture] = await this.databaseService.database
       .select()
       .from(friendlyFixtures)
@@ -255,6 +284,8 @@ export class FriendlyFixturesService {
     }
 
     if (fixture.status !== 'accepted') {
+      if (twoSidedLiveLoggingEnabled())
+        return unavailableFriendlyOpponentLineup();
       const [opponentTeam] = await this.databaseService.database
         .select({ name: teams.name })
         .from(teams)
@@ -279,7 +310,7 @@ export class FriendlyFixturesService {
     fixtureId: string,
     ownTeamId: string,
     expectedOpponentTeamId?: string,
-  ): Promise<FriendlyOpponentLineup> {
+  ): Promise<FriendlyOpponentLineup | ConfirmedOpponentLineup> {
     const [fixture] = await this.databaseService.database
       .select()
       .from(competitionFixtures)
@@ -322,7 +353,7 @@ export class FriendlyFixturesService {
   }
 
   /** One shared projection for pre-kickoff snapshots and post-kickoff squad rows. */
-  private async resolveConfirmedOpponentEvent(
+  private async resolveLegacyOpponentEvent(
     opponentTeamId: string,
     fixtureId: string,
     competition = false,
@@ -443,6 +474,109 @@ export class FriendlyFixturesService {
         ...athlete,
         started: startingIds.has(athlete.id),
       })),
+    };
+  }
+
+  private async resolveConfirmedOpponentEvent(
+    opponentTeamId: string,
+    fixtureId: string,
+    competition = false,
+  ): Promise<FriendlyOpponentLineup | ConfirmedOpponentLineup> {
+    if (!twoSidedLiveLoggingEnabled())
+      return this.resolveLegacyOpponentEvent(
+        opponentTeamId,
+        fixtureId,
+        competition,
+      );
+    const [event] = await this.databaseService.database
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.teamId, opponentTeamId),
+          competition
+            ? eq(events.competitionFixtureId, fixtureId)
+            : eq(events.friendlyFixtureId, fixtureId),
+        ),
+      )
+      .limit(1);
+    const [lineup] = event
+      ? await this.databaseService.database
+          .select()
+          .from(eventLineups)
+          .where(eq(eventLineups.eventId, event.id))
+          .limit(1)
+      : [];
+    let players: FriendlyOpponentLineupPlayer[] = [];
+    let legacy: FriendlyOpponentLineup | undefined;
+    if (lineup) {
+      const ids = [...lineup.startingAthleteIds, ...lineup.benchAthleteIds];
+      const roster = ids.length
+        ? await this.databaseService.database
+            .select({
+              id: athletes.id,
+              firstName: athletes.firstName,
+              lastName: athletes.lastName,
+              squadNumber: athletes.squadNumber,
+              position: athletes.position,
+            })
+            .from(athletes)
+            .where(
+              and(
+                eq(athletes.teamId, opponentTeamId),
+                inArray(athletes.id, ids),
+              ),
+            )
+        : [];
+      players = roster.map((athlete) => ({
+        ...athlete,
+        started: lineup.startingAthleteIds.includes(athlete.id),
+      }));
+    } else {
+      legacy = await this.resolveLegacyOpponentEvent(
+        opponentTeamId,
+        fixtureId,
+        competition,
+      );
+      players = legacy.players;
+    }
+    const toPlayer = (player: FriendlyOpponentLineupPlayer) => ({
+      name: (player.firstName + ' ' + player.lastName).trim(),
+      shirtNumber: player.squadNumber,
+    });
+    players.sort(
+      (a, b) =>
+        (a.squadNumber ?? 999) - (b.squadNumber ?? 999) ||
+        a.lastName.localeCompare(b.lastName) ||
+        a.firstName.localeCompare(b.firstName),
+    );
+    return {
+      available: Boolean(lineup) || Boolean(legacy?.available),
+      formation: lineup?.formationId ?? null,
+      ...(lineup || legacy?.available
+        ? { source: lineup ? ('confirmed' as const) : ('squad' as const) }
+        : {}),
+      ...(lineup?.formationId?.startsWith('custom-') && lineup.customPositions
+        ? {
+            customPositions: lineup.customPositions.map(
+              ({ id, label, x, y }) => ({ id, label, x, y }),
+            ),
+          }
+        : {}),
+      starters: players
+        .filter((player) => player.started)
+        .map((player) => ({
+          ...toPlayer(player),
+          ...(lineup
+            ? {
+                slotId:
+                  Object.entries(lineup.pitchAssignments ?? {}).find(
+                    ([, athleteId]) => athleteId === player.id,
+                  )?.[0] ?? null,
+              }
+            : {}),
+        })),
+      bench: players.filter((player) => !player.started).map(toPlayer),
     };
   }
 

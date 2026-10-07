@@ -19,5 +19,8 @@
   },
   "dependencies": {
     "better-auth": "^1.7.1"
+  },
+  "overrides": {
+    "shell-quote": "1.11.0"
   }
 }
