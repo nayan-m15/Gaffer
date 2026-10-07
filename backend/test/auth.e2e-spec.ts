@@ -336,6 +336,124 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  describe('POST /auth/sign-in (login CSRF protection)', () => {
+    /** Registers and verifies a user whose credentials the "attacker" knows. */
+    async function verifiedCredentials() {
+      const { email } = newIdentity();
+      await request(app.getHttpServer())
+        .post('/auth/sign-up')
+        .send({ name: 'Login Csrf Probe', email, password: PASSWORD })
+        .expect(201);
+      await verifyEmail(email, `${FRONTEND_URL}/login?verified=1`);
+      return { email, password: PASSWORD };
+    }
+
+    it('rejects a cross-site form login before a session is created', async () => {
+      const { email, password } = await verifiedCredentials();
+
+      // The exact shape of the login-CSRF attack (SEC-003): a malicious page
+      // submits a cross-site form POST carrying the attacker's own
+      // credentials, aiming to plant the attacker's session cookie in the
+      // victim's browser. A form POST is a "simple request", so CORS never
+      // blocks it — only request-aware validation can.
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set('Origin', 'https://attacker.example')
+        .set('Sec-Fetch-Site', 'cross-site')
+        .set('Sec-Fetch-Mode', 'navigate')
+        .set('Sec-Fetch-Dest', 'document')
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .send(`email=${encodeURIComponent(email)}&password=${password}`)
+        .expect(403);
+
+      // Rejected before the handler ran: no session was created, so nothing
+      // could be planted in the victim's browser.
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('rejects a browser-like fetch login from an untrusted origin', async () => {
+      const { email, password } = await verifiedCredentials();
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set('Origin', 'https://evil.example')
+        .set('Sec-Fetch-Site', 'cross-site')
+        .set('Sec-Fetch-Mode', 'cors')
+        .set('Sec-Fetch-Dest', 'empty')
+        .send({ email, password })
+        .expect(403);
+
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('rejects an untrusted origin even when the browser already holds cookies', async () => {
+      const { email, password } = await verifiedCredentials();
+
+      // Re-login attempts carry a stale session cookie; requests with cookies
+      // must present a trusted Origin too (the cookie-present branch of
+      // Better Auth's validation).
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set('Origin', 'https://evil.example')
+        .set('Cookie', 'better-auth.session_token=stale')
+        .send({ email, password })
+        .expect(403);
+
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('still signs in a browser-like request from the trusted frontend origin', async () => {
+      const { email, password } = await verifiedCredentials();
+
+      // The dev setup: the frontend on localhost:5173 calls the backend on
+      // localhost:3000 directly (same site, different port) via fetch.
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set('Origin', FRONTEND_URL)
+        .set('Sec-Fetch-Site', 'same-site')
+        .set('Sec-Fetch-Mode', 'cors')
+        .set('Sec-Fetch-Dest', 'empty')
+        .send({ email, password })
+        .expect(201);
+
+      expect((response.body as AuthResponseBody).user).toMatchObject({ email });
+      expect(response.headers['set-cookie']).toBeDefined();
+    });
+
+    it('still signs in the production frontend origin served through same-origin rewrites', async () => {
+      const { email, password } = await verifiedCredentials();
+
+      // Production: the Vercel app proxies /auth to Render, so the browser
+      // sees a same-origin fetch from the deployment origin.
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in')
+        .set('Origin', 'https://gaffer-virid.vercel.app')
+        .set('Sec-Fetch-Site', 'same-origin')
+        .set('Sec-Fetch-Mode', 'cors')
+        .set('Sec-Fetch-Dest', 'empty')
+        .send({ email, password })
+        .expect(201);
+
+      expect(response.headers['set-cookie']).toBeDefined();
+    });
+
+    it('still routes the OAuth sign-in start through Better Auth unchanged', async () => {
+      // Delegation smoke test for the OAuth surface: an unknown provider is
+      // answered by Better Auth itself — its own error body and code, not a
+      // Nest guard or a Nest 404 — proving the social sign-in route still
+      // runs through Better Auth's HTTP handler untouched by the sign-in
+      // hardening.
+      const response = await request(app.getHttpServer())
+        .post('/auth/sign-in/social')
+        .send({ provider: 'not-a-real-provider' })
+        .expect(404);
+
+      expect(response.body).toMatchObject({
+        code: 'PROVIDER_NOT_FOUND',
+      });
+    });
+  });
+
   describe('GET /auth/session', () => {
     it('returns 401 when there is no session', async () => {
       await request(app.getHttpServer()).get('/auth/session').expect(401);
