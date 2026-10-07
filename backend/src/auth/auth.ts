@@ -46,6 +46,14 @@ export const auth = betterAuth({
     },
   },
   advanced: {
+    // Better Auth defaults `skipOriginCheck` to true when it detects a test
+    // environment (NODE_ENV=test), which — through its backward-compatible
+    // coupling — also disables the request-aware login CSRF validation. That
+    // default would silently reopen SEC-003 under `jest`. Setting it
+    // explicitly keeps Origin/Fetch Metadata validation active (and covered
+    // by the e2e suite) in every environment; in production `false` is
+    // already the default, so this changes nothing there.
+    disableOriginCheck: false,
     defaultCookieAttributes: {
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
