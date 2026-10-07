@@ -190,6 +190,11 @@ export const resolveMatchEventReviewSchema = z.object({
   resolution: z.enum(['same_event', 'separate_events']),
   explanation: z.string().trim().max(500).optional(),
 });
+export const resolveMatchEventReviewRequestSchema =
+  resolveMatchEventReviewSchema.extend({
+    operationId: z.uuid().optional(),
+    causalParentIds: z.array(z.uuid()).max(50).default([]),
+  });
 export type ResolveMatchEventReviewDto = z.infer<
   typeof resolveMatchEventReviewSchema
 >;

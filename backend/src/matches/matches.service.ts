@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { stableStringify } from '@gaffer/match-domain';
-import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { getFormationPlayerCount } from '../common/formations';
 import { DatabaseService } from '../database/database.service';
 import { InsightsService } from '../insights/insights.service';
@@ -741,20 +741,26 @@ export class MatchesService {
         )})`,
       )
       .orderBy(desc(matchEventReviews.createdAt));
-    const report =
+    if (rows.length === 0) return [];
+    const [report, sheetSources, ownAthletes] = await Promise.all([
       match.sharedMatchId && twoSidedLiveLoggingEnabled()
-        ? await this.getSessionReport(userId, match.sharedMatchId)
-        : null;
-    const sheetSources = await this.databaseService.database
-      .select({ id: matches.id, teamId: events.teamId, teamName: teams.name })
-      .from(matches)
-      .innerJoin(events, eq(matches.eventId, events.id))
-      .innerJoin(teams, eq(teams.id, events.teamId))
-      .where(
-        match.sharedMatchId
-          ? eq(matches.sharedMatchId, match.sharedMatchId)
-          : eq(matches.id, matchId),
-      );
+        ? this.getSessionReport(userId, match.sharedMatchId)
+        : Promise.resolve(null),
+      this.databaseService.database
+        .select({ id: matches.id, teamId: events.teamId, teamName: teams.name })
+        .from(matches)
+        .innerJoin(events, eq(matches.eventId, events.id))
+        .innerJoin(teams, eq(teams.id, events.teamId))
+        .where(
+          match.sharedMatchId
+            ? eq(matches.sharedMatchId, match.sharedMatchId)
+            : eq(matches.id, matchId),
+        ),
+      this.databaseService.database
+        .select()
+        .from(athletes)
+        .where(eq(athletes.teamId, team.id)),
+    ]);
     const observers = await this.databaseService.database
       .select({ id: user.id, name: user.name })
       .from(user)
@@ -765,41 +771,44 @@ export class MatchesService {
           sql`, `,
         )})`,
       );
-    const ownAthletes = await this.databaseService.database
-      .select()
-      .from(athletes)
-      .where(eq(athletes.teamId, team.id));
+    // Fetch review evidence in batches rather than one query per review.
+    const observationIds = [...new Set(rows.flatMap((row) => row.observationIds))];
+    const legacyCanonicalIds = rows
+      .filter((row) => row.observationIds.length === 0)
+      .map((row) => row.canonicalEventId);
+    const [directObservations, legacyObservations] = await Promise.all([
+      observationIds.length > 0
+        ? this.databaseService.database
+            .select()
+            .from(matchEventObservations)
+            .where(inArray(matchEventObservations.id, observationIds))
+        : Promise.resolve([]),
+      legacyCanonicalIds.length > 0
+        ? this.databaseService.database
+            .select({
+              canonicalEventId: matchEventMemberships.canonicalEventId,
+              observation: matchEventObservations,
+            })
+            .from(matchEventObservations)
+            .innerJoin(
+              matchEventMemberships,
+              eq(matchEventMemberships.observationId, matchEventObservations.id),
+            )
+            .where(inArray(matchEventMemberships.canonicalEventId, legacyCanonicalIds))
+        : Promise.resolve([]),
+    ]);
+    const observationsById = new Map(directObservations.map((row) => [row.id, row]));
     const results = await Promise.all(
       rows.map(async (review) => {
         const observations =
           review.observationIds.length > 0
-            ? await this.databaseService.database
-                .select()
-                .from(matchEventObservations)
-                .where(
-                  sql`${matchEventObservations.id} in (${sql.join(
-                    review.observationIds.map((id) => sql`${id}::uuid`),
-                    sql`, `,
-                  )})`,
-                )
-            : (
-                await this.databaseService.database
-                  .select({ observation: matchEventObservations })
-                  .from(matchEventObservations)
-                  .innerJoin(
-                    matchEventMemberships,
-                    eq(
-                      matchEventMemberships.observationId,
-                      matchEventObservations.id,
-                    ),
-                  )
-                  .where(
-                    eq(
-                      matchEventMemberships.canonicalEventId,
-                      review.canonicalEventId,
-                    ),
-                  )
-              ).map((row) => row.observation);
+            ? review.observationIds.flatMap((id) => {
+                const observation = observationsById.get(id);
+                return observation ? [observation] : [];
+              })
+            : legacyObservations
+                .filter((row) => row.canonicalEventId === review.canonicalEventId)
+                .map((row) => row.observation);
         const sourceTeams = new Set(
           observations.map(
             (observation) =>

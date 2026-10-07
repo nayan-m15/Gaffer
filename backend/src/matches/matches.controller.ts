@@ -16,7 +16,7 @@ import {
   createMatchLogEventSchema,
   updateMatchLogEventSchema,
   updateMatchClockSchema,
-  resolveMatchEventReviewSchema,
+  resolveMatchEventReviewRequestSchema,
   finaliseMatchProjectionSchema,
   reopenMatchProjectionSchema,
   requestMatchAmendmentSchema,
@@ -110,11 +110,17 @@ export class MatchesController {
     @Param('reviewId', ParseUUIDPipe) reviewId: string,
     @Body() body: unknown,
   ) {
+    const { operationId, causalParentIds, ...decision } = zodValidate(
+      resolveMatchEventReviewRequestSchema,
+      body,
+    );
     return this.matchesService.resolveEventReview(
       user.id,
       matchId,
       reviewId,
-      zodValidate(resolveMatchEventReviewSchema, body),
+      decision,
+      operationId,
+      causalParentIds,
     );
   }
 

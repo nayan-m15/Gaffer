@@ -31,6 +31,7 @@ import {
   rejectQueuedEvent,
   setQueuedItemOutcome,
   setQueuedEventState,
+  type SyncedMatchReview,
 } from "@/offline/match-store";
 
 export async function fetchMatch(matchId: string) {
@@ -219,6 +220,43 @@ async function uploadSyncItems(items: unknown[]) {
   });
 }
 
+type ReviewDecisionOperation = {
+  id: string;
+  matchId: string;
+  reviewId: string;
+  resolution: "same_event" | "separate_events";
+  explanation?: string;
+  causalParentIds: string[];
+};
+
+export async function uploadReviewDecision(operation: ReviewDecisionOperation) {
+  try {
+    await setQueuedEventState(operation.id, "uploading");
+    const review = await apiFetch<Partial<SyncedMatchReview> & { canonicalEventId?: string }>(
+      `/matches/${operation.matchId}/event-reviews/${operation.reviewId}/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          operationId: operation.id,
+          resolution: operation.resolution,
+          explanation: operation.explanation,
+          causalParentIds: operation.causalParentIds,
+        }),
+      },
+    );
+    await setQueuedItemOutcome(operation.id, "accepted", review.canonicalEventId);
+    return review;
+  } catch (error) {
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401) {
+      await rejectQueuedEvent(operation.id, error.message);
+    } else {
+      await setQueuedItemOutcome(operation.id, "queued", null,
+        "Decision saved on this device. Reconnect to retry.");
+    }
+    throw error;
+  }
+}
+
 function syncItemForRow(
   row: Awaited<ReturnType<typeof listQueuedEvents>>[number],
 ) {
@@ -355,6 +393,22 @@ export async function createMatchLogEvent(
 async function uploadQueuedBatch(
   batch: Awaited<ReturnType<typeof listQueuedEvents>>,
 ) {
+  // Review votes use their dedicated endpoint and must not depend on the
+  // offline observation rollout gate. Keep causal queue order on replay.
+  const hasReviewDecision = batch.some((row) => row.kind === "operation" &&
+    JSON.parse(row.payload).operationType === "resolve_review");
+  if (hasReviewDecision && batch.length > 1) {
+    for (const row of batch) await uploadQueuedBatch([row]);
+    return;
+  }
+  if (hasReviewDecision) {
+    try {
+      await uploadReviewDecision(JSON.parse(batch[0].payload) as ReviewDecisionOperation);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status === 401 || error.status >= 500) throw error;
+    }
+    return;
+  }
   try {
     await Promise.all(
       batch.map((row) => setQueuedEventState(row.id, "uploading")),

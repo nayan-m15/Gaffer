@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import { flushOfflineMatchEvents } from "@/features/matches/api";
+import { flushOfflineMatchEvents, uploadReviewDecision } from "@/features/matches/api";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { loadEventReviews } from "./event-review-loader";
 import {
@@ -26,64 +27,82 @@ export function EventReviewPanel({
   expectedReviewCount?: number;
 }) {
   const { team } = useAuth();
+  const queryClient = useQueryClient();
   const [reviews, setReviews] = useState<SyncedMatchReview[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const requestVersion = useRef(0);
+  const loadInFlight = useRef<Promise<void> | null>(null);
+  const resolving = useRef(false);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [queuedDecisions, setQueuedDecisions] = useState<
     Record<string, { state: string; error: string | null }>
   >({});
 
-  const load = useCallback(async () => {
-    const version = ++requestVersion.current;
-    setLoading(true);
-    try {
-      const result = await loadEventReviews({
-        online: navigator.onLine,
-        fetch: () => apiFetch<SyncedMatchReview[]>(`/matches/${matchId}/event-reviews`),
-        synced: () => readSyncedMatchReviews(matchId),
-        cached: () => readCachedResponse<SyncedMatchReview[]>(`reviews:${matchId}`),
-        cache: rows => cacheResponse(`reviews:${matchId}`, rows),
-      });
-      if (version !== requestVersion.current) return;
-      setReviews(result.reviews);
-      setError(result.warning);
-      setLoading(false);
-      const queue = await listQueuedEvents(matchId).catch(() => []);
-      if (version !== requestVersion.current) return;
-      const decisions: Record<string, { state: string; error: string | null }> =
-        {};
-      for (const item of queue) {
-        if (item.kind !== "operation") continue;
-        const operation = JSON.parse(item.payload) as {
-          operationType?: string;
-          reviewId?: string;
-        };
-        if (
-          operation.operationType === "resolve_review" &&
-          operation.reviewId
-        ) {
-          decisions[operation.reviewId] = {
-            state: item.state,
-            error: item.error,
+  const load = useCallback(() => {
+    if (loadInFlight.current) return loadInFlight.current;
+    const request = (async () => {
+      const version = ++requestVersion.current;
+      setLoading(true);
+      try {
+        const result = await loadEventReviews({
+          online: navigator.onLine,
+          fetch: () => apiFetch<SyncedMatchReview[]>(`/matches/${matchId}/event-reviews`),
+          synced: () => readSyncedMatchReviews(matchId),
+          cached: () => readCachedResponse<SyncedMatchReview[]>(`reviews:${matchId}`),
+          cache: rows => cacheResponse(`reviews:${matchId}`, rows),
+        });
+        if (version !== requestVersion.current) return;
+        setReviews(result.reviews);
+        setError(result.warning);
+        setLoading(false);
+        const queue = await listQueuedEvents(matchId).catch(() => []);
+        if (version !== requestVersion.current) return;
+        const decisions: Record<string, { state: string; error: string | null }> =
+          {};
+        for (const item of queue) {
+          if (item.kind !== "operation") continue;
+          const operation = JSON.parse(item.payload) as {
+            operationType?: string;
+            reviewId?: string;
           };
+          if (
+            operation.operationType === "resolve_review" &&
+            operation.reviewId
+          ) {
+            decisions[operation.reviewId] = {
+              state: item.state,
+              error: item.error,
+            };
+          }
         }
+        setQueuedDecisions(decisions);
+      } catch (cause) {
+        if (cause && typeof cause === "object" && "status" in cause &&
+          [401, 403, 404].includes(Number(cause.status)) && version === requestVersion.current) setReviews([]);
+        if (version === requestVersion.current) setError(
+          cause instanceof Error ? cause.message : "Could not load reviews.",
+        );
+      } finally {
+        if (version === requestVersion.current) setLoading(false);
       }
-      setQueuedDecisions(decisions);
-    } catch (cause) {
-      if (cause && typeof cause === "object" && "status" in cause &&
-        [401, 403, 404].includes(Number(cause.status)) && version === requestVersion.current) setReviews([]);
-      if (version === requestVersion.current) setError(
-        cause instanceof Error ? cause.message : "Could not load reviews.",
-      );
-    } finally {
-      if (version === requestVersion.current) setLoading(false);
-    }
+    })().finally(() => {
+      loadInFlight.current = null;
+    });
+    loadInFlight.current = request;
+    return request;
   }, [matchId]);
 
   useEffect(() => void load(), [load]);
+  useEffect(() => {
+    if (navigator.onLine) {
+      // Recover votes left queued before the panel was opened.
+      void flushOfflineMatchEvents().then(() => load()).catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not upload saved decisions.");
+      });
+    }
+  }, [load]);
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
@@ -102,13 +121,19 @@ export function EventReviewPanel({
   useEffect(() => {
     const stop = subscribeToOfflineQueueChanges(() => void load());
     const refresh = () => void load();
-    window.addEventListener("online", refresh);
+    const reconnect = () => {
+      refresh();
+      void flushOfflineMatchEvents().then(() => load()).catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not upload saved decisions.");
+      });
+    };
+    window.addEventListener("online", reconnect);
     const interval = window.setInterval(() => {
       if (navigator.onLine && document.visibilityState === "visible") refresh();
     }, 5_000);
     return () => {
       stop();
-      window.removeEventListener("online", refresh);
+      window.removeEventListener("online", reconnect);
       window.clearInterval(interval);
     };
   }, [load]);
@@ -117,13 +142,14 @@ export function EventReviewPanel({
     reviewId: string,
     resolution: "same_event" | "separate_events",
   ) => {
-    if (team?.role !== "coach") return;
+    if (team?.role !== "coach" || resolving.current) return;
+    resolving.current = true;
     setBusy(reviewId);
+    setError(null);
     try {
       const review = reviews.find((row) => row.id === reviewId);
       let causalParentIds: string[] = [];
       if (review?.reason === "conflicting_resolution") {
-        causalParentIds = await readSyncedReviewDecisionIds(matchId, reviewId);
         if (navigator.onLine) {
           const operations = await apiFetch<
             Array<{ id: string; decision: { reviewId?: string } }>
@@ -132,12 +158,14 @@ export function EventReviewPanel({
             .filter((operation) => operation.decision.reviewId === reviewId)
             .map((operation) => operation.id)
             .sort((left, right) => left.localeCompare(right));
+        } else {
+          causalParentIds = await readSyncedReviewDecisionIds(matchId, reviewId);
         }
         if (causalParentIds.length === 0) {
           throw new Error("The conflicting decisions have not synced yet.");
         }
       }
-      await enqueueOperation({
+      const operation = {
         kind: "operation",
         id: crypto.randomUUID(),
         matchId,
@@ -146,17 +174,30 @@ export function EventReviewPanel({
         resolution,
         explanation: explanations[reviewId]?.trim() || undefined,
         causalParentIds,
-      });
-      await load();
+      } as const;
+      await enqueueOperation(operation);
+      setQueuedDecisions(current => ({ ...current, [reviewId]: { state: "queued", error: null } }));
       if (navigator.onLine) {
-        await flushOfflineMatchEvents();
+        const updated = await uploadReviewDecision(operation);
+        // A refresh started before the vote must not overwrite its result.
+        ++requestVersion.current;
+        setReviews(current => current.map(row => row.id === reviewId
+          ? { ...row, ...updated, observations: row.observations }
+          : row));
+        setQueuedDecisions(current => ({ ...current, [reviewId]: { state: "accepted", error: null } }));
+        void queryClient.invalidateQueries({ queryKey: ["matches"] });
+        void queryClient.invalidateQueries({ queryKey: ["statistics"] });
+        void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
+        await loadInFlight.current;
         await load();
       }
     } catch (cause) {
+      await load();
       setError(
         cause instanceof Error ? cause.message : "Could not resolve review.",
       );
     } finally {
+      resolving.current = false;
       setBusy(null);
     }
   };
