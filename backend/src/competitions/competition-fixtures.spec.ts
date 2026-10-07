@@ -790,6 +790,26 @@ describe('Competition fixtures (PostgreSQL)', () => {
     ).toBe('external_confirmed');
   });
 
+  it('rejects reschedule proposals for dates or times that have already passed', async () => {
+    await fill();
+    const fixtures = await service.generateFixtures('admin', competitionId);
+    const slots = await participants();
+    const owner = slots.find((participant) => participant.teamId === teamId)!;
+    const fixture = fixtures.find((candidate) =>
+      [
+        candidate.homeCompetitionTeamId,
+        candidate.awayCompetitionTeamId,
+      ].includes(owner.id),
+    )!;
+
+    await expect(
+      service.proposeFixtureSchedule('admin', competitionId, fixture.id, {
+        expectedRevision: fixture.scheduleRevision,
+        scheduledAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    ).rejects.toThrow('Choose a date and time in the future');
+  });
+
   it('lets a linked opponent coach counter-propose and requires the other linked coach to accept the new revision', async () => {
     await fill();
     const fixtures = await service.generateFixtures('admin', competitionId);
@@ -822,7 +842,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
       .where(eq(schema.competitionTeams.id, opponentId));
 
     const proposedDate = new Date(
-      fixture.scheduledAt.getTime() + 2 * 24 * 60 * 60 * 1000,
+      Date.now() + 2 * 24 * 60 * 60 * 1000,
     ).toISOString();
     const proposal = await service.proposeFixtureSchedule(
       'secondary-coach',
@@ -888,7 +908,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
     const proposedById = externalFixture.homeCompetitionTeamId!;
     const otherId = externalFixture.awayCompetitionTeamId!;
     const proposedDate = new Date(
-      externalFixture.scheduledAt.getTime() + 24 * 60 * 60 * 1000,
+      Date.now() + 24 * 60 * 60 * 1000,
     ).toISOString();
 
     const proposed = await service.proposeFixtureSchedule(

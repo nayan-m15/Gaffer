@@ -64,6 +64,10 @@ function toLocalDateTime(value: string) {
   return local.toISOString().slice(0, 16);
 }
 
+function minimumRescheduleDateTime() {
+  return toLocalDateTime(new Date(Date.now() + 60_000).toISOString());
+}
+
 function teamInitial(name: string) {
   if (name === "TBD") return "?";
   return name.trim().match(/[A-Za-z0-9]/)?.[0]?.toUpperCase() ?? "?";
@@ -313,6 +317,10 @@ function RescheduleDialog({
       setError("Choose a valid date and time.");
       return;
     }
+    if (next.getTime() <= Date.now()) {
+      setError("Choose a date and time in the future.");
+      return;
+    }
     if (next.getTime() === new Date(target.fixture.scheduledAt).getTime()) {
       setError("Choose a different date or time.");
       return;
@@ -351,6 +359,7 @@ function RescheduleDialog({
             <input
               type="datetime-local"
               required
+              min={minimumRescheduleDateTime()}
               value={scheduledAt}
               onChange={(event) => setScheduledAt(event.target.value)}
               className="h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"

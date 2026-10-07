@@ -1050,6 +1050,12 @@ export class CompetitionsService {
       );
     }
     const scheduledAt = new Date(dto.scheduledAt);
+    const now = new Date();
+    if (scheduledAt.getTime() <= now.getTime()) {
+      throw new BadRequestException(
+        'Choose a date and time in the future for the reschedule proposal.',
+      );
+    }
     if (scheduledAt.getTime() === context.fixture.scheduledAt.getTime()) {
       throw new BadRequestException(
         'Choose a different date or time for the reschedule proposal.',
@@ -1059,7 +1065,6 @@ export class CompetitionsService {
     const response = actor.participant.teamId
       ? ('accepted' as const)
       : ('external_confirmed' as const);
-    const now = new Date();
     const common = {
       scheduledAt,
       scheduleRevision: sql<number>`${competitionFixtures.scheduleRevision} + 1`,
