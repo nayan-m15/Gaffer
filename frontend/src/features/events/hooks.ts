@@ -64,19 +64,20 @@ export function useEvent(eventId: string | undefined) {
 export function useFriendlyOpponentLineup(
   eventId: string | undefined,
   enabled = true,
+  refreshIntervalMs?: number,
 ) {
   return useQuery({
     queryKey: [...eventsQueryKey, eventId, "friendly-opponent-lineup"],
     queryFn: () => fetchFriendlyOpponentLineup(eventId!),
     enabled: enabled && Boolean(eventId),
-    refetchInterval: (query) => query.state.data?.available ? 15000 : 5000,
+    refetchInterval: (query) => refreshIntervalMs ?? (query.state.data?.available ? 15000 : 5000),
   });
 }
 
 /**
  * The signed-in team's confirmed pre-match lineup for this event. `data` is
- * null until a coach confirms one, and stays null once the match has
- * started (the live squad supersedes the pre-match record).
+ * null until a coach confirms one. Linked fixtures retain the public tactical
+ * snapshot after kickoff; the live squad remains authoritative for own players.
  */
 export function useEventLineup(eventId: string | undefined, enabled = true) {
   return useQuery({

@@ -1,3 +1,4 @@
+import { normalizeOpponentLineup } from "./opponent-lineup-model.ts";
 import {
   DEFAULT_FORMATION_ID,
   FORMATIONS,
@@ -11,7 +12,7 @@ import type { GamePlanSnapshot } from "@/services/gamePlans";
 import type { Formation } from "@/features/team-management/types";
 import { SECOND_YELLOW_DETAIL } from "./event-visuals.ts";
 import type {
-  FriendlyOpponentLineup,
+  OpponentLineupView,
   MatchLogEvent,
   MatchSquadAthlete,
   OpponentMatchPlayer,
@@ -255,50 +256,29 @@ function hasRecordedPosition(player: OpponentMatchPlayer) {
   return Boolean(player.position?.trim());
 }
 
-/**
- * Display-only view of the shared friendly-opponent lineup in the same shape
- * the pitch and bench panels already render. Used only when the coach has not
- * entered an opposition squad by hand — ids are the opponent's athlete ids,
- * so nothing here is offered for event attribution. Athletes without a squad
- * number cannot be placed as shirts, and duplicate shirt numbers collapse.
- */
+/** Public display rows; their keys never identify private roster rows. */
 export function friendlyLineupPlayers(
-  lineup: FriendlyOpponentLineup | null | undefined,
+  lineup: OpponentLineupView | null | undefined,
 ): OpponentMatchPlayer[] {
-  if (!lineup?.available) {
-    return [];
-  }
-  const seenNumbers = new Set<number>();
-  const players: OpponentMatchPlayer[] = [];
-  for (const athlete of lineup.players) {
-    if (athlete.squadNumber == null || seenNumbers.has(athlete.squadNumber)) {
-      continue;
-    }
-    seenNumbers.add(athlete.squadNumber);
-    players.push({
-      id: athlete.id,
-      shirtNumber: athlete.squadNumber,
-      name: `${athlete.firstName} ${athlete.lastName}`.trim() || null,
-      position: null,
-    });
-  }
-  return players;
+  const view = normalizeOpponentLineup(lineup);
+  return [...view.starters, ...view.bench].map((player) => ({
+    id: player.id,
+    shirtNumber: player.shirtNumber,
+    name: player.name || null,
+    position: null,
+    publicLineup: {
+      slotId: player.slotId,
+      formation: view.formation,
+      customPositions: view.customPositions,
+    },
+  }));
 }
 
-/** The opponent's actual confirmed starters, for pitch/bench selection. */
 export function friendlyLineupStarterIds(
-  lineup: FriendlyOpponentLineup | null | undefined,
+  lineup: OpponentLineupView | null | undefined,
 ): ReadonlySet<string> {
-  if (!lineup?.available) {
-    return new Set<string>();
-  }
-  return new Set(
-    lineup.players
-      .filter((athlete) => athlete.started)
-      .map((athlete) => athlete.id),
-  );
+  return new Set(normalizeOpponentLineup(lineup).starters.map((player) => player.id));
 }
-
 
 export function opponentPitchState(
   players: OpponentMatchPlayer[],
@@ -316,16 +296,15 @@ export function opponentPitchState(
       ? preferredIds
       : starterLimitOrPreferred;
   const unique = uniqueOpponents(players);
-  const sorted = [...unique].sort((a, b) => a.shirtNumber - b.shirtNumber);
+  const sorted = [...unique].sort(
+    (a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999),
+  );
   const positioned = sorted.filter(hasRecordedPosition);
   const unpositioned = sorted.filter((player) => !hasRecordedPosition(player));
-  const starters = selectOpponentStarters(
-    sorted,
-    positioned,
-    unpositioned,
-    new Set(preferredStarterIds ?? []),
-    starterLimit,
-  );
+  const starters =
+    preferredStarterIds !== undefined
+      ? sorted.filter((player) => preferredStarterIds.has(player.id))
+      : selectOpponentStarters(sorted, positioned, unpositioned, starterLimit);
 
   const starterIds = new Set(starters.map((player) => player.id));
   const extras = unique.filter((player) => !starterIds.has(player.id));
@@ -333,9 +312,16 @@ export function opponentPitchState(
   const bench = new Set(extras.map((player) => player.id));
 
   applyOpponentSubstitutions(unique, timeline, onPitch, bench);
-
+  const publicSlots = new Map(unique.map((player) => [player.id, player.publicLineup?.slotId]));
+  for (const event of chronological(timeline)) {
+    if (event.team === "opponent" && event.eventType === "substitution" && event.opponentPlayerId && event.detail) {
+      publicSlots.set(event.detail, publicSlots.get(event.opponentPlayerId));
+    }
+  }
   return {
-    onPitch: unique.filter((player) => onPitch.has(player.id)),
+    onPitch: unique.filter((player) => onPitch.has(player.id)).map((player) => player.publicLineup
+      ? { ...player, publicLineup: { ...player.publicLineup, slotId: publicSlots.get(player.id) ?? null } }
+      : player),
     bench: unique.filter((player) => bench.has(player.id)),
   };
 }
@@ -344,21 +330,22 @@ function selectOpponentStarters(
   sorted: OpponentMatchPlayer[],
   positioned: OpponentMatchPlayer[],
   unpositioned: OpponentMatchPlayer[],
-  preferred: ReadonlySet<string>,
   starterLimit = 11,
 ): OpponentMatchPlayer[] {
   const starters: OpponentMatchPlayer[] = [];
   const seenNumbers = new Set<number>();
   const takeStarter = (player: OpponentMatchPlayer) => {
-    if (seenNumbers.has(player.shirtNumber) || starters.length >= starterLimit) return;
-    seenNumbers.add(player.shirtNumber);
+    if (
+      (player.shirtNumber != null && seenNumbers.has(player.shirtNumber)) ||
+      starters.length >= starterLimit
+    ) return;
+    if (player.shirtNumber != null) seenNumbers.add(player.shirtNumber);
     starters.push(player);
   };
   if (positioned.length > 0) {
     [...positioned, ...unpositioned].forEach(takeStarter);
     return starters;
   }
-  sorted.filter((player) => preferred.has(player.id)).forEach(takeStarter);
   sorted.forEach(takeStarter);
   return starters;
 }
@@ -491,6 +478,57 @@ export function placeOppPlayers(
   formatPlayerCount?: FormationPlayerCount,
 ): PlacedOppPlayer[] {
   const unique = uniqueOpponents(onPitch);
+  if (unique.some((player) => player.publicLineup)) {
+    const changes = chronological(timeline).filter((event) =>
+      event.team === "opponent" &&
+      event.eventType === "tactical_change" &&
+      event.tacticalChange &&
+      (event.tacticalChange.formationId || event.tacticalChange.customPositions !== undefined) &&
+      event.lifecycleStatus !== "voided",
+    );
+    const initial = unique.find((player) => player.publicLineup)?.publicLineup;
+    const geometry = changes.reduce(
+      (view, event) => ({
+        formation: event.tacticalChange?.formationId ?? view.formation,
+        customPositions: event.tacticalChange?.customPositions === undefined
+          ? view.customPositions : event.tacticalChange.customPositions,
+      }),
+      { formation: initial?.formation ?? null, customPositions: initial?.customPositions ?? null },
+    );
+    const changed = changes.length > 0 && geometry.formation;
+    const preferred = Object.fromEntries(unique.flatMap((player) =>
+      player.publicLineup?.slotId ? [[player.publicLineup.slotId, player.id]] : [],
+    ));
+    const customPositions = geometry.customPositions?.map((position) => ({
+      ...position, role: position.label === "GK" ? "GK" as const : "MID" as const,
+    })) ?? null;
+    const initialPositions = initial?.formation?.startsWith("custom-")
+      ? initial.customPositions : FORMATIONS[initial?.formation ?? ""]?.positions;
+    const assignments = changed ? previewAssignmentsForStarters(
+      geometry.formation!,
+      unique.map((player) => player.id),
+      (id) => {
+        const slotId = unique.find((player) => player.id === id)?.publicLineup?.slotId;
+        return initialPositions?.find((position) => position.id === slotId)?.label ?? null;
+      },
+      preferred,
+      customPositions,
+    ) : null;
+    return unique.flatMap((player) => {
+      const view = player.publicLineup;
+      if (view && assignments) {
+        const formation = resolveFormation(geometry.formation!, customPositions);
+        const slot = formation.positions.find((position) => assignments[position.id] === player.id);
+        return slot ? [{ player, ...formationToHalf(slot.x, slot.y, half) }] : [];
+      }
+      if (!view?.formation || !view.slotId) return [];
+      const positions = view.formation.startsWith("custom-")
+        ? view.customPositions ?? []
+        : FORMATIONS[view.formation]?.positions ?? [];
+      const slot = positions.find((position) => position.id === view.slotId);
+      return slot ? [{ player, ...formationToHalf(slot.x, slot.y, half) }] : [];
+    });
+  }
   const byId = new Map(unique.map((player) => [player.id, player]));
   const hasPositions = unique.some(hasRecordedPosition);
   const formationId = hasPositions
@@ -581,7 +619,7 @@ function assignShirtOrderedOpponents(
   players: OpponentMatchPlayer[],
   assignments: Record<string, string | null>,
 ): void {
-  const ordered = [...players].sort((a, b) => a.shirtNumber - b.shirtNumber);
+  const ordered = [...players].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
   formation.positions.forEach((position, index) => {
     assignments[position.id] = ordered[index]?.id ?? null;
   });
@@ -688,4 +726,31 @@ export function runningScoreByEvent(
     }
   }
   return scores;
+}
+
+/** Resolve public labels for display only; uploads must remove these keys. */
+export function publicOpponentTimeline(timeline: MatchLogEvent[], players: OpponentMatchPlayer[]): MatchLogEvent[] {
+  const label = (player: OpponentMatchPlayer) => [
+    player.shirtNumber == null ? "" : "#" + player.shirtNumber,
+    player.name ?? "",
+  ].filter(Boolean).join(" ") || "Unassigned";
+  const resolve = (value: string | null | undefined) => {
+    const matches = players.filter((player) => player.publicLineup && label(player) === value);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  return timeline.map((event) => event.team !== "opponent" ? event : {
+    ...event,
+    opponentPlayerId: event.opponentPlayerId ?? resolve(event.opponentLabel)?.id ?? null,
+    detail: event.eventType === "substitution" ? resolve(event.detail)?.id ?? event.detail : event.detail,
+  });
+}
+
+export function opponentEventAttribution(player: OpponentMatchPlayer) {
+  return {
+    opponentPlayerId: player.publicLineup ? undefined : player.id,
+    opponentLabel: [player.shirtNumber == null ? "" : "#" + player.shirtNumber, player.name ?? ""].filter(Boolean).join(" ") || "Unassigned",
+  };
+}
+export function opponentSubstitutionDetail(player: OpponentMatchPlayer) {
+  return player.publicLineup ? opponentEventAttribution(player).opponentLabel : player.id;
 }

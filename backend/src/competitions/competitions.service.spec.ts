@@ -88,6 +88,15 @@ function failingInsert(error: Error) {
 
 describe('CompetitionsService', () => {
   let service: CompetitionsService;
+  let previousTwoSidedFlag: string | undefined;
+
+  afterEach(() => {
+    if (previousTwoSidedFlag === undefined) {
+      delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    } else {
+      process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousTwoSidedFlag;
+    }
+  });
 
   const mockDatabaseService = {
     database: {} as Record<string, unknown>,
@@ -99,6 +108,8 @@ describe('CompetitionsService', () => {
   };
 
   beforeEach(async () => {
+    previousTwoSidedFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({

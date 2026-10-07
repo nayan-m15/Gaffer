@@ -31,6 +31,10 @@ await sql.transaction((tx) => [
     public.matches,
     public.events,
     public.athletes,
+    public.team_members,
+    public.match_session_participants,
+    public.match_sessions,
+    public.competition_fixtures,
     public.athlete_match_stats,
     public.opponent_match_players
     TO powersync_role`),
@@ -51,6 +55,10 @@ if (!publication) {
     public.matches,
     public.events,
     public.athletes,
+    public.team_members,
+    public.match_session_participants,
+    public.match_sessions,
+    public.competition_fixtures,
     public.athlete_match_stats,
     public.opponent_match_players`);
 } else {
@@ -71,6 +79,10 @@ if (!publication) {
     'matches',
     'events',
     'athletes',
+    'team_members',
+    'match_session_participants',
+    'match_sessions',
+    'competition_fixtures',
     'athlete_match_stats',
     'opponent_match_players',
   ]) {

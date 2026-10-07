@@ -334,7 +334,7 @@ function EventLocationMapSquare({
   destination: string;
 }) {
   const mapUrl = buildEventMapUrl(destination);
-  const containerRef = useRef<HTMLAnchorElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [mapSize, setMapSize] = useState({ width: 224, height: 180 });
 
   useEffect(() => {
@@ -379,13 +379,8 @@ function EventLocationMapSquare({
   }, [latitude, longitude, tileError, mapSize.width, mapSize.height]);
 
   return (
-    <a
+    <div
       ref={containerRef}
-      href={mapUrl}
-      target="_blank"
-      rel="noreferrer"
-      title={`Open ${destination} in Google Maps`}
-      aria-label={`Open ${destination} in Google Maps`}
       className="group relative flex w-44 sm:w-60 shrink-0 self-stretch min-h-[170px] flex-col items-center justify-center overflow-hidden rounded-xl border border-emerald-500/40 bg-muted/40 shadow-md transition-all hover:border-emerald-500/70 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {tiles ? (
@@ -396,6 +391,7 @@ function EventLocationMapSquare({
               <img
                 key={tile.key}
                 src={tile.url}
+                referrerPolicy="strict-origin-when-cross-origin"
                 alt=""
                 onError={() => setTileError(true)}
                 className="absolute size-[256px] max-w-none select-none"
@@ -426,6 +422,9 @@ function EventLocationMapSquare({
           </div>
 
           {/* GPS Coordinates bottom bar */}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" className="absolute right-0 bottom-5 z-30 bg-white/90 px-1 text-[9px] text-black hover:underline">
+            © OpenStreetMap contributors
+          </a>
           {latitude != null && longitude != null && (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-black/80 px-2 py-0.5 text-center font-mono text-[9px] text-zinc-300 backdrop-blur-xs">
               {formatCoordinatesDms(latitude, longitude)}
@@ -450,13 +449,13 @@ function EventLocationMapSquare({
       )}
 
       {/* Floating hover badge */}
-      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40">
+      <a href={mapUrl} target="_blank" rel="noopener noreferrer" title={`Open ${destination} in Google Maps`} aria-label={`Open ${destination} in Google Maps`} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/0 p-1 transition-colors duration-200 group-hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <div className="flex items-center gap-1.5 rounded-md bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-md opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <span>View map</span>
           <ExternalLink className="size-3 text-primary" />
         </div>
-      </div>
-    </a>
+      </a>
+    </div>
   );
 }
 

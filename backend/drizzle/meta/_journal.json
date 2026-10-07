@@ -355,29 +355,141 @@
     {
       "idx": 49,
       "version": "7",
-      "when": 1791000000000,
-      "tag": "0045_game_plan_set_piece_roles",
+      "when": 1790935205000,
+      "tag": "0045_two_sided_match_sessions",
       "breakpoints": true
     },
     {
       "idx": 50,
       "version": "7",
-      "when": 1791100000000,
-      "tag": "0046_match_tactical_change_enum",
+      "when": 1790935210000,
+      "tag": "0046_match_session_event_identity",
       "breakpoints": true
     },
     {
       "idx": 51,
       "version": "7",
-      "when": 1791100010000,
-      "tag": "0047_match_tactical_change_ingest",
+      "when": 1790935215000,
+      "tag": "0047_session_event_reconciliation",
       "breakpoints": true
     },
     {
       "idx": 52,
       "version": "7",
-      "when": 1791100110000,
+      "when": 1790935220000,
+      "tag": "0048_shared_review_disputes",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790935225000,
+      "tag": "0049_session_result_confirmation",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790935230000,
+      "tag": "0050_session_confirmation_actors",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790976000000,
+      "tag": "0051_match_clock_session_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791062400000,
+      "tag": "0052_shared_session_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791158400000,
+      "tag": "0053_session_confirmation_invalidation",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0054_shared_session_clock",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791244801000,
+      "tag": "0045_game_plan_set_piece_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791244802000,
+      "tag": "0046_match_tactical_change_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791244803000,
+      "tag": "0047_match_tactical_change_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791244804000,
       "tag": "0048_game_plan_player_instructions",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791244805000,
+      "tag": "0055_shared_review_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791244806000,
+      "tag": "0056_shared_event_deletion",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0057_shared_report_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1791331201000,
+      "tag": "0058_duplicate_review_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791331202000,
+      "tag": "0059_manual_unknown_player_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791331203000,
+      "tag": "0060_match_play_state",
       "breakpoints": true
     }
   ]

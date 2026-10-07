@@ -62,6 +62,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
   let competitionId: string;
   let teamId: string;
   let secondaryTeamId: string | null;
+  const originalFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
 
   beforeAll(async () => {
     pg = new PGlite();
@@ -121,9 +122,14 @@ describe('Competition fixtures (PostgreSQL)', () => {
     } as unknown as TeamsService);
   }, 60000);
   afterAll(async () => {
+    if (originalFlag === undefined)
+      delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    else process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = originalFlag;
     await pg?.close();
   });
   beforeEach(async () => {
+    // This suite exercises deliberately supported legacy/manual result publication.
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     secondaryTeamId = null;
     await pg.exec('TRUNCATE "user", teams, competitions CASCADE');
     await db

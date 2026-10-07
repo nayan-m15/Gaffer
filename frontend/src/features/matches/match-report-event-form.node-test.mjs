@@ -38,6 +38,10 @@ const scoredPenaltyOps = planAddEvent(
 assert.equal(scoredPenaltyOps.length, 1);
 assert.equal(scoredPenaltyOps[0].kind === "create" && scoredPenaltyOps[0].input.eventType, "goal");
 assert.equal(scoredPenaltyOps[0].kind === "create" && scoredPenaltyOps[0].input.detail, "Penalty");
+assert.equal(scoredPenaltyOps[0].input.period, "first_half");
+assert.equal(scoredPenaltyOps[0].input.matchElapsedMs, 19 * 60_000);
+const secondHalfOps = planAddEvent(emptyEventDraft({ minute: 70, athleteId: scorer, assistAthleteId: assister }));
+assert.ok(secondHalfOps.every(op => op.kind === "create" && op.input.period === "second_half" && op.input.matchElapsedMs === 70 * 60_000));
 
 const missedPenaltyOps = planAddEvent(
   emptyEventDraft({
