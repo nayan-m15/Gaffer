@@ -285,6 +285,8 @@ streams:
              match_event_reviews.canonical_event_id,
              match_event_reviews.observation_ids,
              match_event_reviews.review_version,
+             match_event_reviews.team_decisions,
+             match_event_reviews.team_decision_notes,
              match_event_reviews.reason,
              match_event_reviews.status,
              match_event_reviews.resolution,
@@ -367,7 +369,7 @@ streams:
         AND auth.parameter('two_sided_live_logging') = 'true'
         AND participant.team_id = auth.parameter('team_id')
         AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
-        AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
+        AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate' OR match_event_operations.operation_type = 'review_vote')
 
   shared_session_match_projections:
     auto_subscribe: false
@@ -425,6 +427,7 @@ streams:
     auto_subscribe: false
     query: |
       SELECT match_sessions.id,
+             match_sessions.report_revision,
              match_sessions.home_confirmed_at,
              match_sessions.away_confirmed_at,
              match_sessions.finalised_at
@@ -725,6 +728,8 @@ streams:
                match_event_reviews.canonical_event_id,
                match_event_reviews.observation_ids,
                match_event_reviews.review_version,
+             match_event_reviews.team_decisions,
+             match_event_reviews.team_decision_notes,
                match_event_reviews.reason,
                match_event_reviews.status,
                match_event_reviews.resolution,
@@ -798,7 +803,7 @@ streams:
           AND auth.parameter('two_sided_live_logging') = 'true'
           AND participant.team_id = auth.parameter('team_id')
           AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
-          AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate')
+          AND (match_event_operations.operation_type = 'merge' OR match_event_operations.operation_type = 'separate' OR match_event_operations.operation_type = 'review_vote')
       - |
         SELECT match_projection_state.match_id AS id,
                match_projection_state.session_id,
@@ -847,7 +852,8 @@ streams:
           AND participant.team_id IN (SELECT team_members.team_id FROM team_members WHERE team_members.user_id = auth.parameter('user_id'))
       - |
         SELECT match_sessions.id,
-               match_sessions.home_confirmed_at,
+               match_sessions.report_revision,
+             match_sessions.home_confirmed_at,
                match_sessions.away_confirmed_at,
                match_sessions.finalised_at
         FROM match_sessions

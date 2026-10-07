@@ -96,6 +96,7 @@ async function database() {
           shared_session_id: column.text, home_score: column.integer, away_score: column.integer, status: column.text,
         }),
         match_sessions: new Table({
+          report_revision: column.integer,
           home_confirmed_at: column.text,
           away_confirmed_at: column.text,
           finalised_at: column.text,
@@ -129,6 +130,8 @@ async function database() {
           canonical_event_id: column.text,
           observation_ids: column.text,
           review_version: column.integer,
+          team_decisions: column.text,
+          team_decision_notes: column.text,
           reason: column.text,
           status: column.text,
           resolution: column.text,
@@ -435,6 +438,7 @@ export interface OfflineOperationInput {
   reason?: string;
   reviewId?: string;
   resolution?: "same_event" | "separate_events";
+  explanation?: string;
   causalParentIds: string[];
 }
 
@@ -926,6 +930,12 @@ export async function readSyncedObservationMemberships(matchId: string) {
 export interface SyncedMatchReview {
   id: string;
   reviewVersion: number;
+  crossTeam?: boolean;
+  currentSide?: 'home' | 'away';
+  locked?: boolean;
+  teamDecisions?: Record<string, string>;
+  teamDecisionNotes?: Record<string, string | null>;
+  teamNames?: Record<string, string>;
   reason: string;
   status: string;
   resolution: string | null;
@@ -935,6 +945,10 @@ export interface SyncedMatchReview {
   disputedAt?: string | null;
   observations: Array<{
     id: string;
+    sourceTeamName?: string;
+    eventTeamName?: string;
+    observerName?: string;
+    playerLabel?: string | null;
     eventType: string;
     team: string;
     matchElapsedMs: number;
@@ -948,13 +962,18 @@ export async function readSyncedMatchReviews(
   matchId: string,
 ): Promise<SyncedMatchReview[]> {
   const db = await database();
-  const match = await db.getOptional<{ is_home: number }>(
-    "SELECT is_home FROM matches WHERE id = ?",
+  const match = await db.getOptional<{ is_home: number; shared_match_id: string | null }>(
+    "SELECT is_home, shared_match_id FROM matches WHERE id = ?",
     [matchId],
   );
+  const session = match?.shared_match_id ? await db.getOptional<{ finalised_at: string | null }>(
+    "SELECT finalised_at FROM match_sessions WHERE id = ?", [match.shared_match_id],
+  ) : null;
   const reviews = await db.getAll<{
     id: string;
     review_version: number;
+    team_decisions: string | Record<string,string> | null;
+    team_decision_notes: string | Record<string,string | null> | null;
     reason: string;
     status: string;
     resolution: string | null;
@@ -973,6 +992,7 @@ export async function readSyncedMatchReviews(
   );
   const observations = await db.getAll<{
     id: string;
+    match_id: string;
     event_type: string;
     team: string;
     side: "home" | "away" | null;
@@ -996,6 +1016,11 @@ export async function readSyncedMatchReviews(
     return {
       id: review.id,
       reviewVersion: review.review_version,
+      crossTeam: new Set(ids.flatMap(id => byId.has(id) ? [byId.get(id)!.match_id] : [])).size > 1,
+      currentSide: match?.is_home ? "home" : "away",
+      locked: session ? Boolean(session.finalised_at) : undefined,
+      teamDecisionNotes: typeof review.team_decision_notes === "string" ? JSON.parse(review.team_decision_notes) : review.team_decision_notes ?? {},
+      teamDecisions: typeof review.team_decisions === "string" ? JSON.parse(review.team_decisions) : review.team_decisions ?? {},
       reason: review.reason,
       status: review.status,
       resolution: review.resolution,
@@ -1038,6 +1063,7 @@ export async function subscribeToSyncedMatchReviewChanges(
         "match_event_reviews",
         "match_event_observations",
         "match_event_operations",
+        "match_sessions",
       ],
     },
   );
@@ -1347,6 +1373,7 @@ export async function readSyncedSessionReport(
 ): Promise<import("@/features/matches/session-report-model").SessionReport> {
   const db = await database();
   const state = await db.getOptional<{
+    report_revision?: number;
     home_confirmed_at: string | null;
     away_confirmed_at: string | null;
     finalised_at: string | null;
@@ -1442,6 +1469,7 @@ export async function readSyncedSessionReport(
     fixture.away_score !== null;
   return {
     ...cached,
+    reportRevision: state.report_revision ?? cached.reportRevision,
     timeline,
     score: published
       ? { home: fixture.home_score!, away: fixture.away_score! }

@@ -449,6 +449,7 @@ export function updateMatchClock(
 export async function finaliseMatchProjection(
   matchId: string,
   expectedRevision: number,
+  expectedSessionRevision?: number,
 ) {
   const current = await apiFetch<MatchRecord>(`/matches/${matchId}`, {
     cache: "no-store",
@@ -458,7 +459,7 @@ export async function finaliseMatchProjection(
   }
   return apiFetch(`/matches/${matchId}/finalise`, {
     method: "POST",
-    body: JSON.stringify({ expectedRevision }),
+    body: JSON.stringify({ expectedRevision, expectedSessionRevision }),
   });
 }
 

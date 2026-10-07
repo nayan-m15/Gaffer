@@ -16,12 +16,10 @@ export function shouldFinaliseSession(
   state: SessionConfirmations,
   now: Date,
 ): boolean {
-  if (state.finalisedAt) return false;
-  if (state.homeConfirmedAt && state.awayConfirmedAt) return true;
-  const firstConfirmation = state.homeConfirmedAt ?? state.awayConfirmedAt;
-  return Boolean(
-    firstConfirmation &&
-    now.getTime() - firstConfirmation.getTime() >= 24 * 60 * 60 * 1000,
+  void now;
+  return (
+    !state.finalisedAt &&
+    Boolean(state.homeConfirmedAt && state.awayConfirmedAt)
   );
 }
 
@@ -29,15 +27,10 @@ export function sessionHasTimedOutConfirmation(
   state: SessionConfirmations,
   now: Date,
 ): boolean {
-  if (
-    state.finalisedAt ||
-    Boolean(state.homeConfirmedAt) === Boolean(state.awayConfirmedAt)
-  )
-    return false;
-  const confirmedAt = state.homeConfirmedAt ?? state.awayConfirmedAt;
-  return Boolean(
-    confirmedAt && now.getTime() - confirmedAt.getTime() >= 24 * 60 * 60 * 1000,
-  );
+  // Silence never approves a shared report. Existing callers remain compatible.
+  void state;
+  void now;
+  return false;
 }
 
 export function canPublishSessionFixtureResult(fixture: {

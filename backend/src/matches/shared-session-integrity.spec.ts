@@ -171,6 +171,21 @@ describe('Phase 1 shared-session integrity', () => {
       start,
     };
   }
+  async function confirm(userId: string, matchId: string, revision: number) {
+    const [sheet] = await db
+      .select()
+      .from(schema.matches)
+      .where(eq(schema.matches.id, matchId));
+    const report = sheet.sharedMatchId
+      ? await matches.getSessionReport(userId, sheet.sharedMatchId)
+      : null;
+    return matches.finaliseProjection(
+      userId,
+      matchId,
+      revision,
+      report?.reportRevision,
+    );
+  }
   async function conflict(action: Promise<unknown>, code: string) {
     await expect(action).rejects.toMatchObject({
       response: { code },
@@ -345,7 +360,7 @@ describe('Phase 1 shared-session integrity', () => {
       .set({ status: 'completed' })
       .where(eq(schema.events.id, f.homeEvent));
     await conflict(
-      matches.finaliseProjection(f.home.id, a.id, 0),
+      confirm(f.home.id, a.id, 0),
       'SHARED_MATCH_SESSION_REQUIRED',
     );
     const [row] = await db
@@ -452,7 +467,7 @@ describe('Phase 1 shared-session integrity', () => {
               [f.away, b],
               [f.home, a],
             ] as const);
-      await matches.finaliseProjection(
+      await confirm(
         order[0][0].id,
         order[0][1].id,
         await revision(order[0][1].id),
@@ -478,7 +493,7 @@ describe('Phase 1 shared-session integrity', () => {
             .where(eq(schema.competitionFixtures.id, f.fixtureId))
         )[0].status,
       ).toBe('scheduled');
-      await matches.finaliseProjection(
+      await confirm(
         order[1][0].id,
         order[1][1].id,
         await revision(order[1][1].id),
@@ -531,11 +546,7 @@ describe('Phase 1 shared-session integrity', () => {
         firstSide === 'home' ? ([f.home, a] as const) : ([f.away, b] as const);
       const second =
         firstSide === 'home' ? ([f.away, b] as const) : ([f.home, a] as const);
-      await matches.finaliseProjection(
-        first[0].id,
-        first[1].id,
-        await revision(first[1].id),
-      );
+      await confirm(first[0].id, first[1].id, await revision(first[1].id));
       await matches.logEvent(f.away.id, b.id, {
         ...goal(),
         minute: 40,
@@ -548,26 +559,18 @@ describe('Phase 1 shared-session integrity', () => {
       );
       expect(changed.score).toEqual({ home: 1, away: 1 });
       expect(changed.confirmations).toEqual({ home: null, away: null });
-      await matches.finaliseProjection(
-        second[0].id,
-        second[1].id,
-        await revision(second[1].id),
-      );
+      await confirm(second[0].id, second[1].id, await revision(second[1].id));
       expect(
         (await competitions.findOne(f.home.id, f.competitionId!)).results,
       ).toHaveLength(0);
-      await matches.finaliseProjection(
-        first[0].id,
-        first[1].id,
-        await revision(first[1].id),
-      );
+      await confirm(first[0].id, first[1].id, await revision(first[1].id));
       const detail = await competitions.findOne(f.home.id, f.competitionId!);
       expect(detail.results).toHaveLength(1);
       expect(detail.results[0]).toMatchObject({ homeScore: 1, awayScore: 1 });
     },
   );
   it.each(['home', 'away'] as const)(
-    'publishes canonical goals after the %s confirmation times out',
+    'keeps the report provisional after the %s confirmation times out',
     async (firstSide) => {
       const f = await fixture('competition');
       const a = await f.start(f.home, f.homeEvent);
@@ -597,7 +600,7 @@ describe('Phase 1 shared-session integrity', () => {
         .select()
         .from(schema.matchProjectionState)
         .where(eq(schema.matchProjectionState.matchId, sheet.id));
-      await matches.finaliseProjection(side.id, sheet.id, projection.revision);
+      await confirm(side.id, sheet.id, projection.revision);
       await db
         .update(schema.matchSessions)
         .set(
@@ -612,14 +615,376 @@ describe('Phase 1 shared-session integrity', () => {
           a.sharedMatchId!,
         );
         expect(report.score).toEqual({ home: 2, away: 1 });
-        expect(report.finalStatus).toBe('finalised');
+        expect(report.finalStatus).toBe('awaiting_confirmation');
         const detail = await competitions.findOne(viewer.id, f.competitionId!);
-        expect(detail.results).toHaveLength(1);
-        expect(detail.results[0]).toMatchObject({ homeScore: 2, awayScore: 1 });
-        expect(detail.standings.map((row) => row.played)).toEqual([1, 1]);
+        expect(detail.results).toHaveLength(0);
+        expect(detail.standings.map((row) => row.played)).toEqual([0, 0]);
       }
     },
   );
+  async function requestAmendment(
+    userId: string,
+    matchId: string,
+    dto: Omit<
+      import('./matches.schemas').RequestMatchAmendmentDto,
+      'expectedSessionRevision'
+    > & { replacement?: Record<string, unknown>; canonicalEventId?: string },
+  ) {
+    // Only valid participants can read the report, just as in the UI.
+    const [sheet] = await db
+      .select()
+      .from(schema.matches)
+      .where(eq(schema.matches.id, matchId));
+    const [session] = await db
+      .select()
+      .from(schema.matchSessions)
+      .where(eq(schema.matchSessions.id, sheet.sharedMatchId!));
+    return matches.requestAmendment(userId, matchId, {
+      ...dto,
+      expectedSessionRevision: session.reportRevision,
+    } as import('./matches.schemas').RequestMatchAmendmentDto);
+  }
+  async function confirmedFixture(
+    kind: 'friendly' | 'competition' = 'friendly',
+  ) {
+    const f = await fixture(kind);
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    const logged = await matches.logEvent(f.home.id, a.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.home.athletes[0].id,
+    });
+    await matches.finish(f.home.id, a.id);
+    await matches.finish(f.away.id, b.id);
+    for (const [actor, sheet] of [
+      [f.home, a],
+      [f.away, b],
+    ] as const) {
+      const view = await matches.findOne(actor.id, sheet.id);
+      await confirm(actor.id, sheet.id, view.projection.revision);
+    }
+    return { f, a, b, logged };
+  }
+
+  it.each(['home', 'away'] as const)(
+    'cross-team duplicates wait for both decisions with %s voting first',
+    async (firstSide) => {
+      const f = await fixture();
+      const a = await f.start(f.home, f.homeEvent);
+      const b = await f.start(f.away, f.awayEvent);
+      await matches.logEvent(f.home.id, a.id, {
+        ...goal(),
+        team: 'own',
+        athleteId: f.home.athletes[0].id,
+      });
+      await matches.logEvent(f.away.id, b.id, goal());
+      const [review] = await matches.listEventReviews(f.home.id, a.id);
+      expect(review.crossTeam).toBe(true);
+      expect(
+        review.observations.map((row) => row.sourceTeamName).sort(),
+      ).toEqual([f.home.team.name, f.away.team.name].sort());
+      const first =
+        firstSide === 'home' ? ([f.home, a] as const) : ([f.away, b] as const);
+      const second =
+        firstSide === 'home' ? ([f.away, b] as const) : ([f.home, a] as const);
+      const operationId = randomUUID();
+      await matches.resolveEventReview(
+        first[0].id,
+        first[1].id,
+        review.id,
+        { resolution: 'same_event' },
+        operationId,
+      );
+      let report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+      expect(report.score).toEqual({ home: 2, away: 0 });
+      expect(report.reviews[0].status).toBe('open');
+      const revision = report.reportRevision;
+      await matches.resolveEventReview(
+        first[0].id,
+        first[1].id,
+        review.id,
+        { resolution: 'same_event' },
+        operationId,
+      );
+      expect(
+        (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+          .reportRevision,
+      ).toBe(revision);
+      await matches.resolveEventReview(second[0].id, second[1].id, review.id, {
+        resolution: 'separate_events',
+      });
+      report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+      expect(report.reviews[0].status).toBe('open');
+      await matches.finish(f.home.id, a.id);
+      await expect(
+        confirm(
+          f.home.id,
+          a.id,
+          (await matches.findOne(f.home.id, a.id)).projection.revision,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await matches.resolveEventReview(second[0].id, second[1].id, review.id, {
+        resolution: 'same_event',
+      });
+      report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+      expect(report.reviews[0].status).toBe('resolved');
+      expect(report.score).toEqual({ home: 1, away: 0 });
+      await matches.resolveEventReview(first[0].id, first[1].id, review.id, {
+        resolution: 'separate_events',
+      });
+      expect(
+        (await matches.getSessionReport(f.home.id, a.sharedMatchId!)).score
+          .home,
+      ).toBe(1);
+      await matches.resolveEventReview(second[0].id, second[1].id, review.id, {
+        resolution: 'separate_events',
+      });
+      expect(
+        (await matches.getSessionReport(f.home.id, a.sharedMatchId!)).score
+          .home,
+      ).toBe(2);
+    },
+  );
+
+  it('refuses a stale shared revision even if the private sheet revision is current', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.finish(f.home.id, a.id);
+    await matches.finish(f.away.id, b.id);
+    const old = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    await matches.logEvent(f.away.id, b.id, {
+      ...goal(),
+      team: 'own',
+      athleteId: f.away.athletes[0].id,
+    });
+    const current = await matches.findOne(f.home.id, a.id);
+    await expect(
+      matches.finaliseProjection(
+        f.home.id,
+        a.id,
+        current.projection.revision,
+        old.reportRevision,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+        .confirmations.home,
+    ).toBeNull();
+  });
+
+  it.each(['friendly', 'competition'] as const)(
+    '%s: locks the official report and publishes an agreed deletion atomically',
+    async (kind) => {
+      const { f, a, b, logged } = await confirmedFixture(kind);
+      await expect(
+        matches.reopenProjection(f.home.id, a.id, 'Try to reopen'),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        db
+          .update(schema.matchEvents)
+          .set({ minute: 2 })
+          .where(eq(schema.matchEvents.id, logged.id)),
+      ).rejects.toThrow();
+      const proposal = await requestAmendment(f.home.id, a.id, {
+        id: randomUUID(),
+        action: 'void',
+        canonicalEventId: logged.id,
+        reason: 'This goal was disallowed',
+      });
+      expect(
+        (await matches.getSessionReport(f.away.id, a.sharedMatchId!)).score
+          .home,
+      ).toBe(1);
+      const [review] = await matches.listAmendments(f.away.id, b.id);
+      expect(review.proposedScore).toEqual({ home: 0, away: 0 });
+      expect(JSON.stringify(review)).not.toContain(f.home.athletes[0].id);
+      const result = await matches.respondAmendment(
+        f.away.id,
+        b.id,
+        proposal.id,
+        'approve',
+      );
+      expect(result.status).toBe('accepted');
+      for (const actor of [f.home, f.away]) {
+        const report = await matches.getSessionReport(
+          actor.id,
+          a.sharedMatchId!,
+        );
+        expect(report.finalStatus).toBe('finalised');
+        expect(report.score).toEqual({ home: 0, away: 0 });
+        expect(report.timeline).toHaveLength(0);
+        if (f.competitionId) {
+          const detail = await competitions.findOne(actor.id, f.competitionId);
+          expect(detail.results).toHaveLength(1);
+          expect(detail.results[0]).toMatchObject({
+            homeScore: 0,
+            awayScore: 0,
+          });
+        }
+      }
+      expect(
+        (
+          await matches.respondAmendment(
+            f.away.id,
+            b.id,
+            proposal.id,
+            'approve',
+          )
+        ).status,
+      ).toBe('accepted');
+    },
+  );
+
+  it('preserves late offline evidence as a proposal and retries without duplicates', async () => {
+    const { f, a, b } = await confirmedFixture();
+    const input = { ...goal(), minute: 30, matchElapsedMs: 1800000 };
+    const request = {
+      items: [{ kind: 'observation' as const, matchId: b.id, payload: input }],
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await sync.upload({ id: f.away.id } as never, request);
+      expect(result.receipts[0]).toMatchObject({
+        outcome: 'accepted',
+        canonicalEventId: null,
+      });
+    }
+    const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.score.home).toBe(1);
+    expect(report.finalStatus).toBe('finalised');
+    expect(
+      await db
+        .select()
+        .from(schema.matchEventObservations)
+        .where(eq(schema.matchEventObservations.id, input.clientRequestId)),
+    ).toHaveLength(1);
+    const proposals = await matches.listAmendments(f.home.id, a.id);
+    expect(proposals).toHaveLength(1);
+    await matches.respondAmendment(f.home.id, a.id, proposals[0].id, 'approve');
+    expect(
+      (await matches.getSessionReport(f.away.id, a.sharedMatchId!)).score.home,
+    ).toBe(1);
+    await matches.respondAmendment(f.away.id, b.id, proposals[0].id, 'approve');
+    expect(
+      (await matches.getSessionReport(f.away.id, a.sharedMatchId!)).score.home,
+    ).toBe(2);
+  });
+
+  it('rejects amendments from outsiders and assistants, and preserves the result on requested changes', async () => {
+    const { f, a, b, logged } = await confirmedFixture();
+    const outsider = await coach();
+    const proposal = {
+      id: randomUUID(),
+      action: 'correct' as const,
+      canonicalEventId: logged.id,
+      replacement: { minute: 8 },
+      reason: 'Correct the goal time',
+    };
+    await expect(
+      requestAmendment(outsider.id, a.id, proposal),
+    ).rejects.toMatchObject({ status: 404 });
+    await requestAmendment(f.home.id, a.id, proposal);
+    await expect(
+      matches.respondAmendment(outsider.id, b.id, proposal.id, 'approve'),
+    ).rejects.toMatchObject({ status: 404 });
+    await matches.respondAmendment(
+      f.away.id,
+      b.id,
+      proposal.id,
+      'request_changes',
+      'The goal was in minute nine',
+    );
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!)).timeline[0]
+        .minute,
+    ).toBe(1);
+    const revision = await requestAmendment(f.home.id, a.id, {
+      ...proposal,
+      id: randomUUID(),
+      replacement: { minute: 9 },
+    });
+    expect(
+      (await matches.respondAmendment(f.away.id, b.id, revision.id, 'approve'))
+        .status,
+    ).toBe('accepted');
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!)).timeline[0]
+        .minute,
+    ).toBe(9);
+    await db
+      .update(schema.teamMembers)
+      .set({ role: 'assistant' })
+      .where(eq(schema.teamMembers.userId, f.home.id));
+    await expect(
+      requestAmendment(f.home.id, a.id, { ...proposal, id: randomUUID() }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('stales competing amendments after an accepted change and keeps old approvals from authorizing it', async () => {
+    const { f, a, b, logged } = await confirmedFixture();
+    const proposal = {
+      id: randomUUID(),
+      action: 'correct' as const,
+      canonicalEventId: logged.id,
+      replacement: { minute: 8 },
+      reason: 'Correct the event time',
+    };
+    await requestAmendment(f.home.id, a.id, proposal);
+    const other = { ...proposal, id: randomUUID(), replacement: { minute: 9 } };
+    await requestAmendment(f.away.id, b.id, other);
+    await matches.respondAmendment(f.away.id, b.id, proposal.id, 'approve');
+    expect(
+      (await matches.respondAmendment(f.home.id, a.id, other.id, 'approve'))
+        .status,
+    ).toBe('stale');
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!)).timeline[0]
+        .minute,
+    ).toBe(8);
+  });
+
+  it('turns queued corrections and deletions into amendments after confirmation', async () => {
+    const { f, a, logged } = await confirmedFixture();
+    await matches.updateEvent(f.home.id, a.id, logged.id, { minute: 9 });
+    await matches.deleteEvent(f.home.id, a.id, logged.id);
+    const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
+    expect(report.timeline[0].minute).toBe(1);
+    expect(report.score.home).toBe(1);
+    expect(await matches.listAmendments(f.home.id, a.id)).toHaveLength(2);
+  });
+
+  it('withdraws only the requesting team confirmation', async () => {
+    const f = await fixture();
+    const a = await f.start(f.home, f.homeEvent);
+    const b = await f.start(f.away, f.awayEvent);
+    await matches.finish(f.home.id, a.id);
+    await matches.finish(f.away.id, b.id);
+    await confirm(
+      f.home.id,
+      a.id,
+      (await matches.findOne(f.home.id, a.id)).projection.revision,
+    );
+    await matches.reopenProjection(
+      f.away.id,
+      b.id,
+      'Withdraw own confirmation',
+    );
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+        .confirmations.home,
+    ).not.toBeNull();
+    await matches.reopenProjection(
+      f.home.id,
+      a.id,
+      'Withdraw own confirmation',
+    );
+    expect(
+      (await matches.getSessionReport(f.home.id, a.sharedMatchId!))
+        .confirmations.home,
+    ).toBeNull();
+  });
+
   it('counts reverse round-robin legs as two distinct fixture results', async () => {
     const f = await fixture('competition', 2);
     const fixtures = await db
@@ -673,11 +1038,7 @@ describe('Phase 1 shared-session integrity', () => {
           .select()
           .from(schema.matchProjectionState)
           .where(eq(schema.matchProjectionState.matchId, sheet.id));
-        await matches.finaliseProjection(
-          side.id,
-          sheet.id,
-          projection.revision,
-        );
+        await confirm(side.id, sheet.id, projection.revision);
       }
     }
     expect(sessionIds.size).toBe(2);
@@ -704,7 +1065,7 @@ describe('Phase 1 shared-session integrity', () => {
       .select()
       .from(schema.matchProjectionState)
       .where(eq(schema.matchProjectionState.matchId, a.id));
-    await matches.finaliseProjection(f.home.id, a.id, projection.revision);
+    await confirm(f.home.id, a.id, projection.revision);
     await matches.logEvent(f.home.id, a.id, input);
     await matches.logEvent(f.home.id, a.id, {
       ...goal(),
@@ -835,7 +1196,7 @@ describe('Phase 1 shared-session integrity', () => {
     expect(result.rows[0].result).toBe('SHARED_MATCH_RECONCILIATION_REQUIRED');
     expect((await sheet(a.id)).sharedMatchId).toBeNull();
   });
-  it('publication checks review disputes and preserves the existing 24-hour confirmation rule', async () => {
+  it('publication requires both confirmations and no disputed reviews', async () => {
     const f = await fixture('competition');
     const a = await f.start(f.home, f.homeEvent);
     await matches.logEvent(f.home.id, a.id, {
@@ -871,6 +1232,10 @@ describe('Phase 1 shared-session integrity', () => {
       .update(schema.matchSessions)
       .set({ homeConfirmedAt: new Date(Date.now() - 86400001) })
       .where(eq(schema.matchSessions.id, a.sharedMatchId!));
+    await db
+      .update(schema.matchSessions)
+      .set({ finalisedAt: null })
+      .where(eq(schema.matchSessions.id, a.sharedMatchId!));
     const [canonical] = await db
       .select()
       .from(schema.matchEvents)
@@ -886,13 +1251,33 @@ describe('Phase 1 shared-session integrity', () => {
         disputedAt: new Date(),
       })
       .returning();
+    await db
+      .update(schema.matchSessions)
+      .set({ finalisedAt: new Date() })
+      .where(eq(schema.matchSessions.id, a.sharedMatchId!));
     await conflict(
       syncFixtureResult(database, f.competitionId!, source, input),
       'SHARED_MATCH_RESULT_NOT_FINALISED',
     );
     await db
+      .update(schema.matchSessions)
+      .set({ finalisedAt: null })
+      .where(eq(schema.matchSessions.id, a.sharedMatchId!));
+    await db
       .delete(schema.matchEventReviews)
       .where(eq(schema.matchEventReviews.id, review.id));
+    await conflict(
+      syncFixtureResult(database, f.competitionId!, source, input),
+      'SHARED_MATCH_RESULT_NOT_FINALISED',
+    );
+    await db
+      .update(schema.matchSessions)
+      .set({
+        homeConfirmedAt: new Date(),
+        awayConfirmedAt: new Date(),
+        finalisedAt: new Date(),
+      })
+      .where(eq(schema.matchSessions.id, a.sharedMatchId!));
     await syncFixtureResult(database, f.competitionId!, source, input);
     expect(
       (

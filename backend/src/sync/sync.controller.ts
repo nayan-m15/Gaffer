@@ -304,7 +304,7 @@ export class SyncController {
       userId,
       item.matchId,
       item.reviewId,
-      { resolution: item.resolution },
+      { resolution: item.resolution, explanation: item.explanation },
       item.id,
       item.causalParentIds,
     );

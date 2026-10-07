@@ -579,6 +579,75 @@ for (const rejected of [false, true]) {
   });
 }
 
+test("confirmed shared report locks events and submits an amendment against its version", async ({ page }) => {
+  const sessionId = "44444444-4444-4444-8444-444444444444";
+  await mockAuthenticatedMatch(page, true, { sharedSessionId: sessionId });
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
+    sessionId, reportRevision: 7,
+    participants: [{ side: "home", teamId: "team-test-coach", teamName: "Test FC" },
+      { side: "away", teamId: "team-rivals", teamName: "Rivals FC" }],
+    score: { home: 1, away: 0 },
+    clock: { period: "full_time", elapsedMs: 5400000, startedAt: null, running: false, revision: 1 },
+    finalStatus: "finalised", finalisedAt: "2026-10-06T12:00:00Z",
+    confirmations: { home: "2026-10-06T11:00:00Z", away: "2026-10-06T12:00:00Z" },
+    timeline: [{ id: LOG_ID, side: "home", eventType: "goal", minute: 10,
+      lifecycleStatus: "confirmed", createdAt: "2026-10-06T10:00:00Z", player: { name: "Scorer", shirtNumber: 9 } }],
+    reviews: [],
+  }));
+  let submitted: Record<string, unknown> | undefined;
+  await page.route(`**/api/matches/${MATCH_ID}/amendments`, route => {
+    if (route.request().method() === "POST") {
+      submitted = route.request().postDataJSON();
+      return json(route, { id: submitted!.id, status: "pending" });
+    }
+    return json(route, []);
+  });
+  await page.goto(`/matches/${MATCH_ID}/report`);
+  await expect(page.getByRole("button", { name: /10' Goal/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Delete event", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add Event", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Request amendment", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Report amendments" });
+  await dialog.getByLabel("Minute", { exact: true }).fill("12");
+  await dialog.getByLabel("Reason", { exact: true }).fill("Correct the goal time");
+  await dialog.getByRole("button", { name: "Propose change" }).click();
+  await expect(dialog.getByRole("status")).toContainText("official report stays unchanged");
+  expect(submitted).toMatchObject({ expectedSessionRevision: 7, action: "correct",
+    canonicalEventId: LOG_ID, replacement: { eventType: "goal", minute: 12 }, reason: "Correct the goal time" });
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("button", { name: /10' Goal/i })).toBeDisabled();
+});
+
+test("cross-team duplicate review shows both positions and explanations", async ({ page }) => {
+  const sessionId = "44444444-4444-4444-8444-444444444444";
+  await mockAuthenticatedMatch(page, true, { sharedSessionId: sessionId });
+  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
+  const review = { id: LOG_ID, reviewVersion: 2, reason: "possible_duplicate", status: "open",
+    crossTeam: true, locked: false, teamNames: { home: "Test FC", away: "Rivals FC" },
+    teamDecisions: { home: "same_event", away: "separate_events" },
+    teamDecisionNotes: { home: "Same scorer and time", away: "Two different attacks" },
+    observations: [{ id: LOG_ID, eventType: "goal", team: "own", eventTeamName: "Test FC",
+      sourceTeamName: "Rivals FC", observerName: "Rival coach", playerLabel: "#9 Scorer", matchElapsedMs: 600000 }],
+  };
+  await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, route => json(route, [review]));
+  await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
+    sessionId, reportRevision: 3, participants: [], score: { home: 2, away: 0 },
+    clock: { period: "full_time", elapsedMs: 5400000, startedAt: null, running: false, revision: 1 },
+    finalStatus: "awaiting_confirmation", finalisedAt: null, confirmations: { home: null, away: null },
+    timeline: [], reviews: [review],
+  }));
+  await page.goto(`/matches/${MATCH_ID}/report`);
+  await expect(page.getByRole("button", { name: "Confirm report", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Review queue" }).click();
+  const dialog = page.getByRole("dialog", { name: "Event review" });
+  await expect(dialog.getByText("Test FC: Count as one event - Same scorer and time")).toBeVisible();
+  await expect(dialog.getByText("Rivals FC: Keep as two events - Two different attacks")).toBeVisible();
+  await expect(dialog.getByText(/Teams disagree/)).toBeVisible();
+  await expect(dialog.getByText(/recorded by Rivals FC \(Rival coach\)/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Count as one event" })).toBeEnabled();
+});
+
 test("post-match correction updates the visible timeline", async ({ page }) => {
   await mockAuthenticatedMatch(page, true);
   let event = {

@@ -242,10 +242,12 @@ export type OpponentLineupView = FriendlyOpponentLineup | ConfirmedOpponentLineu
 
 export interface SessionReport {
   sessionId: string;
+  reportRevision?: number;
   participants: Array<{
     side: MatchSessionSide;
     teamId: string | null;
     competitionTeamId: string | null;
+    teamName?: string | null;
   }>;
   score: { home: number; away: number };
   clock: {

@@ -22,14 +22,14 @@ describe('two-sided result confirmation', () => {
     ).toBe(true);
   });
 
-  it('finalises one confirmation after the 24-hour response window', () => {
+  it('never treats a missing confirmation as agreement after 24 hours', () => {
     const state = {
       homeConfirmedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       awayConfirmedAt: null,
       finalisedAt: null,
     };
-    expect(shouldFinaliseSession(state, now)).toBe(true);
-    expect(sessionHasTimedOutConfirmation(state, now)).toBe(true);
+    expect(shouldFinaliseSession(state, now)).toBe(false);
+    expect(sessionHasTimedOutConfirmation(state, now)).toBe(false);
     expect(
       sessionHasTimedOutConfirmation(
         { ...state, homeConfirmedAt: new Date(now.getTime() - 1) },

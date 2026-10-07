@@ -1778,9 +1778,9 @@ export default function LiveMatchPage() {
                       setSettingsOpen(false);
                       const projection = matchQuery.data?.projection;
                       if (!projection) return;
-                      finaliseProjection.mutate(projection.revision, {
+                      finaliseProjection.mutate({ expectedRevision: projection.revision, expectedSessionRevision: sessionReport?.reportRevision }, {
                         onSuccess: () =>
-                          setToast({ label: "Result finalised" }),
+                          setToast({ label: sessionReport ? "Your team confirmed the report" : "Result finalised" }),
                         onError: (error) =>
                           setActionError(
                             error instanceof Error
@@ -1790,7 +1790,7 @@ export default function LiveMatchPage() {
                       });
                     }}
                   >
-                    Finalise result
+                    {sessionReport ? "Confirm report" : "Finalise result"}
                   </SettingsItem>
                 ) : null}
                 {team?.role === "coach" &&
@@ -1799,6 +1799,7 @@ export default function LiveMatchPage() {
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
+                      if (sessionReport?.finalisedAt) { navigate(`/matches/${matchId}/report?amendments=1`); return; }
                       reopenProjection.mutate(
                         "Coach reopened the published result for amendment.",
                         {
@@ -1814,7 +1815,7 @@ export default function LiveMatchPage() {
                       );
                     }}
                   >
-                    Reopen result
+                    {sessionReport?.finalisedAt ? "Review report amendments" : "Reopen result"}
                   </SettingsItem>
                 ) : null}
                 {period === "not_started" && (

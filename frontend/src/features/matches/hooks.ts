@@ -603,8 +603,9 @@ export function useUpdateMatchClock(matchId: string) {
 export function useFinaliseMatchProjection(matchId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (expectedRevision: number) =>
-      finaliseMatchProjection(matchId, expectedRevision),
+    mutationFn: (input: number | { expectedRevision: number; expectedSessionRevision?: number }) =>
+      finaliseMatchProjection(matchId, typeof input === "number" ? input : input.expectedRevision,
+        typeof input === "number" ? undefined : input.expectedSessionRevision),
     onError: async () => {
       invalidateSheetSession(queryClient, matchId);
       await queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
@@ -704,6 +705,7 @@ export function useMatchView(matchId: string | undefined) {
         .filter(
           (row) =>
             (row.kind ?? "observation") === "observation" &&
+            row.state !== "accepted" &&
             !memberships.has(row.id) &&
             !ids.has(row.canonical_event_id ?? ""),
         )

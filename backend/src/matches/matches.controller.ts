@@ -19,6 +19,8 @@ import {
   resolveMatchEventReviewSchema,
   finaliseMatchProjectionSchema,
   reopenMatchProjectionSchema,
+  requestMatchAmendmentSchema,
+  respondMatchAmendmentSchema,
 } from './matches.schemas';
 import { MatchesService } from './matches.service';
 
@@ -164,6 +166,45 @@ export class MatchesController {
       user.id,
       matchId,
       dto.expectedRevision,
+      dto.expectedSessionRevision,
+    );
+  }
+
+  @Get(':matchId/amendments')
+  async amendments(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.matchesService.listAmendments(user.id, matchId);
+  }
+
+  @Post(':matchId/amendments')
+  async requestAmendment(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Body() body: unknown,
+  ) {
+    return this.matchesService.requestAmendment(
+      user.id,
+      matchId,
+      zodValidate(requestMatchAmendmentSchema, body),
+    );
+  }
+
+  @Post(':matchId/amendments/:amendmentId/respond')
+  async respondAmendment(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Param('amendmentId', ParseUUIDPipe) amendmentId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(respondMatchAmendmentSchema, body);
+    return this.matchesService.respondAmendment(
+      user.id,
+      matchId,
+      amendmentId,
+      dto.response,
+      dto.reason,
     );
   }
 

@@ -4,6 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { flushOfflineMatchEvents } from "@/features/matches/api";
 import {
   enqueueOperation,
+  cacheResponse,
+  readCachedResponse,
   listQueuedEvents,
   readSyncedReviewDecisionIds,
   readSyncedMatchReviews,
@@ -22,6 +24,7 @@ export function EventReviewPanel({
   const { team } = useAuth();
   const [reviews, setReviews] = useState<SyncedMatchReview[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [queuedDecisions, setQueuedDecisions] = useState<
     Record<string, { state: string; error: string | null }>
@@ -30,12 +33,17 @@ export function EventReviewPanel({
   const load = useCallback(async () => {
     try {
       const synced = await readSyncedMatchReviews(matchId);
-      const rows =
-        synced.length > 0 || !navigator.onLine
-          ? synced
-          : await apiFetch<SyncedMatchReview[]>(
-              `/matches/${matchId}/event-reviews`,
-            );
+      const cached = await readCachedResponse<SyncedMatchReview[]>(`reviews:${matchId}`);
+      let rows: SyncedMatchReview[] = synced.map(row => {
+        const previous = cached?.find(previous => previous.id === row.id);
+        return { ...previous, ...row, locked: row.locked ?? previous?.locked, observations: row.observations.map(observation => ({
+          ...previous?.observations.find(previous => previous.id === observation.id), ...observation,
+        })) };
+      });
+      if (navigator.onLine) {
+        try { rows = await apiFetch<SyncedMatchReview[]>(`/matches/${matchId}/event-reviews`); await cacheResponse(`reviews:${matchId}`, rows); }
+        catch (cause) { if (!(cause instanceof TypeError)) throw cause; }
+      }
       setReviews(rows);
       const queue = await listQueuedEvents(matchId);
       const decisions: Record<string, { state: string; error: string | null }> =
@@ -126,6 +134,7 @@ export function EventReviewPanel({
         operationType: "resolve_review",
         reviewId,
         resolution,
+        explanation: explanations[reviewId]?.trim() || undefined,
         causalParentIds,
       });
       await load();
@@ -197,27 +206,33 @@ export function EventReviewPanel({
               className="rounded-xl border border-warning/35 bg-surface-nested p-4"
             >
               <p className="text-sm font-semibold text-warning">
-                {review.reason.replaceAll("_", " ")}
+                {review.reason === "possible_duplicate" ? "Possible duplicate" : review.reason.replaceAll("_", " ")}
               </p>
               <ul className="mt-2 space-y-1 text-xs text-secondary-foreground">
                 {review.observations.map((observation) => (
                   <li key={observation.id}>
-                    {observation.team}{" "}
+                    {observation.eventTeamName ?? observation.team}{" "}
                     {observation.eventType.replaceAll("_", " ")} ·{" "}
                     {Math.floor(observation.matchElapsedMs / 60_000)}:
                     {String(
                       Math.floor((observation.matchElapsedMs % 60_000) / 1000),
                     ).padStart(2, "0")}
-                    {observation.athleteId
-                      ? ` · player ${observation.athleteId.slice(0, 8)}`
-                      : ""}
-                    {observation.opponentLabel
-                      ? ` · ${observation.opponentLabel}`
-                      : ""}
-                    {` · observer ${observation.loggedByUserId.slice(0, 8)}`}
+                    {observation.playerLabel ? ' - ' + observation.playerLabel : observation.opponentLabel ? ' - ' + observation.opponentLabel : ''}
+                    {' - recorded by ' + (observation.sourceTeamName ?? 'your team') + (observation.observerName ? ' (' + observation.observerName + ')' : '')}
                   </li>
                 ))}
               </ul>
+              {review.crossTeam ? <div className="mt-3 text-xs text-muted-foreground">
+                <p>Both teams must agree before this changes the shared report.</p>
+                {(["home", "away"] as const).map(side => <p key={side}>
+                  {review.teamNames?.[side] ?? side}: {review.teamDecisions?.[side] === "same_event" ? "Count as one event" : review.teamDecisions?.[side] === "separate_events" ? "Keep as two events" : "Awaiting decision"}
+                  {review.teamDecisionNotes?.[side] ? ` - ${review.teamDecisionNotes[side]}` : ""}
+                </p>)}
+                {review.teamDecisions?.home && review.teamDecisions?.away && review.teamDecisions.home !== review.teamDecisions.away
+                  ? <p className="mt-2 text-warning">Teams disagree. Review the observations and submit a revised decision.</p> : null}
+              </div> : <p className="mt-2 text-xs text-muted-foreground">Your coach can resolve observations recorded within your team.</p>}
+              {review.observations.every(observation => observation.eventType === "goal") ? <p className="mt-2 text-xs text-muted-foreground">Count as one: one goal. Keep as two: two goals.</p> : null}
+              {review.locked ? <p className="mt-2 text-xs text-warning">The confirmed report is locked. Request an amendment from the match report.</p> : null}
               {queuedDecisions[review.id] &&
               queuedDecisions[review.id].state !== "rejected" ? (
                 <p className="mt-2 text-xs text-warning">
@@ -236,7 +251,8 @@ export function EventReviewPanel({
                   A coach resolves this review.
                 </p>
               ) : null}
-              <div className="mt-4 flex gap-2">
+              {!review.locked ? <label className="mt-3 block text-xs text-muted-foreground">Explanation (optional)<textarea maxLength={500} value={explanations[review.id] ?? ""} onChange={event => setExplanations({ ...explanations, [review.id]: event.target.value })} className="mt-1 w-full rounded border border-border-default bg-surface-elevated p-2 text-foreground" /></label> : null}
+              <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={
@@ -247,12 +263,12 @@ export function EventReviewPanel({
                       "dependency_pending",
                       "quarantined",
                     ].includes(queuedDecisions[review.id]?.state ?? "") ||
-                    team?.role !== "coach"
+                    team?.role !== "coach" || Boolean(review.locked)
                   }
                   onClick={() => void resolve(review.id, "same_event")}
                   className="rounded-md bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-text-disabled"
                 >
-                  Same event
+                  Count as one event
                 </button>
                 <button
                   type="button"
@@ -264,12 +280,12 @@ export function EventReviewPanel({
                       "dependency_pending",
                       "quarantined",
                     ].includes(queuedDecisions[review.id]?.state ?? "") ||
-                    team?.role !== "coach"
+                    team?.role !== "coach" || Boolean(review.locked)
                   }
                   onClick={() => void resolve(review.id, "separate_events")}
                   className="rounded-md border border-border-default bg-surface-elevated px-3 py-2 text-xs font-bold text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-text-disabled"
                 >
-                  Separate events
+                  Keep as two events
                 </button>
               </div>
             </article>
@@ -296,7 +312,7 @@ export function EventReviewPanel({
                       ? ` · disputed by coach ${review.disputedByUserId.slice(0, 8)}`
                       : ""}
                   </span>
-                  {team?.role === "coach" && !review.disputedAt ? (
+                  {team?.role === "coach" && !review.disputedAt && !review.locked && !review.crossTeam ? (
                     <button
                       type="button"
                       disabled={!navigator.onLine}
@@ -307,6 +323,7 @@ export function EventReviewPanel({
                     </button>
                   ) : null}
                   {team?.role === "coach" &&
+                  !review.locked &&
                   review.reviewVersion === 2 &&
                   review.resolution ? (
                     <button

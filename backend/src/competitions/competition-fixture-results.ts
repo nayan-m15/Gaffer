@@ -345,7 +345,7 @@ function seedOrder(size: number) {
   return seeds;
 }
 
-async function ensureHybridKnockoutStage(
+export async function ensureHybridKnockoutStage(
   databaseService: DatabaseService,
   competitionId: string,
 ) {
@@ -574,10 +574,7 @@ export async function syncFixtureResult(
       .from(matchSessions)
       .where(eq(matchSessions.id, source.sessionId))
       .limit(1);
-    const first = session?.homeConfirmedAt ?? session?.awayConfirmedAt;
-    const confirmed =
-      (session?.homeConfirmedAt && session?.awayConfirmedAt) ||
-      (first && Date.now() - first.getTime() >= 86400000);
+    const confirmed = session?.homeConfirmedAt && session?.awayConfirmedAt;
     const reviews = await databaseService.database.execute<{
       blocked: boolean;
     }>(

@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { stableStringify } from '@gaffer/match-domain';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { getFormationPlayerCount } from '../common/formations';
 import { DatabaseService } from '../database/database.service';
 import { InsightsService } from '../insights/insights.service';
@@ -36,6 +36,9 @@ import {
   matchSessionParticipants,
   matchSessions,
   teamMembers,
+  teams,
+  user,
+  matchAmendments,
   matches,
   opponentMatchPlayers,
   seasons,
@@ -46,22 +49,19 @@ import {
   unavailableFriendlyOpponentLineup,
 } from '../friendly-fixtures/friendly-fixtures.service';
 import {
-  finaliseTimedOutSession,
+  ensureHybridKnockoutStage,
   syncFixtureResult,
   validateFixtureResult,
 } from '../competitions/competition-fixture-results';
 import type {
   CreateMatchLogEventDto,
   MatchTacticalChangeDto,
+  RequestMatchAmendmentDto,
   ResolveMatchEventReviewDto,
   UpdateMatchLogEventDto,
   UpdateMatchClockDto,
 } from './matches.schemas';
 import { twoSidedLiveLoggingEnabled } from './match-sessions';
-import {
-  sessionHasTimedOutConfirmation,
-  shouldFinaliseSession,
-} from './session-finalisation';
 
 function isGoalkeeperPosition(position: string | null | undefined) {
   const normalized = position?.trim().toLowerCase();
@@ -114,15 +114,7 @@ export class MatchesService {
       )
       .limit(1);
     if (!authorized) throw new NotFoundException('Match session not found.');
-    let session = authorized.session;
-    if (sessionHasTimedOutConfirmation(session, new Date())) {
-      await finaliseTimedOutSession(this.databaseService, sessionId);
-      [session] = await this.databaseService.database
-        .select()
-        .from(matchSessions)
-        .where(eq(matchSessions.id, sessionId))
-        .limit(1);
-    }
+    const session = authorized.session;
 
     const [
       participants,
@@ -137,8 +129,10 @@ export class MatchesService {
           side: matchSessionParticipants.side,
           teamId: matchSessionParticipants.teamId,
           competitionTeamId: matchSessionParticipants.competitionTeamId,
+          teamName: teams.name,
         })
         .from(matchSessionParticipants)
+        .leftJoin(teams, eq(teams.id, matchSessionParticipants.teamId))
         .where(eq(matchSessionParticipants.sessionId, sessionId))
         .orderBy(desc(matchSessionParticipants.side)),
       this.databaseService.database
@@ -196,6 +190,7 @@ export class MatchesService {
           resolvedByUserId: matchEventReviews.resolvedByUserId,
           disputedAt: matchEventReviews.disputedAt,
           disputedByUserId: matchEventReviews.disputedByUserId,
+          teamDecisions: matchEventReviews.teamDecisions,
         })
         .from(matchEventReviews)
         .where(
@@ -304,6 +299,7 @@ export class MatchesService {
       fixture.awayScore !== null;
     return {
       sessionId,
+      reportRevision: session.reportRevision,
       participants,
       score: {
         home: published
@@ -334,9 +330,6 @@ export class MatchesService {
   async findOne(userId: string, matchId: string) {
     const team = await this.requireTeam(userId);
     const { match, event } = await this.requireMatch(team.id, matchId);
-    if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) {
-      await finaliseTimedOutSession(this.databaseService, match.sharedMatchId);
-    }
 
     let competitionName: string | null = null;
     let competitionSeason: string | null = null;
@@ -672,7 +665,26 @@ export class MatchesService {
         ) as canonical_event_id`);
     const persisted = persistedResult.rows[0];
     if (!persisted?.canonical_event_id) {
-      throw new BadRequestException('Could not persist the match observation.');
+      const [amendment] = await this.databaseService.database
+        .select()
+        .from(matchAmendments)
+        .where(
+          and(
+            eq(matchAmendments.id, dto.clientRequestId),
+            eq(matchAmendments.matchId, matchId),
+          ),
+        )
+        .limit(1);
+      if (!amendment)
+        throw new BadRequestException(
+          'Could not persist the match observation.',
+        );
+      return {
+        id: dto.clientRequestId,
+        matchId,
+        ...dto,
+        amendmentPending: true,
+      };
     }
     const persistedEvent = await this.requireCanonicalEventForObservation(
       match.id,
@@ -723,6 +735,34 @@ export class MatchesService {
         )})`,
       )
       .orderBy(desc(matchEventReviews.createdAt));
+    const report =
+      match.sharedMatchId && twoSidedLiveLoggingEnabled()
+        ? await this.getSessionReport(userId, match.sharedMatchId)
+        : null;
+    const sheetSources = await this.databaseService.database
+      .select({ id: matches.id, teamId: events.teamId, teamName: teams.name })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .innerJoin(teams, eq(teams.id, events.teamId))
+      .where(
+        match.sharedMatchId
+          ? eq(matches.sharedMatchId, match.sharedMatchId)
+          : eq(matches.id, matchId),
+      );
+    const observers = await this.databaseService.database
+      .select({ id: user.id, name: user.name })
+      .from(user)
+      .innerJoin(teamMembers, eq(teamMembers.userId, user.id))
+      .where(
+        sql`${teamMembers.teamId} in (${sql.join(
+          sheetSources.map((sheet) => sql`${sheet.teamId}::uuid`),
+          sql`, `,
+        )})`,
+      );
+    const ownAthletes = await this.databaseService.database
+      .select()
+      .from(athletes)
+      .where(eq(athletes.teamId, team.id));
     const results = await Promise.all(
       rows.map(async (review) => {
         const observations =
@@ -754,12 +794,67 @@ export class MatchesService {
                     ),
                   )
               ).map((row) => row.observation);
+        const sourceTeams = new Set(
+          observations.map(
+            (observation) =>
+              sheetSources.find((sheet) => sheet.id === observation.matchId)
+                ?.teamId,
+          ),
+        );
+        const currentSide = report?.participants.find(
+          (participant) => participant.teamId === team.id,
+        )?.side;
+        const labelled = observations.map((observation) => {
+          const player = ownSheetIds.has(observation.matchId)
+            ? ownAthletes.find((player) => player.id === observation.athleteId)
+            : null;
+          return {
+            ...observation,
+            sourceTeamName:
+              sheetSources.find((sheet) => sheet.id === observation.matchId)
+                ?.teamName ?? 'Recording team',
+            eventTeamName:
+              report?.participants.find(
+                (participant) => participant.side === observation.side,
+              )?.teamName ??
+              (observation.team === 'own' ? team.name : 'Opponent'),
+            observerName:
+              observers.find(
+                (observer) => observer.id === observation.loggedByUserId,
+              )?.name ?? 'Team member',
+            playerLabel: player
+              ? [
+                  player.squadNumber == null ? '' : '#' + player.squadNumber,
+                  player.firstName,
+                  player.lastName,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+              : (observation.opponentLabel ??
+                report?.timeline.find((row) => row.id === observation.id)
+                  ?.player?.name ??
+                null),
+          };
+        });
         return {
           ...review,
-          observations: observations.map((observation) =>
+          crossTeam: sourceTeams.size > 1,
+          currentSide,
+          locked: Boolean(report?.finalisedAt),
+          teamNames: Object.fromEntries(
+            (report?.participants ?? []).map((participant) => [
+              participant.side,
+              participant.teamName ?? participant.side,
+            ]),
+          ),
+          observations: labelled.map((observation) =>
             ownSheetIds.has(observation.matchId)
               ? observation
               : {
+                  sourceTeamName: observation.sourceTeamName,
+                  eventTeamName: observation.eventTeamName,
+                  observerName: observation.observerName,
+                  playerLabel: observation.playerLabel,
                   id: observation.id,
                   matchId: observation.matchId,
                   sessionId: observation.sessionId,
@@ -815,6 +910,7 @@ export class MatchesService {
     ) {
       throw new NotFoundException('Event review not found.');
     }
+    await this.assertReviewUnlocked(requester.match);
     const reviewMatchId = review.matchId;
     const { match, event } = await this.requireSharedMatch(
       team.id,
@@ -915,6 +1011,7 @@ export class MatchesService {
     ) {
       throw new NotFoundException('Event review not found.');
     }
+    await this.assertReviewUnlocked(match);
     if (review.status !== 'resolved') {
       throw new BadRequestException('Only a resolved review can be disputed.');
     }
@@ -972,7 +1069,9 @@ export class MatchesService {
       previousDecision.matchId === matchId &&
       previousDecision.actorUserId === userId &&
       previousDecision.decision.reviewId === reviewId &&
-      previousDecision.decision.resolution === dto.resolution;
+      previousDecision.decision.resolution === dto.resolution &&
+      (previousDecision.decision.explanation ?? null) ===
+        (dto.explanation ?? null);
     if (!decisionMatches) {
       throw new BadRequestException('This offline operation ID was reused.');
     }
@@ -1003,7 +1102,7 @@ export class MatchesService {
           }>(sql`select resolve_match_session_event_candidate(
       ${reviewId}::uuid, ${matchId}::uuid, ${match.sharedMatchId}::uuid,
       ${userId}::text, ${operationId}::uuid, ${dto.resolution}::text,
-      ${JSON.stringify(causalParentIds)}::jsonb
+      ${JSON.stringify(causalParentIds)}::jsonb, ${dto.explanation ?? null}::text
     ) as canonical_event_id`)
         : await this.databaseService.database.execute<{
             canonical_event_id: string;
@@ -1515,6 +1614,7 @@ export class MatchesService {
     userId: string,
     matchId: string,
     expectedRevision: number,
+    expectedSessionRevision?: number,
   ) {
     const team = await this.teamsService.requireCoachTeam(userId);
     const { event, match } = await this.requireMatch(team.id, matchId);
@@ -1545,7 +1645,10 @@ export class MatchesService {
         `Projection changed; expected revision ${expectedRevision} but found ${projection.revision}.`,
       );
     }
-    if (projection.unresolvedReviewCount > 0) {
+    if (
+      projection.unresolvedReviewCount > 0 &&
+      !(match.sharedMatchId && twoSidedLiveLoggingEnabled())
+    ) {
       throw new BadRequestException(
         'Resolve all event reviews before finalising the result.',
       );
@@ -1556,6 +1659,7 @@ export class MatchesService {
         team.id,
         match,
         expectedRevision,
+        expectedSessionRevision,
       );
     }
     const fixtureContext = await this.buildCompetitionFixtureResult(
@@ -1620,96 +1724,37 @@ export class MatchesService {
     teamId: string,
     match: typeof matches.$inferSelect,
     expectedRevision: number,
+    expectedSessionRevision?: number,
   ) {
+    if (!expectedSessionRevision)
+      throw new BadRequestException(
+        'Refresh the shared report before confirming.',
+      );
     const projection = await this.refreshProjection(match.id);
-    if (projection.revision !== expectedRevision) {
-      throw new BadRequestException(
-        'Projection changed; refresh before confirming.',
-      );
-    }
-    if (projection.unresolvedReviewCount > 0) {
-      throw new BadRequestException(
-        'Resolve all event reviews before confirming the result.',
-      );
-    }
-    const [participant] = await this.databaseService.database
-      .select()
-      .from(matchSessionParticipants)
-      .where(
-        and(
-          eq(matchSessionParticipants.sessionId, match.sharedMatchId!),
-          eq(matchSessionParticipants.teamId, teamId),
-        ),
-      )
-      .limit(1);
-    if (!participant) throw new NotFoundException('Match session not found.');
-    const blocked = await this.databaseService.database.execute<{
-      blocked: boolean;
-    }>(
-      sql`select exists(select 1 from match_event_reviews where session_id = ${match.sharedMatchId}::uuid and (status = 'open' or disputed_at is not null)) as blocked`,
-    );
-    if (blocked.rows[0]?.blocked)
-      throw sharedMatchConflict('SHARED_MATCH_RESULT_NOT_FINALISED');
-    const now = new Date();
-    await this.databaseService.database
-      .update(matchSessionParticipants)
-      .set({ confirmationState: 'confirmed', updatedAt: now })
-      .where(eq(matchSessionParticipants.id, participant.id));
-    await this.databaseService.database
-      .update(matchSessions)
-      .set(
-        participant.side === 'home'
-          ? {
-              homeConfirmedAt: sql`coalesce(${matchSessions.homeConfirmedAt}, ${now})`,
-              homeConfirmedByUserId: sql`coalesce(${matchSessions.homeConfirmedByUserId}, ${userId})`,
-              updatedAt: now,
-            }
-          : {
-              awayConfirmedAt: sql`coalesce(${matchSessions.awayConfirmedAt}, ${now})`,
-              awayConfirmedByUserId: sql`coalesce(${matchSessions.awayConfirmedByUserId}, ${userId})`,
-              updatedAt: now,
-            },
-      )
-      .where(eq(matchSessions.id, match.sharedMatchId!));
-    const [session] = await this.databaseService.database
-      .select()
-      .from(matchSessions)
-      .where(eq(matchSessions.id, match.sharedMatchId!))
-      .limit(1);
-    if (!shouldFinaliseSession(session, now)) {
-      return { ...session, confirmed: true, finalised: false };
-    }
-    const finalisedResult = await this.databaseService.database.execute<{
-      finalised: boolean;
-    }>(sql`
-      select finalise_match_projection(${match.id}::uuid, ${expectedRevision}::integer, ${userId}::text) as finalised`);
-    if (!finalisedResult.rows[0]?.finalised) {
-      throw new BadRequestException(
-        'Projection changed; refresh before finalising.',
-      );
-    }
-    await this.databaseService.database
-      .update(matchSessions)
-      .set({ finalisedAt: now, finalisedByUserId: userId, updatedAt: now })
-      .where(
-        and(
-          eq(matchSessions.id, match.sharedMatchId!),
-          sql`${matchSessions.finalisedAt} is null`,
-        ),
+    if (projection.revision !== expectedRevision)
+      throw new ConflictException(
+        'The report changed. Review it and confirm again.',
       );
     const fixtureContext = await this.buildCompetitionFixtureResult(
       teamId,
       match,
     );
-    if (fixtureContext) {
-      await syncFixtureResult(
+    if (fixtureContext)
+      await validateFixtureResult(
         this.databaseService,
         fixtureContext.competitionId,
         { kind: 'live', id: match.id, sessionId: match.sharedMatchId! },
         fixtureContext.result,
       );
-    }
-    return { ...session, finalisedAt: now, finalised: true };
+    const result = await this.sharedCommand<{ finalised: boolean }>(
+      sql`select confirm_shared_report(${match.id}::uuid, ${userId}::text, ${expectedSessionRevision}::integer) as finalised`,
+    );
+    if (result.rows[0]?.finalised && fixtureContext)
+      await ensureHybridKnockoutStage(
+        this.databaseService,
+        fixtureContext.competitionId,
+      );
+    return { confirmed: true, finalised: result.rows[0]?.finalised ?? false };
   }
 
   async reopenProjection(userId: string, matchId: string, reason: string) {
@@ -1729,20 +1774,10 @@ export class MatchesService {
           'A final session result cannot be reopened.',
         );
       }
-      await this.databaseService.database
-        .update(matchSessionParticipants)
-        .set({ confirmationState: 'pending', updatedAt: new Date() })
-        .where(eq(matchSessionParticipants.sessionId, match.sharedMatchId));
-      await this.databaseService.database
-        .update(matchSessions)
-        .set({
-          homeConfirmedAt: null,
-          homeConfirmedByUserId: null,
-          awayConfirmedAt: null,
-          awayConfirmedByUserId: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(matchSessions.id, match.sharedMatchId));
+      await this.sharedCommand(
+        sql`select withdraw_shared_confirmation(${match.id}::uuid, ${userId}::text)`,
+      );
+      return { withdrawn: true };
     }
     const [reopened] = await this.databaseService.database
       .update(matchProjectionState)
@@ -1789,7 +1824,7 @@ export class MatchesService {
         and(
           eq(matchEventOperations.matchId, matchId),
           peer
-            ? sql`${matchEventOperations.operationType} in ('merge', 'separate')`
+            ? sql`${matchEventOperations.operationType} in ('merge', 'separate', 'review_vote')`
             : undefined,
           peer
             ? sql`${matchEventOperations.canonicalEventId} in (select id from match_events where event_type <> 'injury')`
@@ -1847,6 +1882,17 @@ export class MatchesService {
       )
       .limit(1);
     if (!membership) {
+      const [amendment] = await this.databaseService.database
+        .select({ id: matchAmendments.id })
+        .from(matchAmendments)
+        .where(
+          and(
+            eq(matchAmendments.observationId, observationId),
+            eq(matchAmendments.matchId, matchId),
+          ),
+        )
+        .limit(1);
+      if (amendment) return null;
       throw new NotFoundException('Canonical event membership not found.');
     }
     return membership.canonicalEventId;
@@ -2039,6 +2085,7 @@ export class MatchesService {
     eventStatus: string,
     scoreMayHaveChanged: boolean,
   ) {
+    if (match.sharedMatchId && twoSidedLiveLoggingEnabled()) return;
     if (eventStatus !== 'completed' || !scoreMayHaveChanged) return;
     const projection = await this.refreshProjection(match.id);
     if (
@@ -2165,6 +2212,224 @@ export class MatchesService {
       throw new ForbiddenException('No team associated with this account.');
     }
     return team;
+  }
+
+  private async sharedCommand<
+    T extends Record<string, unknown> = Record<string, unknown>,
+  >(command: SQL) {
+    try {
+      return await this.databaseService.database.execute<T>(command);
+    } catch (error) {
+      const cause: unknown =
+        error instanceof Error && 'cause' in error ? error.cause : error;
+      if (
+        cause &&
+        typeof cause === 'object' &&
+        'code' in cause &&
+        'message' in cause &&
+        ['22000', '42501', 'P0002'].includes(String(cause.code))
+      ) {
+        throw new ConflictException(String(cause.message));
+      }
+      throw error;
+    }
+  }
+
+  private async assertReviewUnlocked(match: typeof matches.$inferSelect) {
+    if (!match.sharedMatchId || !twoSidedLiveLoggingEnabled()) return;
+    const [session] = await this.databaseService.database
+      .select()
+      .from(matchSessions)
+      .where(eq(matchSessions.id, match.sharedMatchId))
+      .limit(1);
+    if (session?.finalisedAt)
+      throw new ConflictException(
+        'The confirmed report is locked. Request an amendment.',
+      );
+  }
+
+  async requestAmendment(
+    userId: string,
+    matchId: string,
+    dto: RequestMatchAmendmentDto,
+  ) {
+    const team = await this.teamsService.requireCoachTeam(userId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
+    if (!match.sharedMatchId || !twoSidedLiveLoggingEnabled())
+      throw new BadRequestException('A shared confirmed report is required.');
+    let replacement: Record<string, unknown> =
+      dto.action === 'void' ? {} : { ...dto.replacement };
+    if (dto.action === 'add') {
+      const input = dto.replacement;
+      if (input.eventType === 'injury')
+        throw new BadRequestException(
+          'Injury records remain private to your team.',
+        );
+      if (input.athleteId)
+        await this.requireMatchAthlete(match.id, input.athleteId);
+      this.validateEventAttribution(
+        input.team,
+        input.eventType,
+        input.athleteId ?? null,
+        input.opponentPlayerId ?? null,
+        input.opponentLabel ?? null,
+      );
+      await this.validateSubstitution(
+        match.id,
+        input.team,
+        input.eventType,
+        input.detail,
+      );
+      const attribution = await this.resolveOpponentAttribution(match, input);
+      await this.validateGoalkeeperSave(
+        match.id,
+        input.team,
+        input.eventType,
+        input.athleteId ?? null,
+        attribution.opponentPlayerId ?? null,
+      );
+      this.validateTacticalChange(match, input);
+      replacement = { ...replacement, ...attribution };
+    } else {
+      const target = await this.requireDeletableMatchEvent(
+        match,
+        dto.canonicalEventId,
+      );
+      if (target.eventType === 'injury')
+        throw new BadRequestException(
+          'Injury records remain private to your team.',
+        );
+      if (dto.action === 'correct') {
+        const input = dto.replacement;
+        if (input.eventType === 'injury')
+          throw new BadRequestException(
+            'Shared events cannot become private injury records.',
+          );
+        if (
+          target.matchId !== matchId &&
+          (input.athleteId !== undefined ||
+            input.opponentPlayerId !== undefined ||
+            input.detail !== undefined)
+        ) {
+          throw new BadRequestException(
+            'The recording team must propose changes to private player references.',
+          );
+        }
+        if (input.athleteId)
+          await this.requireMatchAthlete(target.matchId, input.athleteId);
+        const type = input.eventType ?? target.eventType;
+        this.validateEventAttribution(
+          target.team,
+          type,
+          input.athleteId === undefined ? target.athleteId : input.athleteId,
+          input.opponentPlayerId === undefined
+            ? target.opponentPlayerId
+            : input.opponentPlayerId,
+          input.opponentLabel === undefined
+            ? target.opponentLabel
+            : input.opponentLabel,
+        );
+        await this.validateSubstitution(
+          target.matchId,
+          target.team,
+          type,
+          input.detail === undefined ? target.detail : input.detail,
+        );
+        replacement = { ...input };
+        if (target.matchId === matchId)
+          replacement = {
+            ...replacement,
+            ...(await this.resolveOpponentAttribution(match, {
+              team: target.team,
+              ...input,
+            })),
+          };
+      }
+    }
+    await this
+      .sharedCommand(sql`select propose_match_amendment(${dto.id}::uuid, ${matchId}::uuid, ${userId}::text,
+      ${dto.action}::text, ${dto.action === 'add' ? null : dto.canonicalEventId}::uuid, NULL::uuid,
+      ${JSON.stringify(replacement)}::jsonb, ${dto.reason}::text, ${dto.expectedSessionRevision}::integer, true)`);
+    return { id: dto.id, status: 'pending' };
+  }
+
+  async listAmendments(userId: string, matchId: string) {
+    const team = await this.requireTeam(userId);
+    const { match } = await this.requireMatch(team.id, matchId);
+    if (!match.sharedMatchId || !twoSidedLiveLoggingEnabled()) return [];
+    const report = await this.getSessionReport(userId, match.sharedMatchId);
+    const rows = await this.databaseService.database
+      .select()
+      .from(matchAmendments)
+      .where(eq(matchAmendments.sessionId, match.sharedMatchId))
+      .orderBy(desc(matchAmendments.createdAt));
+    return Promise.all(
+      rows.map(async (row) => {
+        const target = report.timeline.find(
+          (event) => event.id === row.canonicalEventId,
+        );
+        const [source] = await this.databaseService.database
+          .select({ isHome: matches.isHome })
+          .from(matches)
+          .where(eq(matches.id, row.matchId))
+          .limit(1);
+        const side =
+          target?.side ??
+          (source.isHome === (row.replacement.team === 'own')
+            ? 'home'
+            : 'away');
+        return {
+          id: row.id,
+          proposedByTeamId: row.proposedByTeamId,
+          baseRevision: row.baseRevision,
+          action: row.action,
+          canonicalEventId: row.canonicalEventId,
+          reason: row.reason,
+          status: row.status,
+          approvals: {
+            home: Boolean(row.approvals.home),
+            away: Boolean(row.approvals.away),
+          },
+          responseReason: row.responseReason,
+          createdAt: row.createdAt,
+          side,
+          before: row.beforeEvent,
+          after: row.afterEvent,
+          proposedScore: row.proposedScore,
+        };
+      }),
+    );
+  }
+
+  async respondAmendment(
+    userId: string,
+    matchId: string,
+    amendmentId: string,
+    response: 'approve' | 'reject' | 'request_changes' | 'withdraw',
+    reason?: string,
+  ) {
+    const team = await this.teamsService.requireCoachTeam(userId);
+    const { match } = await this.requireMatch(team.id, matchId);
+    const [amendment] = await this.databaseService.database
+      .select()
+      .from(matchAmendments)
+      .where(
+        and(
+          eq(matchAmendments.id, amendmentId),
+          eq(matchAmendments.sessionId, match.sharedMatchId ?? randomUUID()),
+        ),
+      )
+      .limit(1);
+    if (!amendment || !twoSidedLiveLoggingEnabled())
+      throw new NotFoundException('Amendment not found.');
+    const result = await this.sharedCommand<{
+      status: string;
+    }>(sql`select respond_match_amendment(
+      ${amendmentId}::uuid, ${userId}::text, ${response}::text, ${reason ?? null}::text) as status`);
+    return { id: amendmentId, status: result.rows[0]?.status };
   }
 
   private async requireMatch(teamId: string, matchId: string) {

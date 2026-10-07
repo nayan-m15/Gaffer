@@ -131,6 +131,7 @@ export const matchSessionConfirmationState = pgEnum(
 // Canonical shared timeline identity. Team-specific match sheets remain in
 // `matches`; this row only represents the fixture/session they may share.
 export const matchSessions = pgTable('match_sessions', {
+  reportRevision: integer('report_revision').default(1).notNull(),
   id: uuid('id').defaultRandom().primaryKey(),
   homeConfirmedAt: timestamp('home_confirmed_at', { withTimezone: true }),
   homeConfirmedByUserId: text('home_confirmed_by_user_id').references(
@@ -1519,6 +1520,14 @@ export const matchClockOperations = pgTable(
 export const matchEventReviews = pgTable(
   'match_event_reviews',
   {
+    teamDecisionNotes: jsonb('team_decision_notes')
+      .$type<Record<string, string | null>>()
+      .default({})
+      .notNull(),
+    teamDecisions: jsonb('team_decisions')
+      .$type<Record<string, string>>()
+      .default({})
+      .notNull(),
     id: uuid('id').defaultRandom().primaryKey(),
     matchId: uuid('match_id')
       .notNull()
@@ -1877,3 +1886,52 @@ export const syncClientTelemetry = pgTable(
     index('sync_client_telemetry_team_index').on(table.teamId, table.updatedAt),
   ],
 );
+
+/** Proposed public changes; the official timeline changes only after both teams approve. */
+export const matchAmendments = pgTable('match_amendments', {
+  id: uuid('id').primaryKey(),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => matchSessions.id, { onDelete: 'cascade' }),
+  matchId: uuid('match_id')
+    .notNull()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  proposedByUserId: text('proposed_by_user_id')
+    .notNull()
+    .references(() => user.id),
+  proposedByTeamId: uuid('proposed_by_team_id')
+    .notNull()
+    .references(() => teams.id),
+  baseRevision: integer('base_revision').notNull(),
+  action: text('action').notNull(),
+  canonicalEventId: uuid('canonical_event_id').references(() => matchEvents.id),
+  observationId: uuid('observation_id').references(
+    () => matchEventObservations.id,
+  ),
+  replacement: jsonb('replacement')
+    .$type<Record<string, unknown>>()
+    .default({})
+    .notNull(),
+  beforeEvent: jsonb('before_event').$type<{
+    eventType: string;
+    minute: number;
+    playerLabel: string | null;
+  }>(),
+  afterEvent: jsonb('after_event').$type<{
+    eventType: string;
+    minute: number;
+    playerLabel: string | null;
+  }>(),
+  proposedScore: jsonb('proposed_score')
+    .$type<{ home: number; away: number }>()
+    .notNull(),
+  reason: text('reason').notNull(),
+  approvals: jsonb('approvals')
+    .$type<Record<string, string>>()
+    .default({})
+    .notNull(),
+  status: text('status').default('pending').notNull(),
+  responseReason: text('response_reason'),
+  respondedByUserId: text('responded_by_user_id').references(() => user.id),
+  ...timestamps,
+});

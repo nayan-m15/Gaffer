@@ -12,17 +12,18 @@ export function SessionReportStatus({
     finalised: "Final result",
     amendment_required: "Amendment review required",
   }[report.finalStatus];
+  const teamName = (side: "home" | "away") => report.participants.find(participant => participant.side === side)?.teamName ?? side;
   return (
     <section
       className="rounded-xl border border-white/10 p-3 text-sm"
       aria-label="Shared session result"
     >
       <p>
-        {status} · Home {report.score.home} – {report.score.away} Away
+        {status} · {teamName("home")} {report.score.home} – {report.score.away} {teamName("away")}
       </p>
       <p className="text-xs opacity-70">
-        Home {report.confirmations.home ? "confirmed" : "unconfirmed"} · Away{" "}
-        {report.confirmations.away ? "confirmed" : "unconfirmed"}
+        {teamName("home")} {report.confirmations.home ? "confirmed" : "awaiting confirmation"} · {teamName("away")}{" "}
+        {report.confirmations.away ? "confirmed" : "awaiting confirmation"}
       </p>
       {report.reviews.map((review) => (
         <p key={review.id} className="text-xs opacity-70">
