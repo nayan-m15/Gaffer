@@ -16,6 +16,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { stableStringify } from '@gaffer/match-domain';
 import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { getFormationPlayerCount } from '../common/formations';
 import { DatabaseService } from '../database/database.service';
 import { InsightsService } from '../insights/insights.service';
@@ -115,6 +116,11 @@ export class MatchesService {
       .limit(1);
     if (!authorized) throw new NotFoundException('Match session not found.');
     const session = authorized.session;
+    const incomingAthlete = alias(athletes, 'session_incoming_athlete');
+    const incomingOpponent = alias(
+      opponentMatchPlayers,
+      'session_incoming_opponent',
+    );
 
     const [
       participants,
@@ -153,9 +159,18 @@ export class MatchesService {
           incomingPlayerLabel: sql<
             string | null
           >`CASE WHEN ${matchEvents.eventType} = 'substitution'
-          AND ${matchEvents.team} = 'opponent'
-          AND ${matchEvents.detail} !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN left(${matchEvents.detail}, 50) ELSE NULL END`,
+          THEN CASE
+            WHEN ${incomingAthlete.id} IS NOT NULL THEN concat_ws(' ',
+              CASE WHEN ${incomingAthlete.squadNumber} IS NOT NULL THEN '#' || ${incomingAthlete.squadNumber}::text END,
+              trim(${incomingAthlete.firstName} || ' ' || ${incomingAthlete.lastName}))
+            WHEN ${incomingOpponent.id} IS NOT NULL THEN concat_ws(' ',
+              CASE WHEN ${incomingOpponent.shirtNumber} IS NOT NULL THEN '#' || ${incomingOpponent.shirtNumber}::text END,
+              nullif(trim(${incomingOpponent.name}), ''))
+            WHEN ${matchEvents.team} = 'opponent'
+              AND ${matchEvents.detail} !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN left(${matchEvents.detail}, 50)
+            ELSE NULL END
+          ELSE NULL END`,
           opponentLabel: matchEvents.opponentLabel,
           opponentName: opponentMatchPlayers.name,
           opponentNumber: opponentMatchPlayers.shirtNumber,
@@ -166,6 +181,26 @@ export class MatchesService {
         .leftJoin(
           opponentMatchPlayers,
           eq(matchEvents.opponentPlayerId, opponentMatchPlayers.id),
+        )
+        .leftJoin(
+          incomingAthlete,
+          and(
+            eq(matchEvents.eventType, 'substitution'),
+            eq(matchEvents.team, 'own'),
+            eq(matchEvents.detail, sql`${incomingAthlete.id}::text`),
+            sql`exists (select 1 from ${athleteMatchStats}
+            where ${athleteMatchStats.matchId} = ${matchEvents.matchId}
+            and ${athleteMatchStats.athleteId} = ${incomingAthlete.id})`,
+          ),
+        )
+        .leftJoin(
+          incomingOpponent,
+          and(
+            eq(matchEvents.eventType, 'substitution'),
+            eq(matchEvents.team, 'opponent'),
+            eq(matchEvents.detail, sql`${incomingOpponent.id}::text`),
+            eq(incomingOpponent.matchId, matchEvents.matchId),
+          ),
         )
         .where(
           and(
