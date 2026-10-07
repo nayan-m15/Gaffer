@@ -96,8 +96,10 @@ describe('PublicDashboardService', () => {
             eventStatus: 'completed',
             minutesPlayed: 90,
             appeared: true,
+            started: true,
             goals: 1,
             assists: 2,
+            saves: 0,
             yellowCards: 0,
             redCards: 0,
           },
@@ -113,8 +115,10 @@ describe('PublicDashboardService', () => {
             eventStatus: 'scheduled',
             minutesPlayed: null,
             appeared: false,
+            started: false,
             goals: 0,
             assists: 0,
+            saves: 3,
             yellowCards: 0,
             redCards: 0,
           },
@@ -133,9 +137,11 @@ describe('PublicDashboardService', () => {
         team: { id: 'team-1', name: 'Gaffer FC' },
         statistics: {
           appearances: 1,
+          starts: 1,
           minutesPlayed: 90,
           goals: 1,
           assists: 2,
+          saves: 0,
           yellowCards: 0,
           redCards: 0,
         },
@@ -152,6 +158,96 @@ describe('PublicDashboardService', () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it('returns goalkeeper saves and zero-filled statistics from completed matches', async () => {
+    select
+      .mockReturnValueOnce(
+        queryResult([{ id: 'keeper-1' }, { id: 'keeper-2' }]),
+      )
+      .mockReturnValueOnce(
+        queryResult([
+          {
+            id: 'keeper-1',
+            firstName: 'Sam',
+            lastName: 'Dlamini',
+            position: 'GK',
+            squadNumber: 1,
+            teamId: 'team-1',
+            teamName: 'Gaffer FC',
+            matchId: 'match-1',
+            eventStatus: 'completed',
+            minutesPlayed: 90,
+            appeared: true,
+            started: true,
+            goals: 0,
+            assists: 0,
+            saves: 5,
+            yellowCards: 0,
+            redCards: 0,
+          },
+          {
+            id: 'keeper-1',
+            firstName: 'Sam',
+            lastName: 'Dlamini',
+            position: 'GK',
+            squadNumber: 1,
+            teamId: 'team-1',
+            teamName: 'Gaffer FC',
+            matchId: 'match-2',
+            eventStatus: 'scheduled',
+            minutesPlayed: null,
+            appeared: false,
+            started: false,
+            goals: 0,
+            assists: 0,
+            saves: 2,
+            yellowCards: 0,
+            redCards: 0,
+          },
+          {
+            id: 'keeper-2',
+            firstName: 'Lee',
+            lastName: 'Mokoena',
+            position: 'GK',
+            squadNumber: 12,
+            teamId: 'team-1',
+            teamName: 'Gaffer FC',
+            matchId: null,
+            eventStatus: null,
+            minutesPlayed: null,
+            appeared: false,
+            started: false,
+            goals: 0,
+            assists: 0,
+            saves: 0,
+            yellowCards: 0,
+            redCards: 0,
+          },
+        ]),
+      );
+
+    const result = await service.getPlayers({ limit: 200, offset: 0 });
+    expect(result[0].statistics).toEqual({
+      appearances: 1,
+      starts: 1,
+      minutesPlayed: 90,
+      goals: 0,
+      assists: 0,
+      saves: 5,
+      yellowCards: 0,
+      redCards: 0,
+    });
+    expect(result[1].statistics).toEqual({
+      appearances: 0,
+      starts: 0,
+      minutesPlayed: 0,
+      goals: 0,
+      assists: 0,
+      saves: 0,
+      yellowCards: 0,
+      redCards: 0,
+    });
   });
 
   it('derives goal difference for public standings', async () => {

@@ -57,9 +57,11 @@ export interface PublicPlayer {
   team: PublicTeam;
   statistics: {
     appearances: number;
+    starts: number;
     minutesPlayed: number;
     goals: number;
     assists: number;
+    saves: number;
     yellowCards: number;
     redCards: number;
   };

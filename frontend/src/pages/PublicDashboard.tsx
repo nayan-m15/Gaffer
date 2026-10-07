@@ -25,13 +25,12 @@ import {
 } from "lucide-react";
 import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
-import { DepthCarousel } from "@/components/ui/DepthCarousel";
+import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
 } from "@/components/standings/StandingsDisplay";
 import { brand } from "@/data/brand";
-import { PlayerCard } from "@/features/team-management/PlayerCard";
 import {
   getPublicDashboardFilters,
   getPublicMatches,
@@ -339,11 +338,11 @@ export default function PublicDashboard() {
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
         <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
           
-          {/* SECTION 1: Player Showcase Carousel */}
+          {/* SECTION 1: Player Showcase */}
           <DashboardSection
             id="players"
             title="Squad Showcase"
-            description="Active players across teams, featuring career telemetry and match statistics."
+            description="Player performance from completed matches across the selected teams and competitions."
             icon={<Users className="size-5" />}
           >
             <div className="mt-4 flex flex-col gap-4 border-b border-border/60 pb-4 lg:flex-row lg:items-end lg:justify-between">
@@ -388,18 +387,22 @@ export default function PublicDashboard() {
               </div>
             </div>
 
-            <SectionState
-              loading={playersQuery.isLoading}
-              error={playersQuery.isError}
-              empty={filteredPlayers.length === 0}
-              emptyMessage={
-                playerSearch.trim()
-                  ? `No players found matching “${playerSearch.trim()}”.`
-                  : "No players found matching the selected filters."
-              }
-            >
-              <PlayerCarousel players={filteredPlayers} />
-            </SectionState>
+            {playersQuery.isLoading ? (
+              <PlayerShowcaseSkeleton />
+            ) : (
+              <SectionState
+                loading={false}
+                error={playersQuery.isError}
+                empty={filteredPlayers.length === 0}
+                emptyMessage={
+                  playerSearch.trim()
+                    ? `No players found matching “${playerSearch.trim()}”.`
+                    : "No players found matching the selected filters."
+                }
+              >
+                <PlayerShowcase players={filteredPlayers} />
+              </SectionState>
+            )}
           </DashboardSection>
 
           {/* SECTION 2: Match Center (Split Status Grid) */}
@@ -553,41 +556,39 @@ export default function PublicDashboard() {
   );
 }
 
-{/* ─── Component: Interactive Player Carousel ───────────────────────────── */}
-function PlayerCarousel({ players }: { players: PublicPlayer[] }) {
+{/* ─── Component: Public player showcase ────────────────────────────────── */}
+function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   return (
-    <div className="mt-4">
-      <DepthCarousel
-        items={players.map((player) => ({
-          id: player.id,
-          label: `${player.firstName} ${player.lastName}`,
-          content: (
-            <PlayerCard
-              initials={`${player.firstName[0] ?? ""}${player.lastName[0] ?? ""}`}
-              name={`${player.firstName} ${player.lastName}`}
-              position={player.position ?? "UN"}
-              squadNumber={player.squadNumber}
-              appearances={player.statistics.appearances}
-              minutesPlayed={player.statistics.minutesPlayed}
-              goals={player.statistics.goals}
-              assists={player.statistics.assists}
-              yellowCards={player.statistics.yellowCards}
-              redCards={player.statistics.redCards}
-              variant="sub"
-              readOnly
-              publicView
-            />
-          ),
-        }))}
-        depth={110}
-        spread={115}
-        tilt={22}
-        perspective={1600}
-        visibleCards={5}
-        falloff={0.2}
-        blur={1}
-        autoplay
-      />
+    <div className="mt-4 grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {players.map((player) => (
+        <PublicDashboardPlayerCard key={player.id} player={player} />
+      ))}
+    </div>
+  );
+}
+
+function PlayerShowcaseSkeleton() {
+  return (
+    <div
+      className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      role="status"
+      aria-label="Loading players"
+    >
+      {Array.from({ length: 4 }, (_, index) => (
+        <div
+          key={index}
+          aria-hidden="true"
+          className="h-[470px] animate-pulse overflow-hidden rounded-3xl border border-border/80 bg-card"
+        >
+          <div className="h-44 bg-muted/70" />
+          <div className="space-y-4 p-5">
+            <div className="h-3 w-1/3 rounded bg-muted" />
+            <div className="h-6 w-2/3 rounded bg-muted" />
+            <div className="h-28 rounded bg-muted/70" />
+          </div>
+        </div>
+      ))}
+      <span className="sr-only">Loading squad showcase…</span>
     </div>
   );
 }

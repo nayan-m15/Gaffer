@@ -208,8 +208,10 @@ export class PublicDashboardService {
         eventStatus: events.status,
         minutesPlayed: athleteMatchStats.minutesPlayed,
         appeared: appearedInMatch(),
+        started: athleteMatchStats.started,
         goals: loggedEventCount('goal'),
         assists: loggedEventCount('assist'),
+        saves: loggedEventCount('goalkeeper_save'),
         yellowCards: loggedEventCount('yellow_card'),
         redCards: loggedEventCount('red_card'),
       })
@@ -239,9 +241,11 @@ export class PublicDashboardService {
         team: { id: string; name: string };
         statistics: {
           appearances: number;
+          starts: number;
           minutesPlayed: number;
           goals: number;
           assists: number;
+          saves: number;
           yellowCards: number;
           redCards: number;
         };
@@ -260,9 +264,11 @@ export class PublicDashboardService {
           team: { id: row.teamId, name: row.teamName },
           statistics: {
             appearances: 0,
+            starts: 0,
             minutesPlayed: 0,
             goals: 0,
             assists: 0,
+            saves: 0,
             yellowCards: 0,
             redCards: 0,
           },
@@ -272,9 +278,11 @@ export class PublicDashboardService {
 
       if (row.matchId && row.eventStatus === 'completed') {
         if (row.appeared) player.statistics.appearances += 1;
+        if (row.started) player.statistics.starts += 1;
         player.statistics.minutesPlayed += row.minutesPlayed ?? 0;
         player.statistics.goals += row.goals;
         player.statistics.assists += row.assists;
+        player.statistics.saves += row.saves;
         player.statistics.yellowCards += row.yellowCards;
         player.statistics.redCards += row.redCards;
       }
