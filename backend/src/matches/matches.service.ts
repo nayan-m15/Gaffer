@@ -1534,37 +1534,21 @@ export class MatchesService {
     );
     this.assertLive(event.status);
 
-    const [finishedMatch] = await this.databaseService.database
-      .update(matches)
-      .set({
-        clockPeriod: 'full_time',
-        clockStartedAt: null,
-        clockElapsedMs: sql<number>`case
-          when ${matches.clockStartedAt} is null then ${matches.clockElapsedMs}
-          else ${matches.clockElapsedMs} + floor(extract(epoch from (now() - ${matches.clockStartedAt})) * 1000)::int
-        end`,
-        updatedAt: new Date(),
-      })
-      .where(eq(matches.id, match.id))
-      .returning();
+    await this.sharedCommand(sql`select change_match_play_state(
+      ${match.id}::uuid, ${userId}::text, true, ${match.clockRevision}::integer
+    )`);
+    return this.findOne(userId, matchId);
+  }
 
-    const [updated] = await this.databaseService.database
-      .update(events)
-      .set({
-        status: 'completed',
-        updatedAt: new Date(),
-      })
-      .where(and(eq(events.id, event.id), eq(events.teamId, team.id)))
-      .returning();
-
-    if (!updated) {
-      throw new NotFoundException('Match not found.');
-    }
-
-    if (!finishedMatch) {
-      throw new NotFoundException('Match not found.');
-    }
-    await this.refreshProjection(matchId);
+  async resume(userId: string, matchId: string, expectedClockRevision: number) {
+    const team = await this.teamsService.requireCoachTeam(userId);
+    const { match, event } = await this.requireMatch(team.id, matchId);
+    assertMatchSessionIdentity(
+      await resolveMatchSessionIdentity(this.databaseService, event, match),
+    );
+    await this.sharedCommand(sql`select change_match_play_state(
+      ${match.id}::uuid, ${userId}::text, false, ${expectedClockRevision}::integer
+    )`);
     return this.findOne(userId, matchId);
   }
 
@@ -1608,6 +1592,13 @@ export class MatchesService {
       const databaseError: unknown =
         (error as { cause?: { code?: string; message?: string } }).cause ??
         error;
+      if (
+        (databaseError as { code?: string }).code === '22000' &&
+        (databaseError as Error).message ===
+          'The match clock changed. Refresh and confirm full time again.'
+      ) {
+        throw new ConflictException((databaseError as Error).message);
+      }
       if (
         (databaseError as { code?: string }).code === '22000' &&
         (databaseError as Error).message ===

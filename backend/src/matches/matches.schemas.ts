@@ -286,6 +286,9 @@ export const updateMatchClockSchema = z.object({
     .min(0)
     .max(3 * 60 * 60 * 1000),
 });
+export const resumeMatchSchema = z.object({
+  expectedClockRevision: z.number().int().min(0),
+});
 export type UpdateMatchClockDto = z.infer<typeof updateMatchClockSchema>;
 
 export const requestMatchAmendmentSchema = z.discriminatedUnion('action', [

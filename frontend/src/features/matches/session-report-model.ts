@@ -54,7 +54,9 @@ export function applySessionReport(
     clockStartedAt: clock.startedAt,
     clockRevision: clock.revision,
     eventStatus:
-      clock.period === "full_time" ? "completed" : sheet.eventStatus,
+      clock.period === "full_time" ? "completed"
+        : sheet.eventStatus === "completed" && clock.revision > sheet.clockRevision
+          ? "scheduled" : sheet.eventStatus,
     projection: {
       ...sheet.projection,
       revision: sheet.projection?.revision ?? 0,

@@ -29,6 +29,7 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
+import { ResumeMatchDialog } from "@/features/matches/ResumeMatchDialog";
 import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
 import {
   isClockAnchorPending,
@@ -451,6 +452,8 @@ export default function LiveMatchPage() {
   }, [composer]);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [endOpen, setEndOpen] = useState(false);
+  const finishingRef = useRef(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [offlineReadinessOpen, setOfflineReadinessOpen] = useState(false);
@@ -494,9 +497,12 @@ export default function LiveMatchPage() {
             ? Date.now() - new Date(match.clockStartedAt).getTime()
             : 0),
       );
+      const supersededFullTime = local?.period === "full_time" &&
+        match.clockPeriod !== "full_time" && match.clockRevision > Number(local.authorityRevision);
+      if (supersededFullTime && local && matchId) markClockAnchorSynced(matchId, local.updatedAt);
       const useLocal = Boolean(
         match.eventStatus !== "completed" && matchId && local &&
-        isClockAnchorPending(matchId),
+        !supersededFullTime && isClockAnchorPending(matchId),
       );
       const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
       const nextPeriod = match.eventStatus === "completed"
@@ -943,7 +949,7 @@ export default function LiveMatchPage() {
     return () => window.clearInterval(id);
   }, [checkIn]);
 
-  // No response in time: end the period exactly as the coach's own button would.
+  // No response in time: half time pauses; full time still needs confirmation.
   useEffect(() => {
     if (!checkIn || checkInLeftMs > 0) {
       return;
@@ -951,10 +957,10 @@ export default function LiveMatchPage() {
     if (checkIn.period === "first_half") {
       goHalfTime();
     } else {
-      goFullTime();
+      setCheckIn(null);
       setEndOpen(true);
     }
-  }, [checkIn, checkInLeftMs, goHalfTime, goFullTime]);
+  }, [checkIn, checkInLeftMs, goHalfTime]);
 
   const closeComposer = useCallback(() => {
     setComposer({ kind: "closed" });
@@ -1511,6 +1517,8 @@ export default function LiveMatchPage() {
   };
 
   const handleFinish = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     setActionError(null);
     try {
       await finishMatch.mutateAsync();
@@ -1519,6 +1527,8 @@ export default function LiveMatchPage() {
       setActionError(
         err instanceof ApiError ? err.message : "Could not finish this match.",
       );
+    } finally {
+      finishingRef.current = false;
     }
   };
 
@@ -1904,18 +1914,27 @@ export default function LiveMatchPage() {
               <span className="live-match-control-short" aria-hidden="true">HT</span>
             </button>
           )}
+          {period === "full_time" && team?.role === "coach" && !sessionReport?.finalisedAt &&
+            (!projection || projection.finalisationState === "open") ? (
+            <button type="button" onClick={() => setResumeOpen(true)}
+              className="rounded-md bg-[#16d99a] px-3 py-1.5 text-xs font-semibold tracking-wide text-[#06120e] sm:px-4 sm:text-sm">
+              Resume match
+            </button>
+          ) : null}
           <button
             type="button"
-            aria-label="End Match"
+            aria-label={match.eventStatus === "completed" ? "View report" : "End Match"}
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
             onClick={() => {
-              if (period !== "full_time") {
-                goFullTime();
+              if (match.eventStatus === "completed") {
+                navigate(`/matches/${matchId}/report`);
+              } else {
+                setActionError(null);
+                setEndOpen(true);
               }
-              setEndOpen(true);
             }}
           >
-            <span className="live-match-control-label">End Match</span>
+            <span className="live-match-control-label">{match.eventStatus === "completed" ? "View report" : "End Match"}</span>
             <span className="live-match-control-short" aria-hidden="true">FT</span>
           </button>
         </div>
@@ -2589,12 +2608,17 @@ export default function LiveMatchPage() {
         </Overlay>
       )}
 
+      {resumeOpen ? <ResumeMatchDialog match={match} onClose={() => setResumeOpen(false)}
+        onResumed={() => { setEndOpen(false); setCheckIn(null); }} /> : null}
       {endOpen && (
-        <Overlay onClose={() => setEndOpen(false)}>
-          <p className="font-oswald text-2xl tracking-widest">SAVE REPORT</p>
+        <Overlay onClose={() => { if (!finishMatch.isPending) setEndOpen(false); }}>
+          <p className="font-oswald text-2xl tracking-widest">END MATCH?</p>
           <p className="mt-4 text-sm text-[#9ca39f]">
-            Reconcile the scoreboard with logged goals before saving.
+            {match.sharedSessionId
+              ? "This ends live play for both teams and saves the report. Check the score before confirming."
+              : "This ends live play and saves the report. Check the score before confirming."}
           </p>
+          {actionError ? <p role="alert" className="mt-3 text-sm text-[#e36a6d]">{actionError}</p> : null}
           <div className="mt-6 space-y-2 rounded-xl border border-[#2a2e31] bg-[#111315] p-4 font-oswald tracking-wide">
             <p>
               Scoreboard: {teamScore} – {oppScore}
@@ -2616,6 +2640,7 @@ export default function LiveMatchPage() {
               type="button"
               className="rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
               onClick={() => setEndOpen(false)}
+              disabled={finishMatch.isPending}
             >
               NO, GO BACK
             </button>

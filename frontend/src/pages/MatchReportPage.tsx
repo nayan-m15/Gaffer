@@ -81,6 +81,7 @@ import {
 import { matchFacts, matchStory } from "@/features/matches/match-report-model";
 import { exportLiveMatchReportPdf } from "@/features/matches/live-match-report-export";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
+import { ResumeMatchDialog } from "@/features/matches/ResumeMatchDialog";
 import {
   LiveBenchRow,
   LivePitch,
@@ -367,7 +368,20 @@ export default function MatchReportPage() {
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [amendmentPanelOpen, setAmendmentPanelOpen] = useState(() => new URLSearchParams(window.location.search).has("amendments"));
+
+  const previousPlayState = useRef<{ matchId: string; finished: boolean } | null>(null);
+  useEffect(() => {
+    const current = matchQuery.data;
+    if (!current) return;
+    const finished = current.eventStatus === "completed" || current.clockPeriod === "full_time";
+    const previous = previousPlayState.current;
+    previousPlayState.current = { matchId: current.id, finished };
+    if (previous?.matchId === current.id && previous.finished && !finished) {
+      navigate(`/matches/${current.id}/live`, { replace: true });
+    }
+  }, [matchQuery.data, navigate]);
 
   const previousReport = useRef({ revision: sessionReport?.reportRevision, confirmed: false });
   useEffect(() => {
@@ -816,6 +830,13 @@ export default function MatchReportPage() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {team?.role === "coach" && match.eventStatus === "completed" && !sharedLocked &&
+                (!projection || projection.finalisationState === "open") ? (
+                <button type="button" onClick={() => setResumeOpen(true)}
+                  className="rounded-lg bg-[#00d99a] px-3 py-2 text-xs font-semibold text-[#06120e]">
+                  Resume match
+                </button>
+              ) : null}
               {match.sharedSessionId ? (
                 <button
                   type="button"
@@ -1175,6 +1196,8 @@ export default function MatchReportPage() {
         />
       )}
       {amendmentPanelOpen && sessionReport ? <MatchAmendmentPanel match={match} report={sessionReport} events={timeline.filter(event => !event.pending)} squad={squad} onClose={() => setAmendmentPanelOpen(false)} /> : null}
+      {resumeOpen ? <ResumeMatchDialog match={match} onClose={() => setResumeOpen(false)}
+        onResumed={() => navigate(`/matches/${match.id}/live`, { replace: true })} /> : null}
       {reviewPanelOpen && match.sharedSessionId ? (
         <EventReviewPanel
           matchId={match.id}

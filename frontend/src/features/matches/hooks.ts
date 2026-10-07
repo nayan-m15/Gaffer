@@ -31,6 +31,7 @@ import {
   fetchMatchOpponentSquad,
   fetchMatchSquad,
   finishMatch,
+  resumeMatch,
   finaliseMatchProjection,
   reopenMatchProjection,
   updateMatchLogEvent,
@@ -599,6 +600,23 @@ export function useFinishMatch(matchId: string) {
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       void queryClient.invalidateQueries({ queryKey: ["statistics"] });
       void queryClient.invalidateQueries({ queryKey: ["shared-competitions"] });
+    },
+  });
+}
+
+export function useResumeMatch(matchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (expectedClockRevision: number) => resumeMatch(matchId, expectedClockRevision),
+    onSuccess: async (match) => {
+      await queryClient.cancelQueries({ queryKey: matchQueryKey(matchId), exact: true });
+      queryClient.setQueryData(matchQueryKey(matchId), match);
+      invalidateSheetSession(queryClient, matchId);
+      void queryClient.invalidateQueries({ queryKey: ["matches"] });
+      void queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: matchQueryKey(matchId) });
     },
   });
 }

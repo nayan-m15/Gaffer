@@ -557,6 +557,12 @@ export function finishMatch(matchId: string) {
   });
 }
 
+export function resumeMatch(matchId: string, expectedClockRevision: number) {
+  return apiFetch<MatchRecord>(`/matches/${matchId}/resume`, {
+    method: "POST",
+    body: JSON.stringify({ expectedClockRevision }),
+  });
+
 export function updateMatchClock(
   matchId: string,
   input: UpdateMatchClockInput,

@@ -16,6 +16,7 @@ import {
   createMatchLogEventSchema,
   updateMatchLogEventSchema,
   updateMatchClockSchema,
+  resumeMatchSchema,
   resolveMatchEventReviewRequestSchema,
   finaliseMatchProjectionSchema,
   reopenMatchProjectionSchema,
@@ -159,6 +160,16 @@ export class MatchesController {
     @Param('matchId', ParseUUIDPipe) matchId: string,
   ) {
     return this.matchesService.finish(user.id, matchId);
+  }
+
+  @Post(':matchId/resume')
+  async resume(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = zodValidate(resumeMatchSchema, body);
+    return this.matchesService.resume(user.id, matchId, dto.expectedClockRevision);
   }
 
   @Post(':matchId/finalise')
