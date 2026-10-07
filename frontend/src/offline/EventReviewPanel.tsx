@@ -354,10 +354,10 @@ export function EventReviewPanel({
                     {review.reason.replaceAll("_", " ")} ·{" "}
                     {review.resolution === "event_removed" ? "Closed because an event was removed" : review.resolution === "events_changed" ? "Closed because the events changed" : review.resolution?.replaceAll("_", " ") ?? "resolved"}
                     {review.resolvedByUserId
-                      ? ` · resolved by coach ${review.resolvedByUserId.slice(0, 8)}`
+                      ? ` · resolved by ${review.resolvedByName?.trim() || "coach"}`
                       : ""}
                     {review.disputedByUserId
-                      ? ` · disputed by coach ${review.disputedByUserId.slice(0, 8)}`
+                      ? ` · disputed by ${review.disputedByName?.trim() || "coach"}`
                       : ""}
                   </span>
                   {team?.role === "coach" && !review.disputedAt && !review.locked && !review.crossTeam && ["same_event", "separate_events"].includes(review.resolution ?? "") ? (

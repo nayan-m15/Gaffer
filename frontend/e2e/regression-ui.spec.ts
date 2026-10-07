@@ -773,7 +773,9 @@ test("removed duplicate reviews stay in history and no longer block the report",
   await mockAuthenticatedMatch(page, true, { sharedSessionId: sessionId });
   await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
   const review = { id: LOG_ID, reviewVersion: 2, reason: "possible_duplicate", status: "resolved",
-    resolution: "event_removed", locked: false, observations: [] };
+    resolution: "event_removed", locked: false, observations: [],
+    resolvedByUserId: "resolver-private-id", resolvedByName: "Alex Coach",
+    disputedByUserId: "disputer-private-id", disputedByName: "Sam Coach" };
   await page.route(`**/api/matches/${MATCH_ID}/event-reviews`, route => json(route, [review]));
   await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, {
     sessionId, reportRevision: 2, participants: [], score: { home: 1, away: 0 },
@@ -787,6 +789,10 @@ test("removed duplicate reviews stay in history and no longer block the report",
   await page.getByRole("button", { name: "Review queue" }).click();
   const dialog = page.getByRole("dialog", { name: "Event review" });
   await expect(dialog.getByText(/Closed because an event was removed/)).toBeVisible();
+  await expect(dialog.getByText(/resolved by Alex Coach/)).toBeVisible();
+  await expect(dialog.getByText(/disputed by Sam Coach/)).toBeVisible();
+  await expect(dialog).not.toContainText("resolver-");
+  await expect(dialog).not.toContainText("disputer-");
   await expect(dialog.getByRole("button", { name: "Reconsider" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Flag dispute" })).toHaveCount(0);
 });

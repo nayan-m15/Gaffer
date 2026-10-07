@@ -48,3 +48,16 @@ test("access denial never falls back to a cached private review", async () => {
       synced: async () => [review], cached: async () => [review], cache: broken }), /Access denied/);
   }
 });
+
+test("offline history retains cached coach names only while the actor identity matches", async () => {
+  const cached = { ...review, resolvedByUserId: "alex", resolvedByName: "Alex Coach",
+    disputedByUserId: "sam", disputedByName: "Sam Coach" };
+  for (const changed of [false, true]) {
+    const result = await loadEventReviews({ online: false, fetch: broken, cache: broken,
+      cached: async () => [cached], synced: async () => [{ ...review,
+        resolvedByUserId: changed ? "new-resolver" : "alex",
+        disputedByUserId: changed ? "new-disputer" : "sam" }] });
+    assert.equal(result.reviews[0].resolvedByName, changed ? null : "Alex Coach");
+    assert.equal(result.reviews[0].disputedByName, changed ? null : "Sam Coach");
+  }
+});

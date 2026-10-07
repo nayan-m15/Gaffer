@@ -29,6 +29,8 @@ export async function loadEventReviews(sources: ReviewSources) {
     const reviews = synced.value.map(row => {
       const old = previous?.find(item => item.id === row.id);
       return { ...old, ...row, locked: row.locked ?? old?.locked,
+        resolvedByName: row.resolvedByName ?? (row.resolvedByUserId === old?.resolvedByUserId ? old?.resolvedByName : null),
+        disputedByName: row.disputedByName ?? (row.disputedByUserId === old?.disputedByUserId ? old?.disputedByName : null),
         observations: row.observations.map(observation => ({
           ...old?.observations.find(item => item.id === observation.id), ...observation,
         })),

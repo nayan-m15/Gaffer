@@ -868,6 +868,12 @@ export class MatchesService {
       });
       return {
         ...review,
+        resolvedByName:
+          observers.find((observer) => observer.id === review.resolvedByUserId)
+            ?.name ?? null,
+        disputedByName:
+          observers.find((observer) => observer.id === review.disputedByUserId)
+            ?.name ?? null,
         crossTeam: sourceTeams.size > 1,
         currentSide,
         locked: Boolean(report?.finalisedAt),

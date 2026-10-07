@@ -940,8 +940,10 @@ export interface SyncedMatchReview {
   status: string;
   resolution: string | null;
   resolvedByUserId: string | null;
+  resolvedByName?: string | null;
   resolvedAt?: string | null;
   disputedByUserId?: string | null;
+  disputedByName?: string | null;
   disputedAt?: string | null;
   observations: Array<{
     id: string;

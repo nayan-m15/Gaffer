@@ -1740,6 +1740,10 @@ describe('Phase 1 shared-session integrity', () => {
 
   it('online review decisions record both coach votes even when offline observation uploads are disabled', async () => {
     const f = await fixture();
+    await db
+      .update(schema.user)
+      .set({ name: 'Alex Coach' })
+      .where(eq(schema.user.id, f.away.id));
     const a = await f.start(f.home, f.homeEvent);
     const b = await f.start(f.away, f.awayEvent);
     await matches.finish(f.home.id, a.id);
@@ -1773,6 +1777,9 @@ describe('Phase 1 shared-session integrity', () => {
     const report = await matches.getSessionReport(f.home.id, a.sharedMatchId!);
     expect(report.reviews[0].status).toBe('resolved');
     expect(report.score.home).toBe(1);
+    const [history] = await matches.listEventReviews(f.home.id, a.id);
+    expect(history.resolvedByUserId).toBe(f.away.id);
+    expect(history.resolvedByName).toBe('Alex Coach');
   });
 
   it('an offline goal uploaded after the peer goal creates a duplicate review', async () => {
