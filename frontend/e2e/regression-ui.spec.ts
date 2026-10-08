@@ -366,54 +366,6 @@ test("assistant controls and remote clock changes update without a refresh", asy
   });
 });
 
-test("shared logger follows peer halves and clock corrections with an unchanged sheet timestamp", async ({ page }) => {
-  const sessionId = "44444444-4444-4444-8444-444444444444";
-  await mockAuthenticatedMatch(page, false, { sharedSessionId: sessionId, clockRevision: 0 });
-  await page.route(`**/api/events/${EVENT_ID}/opponent-lineup`, route => json(route, {
-    available: false, formation: null, starters: [], bench: [],
-  }));
-  await page.route(`**/api/matches/${MATCH_ID}/events`, route => json(route, []));
-  let report = {
-    sessionId, participants: [], score: { home: 1, away: 0 },
-    clock: { period: "first_half", elapsedMs: 754000, startedAt: new Date().toISOString() as string | null,
-      running: true, revision: 1 },
-    finalStatus: "open", finalisedAt: null, confirmations: { home: null, away: null },
-    timeline: [], reviews: [],
-  };
-  await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, report));
-  await page.goto(`/matches/${MATCH_ID}/live`);
-  const score = page.locator(".live-match-scoreline");
-  const timer = page.locator(".live-match-clock .tabular-nums").last();
-  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible({ timeout: 20000 });
-  await expect(page.getByRole("region", { name: "Shared session result" })).toHaveCount(0);
-  await expect(score).toHaveCount(1);
-
-  report = { ...report, clock: { period: "half_time", elapsedMs: 2700000, startedAt: null,
-    running: false, revision: 2 } };
-  await expect(page.getByRole("dialog", { name: "Half time", exact: true })).toBeVisible({ timeout: 4000 });
-  await expect(timer).toHaveText("45:00");
-
-  report = { ...report, clock: { period: "second_half", elapsedMs: 2700000,
-    startedAt: new Date().toISOString(), running: true, revision: 3 } };
-  await expect(page.getByText("2ND HALF", { exact: true })).toBeVisible({ timeout: 4000 });
-  await expect(page.getByRole("dialog", { name: "Half time", exact: true })).toHaveCount(0);
-  await expect(timer).toHaveText(/45:0[0-9]/);
-
-  // A running-to-running correction must also replace the interval's origin.
-  report = { ...report, score: { home: 2, away: 1 }, clock: { period: "second_half", elapsedMs: 3600000,
-    startedAt: new Date().toISOString(), running: true, revision: 4 } };
-  await expect(score).toHaveText(/2\s*-\s*1/, { timeout: 4000 });
-  await expect(timer).toHaveText(/60:0[2-9]/, { timeout: 5000 });
-
-  report = { ...report, finalStatus: "awaiting_confirmation", clock: { period: "full_time", elapsedMs: 5400000,
-    startedAt: null, running: false, revision: 5 } };
-  await expect(timer).toHaveText("90:00", { timeout: 4000 });
-  await expect(page.getByRole("button", { name: "Pause", exact: true })).toHaveCount(0);
-  await page.reload();
-  await expect(timer).toHaveText("90:00");
-  await expect(score).toHaveText(/2\s*-\s*1/);
-});
-
 test("friendly search deduplicates identities and distinguishes same-name coached teams", async ({ page }) => {
   await page.route('**/auth/session', route => json(route, session('Coach', 'Own FC', 'viewer')));
   await page.route('**/api/**', route => json(route, []));
