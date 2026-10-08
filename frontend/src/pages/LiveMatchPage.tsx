@@ -1,3 +1,4 @@
+import { sessionPlayerLabel } from "@/features/matches/session-report-model";
 import {
   Fragment,
   useCallback,
@@ -28,6 +29,7 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
+import { ResumeMatchDialog } from "@/features/matches/ResumeMatchDialog";
 import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
 import {
   isClockAnchorPending,
@@ -43,8 +45,7 @@ import {
   useFinishMatch,
   useFinaliseMatchProjection,
   useLogMatchEvent,
-  useMatch,
-  useMatchEvents,
+  useMatchView,
   useMatchSquad,
   useUpdateMatchEvent,
   useUpdateMatchClock,
@@ -52,6 +53,7 @@ import {
 } from "@/features/matches/hooks";
 import type {
   MatchEventTeam,
+  MatchTacticalChange,
   MatchEventType,
   MatchLogEvent,
   MatchSquadAthlete,
@@ -79,11 +81,15 @@ import {
   isSubOutCallout,
 } from "@/features/matches/live-callouts";
 import {
+  publicOpponentTimeline,
+  opponentEventAttribution,
+  opponentSubstitutionDetail,
   friendlyLineupPlayers,
   friendlyLineupStarterIds,
   opponentPitchState,
   ownPitchState,
   placeOppPlayers,
+  effectiveGamePlan,
   placeOwnPlayers,
   resolveOppColor,
   resolveOwnColor,
@@ -95,6 +101,7 @@ import {
   LiveInjurySheet,
   type LiveInjurySpec,
 } from "@/features/matches/LiveInjurySheet";
+import { LiveTacticsSheet } from "@/features/matches/LiveTacticsSheet";
 import { injuryTitle } from "@/features/injuries/body-regions";
 import { useCreateInjury } from "@/features/injuries/hooks";
 import {
@@ -331,9 +338,9 @@ function opponentShirtLabel(
   visibility: "none" | "numbers" | "full",
 ) {
   if (visibility === "full" && player.name) {
-    return `#${player.shirtNumber} ${player.name}`;
+    return [player.shirtNumber == null ? "" : `#${player.shirtNumber}`, player.name].filter(Boolean).join(" ");
   }
-  return `#${player.shirtNumber}`;
+  return player.shirtNumber == null ? "Unassigned" : `#${player.shirtNumber}`;
 }
 
 function substitutionIncoming(
@@ -398,17 +405,16 @@ export default function LiveMatchPage() {
   const navigate = useNavigate();
   const { team } = useAuth();
 
-  const matchQuery = useMatch(matchId);
+  const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
   const clockAuthorityRevision = matchQuery.data?.clockRevision ?? 0;
   const refetchMatch = matchQuery.refetch;
   const squadQuery = useMatchSquad(matchId);
-  const eventsQuery = useMatchEvents(matchId);
   const gamePlanSnapshot = matchQuery.data?.gamePlanSnapshot ?? undefined;
   const gamePlanQuery = useGamePlan(
     gamePlanSnapshot ? undefined : (matchQuery.data?.gamePlanId ?? undefined),
   );
   const gamePlan = gamePlanSnapshot ?? gamePlanQuery.data;
-  const logEvent = useLogMatchEvent(matchId ?? "");
+  const logEvent = useLogMatchEvent(matchId ?? "", { backgroundUpload: true });
   const updateEvent = useUpdateMatchEvent(matchId ?? "");
   const deleteEvent = useDeleteMatchEvent(matchId ?? "");
   const finishMatch = useFinishMatch(matchId ?? "");
@@ -428,7 +434,9 @@ export default function LiveMatchPage() {
   /** Periods whose end-of-regulation check-in has already been shown. */
   const checkedMarksRef = useRef(new Set<Period>());
   const baseRef = useRef(0);
+  const clockOriginRef = useRef(0);
 
+  const [tacticsOpen, setTacticsOpen] = useState(false);
   const [target, setTarget] = useState<LogTarget | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
   const [composer, setComposer] = useState<Composer>({ kind: "closed" });
@@ -444,6 +452,8 @@ export default function LiveMatchPage() {
   }, [composer]);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [endOpen, setEndOpen] = useState(false);
+  const finishingRef = useRef(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [offlineReadinessOpen, setOfflineReadinessOpen] = useState(false);
@@ -465,18 +475,21 @@ export default function LiveMatchPage() {
 
   useEffect(() => {
     const match = matchQuery.data;
-    if (!match || lastAppliedClockRevisionRef.current === match.updatedAt)
-      return;
+    if (!match) return;
+    // The peer can change the session clock without changing this sheet's timestamp.
+    const clockKey = JSON.stringify([
+      match.id,
+      match.clockRevision,
+      match.clockPeriod,
+      match.clockElapsedMs,
+      match.clockStartedAt,
+      match.eventStatus,
+    ]);
+    if (lastAppliedClockRevisionRef.current === clockKey) return;
     let cancelled = false;
     void (async () => {
       const local = matchId ? await readClockAnchor(matchId) : null;
       if (cancelled) return;
-      if (match.eventStatus === "completed") {
-        setPeriod("full_time");
-        setRunning(false);
-        lastAppliedClockRevisionRef.current = match.updatedAt;
-        return;
-      }
       const serverElapsed = Math.max(
         0,
         match.clockElapsedMs +
@@ -484,22 +497,31 @@ export default function LiveMatchPage() {
             ? Date.now() - new Date(match.clockStartedAt).getTime()
             : 0),
       );
+      const supersededFullTime = local?.period === "full_time" &&
+        match.clockPeriod !== "full_time" && match.clockRevision > Number(local.authorityRevision);
+      if (supersededFullTime && local && matchId) markClockAnchorSynced(matchId, local.updatedAt);
       const useLocal = Boolean(
-        matchId && local && isClockAnchorPending(matchId),
+        match.eventStatus !== "completed" && matchId && local &&
+        !supersededFullTime && isClockAnchorPending(matchId),
       );
       const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
-      const nextPeriod = useLocal && local ? local.period : match.clockPeriod;
+      const nextPeriod = match.eventStatus === "completed"
+        ? "full_time"
+        : useLocal && local ? local.period : match.clockPeriod;
       const nextRunning =
-        useLocal && local ? local.running : Boolean(match.clockStartedAt);
+        match.eventStatus !== "completed" &&
+        (useLocal && local ? local.running : Boolean(match.clockStartedAt));
       if (local?.uncertain) {
         setActionError(
           "The offline match clock changed unexpectedly and was paused. Confirm the time before continuing.",
         );
       }
       baseRef.current = elapsed;
+      clockOriginRef.current = Date.now() - elapsed;
       elapsedRef.current = elapsed;
       setElapsedMs(elapsed);
       setPeriod(nextPeriod);
+      setCheckIn(null);
       const livePeriod =
         nextPeriod === "first_half" || nextPeriod === "second_half";
       const regulation =
@@ -508,7 +530,7 @@ export default function LiveMatchPage() {
         checkedMarksRef.current.add(nextPeriod);
       }
       setRunning(nextRunning);
-      lastAppliedClockRevisionRef.current = match.updatedAt;
+      lastAppliedClockRevisionRef.current = clockKey;
     })();
     return () => {
       cancelled = true;
@@ -519,9 +541,9 @@ export default function LiveMatchPage() {
     if (!running) {
       return;
     }
-    const origin = Date.now() - baseRef.current;
+    clockOriginRef.current = Date.now() - baseRef.current;
     const id = window.setInterval(() => {
-      const next = Date.now() - origin;
+      const next = Date.now() - clockOriginRef.current;
       const minuteChanged =
         Math.floor(elapsedRef.current / 60_000) !== Math.floor(next / 60_000);
       elapsedRef.current = next;
@@ -539,7 +561,27 @@ export default function LiveMatchPage() {
   }, [running]);
 
   const squad = useMemo(() => squadQuery.data ?? [], [squadQuery.data]);
-  const timeline = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
+  const manualOpponentSquad = matchQuery.data?.opponentSquad;
+  const opponentSquad = useMemo(
+    () => manualOpponentSquad?.length
+      ? manualOpponentSquad
+      : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
+    [manualOpponentSquad, matchQuery.data?.friendlyOpponentLineup],
+  );
+  const visibility = opponentSquad.some((player) => player.publicLineup)
+    ? "full" : matchQuery.data?.opponentSquadVisibility ?? "none";
+  const opponentDisplaySquad = opponentSquad;
+  const timeline = useMemo(() => publicOpponentTimeline(eventsQuery.data ?? [], opponentSquad), [eventsQuery.data, opponentSquad]);
+
+  /**
+   * The plan in force right now: the one the match kicked off with, plus every
+   * tactical change the coach has logged. `gamePlan` stays the starting plan,
+   * so the squad size it was locked at never moves.
+   */
+  const effectivePlan = useMemo(
+    () => effectiveGamePlan(gamePlan, timeline),
+    [gamePlan, timeline],
+  );
   const loggedGoalsOwn = timeline.filter(
     (event) => event.eventType === "goal" && event.team === "own",
   ).length;
@@ -575,21 +617,6 @@ export default function LiveMatchPage() {
     [timeline],
   );
   const assistsByGoal = useMemo(() => pairAssistsToGoals(timeline), [timeline]);
-  const opponentSquad = useMemo(
-    () => matchQuery.data?.opponentSquad ?? [],
-    [matchQuery.data?.opponentSquad],
-  );
-  const visibility = matchQuery.data?.opponentSquadVisibility ?? "none";
-  // Pitch and bench display only: manual entries win, otherwise show the
-  // shared lineup of an accepted Gaffer friendly. Event attribution keeps
-  // using the manual `opponentSquad` above, whose ids are real rows.
-  const opponentDisplaySquad = useMemo(
-    () =>
-      opponentSquad.length > 0
-        ? opponentSquad
-        : friendlyLineupPlayers(matchQuery.data?.friendlyOpponentLineup),
-    [matchQuery.data?.friendlyOpponentLineup, opponentSquad],
-  );
   const currentMinute = Math.floor(elapsedMs / 60_000);
 
   const rowKey = (event: MatchLogEvent) => event.optimisticKey ?? event.id;
@@ -608,8 +635,8 @@ export default function LiveMatchPage() {
   }
 
   const ownState = useMemo(
-    () => ownPitchState(squad, timeline),
-    [squad, timeline],
+    () => ownPitchState(squad, privateEventsQuery.data ?? timeline),
+    [squad, timeline, privateEventsQuery.data],
   );
   const matchPlayerCount: FormationPlayerCount = gamePlan
     ? getFormationPlayerCount(gamePlan.formationId)
@@ -622,7 +649,7 @@ export default function LiveMatchPage() {
         opponentDisplaySquad,
         timeline,
         matchPlayerCount,
-        opponentSquad.length > 0
+        manualOpponentSquad?.length
           ? undefined
           : friendlyLineupStarterIds(matchQuery.data?.friendlyOpponentLineup),
       ),
@@ -630,7 +657,7 @@ export default function LiveMatchPage() {
       matchPlayerCount,
       matchQuery.data?.friendlyOpponentLineup,
       opponentDisplaySquad,
-      opponentSquad,
+      manualOpponentSquad,
       timeline,
     ],
   );
@@ -649,7 +676,7 @@ export default function LiveMatchPage() {
   const oppHalf = isHome ? "right" : "left";
   // Once the timeline is loaded, its effective rows determine the displayed
   // score. A cached match total may be from a different projection revision.
-  const teamScore = eventsQuery.isSuccess
+  const teamScore = sessionReport ? (isHome ? sessionReport.score.home : sessionReport.score.away) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "own" &&
@@ -657,7 +684,7 @@ export default function LiveMatchPage() {
           event.lifecycleStatus !== "voided",
       ).length
     : (matchQuery.data?.teamScore ?? 0);
-  const oppScore = eventsQuery.isSuccess
+  const oppScore = sessionReport ? (isHome ? sessionReport.score.away : sessionReport.score.home) : eventsQuery.isSuccess
     ? timeline.filter(
         (event) =>
           event.team === "opponent" &&
@@ -693,12 +720,12 @@ export default function LiveMatchPage() {
     () =>
       placeOwnPlayers(
         ownState.onPitch,
-        gamePlan,
+        effectivePlan,
         ownHalf,
         timeline,
         visibility === "none" ? "own" : "full",
       ),
-    [ownState.onPitch, gamePlan, ownHalf, timeline, visibility],
+    [ownState.onPitch, effectivePlan, ownHalf, timeline, visibility],
   );
   const oppPlaced = useMemo(
     () => placeOppPlayers(
@@ -714,8 +741,8 @@ export default function LiveMatchPage() {
     [ownPlaced],
   );
   const oppPitchIds = useMemo(
-    () => new Set(oppPlaced.map((placed) => placed.player.id)),
-    [oppPlaced],
+    () => new Set(oppState.onPitch.map((player) => player.id)),
+    [oppState.onPitch],
   );
   const ownBench = useMemo(() => {
     const overflow = ownState.onPitch.filter(
@@ -728,13 +755,13 @@ export default function LiveMatchPage() {
   }, [ownState.bench, ownState.onPitch, ownPitchIds]);
   const oppBench = useMemo(() => {
     const overflow = oppState.onPitch.filter(
-      (player) => !oppPitchIds.has(player.id),
+      (player) => !oppPlaced.some((placed) => placed.player.id === player.id),
     );
     return [
       ...oppState.bench.filter((player) => !oppPitchIds.has(player.id)),
       ...overflow,
     ];
-  }, [oppState.bench, oppState.onPitch, oppPitchIds]);
+  }, [oppState.bench, oppState.onPitch, oppPitchIds, oppPlaced]);
 
   const runningScores = useMemo(
     () => runningScoreByEvent(timeline, isHome),
@@ -792,7 +819,7 @@ export default function LiveMatchPage() {
             clientCreatedAt: anchor.clientCreatedAt,
             period: anchor.period,
             running: anchor.running,
-            elapsedMs: anchor.elapsedMs,
+            elapsedMs: anchor.operationElapsedMs,
           });
           markClockAnchorSynced(matchId, anchor.updatedAt);
           lastAppliedClockRevisionRef.current = null;
@@ -922,7 +949,7 @@ export default function LiveMatchPage() {
     return () => window.clearInterval(id);
   }, [checkIn]);
 
-  // No response in time: end the period exactly as the coach's own button would.
+  // No response in time: half time pauses; full time still needs confirmation.
   useEffect(() => {
     if (!checkIn || checkInLeftMs > 0) {
       return;
@@ -930,10 +957,10 @@ export default function LiveMatchPage() {
     if (checkIn.period === "first_half") {
       goHalfTime();
     } else {
-      goFullTime();
+      setCheckIn(null);
       setEndOpen(true);
     }
-  }, [checkIn, checkInLeftMs, goHalfTime, goFullTime]);
+  }, [checkIn, checkInLeftMs, goHalfTime]);
 
   const closeComposer = useCallback(() => {
     setComposer({ kind: "closed" });
@@ -1032,6 +1059,13 @@ export default function LiveMatchPage() {
         closeComposer();
       }
 
+      const publicPlayer = opponentSquad.find((player) =>
+        player.publicLineup && player.id === input.opponentPlayerId);
+      const publicIncoming = eventType === "substitution"
+        ? opponentSquad.find((player) => player.publicLineup && player.id === detail)
+        : undefined;
+      const safeOpponentId = publicPlayer ? opponentEventAttribution(publicPlayer).opponentPlayerId : input.opponentPlayerId;
+      const safeDetail = publicIncoming ? opponentSubstitutionDetail(publicIncoming) : detail;
       try {
         if (input.reassignId) {
           await updateEvent.mutateAsync({
@@ -1039,7 +1073,7 @@ export default function LiveMatchPage() {
             input: {
               athleteId: input.athleteId ?? null,
               opponentLabel: input.opponentLabel ?? null,
-              opponentPlayerId: input.opponentPlayerId ?? null,
+              opponentPlayerId: safeOpponentId ?? null,
             },
           });
         } else {
@@ -1053,8 +1087,8 @@ export default function LiveMatchPage() {
             minute: input.minute ?? currentMinute,
             ...(input.athleteId ? { athleteId: input.athleteId } : {}),
             ...(input.opponentLabel ? { opponentLabel: input.opponentLabel } : {}),
-            ...(input.opponentPlayerId ? { opponentPlayerId: input.opponentPlayerId } : {}),
-            ...(detail ? { detail } : {}),
+            ...(safeOpponentId ? { opponentPlayerId: safeOpponentId } : {}),
+            ...(safeDetail ? { detail: safeDetail } : {}),
           });
           await handleLoggedEventFollowUp(input, created, eventType, detail, canSelectOpponentTeammate);
           return created.id;
@@ -1087,6 +1121,37 @@ export default function LiveMatchPage() {
       closeComposer,
       handleLoggedEventFollowUp,
     ],
+  );
+
+  /**
+   * Logs one tactical change. Deliberately not routed through `persistEvent`:
+   * this is a coach instruction, not an observation of play, so none of the
+   * attribution, dismissal or follow-up rules there apply to it. The saved game
+   * plan is never touched — the timeline carries what changed and when.
+   */
+  const logTacticalChange = useCallback(
+    async (change: MatchTacticalChange) => {
+      if (!matchId || Object.keys(change).length === 0) return;
+      setTacticsOpen(false);
+      try {
+        await logEvent.mutateAsync({
+          clientRequestId: crypto.randomUUID(),
+          clientCreatedAt: new Date().toISOString(),
+          period,
+          matchElapsedMs: elapsedRef.current,
+          team: "own",
+          eventType: "tactical_change",
+          minute: currentMinute,
+          tacticalChange: change,
+        });
+      } catch (err) {
+        const message = persistEventErrorMessage(err);
+        setActionError(message);
+        setToast({ label: message });
+        window.setTimeout(() => setToast(null), 5000);
+      }
+    },
+    [matchId, logEvent, period, currentMinute],
   );
 
   const persistFromTarget = (
@@ -1410,7 +1475,7 @@ export default function LiveMatchPage() {
     if (
       isSubIncomingComposer(composer) &&
       composer.team === "opponent" &&
-      oppBench.some((item) => item.id === player.id)
+      oppState.bench.some((item) => item.id === player.id)
     ) {
       completeSubIn(player);
       return;
@@ -1452,6 +1517,8 @@ export default function LiveMatchPage() {
   };
 
   const handleFinish = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     setActionError(null);
     try {
       await finishMatch.mutateAsync();
@@ -1460,6 +1527,8 @@ export default function LiveMatchPage() {
       setActionError(
         err instanceof ApiError ? err.message : "Could not finish this match.",
       );
+    } finally {
+      finishingRef.current = false;
     }
   };
 
@@ -1579,7 +1648,7 @@ export default function LiveMatchPage() {
 
   return (
     <div className="live-match relative flex min-h-dvh flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
+      <header className="live-match-header shrink-0 items-center gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />
           <h1 className="font-display text-base font-bold tracking-wide text-[#16d99a]">
@@ -1594,7 +1663,83 @@ export default function LiveMatchPage() {
             <span>Dashboard</span>
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+            <div className="flex flex-col items-end">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {homeAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: homeColor }}
+              />
+            </div>
+            <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
+              <span style={{ color: homeColor }}>{homeScore}</span>
+              <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
+              <span style={{ color: awayColor }}>{awayScore}</span>
+            </p>
+            <div className="flex flex-col items-start">
+              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
+                {awayAbbrev}
+              </p>
+              <span
+                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
+                style={{ backgroundColor: awayColor }}
+              />
+            </div>
+          </div>
+          {projection ? (
+            <div className="mt-1 flex justify-center">
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
+                  projection.finalisationState === "finalised"
+                    ? "bg-[#16d99a]/12 text-[#16d99a]"
+                    : projection.unresolvedReviewCount > 0 ||
+                        projection.finalisationState === "amendment_required"
+                      ? "bg-[#d6a447]/12 text-[#d6a447]"
+                      : "bg-[#707773]/15 text-[#9ca39f]",
+                )}
+              >
+                {!projectionConsistent
+                  ? "Syncing result and event log"
+                  : projection.finalisationState === "finalised"
+                    ? `Final result · revision ${projection.revision}`
+                    : projection.finalisationState === "amendment_required"
+                      ? "Result changed · amendment review required"
+                      : projection.unresolvedReviewCount > 0
+                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+                        : `Live provisional · revision ${projection.revision}`}
+              </span>
+            </div>
+          ) : null}
+        </div>
+        <div className="live-match-clock mt-1.5 flex justify-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
+              )}
+            />
+            <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
+              <LiveClockTime elapsedMs={elapsedMs} running={running} />
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
+              {periodLabel}
+            </span>
+            {addedStoppageMin > 0 ? (
+              <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
+                +{addedStoppageMin}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <h2 className="live-match-tactical-label text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
+          Tactical view
+        </h2>
+        <div className="live-match-controls flex items-center gap-2">
           {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
           <div className="relative">
             <button
@@ -1617,6 +1762,16 @@ export default function LiveMatchPage() {
                     Review duplicates
                   </SettingsItem>
                 ) : null}
+                {team?.role === "coach" && period !== "full_time" ? (
+                  <SettingsItem
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      setTacticsOpen(true);
+                    }}
+                  >
+                    Change tactics
+                  </SettingsItem>
+                ) : null}
                 <SettingsItem
                   onClick={() => {
                     setSettingsOpen(false);
@@ -1633,9 +1788,9 @@ export default function LiveMatchPage() {
                       setSettingsOpen(false);
                       const projection = matchQuery.data?.projection;
                       if (!projection) return;
-                      finaliseProjection.mutate(projection.revision, {
+                      finaliseProjection.mutate({ expectedRevision: projection.revision, expectedSessionRevision: sessionReport?.reportRevision }, {
                         onSuccess: () =>
-                          setToast({ label: "Result finalised" }),
+                          setToast({ label: sessionReport ? "Your team confirmed the report" : "Result finalised" }),
                         onError: (error) =>
                           setActionError(
                             error instanceof Error
@@ -1645,7 +1800,7 @@ export default function LiveMatchPage() {
                       });
                     }}
                   >
-                    Finalise result
+                    {sessionReport ? "Confirm report" : "Finalise result"}
                   </SettingsItem>
                 ) : null}
                 {team?.role === "coach" &&
@@ -1654,6 +1809,7 @@ export default function LiveMatchPage() {
                   <SettingsItem
                     onClick={() => {
                       setSettingsOpen(false);
+                      if (sessionReport?.finalisedAt) { navigate(`/matches/${matchId}/report?amendments=1`); return; }
                       reopenProjection.mutate(
                         "Coach reopened the published result for amendment.",
                         {
@@ -1669,7 +1825,7 @@ export default function LiveMatchPage() {
                       );
                     }}
                   >
-                    Reopen result
+                    {sessionReport?.finalisedAt ? "Review report amendments" : "Reopen result"}
                   </SettingsItem>
                 ) : null}
                 {period === "not_started" && (
@@ -1728,6 +1884,8 @@ export default function LiveMatchPage() {
           {liveLogging && !checkIn && (
             <button
               type="button"
+              aria-label={running ? "Pause" : "Resume"}
+              title={running ? "Pause" : "Resume"}
               className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-[#2a2e31] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => {
                 if (running) {
@@ -1742,29 +1900,42 @@ export default function LiveMatchPage() {
               ) : (
                 <Play className="size-3.5 sm:size-4" />
               )}
-              {running ? "Pause" : "Resume"}
+              <span className="live-match-control-label">{running ? "Pause" : "Resume"}</span>
             </button>
           )}
           {liveLogging && period === "first_half" && (
             <button
               type="button"
+              aria-label="Half Time"
               className="rounded-md bg-[#72a7d5] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
               onClick={() => setConfirm("half")}
             >
-              Half Time
+              <span className="live-match-control-label">Half Time</span>
+              <span className="live-match-control-short" aria-hidden="true">HT</span>
             </button>
           )}
+          {period === "full_time" && team?.role === "coach" && !sessionReport?.finalisedAt &&
+            (!projection || projection.finalisationState === "open") ? (
+            <button type="button" onClick={() => setResumeOpen(true)}
+              className="rounded-md bg-[#16d99a] px-3 py-1.5 text-xs font-semibold tracking-wide text-[#06120e] sm:px-4 sm:text-sm">
+              Resume match
+            </button>
+          ) : null}
           <button
             type="button"
+            aria-label={match.eventStatus === "completed" ? "View report" : "End Match"}
             className="rounded-md bg-[#e23d3d] px-3 py-1.5 text-xs font-semibold tracking-wide text-white sm:px-4 sm:text-sm"
             onClick={() => {
-              if (period !== "full_time") {
-                goFullTime();
+              if (match.eventStatus === "completed") {
+                navigate(`/matches/${matchId}/report`);
+              } else {
+                setActionError(null);
+                setEndOpen(true);
               }
-              setEndOpen(true);
             }}
           >
-            End Match
+            <span className="live-match-control-label">{match.eventStatus === "completed" ? "View report" : "End Match"}</span>
+            <span className="live-match-control-short" aria-hidden="true">FT</span>
           </button>
         </div>
       </header>
@@ -1772,6 +1943,7 @@ export default function LiveMatchPage() {
       {reviewOpen && matchId ? (
         <EventReviewPanel
           matchId={matchId}
+          expectedReviewCount={projection?.unresolvedReviewCount ?? 0}
           onClose={() => setReviewOpen(false)}
         />
       ) : null}
@@ -1783,78 +1955,7 @@ export default function LiveMatchPage() {
       ) : null}
 
       <div className="live-match-layout min-h-0 flex-1 gap-3 px-3 pb-3 pt-0 sm:px-4">
-        <div className="live-match-score mx-auto w-full max-w-5xl shrink-0">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-            <div className="flex flex-col items-end">
-              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
-                {homeAbbrev}
-              </p>
-              <span
-                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
-                style={{ backgroundColor: homeColor }}
-              />
-            </div>
-            <p className="live-match-scoreline font-oswald text-4xl leading-none tabular-nums sm:text-5xl">
-              <span style={{ color: homeColor }}>{homeScore}</span>
-              <span className="mx-1.5 text-2xl text-[#9ca39f]">-</span>
-              <span style={{ color: awayColor }}>{awayScore}</span>
-            </p>
-            <div className="flex flex-col items-start">
-              <p className="live-match-team-code font-oswald text-lg tracking-[0.14em] text-white sm:text-xl">
-                {awayAbbrev}
-              </p>
-              <span
-                className="mt-0.5 h-0.5 w-10 rounded-full sm:w-14"
-                style={{ backgroundColor: awayColor }}
-              />
-            </div>
-          </div>
-          {projection ? (
-            <div className="mt-1 flex justify-center">
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]",
-                  projection.finalisationState === "finalised"
-                    ? "bg-[#16d99a]/12 text-[#16d99a]"
-                    : projection.unresolvedReviewCount > 0 ||
-                        projection.finalisationState === "amendment_required"
-                      ? "bg-[#d6a447]/12 text-[#d6a447]"
-                      : "bg-[#707773]/15 text-[#9ca39f]",
-                )}
-              >
-                {!projectionConsistent
-                  ? "Syncing result and event log"
-                  : projection.finalisationState === "finalised"
-                    ? `Final result · revision ${projection.revision}`
-                    : projection.finalisationState === "amendment_required"
-                      ? "Result changed · amendment review required"
-                      : projection.unresolvedReviewCount > 0
-                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
-                        : `Live provisional · revision ${projection.revision}`}
-              </span>
-            </div>
-          ) : null}
-          <div className="mt-1.5 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#2a2e31] bg-[#0d0f10] px-3 py-0.5">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  running ? "animate-pulse bg-[#e36a6d]" : "bg-[#707773]",
-                )}
-              />
-              <span className="font-oswald text-sm tabular-nums tracking-wide text-white">
-                <LiveClockTime elapsedMs={elapsedMs} running={running} />
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ca39f]">
-                {periodLabel}
-              </span>
-              {addedStoppageMin > 0 ? (
-                <span className="rounded-full bg-[#d6a447]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[#d6a447]">
-                  +{addedStoppageMin}
-                </span>
-              ) : null}
-            </span>
-          </div>
+        <div className="live-match-summary">
           {period === "full_time" && (
             <PeriodSummary
               title="FULL TIME"
@@ -1959,7 +2060,7 @@ export default function LiveMatchPage() {
             align="left"
           />
           <LiveBenchRow
-            label={`${oppAbbrev} bench`}
+            label={`${oppAbbrev} ${oppBench.some((player) => oppPitchIds.has(player.id)) ? "bench / unplaced starters" : "bench"}`}
             color={oppColor}
             opponents={oppBench}
             visibility={visibility}
@@ -2372,6 +2473,17 @@ export default function LiveMatchPage() {
         </div>
       )}
 
+      {tacticsOpen && (
+        <LiveTacticsSheet
+          plan={effectivePlan}
+          playerCount={matchPlayerCount}
+          onPitch={ownState.onPitch}
+          minute={currentMinute}
+          onApply={(change) => void logTacticalChange(change)}
+          onClose={() => setTacticsOpen(false)}
+        />
+      )}
+
       {composer.kind === "injury-detail" && (
         <LiveInjurySheet
           athlete={composer.athlete}
@@ -2496,12 +2608,17 @@ export default function LiveMatchPage() {
         </Overlay>
       )}
 
+      {resumeOpen ? <ResumeMatchDialog match={match} onClose={() => setResumeOpen(false)}
+        onResumed={() => { setEndOpen(false); setCheckIn(null); }} /> : null}
       {endOpen && (
-        <Overlay onClose={() => setEndOpen(false)}>
-          <p className="font-oswald text-2xl tracking-widest">SAVE REPORT</p>
+        <Overlay onClose={() => { if (!finishMatch.isPending) setEndOpen(false); }}>
+          <p className="font-oswald text-2xl tracking-widest">END MATCH?</p>
           <p className="mt-4 text-sm text-[#9ca39f]">
-            Reconcile the scoreboard with logged goals before saving.
+            {match.sharedSessionId
+              ? "This ends live play for both teams and saves the report. Check the score before confirming."
+              : "This ends live play and saves the report. Check the score before confirming."}
           </p>
+          {actionError ? <p role="alert" className="mt-3 text-sm text-[#e36a6d]">{actionError}</p> : null}
           <div className="mt-6 space-y-2 rounded-xl border border-[#2a2e31] bg-[#111315] p-4 font-oswald tracking-wide">
             <p>
               Scoreboard: {teamScore} – {oppScore}
@@ -2523,6 +2640,7 @@ export default function LiveMatchPage() {
               type="button"
               className="rounded-xl border border-[#3e4448] py-3 font-oswald tracking-widest"
               onClick={() => setEndOpen(false)}
+              disabled={finishMatch.isPending}
             >
               NO, GO BACK
             </button>
@@ -2537,6 +2655,8 @@ function timelinePersonLabel(
   event: MatchLogEvent,
   visibility: OpponentSquadVisibility,
 ) {
+  const sharedLabel = sessionPlayerLabel(event);
+  if (sharedLabel) return sharedLabel;
   if (event.athlete) return shirtLabel(event.athlete);
   if (event.opponentPlayer) return opponentShirtLabel(event.opponentPlayer, visibility);
   return event.opponentLabel ?? "Unassigned";

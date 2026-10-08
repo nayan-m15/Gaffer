@@ -21,7 +21,7 @@ import {
   LandingScene,
   type LandingSceneStatus,
 } from "@/components/landing/LandingScene";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
 import "@/components/landing/landing-product.css";

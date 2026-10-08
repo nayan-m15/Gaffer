@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useEffect,
   useMemo,
@@ -10,103 +9,33 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { subscribeToDataChanges } from "@/lib/data-changes";
 import { clearPendingClaimToken } from "@/services/claims";
 import { discardQueuedItems, setOfflineUserScope } from "@/offline/match-store";
 
-export interface SessionUser {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  emailVerified: boolean;
-}
-
-export interface SessionTeam {
-  id: string;
-  name: string;
-  role: "coach" | "assistant";
-  primaryColor: string | null;
-}
-
-/**
- * A single athlete row the signed-in user has claimed as themselves.
- * Returned by `GET /auth/session` alongside `user` and `team`.
- */
-export interface ClaimedAthleteSummary {
-  id: string;
-  teamId: string;
-  teamName: string;
-  firstName: string;
-  lastName: string;
-  position: string | null;
-  squadNumber: number | null;
-}
-
-export type AccountKind = "coach" | "player" | "new";
-
-export type AuthStatus =
-  | "loading"
-  | "authenticated"
-  | "offline"
-  | "unauthenticated"
-  | "unavailable";
-
-/** Payload of `GET /auth/session` — what `refreshSession` resolves to. */
-export interface SessionPayload {
-  user: SessionUser;
-  team: SessionTeam | null;
-  claimedAthletes: ClaimedAthleteSummary[];
-}
-
-export interface SignUpInput {
-  name: string;
-  email: string;
-  password: string;
-  /**
-   * Team-invite token when the sign-up originates from /join-team/:token —
-   * makes the verification email land the user back on the invite.
-   */
-  inviteToken?: string;
-  inviteKind?: "team" | "competition";
-}
-
-export interface SignInInput {
-  email: string;
-  password: string;
-  rememberMe?: boolean;
-}
-
-export interface SignUpResult {
-  /**
-   * True when the account was created but no session was issued because the
-   * address still needs to be verified (email/password sign-up). False for
-   * Google sign-up, which is auto-verified and signs in immediately.
-   */
-  emailVerificationRequired: boolean;
-}
-
-interface AuthContextValue {
-  status: AuthStatus;
-  user: SessionUser | null;
-  team: SessionTeam | null;
-  claimedAthletes: ClaimedAthleteSummary[];
-  /** Derived account type: coach (has team), player (has claimed athletes), new (neither). */
-  accountKind: AccountKind;
-  sessionError: string | null;
-  retrySession: () => Promise<void>;
-  signUp: (input: SignUpInput) => Promise<SignUpResult>;
-  signIn: (input: SignInInput) => Promise<void>;
-  signInWithGoogle: (callbackPath?: string) => Promise<void>;
-  signOut: (options?: { pendingData?: "retain" | "discard" }) => Promise<void>;
-  refreshSession: () => Promise<SessionPayload | null>;
-  resendVerificationEmail: (
-    email: string,
-    inviteToken?: string,
-    inviteKind?: "team" | "competition",
-  ) => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextValue | null>(null);
+import {
+  AuthContext,
+  type SessionUser,
+  type SessionTeam,
+  type ClaimedAthleteSummary,
+  type AuthStatus,
+  type SessionPayload,
+  type SignUpInput,
+  type SignInInput,
+  type SignUpResult,
+  type AccountKind,
+} from "./auth-context";
+export type {
+  SessionUser,
+  SessionTeam,
+  ClaimedAthleteSummary,
+  AuthStatus,
+  SessionPayload,
+  SignUpInput,
+  SignInInput,
+  SignUpResult,
+  AccountKind,
+} from "./auth-context";
 
 /**
  * Owns the coach's authentication state for the whole app.
@@ -126,9 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cachedSessionKey = "gaffer-offline-session";
   const rememberedSessionKey = "gaffer-remember-session";
 
-  const refresh = useCallback(async (): Promise<SessionPayload | null> => {
+  const refresh = useCallback(async (background = false): Promise<SessionPayload | null> => {
+    const startedForUserId = activeUserIdRef.current;
     try {
       const data = await apiFetch<SessionPayload>("/auth/session");
+      if (background && activeUserIdRef.current !== startedForUserId) return null;
       if (activeUserIdRef.current && activeUserIdRef.current !== data.user.id) {
         queryClient.clear();
       }
@@ -148,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return data;
     } catch (error) {
+      if (background && activeUserIdRef.current !== startedForUserId) return null;
       if (error instanceof ApiError && error.status === 401) {
         setUser(null);
         setTeam(null);
@@ -160,6 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
         return null;
       }
+
+      // A temporary background failure must not unmount the page or its drafts.
+      if (background && activeUserIdRef.current) return null;
 
       // Distinguish service transport/connectivity failure (network drop,
       // timeout, 503) from invalid credentials so users can retry without
@@ -197,6 +132,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const sessionUserId = user?.id;
+  useEffect(() => {
+    if (!sessionUserId) return;
+    let pending = false;
+    const refreshInBackground = () => {
+      if (pending || !navigator.onLine || document.visibilityState === "hidden") return;
+      pending = true;
+      void refresh(true).finally(() => { pending = false; });
+    };
+    const interval = window.setInterval(refreshInBackground, 15_000);
+    window.addEventListener("focus", refreshInBackground);
+    window.addEventListener("online", refreshInBackground);
+    document.addEventListener("visibilitychange", refreshInBackground);
+    const unsubscribe = subscribeToDataChanges((path) => {
+      if (/^\/(profile|teams|claims|team-invites)(\/|$)/.test(path)) refreshInBackground();
+    });
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshInBackground);
+      window.removeEventListener("online", refreshInBackground);
+      document.removeEventListener("visibilitychange", refreshInBackground);
+      unsubscribe();
+    };
+  }, [sessionUserId, refresh]);
 
   const signUp = useCallback(
     async (input: SignUpInput): Promise<SignUpResult> => {

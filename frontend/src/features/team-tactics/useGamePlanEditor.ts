@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ApiError } from "@/lib/api";
 import type { BackendAthlete } from "@/services/athletes";
 import type {
   BackendGamePlan,
@@ -16,16 +17,19 @@ import type {
   GamePlanTactics,
 } from "@/services/gamePlans";
 import { useLineupState } from "@/features/team-management/useLineupState";
+import { athleteShortName } from "@/features/team-management/athlete-display";
+import { reconcilePlayerInstructions } from "./instructions/instructionDefaults";
 import {
   useCreateGamePlan,
   useDeleteGamePlan,
   useGamePlans,
   useUpdateGamePlan,
 } from "./api";
-import {
-  DEFAULT_GAME_PLAN_TACTICS,
-  type TacticsTab as TacticsTabName,
-} from "./tactics-options";
+import { DEFAULT_GAME_PLAN_TACTICS } from "./tactics-options";
+
+/** Why a save is refused before it is sent; shown wherever the save was begun. */
+const INJURED_STARTER_MESSAGE =
+  "Remove injured players from the starting lineup before saving.";
 
 const TACTICS_KEYS = Object.keys(
   DEFAULT_GAME_PLAN_TACTICS,
@@ -38,6 +42,9 @@ export function toTactics(plan: BackendGamePlan): GamePlanTactics {
     // Each key exists on BackendGamePlan with a compatible type.
     (out as Record<string, unknown>)[key] = plan[key];
   }
+  // A response cached before player instructions existed has no such field,
+  // and both the reconciler and the panel assume an object.
+  out.playerInstructions = plan.playerInstructions ?? {};
   return out;
 }
 
@@ -68,9 +75,6 @@ export interface GamePlanEditor {
   content: GamePlanTactics;
   patch: (p: Partial<GamePlanTactics>) => void;
 
-  activeTab: TacticsTabName;
-  setActiveTab: (tab: TacticsTabName) => void;
-
   saving: boolean;
   justSaved: boolean;
   saveError: string | null;
@@ -80,10 +84,21 @@ export interface GamePlanEditor {
   clearDeleteError: () => void;
   isDeleting: boolean;
 
+  /**
+   * Set when a lineup change pruned instructions that no longer applied, so
+   * the Instructions screen can say so. Cleared by dismissing it.
+   */
+  instructionsNotice: string | null;
+  dismissInstructionsNotice: () => void;
+
   isSaveDialogOpen: boolean;
   setSaveDialogOpen: (open: boolean) => void;
   isDeleteDialogOpen: boolean;
   setDeleteDialogOpen: (open: boolean) => void;
+  isResetInstructionsDialogOpen: boolean;
+  setResetInstructionsDialogOpen: (open: boolean) => void;
+  /** Puts every player in the plan back on their position's defaults. */
+  resetAllPlayerInstructions: () => void;
 
   selectPlan: (id: string | null) => void;
   save: () => void;
@@ -114,11 +129,15 @@ export function useGamePlanEditor(
   const [content, setContent] = useState<GamePlanTactics>(
     DEFAULT_GAME_PLAN_TACTICS,
   );
-  const [activeTab, setActiveTab] = useState<TacticsTabName>("Tactics");
   const [isSaveDialogOpen, setSaveDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isResetInstructionsDialogOpen, setResetInstructionsDialogOpen] =
+    useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [instructionsNotice, setInstructionsNotice] = useState<string | null>(
+    null,
+  );
 
   const selectedPlan = useMemo(
     () => plans.find((p) => p.id === selectedId) ?? null,
@@ -137,8 +156,46 @@ export function useGamePlanEditor(
     loadLineup(initial ? toSquad(initial) : null);
   }, [isAthletesLoading, isPlansLoading, loadLineup, plans]);
 
+  /**
+   * Player instructions follow the lineup. Moving someone from right wing to
+   * right-back, swapping the formation or dropping them from the squad all
+   * leave instructions behind that their new position never asks about — and
+   * the backend rejects those on save — so they are pruned here, where every
+   * lineup change passes, rather than only when the Instructions tab is open.
+   */
+  const { formation, assignments } = lineup;
+  useEffect(() => {
+    if (!hasHydrated.current || athletes.length === 0) return;
+
+    const result = reconcilePlayerInstructions({
+      instructions: content.playerInstructions,
+      formation,
+      assignments,
+      knownAthleteIds: new Set(athletes.map((athlete) => athlete.id)),
+    });
+    if (!result.changed) return;
+
+    setContent((prev) => ({
+      ...prev,
+      playerInstructions: result.instructions,
+    }));
+
+    const moved = result.changedAthleteIds
+      .map((id) => athletes.find((athlete) => athlete.id === id))
+      .filter((athlete): athlete is BackendAthlete => athlete != null)
+      .map(athleteShortName);
+    if (moved.length > 0) {
+      setInstructionsNotice(
+        moved.length === 1
+          ? `${moved[0]}'s instructions were updated to match their new position.`
+          : `Instructions were updated for ${moved.length} players to match their new positions.`,
+      );
+    }
+  }, [assignments, athletes, content.playerInstructions, formation]);
+
   const selectPlan = (id: string | null) => {
     setSaveError(null);
+    setInstructionsNotice(null);
     setSelectedId(id);
     const target = id ? plans.find((p) => p.id === id) ?? null : null;
     setContent(target ? toTactics(target) : DEFAULT_GAME_PLAN_TACTICS);
@@ -165,7 +222,7 @@ export function useGamePlanEditor(
   const save = () => {
     setSaveError(null);
     if (lineup.hasInjuredPitchPlayers) {
-      setSaveError("Remove injured players from the starting lineup before saving.");
+      setSaveError(INJURED_STARTER_MESSAGE);
       return;
     }
     if (!selectedPlan) {
@@ -187,8 +244,9 @@ export function useGamePlanEditor(
   const saveAsNew = async (name: string) => {
     setSaveError(null);
     if (lineup.hasInjuredPitchPlayers) {
-      setSaveError("Remove injured players from the starting lineup before saving.");
-      return;
+      // Thrown rather than returned: the dialog reports what it catches, and
+      // returning quietly would close it as though the plan had been saved.
+      throw new ApiError(INJURED_STARTER_MESSAGE, 400);
     }
 
     const created = await createMutation.mutateAsync({
@@ -226,9 +284,6 @@ export function useGamePlanEditor(
     content,
     patch,
 
-    activeTab,
-    setActiveTab,
-
     saving: updateMutation.isPending,
     justSaved,
     saveError,
@@ -238,10 +293,20 @@ export function useGamePlanEditor(
     clearDeleteError: () => deleteMutation.reset(),
     isDeleting: deleteMutation.isPending,
 
+    instructionsNotice,
+    dismissInstructionsNotice: () => setInstructionsNotice(null),
+
     isSaveDialogOpen,
     setSaveDialogOpen,
     isDeleteDialogOpen,
     setDeleteDialogOpen,
+    isResetInstructionsDialogOpen,
+    setResetInstructionsDialogOpen,
+    resetAllPlayerInstructions: () => {
+      patch({ playerInstructions: {} });
+      setInstructionsNotice(null);
+      setResetInstructionsDialogOpen(false);
+    },
 
     selectPlan,
     save,

@@ -231,6 +231,7 @@ export function EventFormDialog({
   const [error, setError] = useState<string | null>(null);
   const venueSearchIdRef = useRef(0);
   const gafferOpponentSearchIdRef = useRef(0);
+  const initializedFormRef = useRef<string | null>(null);
 
   const competitionOptions = useMemo(
     () =>
@@ -244,8 +245,14 @@ export function EventFormDialog({
 
   useEffect(() => {
     if (!open) {
+      initializedFormRef.current = null;
       return;
     }
+
+    // Polling may replace the event object while the user is typing.
+    const formKey = event?.id ?? "new";
+    if (initializedFormRef.current === formKey) return;
+    initializedFormRef.current = formKey;
 
     if (event) {
       const parts = splitScheduledAt(event.scheduledAt);
@@ -671,6 +678,11 @@ export function EventFormDialog({
                           }}
                         >
                           {team.name}
+                          {team.coachName ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Coach: {team.coachName}
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>

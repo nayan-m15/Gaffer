@@ -1,3 +1,4 @@
+import { sessionPlayerLabel } from "./session-report-model.ts";
 import type {
   MatchClockPeriod,
   MatchEventTeam,
@@ -62,6 +63,7 @@ const EVENT_LABEL: Record<MatchEventType, string> = {
   substitution: "Substitution",
   penalty: "Penalty",
   injury: "Injury",
+  tactical_change: "Tactical change",
   goalkeeper_save: "Save",
 };
 
@@ -98,6 +100,8 @@ export function matchEventPerson(
   event: MatchLogEvent,
   squad: MatchSquadAthlete[],
 ): string {
+  const sharedLabel = sessionPlayerLabel(event);
+  if (sharedLabel) return sharedLabel;
   if (event.athlete) return athleteName(event.athlete);
   if (event.opponentPlayer) return opponentName(event.opponentPlayer);
   if (event.athleteId) {

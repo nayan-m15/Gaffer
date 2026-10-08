@@ -1,6 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import type { Agent } from 'supertest';
 import type { App } from 'supertest/types';
@@ -35,7 +37,11 @@ describe('Offline collaborative sync (e2e)', () => {
     await app.close();
   });
 
-  async function createLiveMatch(agent: Agent) {
+  async function createLiveMatch(
+    agent: Agent,
+    isHome = true,
+    capturedAthleteIds?: string[],
+  ) {
     const athleteIds: string[] = [];
     for (let index = 0; index < 11; index += 1) {
       const athlete = await agent
@@ -44,6 +50,7 @@ describe('Offline collaborative sync (e2e)', () => {
         .expect(201);
       athleteIds.push((athlete.body as { id: string }).id);
     }
+    capturedAthleteIds?.push(...athleteIds);
     const event = await agent
       .post('/events')
       .send({
@@ -57,12 +64,454 @@ describe('Offline collaborative sync (e2e)', () => {
       .post(`/events/${(event.body as { id: string }).id}/start-match`)
       .send({
         opponentName: 'Concurrency FC',
-        isHome: true,
+        isHome,
         startingAthleteIds: athleteIds,
       })
       .expect(201);
     return (started.body as { id: string }).id;
   }
+
+  it('authorizes shared event and candidate streams by current session membership', async () => {
+    const homeIdentity = uniqueTestIdentity('sync-home');
+    const awayIdentity = uniqueTestIdentity('sync-away');
+    const unrelatedIdentity = uniqueTestIdentity('sync-unrelated');
+    identities.push(homeIdentity, awayIdentity, unrelatedIdentity);
+    const home = await registerCoach(app.getHttpServer(), homeIdentity);
+    const away = await registerCoach(app.getHttpServer(), awayIdentity);
+    const unrelated = await registerCoach(
+      app.getHttpServer(),
+      unrelatedIdentity,
+    );
+    const homeMatchId = await createLiveMatch(home.agent);
+    const awayMatchId = await createLiveMatch(away.agent, false);
+    const database = app.get(DatabaseService).database;
+    const sessionId = randomUUID();
+    const eventId = randomUUID();
+    const reviewId = randomUUID();
+    const awayEventId = randomUUID();
+    const awayReviewId = randomUUID();
+    const homeClockOperationId = randomUUID();
+    const awayClockOperationId = randomUUID();
+    await database.execute(sql`
+      insert into match_sessions (id) values (${sessionId}::uuid)
+    `);
+    await database.execute(sql`
+      update matches set shared_match_id = ${sessionId}::uuid
+      where id in (${homeMatchId}::uuid, ${awayMatchId}::uuid);
+    `);
+    await database.execute(sql`
+      insert into match_session_participants (session_id, team_id, side)
+      values (${sessionId}::uuid, ${home.team.id}::uuid, 'home'),
+             (${sessionId}::uuid, ${away.team.id}::uuid, 'away')
+    `);
+    await database.execute(sql`
+      insert into match_events
+        (id, match_id, session_id, side, team, event_type, minute, logged_by_user_id)
+      values (${eventId}::uuid, ${homeMatchId}::uuid, ${sessionId}::uuid,
+              'home', 'own', 'goal', 12, ${home.user.id})
+    `);
+    await database.execute(sql`
+      insert into match_event_reviews
+        (id, match_id, session_id, canonical_event_id, observation_ids, reason)
+      values (${reviewId}::uuid, ${homeMatchId}::uuid, ${sessionId}::uuid,
+              ${eventId}::uuid, '[]'::jsonb, 'cross-side candidate')
+    `);
+    await database.execute(sql`
+      insert into match_events
+        (id, match_id, session_id, side, team, event_type, minute, logged_by_user_id)
+      values (${awayEventId}::uuid, ${awayMatchId}::uuid, ${sessionId}::uuid,
+              'away', 'own', 'goal', 15, ${away.user.id})
+    `);
+    await database.execute(sql`
+      insert into match_event_reviews
+        (id, match_id, session_id, canonical_event_id, observation_ids, reason)
+      values (${awayReviewId}::uuid, ${awayMatchId}::uuid, ${sessionId}::uuid,
+              ${awayEventId}::uuid, '[]'::jsonb, 'cross-side candidate')
+    `);
+    for (const [id, matchId, actorId] of [
+      [homeClockOperationId, homeMatchId, home.user.id],
+      [awayClockOperationId, awayMatchId, away.user.id],
+    ]) {
+      await database.execute(sql`
+        insert into match_clock_operations (
+          id, match_id, actor_user_id, period, elapsed_ms, running,
+          base_revision, applied_revision, outcome, payload_hash,
+          client_created_at
+        ) values (
+          ${id}::uuid, ${matchId}::uuid, ${actorId}, 'first_half', 12000,
+          true, 0, 1, 'applied', ${id}, now()
+        )
+      `);
+    }
+
+    const config = readFileSync(
+      resolve(__dirname, '../../powersync/sync-config.yaml'),
+      'utf8',
+    );
+    const streamSql = (name: string) => {
+      const start = config.indexOf(`  ${name}:`);
+      const nextMatch = /\n {2}[a-z][a-z0-9_]*:/g;
+      nextMatch.lastIndex = start + 3;
+      const end = nextMatch.exec(config)?.index ?? config.length;
+      return config
+        .slice(start, end)
+        .split(/query:\s*\|\s*\n/)[1]
+        .split('\n')
+        .map((line) => line.replace(/^\s{6}/, ''))
+        .join('\n')
+        .replaceAll("auth.parameter('team_id')", `'$TEAM_ID'`)
+        .replaceAll("auth.parameter('user_id')", `'$USER_ID'`)
+        .replaceAll("auth.parameter('two_sided_live_logging')", "'true'");
+    };
+    const readRows = async (stream: string, teamId: string, userId: string) => {
+      const query = streamSql(stream)
+        .replaceAll('$TEAM_ID', teamId)
+        .replaceAll('$USER_ID', userId);
+      return database.execute(sql.raw(query));
+    };
+
+    for (const stream of [
+      'shared_session_match_events',
+      'shared_session_match_reviews',
+    ]) {
+      expect(
+        (await readRows(stream, home.team.id, home.user.id)).rows,
+      ).toHaveLength(1);
+      expect(
+        (await readRows(stream, away.team.id, away.user.id)).rows,
+      ).toHaveLength(1);
+      expect(
+        (await readRows(stream, unrelated.team.id, unrelated.user.id)).rows,
+      ).toHaveLength(0);
+    }
+    for (const stream of [
+      'shared_session_match_observations',
+      'shared_session_match_memberships',
+      'shared_session_match_operations',
+      'shared_session_match_projections',
+    ]) {
+      await readRows(stream, home.team.id, home.user.id);
+    }
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          home.team.id,
+          home.user.id,
+        )
+      ).rows,
+    ).toEqual([expect.objectContaining({ id: awayClockOperationId })]);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toEqual([expect.objectContaining({ id: homeClockOperationId })]);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          unrelated.team.id,
+          unrelated.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+
+    await database.execute(sql`
+      delete from team_members where user_id = ${away.user.id}
+        and team_id = ${away.team.id}::uuid
+    `);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_events',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_reviews',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await readRows(
+          'shared_session_match_clock_operations',
+          away.team.id,
+          away.user.id,
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
+
+  it('reconciles session observations idempotently across match sheets', async () => {
+    const identity = uniqueTestIdentity('session-reconcile');
+    identities.push(identity);
+    const { agent } = await registerCoach(app.getHttpServer(), identity);
+    const homeAthleteIds: string[] = [];
+    const homeMatchId = await createLiveMatch(agent, true, homeAthleteIds);
+    const awayMatchId = await createLiveMatch(agent, false);
+    const database = app.get(DatabaseService).database;
+    const matchesResult = await database.execute<{
+      id: string;
+      team_id: string;
+    }>(sql`select match.id, event.team_id from matches match
+      join events event on event.id = match.event_id
+      where match.id in (${homeMatchId}::uuid, ${awayMatchId}::uuid)`);
+    const teamId = matchesResult.rows[0]?.team_id;
+    expect(teamId).toBeDefined();
+    const sessionResult = await database.execute<{ id: string }>(sql`
+      insert into match_sessions default values returning id`);
+    const sessionId = sessionResult.rows[0].id;
+    await database.execute(sql`
+      update matches set opponent_squad_visibility = 'numbers'
+      where id = ${awayMatchId}::uuid`);
+    const opponentPlayerResult = await database.execute<{ id: string }>(sql`
+      insert into opponent_match_players (match_id, shirt_number, name)
+      select ${awayMatchId}::uuid, 9, first_name || ' ' || last_name
+      from athletes where id = ${homeAthleteIds[0]}::uuid returning id`);
+    const opponentPlayerId = opponentPlayerResult.rows[0].id;
+    await database.execute(sql`
+      insert into match_session_participants (session_id, team_id, side)
+      values (${sessionId}::uuid, ${teamId}::uuid, 'home'),
+             (${sessionId}::uuid, ${teamId}::uuid, 'away')`);
+    await database.execute(sql`
+      update matches set shared_match_id = ${sessionId}::uuid
+      where id in (${homeMatchId}::uuid, ${awayMatchId}::uuid)`);
+
+    const previousFlag = process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
+    try {
+      const firstId = randomUUID();
+      const secondId = randomUUID();
+      const observation = (
+        matchId: string,
+        id: string,
+        team: 'own' | 'opponent',
+        elapsedMs: number,
+        minute: number,
+        playerId?: string,
+      ) => ({
+        kind: 'observation',
+        matchId,
+        payload: {
+          clientRequestId: id,
+          deviceId: randomUUID(),
+          clientCreatedAt: new Date().toISOString(),
+          period: 'first_half',
+          matchElapsedMs: elapsedMs,
+          team,
+          eventType: 'goal',
+          ...(team === 'own' && playerId ? { athleteId: playerId } : {}),
+          ...(team === 'opponent' && playerId
+            ? { opponentPlayerId: playerId }
+            : team === 'opponent'
+              ? { opponentLabel: 'Home number 9' }
+              : {}),
+          minute,
+        },
+      });
+      const first = observation(
+        homeMatchId,
+        firstId,
+        'own',
+        720_000,
+        12,
+        homeAthleteIds[0],
+      );
+      const second = observation(
+        awayMatchId,
+        secondId,
+        'opponent',
+        722_000,
+        12,
+        opponentPlayerId,
+      );
+      const [firstUpload, secondUpload] = await Promise.all([
+        agent
+          .post('/sync/upload')
+          .send({ items: [first] })
+          .expect(201),
+        agent
+          .post('/sync/upload')
+          .send({ items: [second] })
+          .expect(201),
+      ]);
+      expect(
+        (firstUpload.body as { receipts: Array<{ outcome: string }> })
+          .receipts[0].outcome,
+      ).toBe('accepted');
+      expect(
+        (secondUpload.body as { receipts: Array<{ outcome: string }> })
+          .receipts[0].outcome,
+      ).toBe('accepted');
+      await agent
+        .post('/sync/upload')
+        .send({ items: [second] })
+        .expect(201);
+
+      const observationRows = await database.execute<{
+        id: string;
+        session_id: string;
+        side: string;
+      }>(sql`select id, session_id, side from match_event_observations
+        where id in (${firstId}::uuid, ${secondId}::uuid) order by id`);
+      expect(observationRows.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: firstId,
+            session_id: sessionId,
+            side: 'home',
+          }),
+          expect.objectContaining({
+            id: secondId,
+            session_id: sessionId,
+            side: 'home',
+          }),
+        ]),
+      );
+      const candidateRows = await database.execute<{
+        id: string;
+        match_id: string;
+        observation_ids: string[];
+        status: string;
+      }>(sql`select id, match_id, observation_ids, status from match_event_reviews
+        where session_id = ${sessionId}::uuid and review_version = 2`);
+      expect(candidateRows.rows).toHaveLength(1);
+      expect(candidateRows.rows[0].status).toBe('open');
+      expect(candidateRows.rows[0].observation_ids).toEqual(
+        [firstId, secondId].sort(),
+      );
+      const actorResult = await database.execute<{
+        logged_by_user_id: string;
+      }>(sql`
+        select logged_by_user_id from match_event_observations
+        where id = ${firstId}::uuid`);
+      const mergeOperationId = randomUUID();
+      const resolveSameEvent = () =>
+        database.execute<{ canonical_event_id: string }>(sql`
+        select resolve_match_session_event_candidate(
+          ${candidateRows.rows[0].id}::uuid,
+          ${candidateRows.rows[0].match_id}::uuid,
+          ${sessionId}::uuid,
+          ${actorResult.rows[0].logged_by_user_id}::text,
+          ${mergeOperationId}::uuid,
+          'same_event'::text,
+          '[]'::jsonb
+        ) as canonical_event_id`);
+      const merged = await resolveSameEvent();
+      const mergedRetry = await resolveSameEvent();
+      expect(mergedRetry.rows[0].canonical_event_id).toBe(
+        merged.rows[0].canonical_event_id,
+      );
+      const mergeOperation = await database.execute<{ session_id: string }>(sql`
+        select session_id from match_event_operations
+        where id = ${mergeOperationId}::uuid`);
+      expect(mergeOperation.rows[0].session_id).toBe(sessionId);
+      const mergedMemberships = await database.execute<{
+        canonical_event_id: string;
+      }>(sql`
+        select canonical_event_id from match_event_memberships
+        where observation_id in (${firstId}::uuid, ${secondId}::uuid)
+        order by observation_id`);
+      expect(mergedMemberships.rows[0].canonical_event_id).toBe(
+        mergedMemberships.rows[1].canonical_event_id,
+      );
+
+      const distinctGoalId = randomUUID();
+      const distinctGoal = observation(
+        awayMatchId,
+        distinctGoalId,
+        'opponent',
+        750_000,
+        12,
+        opponentPlayerId,
+      );
+      await agent
+        .post('/sync/upload')
+        .send({ items: [distinctGoal] })
+        .expect(201);
+      const afterDistinctGoal = await database.execute<{ count: string }>(sql`
+        select count(*)::text as count from match_event_reviews
+        where session_id = ${sessionId}::uuid and review_version = 2`);
+      expect(afterDistinctGoal.rows[0].count).toBe('1');
+
+      const separateIds = [randomUUID(), randomUUID()];
+      await Promise.all([
+        agent
+          .post('/sync/upload')
+          .send({
+            items: [
+              observation(homeMatchId, separateIds[0], 'own', 1_200_000, 20),
+            ],
+          })
+          .expect(201),
+        agent
+          .post('/sync/upload')
+          .send({
+            items: [
+              observation(
+                awayMatchId,
+                separateIds[1],
+                'opponent',
+                1_202_000,
+                20,
+                opponentPlayerId,
+              ),
+            ],
+          })
+          .expect(201),
+      ]);
+      const separateReviewResult = await database.execute<{
+        id: string;
+        match_id: string;
+      }>(sql`select id, match_id from match_event_reviews
+        where session_id = ${sessionId}::uuid and status = 'open'
+          and review_version = 2`);
+      expect(separateReviewResult.rows).toHaveLength(1);
+      const separateOperationId = randomUUID();
+      const resolveSeparateEvents = () =>
+        database.execute<{ canonical_event_id: string }>(sql`
+        select resolve_match_session_event_candidate(
+          ${separateReviewResult.rows[0].id}::uuid,
+          ${separateReviewResult.rows[0].match_id}::uuid,
+          ${sessionId}::uuid,
+          ${actorResult.rows[0].logged_by_user_id}::text,
+          ${separateOperationId}::uuid,
+          'separate_events'::text,
+          '[]'::jsonb
+        ) as canonical_event_id`);
+      const separated = await resolveSeparateEvents();
+      const separatedRetry = await resolveSeparateEvents();
+      expect(separatedRetry.rows[0].canonical_event_id).toBe(
+        separated.rows[0].canonical_event_id,
+      );
+      const separateMemberships = await database.execute<{
+        canonical_event_id: string;
+      }>(sql`
+        select canonical_event_id from match_event_memberships
+        where observation_id in (${separateIds[0]}::uuid, ${separateIds[1]}::uuid)
+        order by observation_id`);
+      expect(separateMemberships.rows[0].canonical_event_id).not.toBe(
+        separateMemberships.rows[1].canonical_event_id,
+      );
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.TWO_SIDED_LIVE_LOGGING_ENABLED;
+      } else {
+        process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = previousFlag;
+      }
+    }
+  });
 
   it('serialises concurrent ingestion and safely retries a lost response', async () => {
     const identity = uniqueTestIdentity('offline-sync');
