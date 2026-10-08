@@ -5,6 +5,7 @@ import {
   isDatabaseConnectionError,
 } from '../../src/database/drizzle';
 import {
+  authRateLimits,
   injuries,
   injuryTimelineEntries,
   matchSessionParticipants,
@@ -169,4 +170,17 @@ export async function verifyUserEmail(email: string): Promise<void> {
     .update(user)
     .set({ emailVerified: true })
     .where(eq(user.email, email));
+}
+
+/**
+ * Clears the auth rate-limit counters.
+ *
+ * Rate-limit rows are keyed by client IP, and the rate-limit e2e spec draws
+ * its IPs from a fixed documentation range, so rows left behind by a previous
+ * jest invocation would pre-exhaust the buckets its tests pin. The counters
+ * are pure ephemeral state — no other suite's assertions depend on them — so
+ * a wholesale clear is safe even while suites run in parallel.
+ */
+export async function clearAuthRateLimits(): Promise<void> {
+  await testDb.delete(authRateLimits);
 }
