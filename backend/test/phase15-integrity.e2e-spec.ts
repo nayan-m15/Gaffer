@@ -102,13 +102,19 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
     return { ...c, athletes: athletes.map((a) => a.id) };
   }
   const scheduledAt = () => new Date(Date.now() - 86400000).toISOString();
+  // Creation rejects past kickoffs while starting a match rejects anything
+  // before match day (compared by calendar date), so new events are booked a
+  // minute ahead on today's date to satisfy both. Rows that must look
+  // historical are moved back by the direct database updates below, which
+  // bypass creation validation.
+  const futureScheduledAt = () => new Date(Date.now() + 60_000).toISOString();
   async function friendly() {
     const event = await http<Event>(
       'friendly-create-' + randomUUID(),
       home.agent.post('/events').send({
         title: 'Phase15 fresh friendly',
         type: 'match',
-        scheduledAt: scheduledAt(),
+        scheduledAt: futureScheduledAt(),
         location: 'Synthetic ground',
         friendlyOpponentTeamId: away.team.id,
       }),
@@ -629,7 +635,7 @@ describe('Phase 1.5 real PostgreSQL + authenticated HTTP', () => {
       home.agent.post('/events').send({
         title: 'Phase15 manual',
         type: 'match',
-        scheduledAt: scheduledAt(),
+        scheduledAt: futureScheduledAt(),
         location: 'Synthetic ground',
       }),
       201,
