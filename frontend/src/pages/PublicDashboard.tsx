@@ -246,7 +246,7 @@ export default function PublicDashboard() {
         }
       >
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
-        <section className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
+        <section className="relative overflow-hidden pb-4 pt-12 sm:pb-6 sm:pt-16 lg:pt-20">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--card)_82%,transparent)_0%,color-mix(in_srgb,var(--card)_45%,transparent)_38%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--background)_88%,transparent)_0%,color-mix(in_srgb,var(--background)_52%,transparent)_40%,transparent_74%)]"
             aria-hidden="true"
@@ -270,7 +270,7 @@ export default function PublicDashboard() {
         {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
         <div
           ref={filterBarRef}
-          className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
+          className="sticky top-16 z-40 w-full"
         >
           <div className="public-dashboard-toolbar">
             <PublicDashboardSectionNav sections={dashboardSections} />

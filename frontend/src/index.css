@@ -780,7 +780,8 @@ select:-webkit-autofill {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 0;
+  border-inline: 0;
   background: var(--card);
   padding: 0 20px;
   box-shadow: 0 12px 36px rgb(15 23 42 / 12%);
