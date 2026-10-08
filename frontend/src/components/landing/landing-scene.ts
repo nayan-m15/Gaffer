@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createGafferStadium } from "./gaffer-stadium";
 
 export interface LandingSceneController {
@@ -661,6 +662,7 @@ function shirtCollarGeometry(lowPower: boolean) {
 function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture, index: number) {
   const group = new THREE.Group();
   group.name = "Dressing room shirt";
+  group.userData.shirtNumber = DRESSING_ROOM_SHIRT_NUMBERS[index];
   const material = kit.shirt.clone();
   material.map = numberMap;
   const body = new THREE.Mesh(kit.shirtGeometry, [material, kit.shirt]);
@@ -1280,9 +1282,146 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
   const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;if(Math.abs(difference)<.00008){currentProgress=targetProgress;updateCamera(currentProgress);render();return;}currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(targetProgress-currentProgress)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
+  // Keep the synchronous shirts until both assets and every replacement are ready.
+  let loadedShirt: THREE.Object3D | null = null;
+  let kitImage: HTMLImageElement | null = null;
+  let shirtLoadFailed = false, shirtsSwapped = false;
+  const modelTextures = new Set<THREE.Texture>();
+  const modelMaterials = new Set<THREE.Material>();
+  const collectResources = (roots: THREE.Object3D[]) => {
+    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+    roots.forEach(root => root.traverse(object => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+      geometries.add(object.geometry);
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => materials.add(material));
+    }));
+    return { geometries, materials };
+  };
+  const releaseLoadedShirt = () => {
+    if (!loadedShirt) return;
+    const resources = collectResources([loadedShirt]);
+    resources.geometries.forEach(value => value.dispose());
+    resources.materials.forEach(value => {
+      Object.values(value).forEach(property => { if (property instanceof THREE.Texture) modelTextures.add(property); });
+      value.dispose();
+    });
+    loadedShirt = null;
+  };
+  const failShirtLoad = (error: unknown) => {
+    if (!shirtLoadFailed && !disposed) console.warn("Landing shirt assets could not be loaded; keeping fallback shirts.", error);
+    shirtLoadFailed = true;
+    releaseLoadedShirt();
+    modelMaterials.forEach(value => value.dispose()); modelMaterials.clear();
+    modelTextures.forEach(value => value.dispose()); modelTextures.clear();
+    kitImage = null;
+  };
+  const swapShirts = () => {
+    if (disposed || shirtLoadFailed || !loadedShirt || !kitImage || shirtsSwapped) return;
+    try {
+      const groups: THREE.Group[] = [];
+      scene.traverse(object => { if (object instanceof THREE.Group && object.name === "Dressing room shirt") groups.push(object); });
+      const sourceShirt = loadedShirt.getObjectByName("Shirt");
+      if (!(sourceShirt instanceof THREE.Mesh)) throw new Error("Landing model is missing the Shirt mesh");
+      const sourceBounds = new THREE.Box3().setFromObject(loadedShirt);
+      const centerX = (sourceBounds.min.x + sourceBounds.max.x) / 2;
+      // Existing hook top is about .90 above the group; cushion top is 1.17.
+      const hookTop = .90, surfaceTop = 1.17, minimumClearance = .15;
+      let scale = .18;
+      const replacements = groups.map(group => {
+        const canvas = document.createElement("canvas");
+        const size = lowPower ? 256 : 512, R = size / 1024;
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Landing kit canvas is unavailable");
+        ctx.drawImage(kitImage!, 0, 0, size, size);
+        ctx.fillStyle = "#f1f4f1"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `900 ${160 * R}px Inter, Arial, sans-serif`;
+        ctx.fillText(String(group.userData.shirtNumber), 251 * R, 258 * R);
+        ctx.font = `900 ${230 * R}px Inter, Arial, sans-serif`;
+        ctx.fillText(String(group.userData.shirtNumber), 773 * R, 303 * R);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.flipY = false; texture.encoding = THREE.sRGBEncoding;
+        texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+        modelTextures.add(texture);
+        const material = new THREE.MeshStandardMaterial({ map: texture, roughness: .9, metalness: 0, side: THREE.DoubleSide });
+        modelMaterials.add(material);
+        const model = loadedShirt!.clone(true);
+        model.traverse(object => {
+          if (!(object instanceof THREE.Mesh)) return;
+          const isShirt = object.name === "Shirt";
+          if (isShirt) object.material = material;
+          object.castShadow = isShirt && !lowPower; object.receiveShadow = isShirt;
+        });
+        return { group, model };
+      });
+      let clearance = Infinity;
+      for (;;) {
+        clearance = Infinity;
+        replacements.forEach(({ group, model }) => {
+          model.scale.setScalar(scale);
+          model.position.set(-centerX * scale, hookTop - sourceBounds.max.y * scale, .08);
+          // Test both ends of the first shirt's possible scroll sway as well as
+          // the unchanged deterministic tilt. No bounds work runs per frame.
+          const probe = new THREE.Group();
+          probe.position.copy(group.position); probe.rotation.copy(group.rotation);
+          probe.add(model);
+          const baseRoll = group === animatedShirt ? shirtBaseRoll : group.rotation.z;
+          for (const sway of group === animatedShirt ? [-.024, 0, .024] : [0]) {
+            probe.rotation.z = baseRoll + sway;
+            probe.updateMatrixWorld(true);
+            const bounds = new THREE.Box3().setFromObject(model.getObjectByName("Shirt")!);
+            clearance = Math.min(clearance, bounds.min.y - surfaceTop);
+            // Stay inside the clear locker opening, in front of handles/rail,
+            // below the overhead shelf and away from the dividing posts.
+            const halfOpening = LOCKER_CONFIG.width / 2 - .12;
+            if (bounds.min.x < group.position.x - halfOpening || bounds.max.x > group.position.x + halfOpening ||
+                bounds.max.y >= 3.43 || Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z)) >= 7.4675) {
+              clearance = -Infinity;
+            }
+          }
+          probe.remove(model);
+        });
+        if (clearance >= minimumClearance) break;
+        if (scale <= .15) throw new Error("Landing model cannot clear the locker cushion by .15 units");
+        scale = Math.max(.15, scale - .005);
+      }
+      const removed = groups.flatMap(group => [...group.children]);
+      const fallback = collectResources(removed);
+      replacements.forEach(({ group, model }) => {
+        group.remove(...group.children); group.add(model);
+        group.userData.shirtModelScale = scale;
+        group.userData.shirtModelClearance = clearance;
+        model.traverse(object => { object.updateMatrix(); object.matrixAutoUpdate = false; });
+      });
+      // Shared locker materials remain alive; only unreferenced fallback assets go.
+      const live = collectResources([scene]);
+      fallback.geometries.forEach(value => { if (!live.geometries.has(value)) value.dispose(); });
+      fallback.materials.forEach(value => { if (!live.materials.has(value)) value.dispose(); });
+      collectResources([loadedShirt]).materials.forEach(value => {
+        if (!live.materials.has(value)) value.dispose();
+      });
+      loadedShirt = null; kitImage = null; shirtsSwapped = true;
+      numberMaps.forEach(value => value.dispose()); numberMaps.length = 0;
+      shirtFabricMap.dispose();
+      // The existing request coalesces with an outstanding scroll frame.
+      start();
+    } catch (error) { failShirtLoad(error); }
+  };
+  new GLTFLoader().load("/models/landing-shirt.glb", gltf => {
+    loadedShirt = gltf.scene;
+    if (disposed || shirtLoadFailed) {
+      releaseLoadedShirt(); modelTextures.forEach(value => value.dispose()); modelTextures.clear();
+      return;
+    }
+    swapShirts();
+  }, undefined, failShirtLoad);
+  new THREE.ImageLoader().load("/models/landing-shirt-kit.jpg", image => {
+    if (disposed || shirtLoadFailed) return;
+    kitImage = image; swapShirts();
+  }, undefined, failShirtLoad);
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.05:width<1280?1.28:1.45,budget=lowPower?760000:width<1280?1250000:1750000;
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
