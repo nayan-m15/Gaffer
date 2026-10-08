@@ -154,3 +154,18 @@ export interface CompetitionInvite {
   proposedName?: string | null;
   requestedByUserId?: string | null;
 }
+
+export type CompetitionPlayerStat = {
+  athleteId: string;
+  name: string;
+  position: string | null;
+  teamId: string;
+  teamName: string;
+  goals: number;
+  assists: number;
+  goalContributions: number;
+  saves: number;
+  appearances: number;
+  yellowCards: number;
+  redCards: number;
+};

@@ -13,6 +13,7 @@ import { addParticipant, deleteCompetition, deleteCompetitionResult, generateCom
 import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type ActionDialogConfig } from "./CompetitionDialogs";
 import { CompetitionResultDialog } from "./CompetitionResultDialog";
 import { CompetitionFixturesView } from "./CompetitionFixturesView";
+import { CompetitionPlayerStats } from "./CompetitionPlayerStats";
 import type { CompetitionDetail, CompetitionFixture, CompetitionFormat, CompetitionInvite, CompetitionResult, CompetitionSummary, Participant } from "./types";
 import "./competitions-background.css";
 
@@ -558,6 +559,7 @@ function SharedCompetitionDetailsContent({
       showCompetitionHeaders={false}
       compactOnMobile
     />}
+    <CompetitionPlayerStats competitionId={id} participants={competition.participants} />
     {competition.isAdmin && <FixtureReadinessPanel
       participantCount={participantCount}
       configuredCount={configuredCount}

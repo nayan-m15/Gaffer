@@ -88,6 +88,14 @@ export class CompetitionsController {
     return { success: true };
   }
 
+  @Get(':id/player-stats')
+  async playerStats(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.competitionsService.getPlayerStats(user.id, id);
+  }
+
   @Get(':id/fixtures')
   async fixtures(
     @CurrentUser() user: SessionUser,

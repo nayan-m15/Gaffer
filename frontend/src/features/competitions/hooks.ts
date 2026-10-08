@@ -68,3 +68,11 @@ export function useCompetitionMutation<T, R>(mutationFn: (input: T) => Promise<R
     },
   });
 }
+
+export function useCompetitionPlayerStats(id: string) {
+  return useQuery({
+    queryKey: [...useCompetitionKey(), "player-stats", id],
+    queryFn: () => api.fetchCompetitionPlayerStats(id),
+    refetchInterval: 60_000,
+  });
+}

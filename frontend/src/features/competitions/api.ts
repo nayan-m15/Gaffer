@@ -8,6 +8,7 @@ import type {
   CompetitionResult,
   CompetitionResultInput,
   CompetitionSummary,
+  CompetitionPlayerStat,
   Participant,
 } from "./types";
 
@@ -115,3 +116,6 @@ export const proposeCompetitionFixtureSchedule = (
     { method: "POST", body: JSON.stringify(input) },
   );
 
+
+export const fetchCompetitionPlayerStats = (id: string) =>
+  apiFetch<CompetitionPlayerStat[]>(`/competitions/${encodeURIComponent(id)}/player-stats`);

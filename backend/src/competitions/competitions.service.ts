@@ -27,6 +27,8 @@ import {
 } from '../matches/match-sessions';
 import {
   athletes,
+  athleteMatchStats,
+  matchEvents,
   competitionMatches,
   competitionFixtures,
   competitions,
@@ -660,6 +662,82 @@ export class CompetitionsService {
     await this.databaseService.database
       .delete(competitionMatches)
       .where(eq(competitionMatches.id, resultId));
+  }
+
+  /** Competition-wide leaderboard, sourced exclusively from finalized fixture logs.
+   * Manual score-only results are intentionally excluded: they have no player attribution.
+   */
+  async getPlayerStats(userId: string, competitionId: string) {
+    // Detail has the same authenticated visibility rules as other public competition reads.
+    await this.findOne(userId, competitionId);
+    const validEvent = (kind: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save') =>
+      sql<number>`(select count(*)::int from ${matchEvents} me
+        where me.match_id = ${athleteMatchStats.matchId}
+          and me.athlete_id = ${athleteMatchStats.athleteId}
+          and me.team = 'own' and me.event_type = ${kind}
+          and me.lifecycle_status not in ('voided', 'needs_review'))`;
+    const appeared = sql<boolean>`${athleteMatchStats.started} or exists (
+      select 1 from ${matchEvents} sub where sub.match_id = ${athleteMatchStats.matchId}
+        and sub.event_type = 'substitution' and sub.team = 'own'
+        and sub.detail = ${athleteMatchStats.athleteId}::text
+        and sub.lifecycle_status not in ('voided', 'needs_review'))`;
+    const rows = await this.databaseService.database.select({
+      athleteId: athletes.id,
+      firstName: athletes.firstName,
+      lastName: athletes.lastName,
+      position: athletes.position,
+      teamId: competitionTeams.teamId,
+      teamName: competitionTeams.displayName,
+      goals: validEvent('goal'),
+      assists: validEvent('assist'),
+      saves: validEvent('goalkeeper_save'),
+      yellowCards: validEvent('yellow_card'),
+      redCards: validEvent('red_card'),
+      appeared,
+    })
+      .from(athleteMatchStats)
+      .innerJoin(athletes, eq(athleteMatchStats.athleteId, athletes.id))
+      .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .innerJoin(competitionTeams, and(
+        eq(competitionTeams.competitionId, competitionId),
+        eq(competitionTeams.teamId, athletes.teamId),
+        eq(competitionTeams.teamId, events.teamId),
+      ))
+      .where(and(
+        eq(matches.competitionId, competitionId),
+        eq(events.status, 'completed'),
+        sql`exists (select 1 from ${competitionFixtures} f
+          where f.competition_id = ${competitionId}
+            and f.status = 'completed'
+            and (f.linked_match_id = ${matches.id}
+              or (f.shared_session_id is not null and f.shared_session_id = ${matches.sharedMatchId})))`,
+      ));
+    const players = new Map<string, {
+      athleteId: string; name: string; position: string | null; teamId: string;
+      teamName: string; goals: number; assists: number; goalContributions: number;
+      saves: number; appearances: number; yellowCards: number; redCards: number;
+    }>();
+    for (const row of rows) {
+      if (!row.teamId) continue;
+      let player = players.get(row.athleteId);
+      if (!player) {
+        player = { athleteId: row.athleteId, name: `${row.firstName} ${row.lastName}`.trim(),
+          position: row.position, teamId: row.teamId, teamName: row.teamName,
+          goals: 0, assists: 0, goalContributions: 0, saves: 0,
+          appearances: 0, yellowCards: 0, redCards: 0 };
+        players.set(row.athleteId, player);
+      }
+      player.goals += Number(row.goals ?? 0);
+      player.assists += Number(row.assists ?? 0);
+      player.saves += Number(row.saves ?? 0);
+      player.yellowCards += Number(row.yellowCards ?? 0);
+      player.redCards += Number(row.redCards ?? 0);
+      if (row.appeared) player.appearances++;
+      player.goalContributions = player.goals + player.assists;
+    }
+    return Array.from(players.values()).sort((a, b) =>
+      b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name));
   }
 
   /* ── Internals ──────────────────────────────────────────────────────────── */
