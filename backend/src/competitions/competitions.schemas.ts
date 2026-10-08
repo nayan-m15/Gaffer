@@ -138,7 +138,7 @@ const fixtureTimezoneSchema = z
 
 export const generateFixturesSchema = z.object({
   regenerate: z.boolean().optional().default(false),
-  timezone: fixtureTimezoneSchema.optional().default('UTC'),
+  timezone: fixtureTimezoneSchema.optional(),
 });
 
 export const fixtureScheduleAcceptSchema = z.object({

@@ -729,7 +729,8 @@ export const competitions = pgTable(
       .default(1)
       .notNull(),
     startDate: date('start_date'),
-    // UTC weekdays: Sunday=0 ... Saturday=6; kickoff is explicitly UTC.
+    // Local weekdays: Sunday=0 ... Saturday=6, in the generation timezone.
+    scheduleTimezone: text('schedule_timezone').default('UTC').notNull(),
     allowedPlayingDays: integer('allowed_playing_days')
       .array()
       .default(sql`ARRAY[6]::integer[]`)

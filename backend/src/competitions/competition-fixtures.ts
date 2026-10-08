@@ -79,12 +79,12 @@ export interface PlannedFixture {
   nextFixtureSlot: 'home' | 'away' | null;
 }
 
-/** One matchday per allowed UTC date. All games in a round share kickoff. */
+/** One matchday per allowed local date. All games in a round share kickoff. */
 export function planFixtures(
   competition: typeof competitions.$inferSelect,
   participantIds: string[],
   now = new Date(),
-  timezone = 'UTC',
+  timezone = competition.scheduleTimezone ?? 'UTC',
 ): PlannedFixture[] {
   const { size, format } = validateFixtureParticipants(
     competition,
@@ -205,6 +205,11 @@ function addCalendarDays(value: string, amount: number): string {
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + amount));
   return date.toISOString().slice(0, 10);
+}
+
+export function fixtureCalendarDate(date: Date, timezone: string): string {
+  const parts = zonedParts(date, timezone);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 function localScheduleToUtc(

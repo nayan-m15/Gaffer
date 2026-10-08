@@ -128,6 +128,22 @@ describe('Competition fixtures (PostgreSQL)', () => {
     await pg?.close();
   });
   beforeEach(async () => {
+    // Freeze Date only; PGlite still needs real timers and microtasks.
+    jest.useFakeTimers({
+      now: new Date('2026-09-20T10:00:00.000Z'),
+      doNotFake: [
+        'nextTick',
+        'queueMicrotask',
+        'performance',
+        'hrtime',
+        'setImmediate',
+        'clearImmediate',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
     // This suite exercises deliberately supported legacy/manual result publication.
     process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
     secondaryTeamId = null;
@@ -150,6 +166,7 @@ describe('Competition fixtures (PostgreSQL)', () => {
     });
     competitionId = created.id;
   });
+  afterEach(() => jest.useRealTimers());
   async function fill(size = 4) {
     for (let i = 1; i < size; i++)
       await service.addParticipant('admin', competitionId, {
@@ -227,6 +244,42 @@ describe('Competition fixtures (PostgreSQL)', () => {
     const detail = await service.findOne('admin', competitionId);
     expect(detail.configuredTeamCount).toBe(4);
     expect(detail.playersPerSide).toBe(11);
+  });
+
+  it('retains the saved timezone when omitted and changes it only during safe regeneration', async () => {
+    await fill();
+    const initial = await service.generateFixtures(
+      'admin',
+      competitionId,
+      false,
+      'Asia/Tokyo',
+    );
+    const regenerated = await service.generateFixtures(
+      'admin',
+      competitionId,
+      true,
+    );
+    expect(
+      regenerated.map((fixture) => fixture.scheduledAt.toISOString()),
+    ).toEqual(initial.map((fixture) => fixture.scheduledAt.toISOString()));
+    expect((await row()).scheduleTimezone).toBe('Asia/Tokyo');
+    const changed = await service.generateFixtures(
+      'admin',
+      competitionId,
+      true,
+      'Africa/Johannesburg',
+    );
+    expect((await row()).scheduleTimezone).toBe('Africa/Johannesburg');
+    expect(
+      changed.every((fixture) => fixture.scheduledAt.getUTCHours() === 16),
+    ).toBe(true);
+    await expect(
+      db
+        .update(schema.competitions)
+        .set({ scheduleTimezone: 'UTC' })
+        .where(eq(schema.competitions.id, competitionId)),
+    ).rejects.toThrow();
+    expect((await row()).scheduleTimezone).toBe('Africa/Johannesburg');
   });
 
   it('stores the selected local kickoff at the correct UTC instant', async () => {
@@ -527,12 +580,26 @@ describe('Competition fixtures (PostgreSQL)', () => {
       format: 'league_knockout',
       configuredTeamCount: 5,
       qualifierCount: 4,
+      defaultKickoffTime: '00:30',
+      allowedPlayingDays: [0, 1, 2, 3, 4, 5, 6],
     });
     await fill(5);
     const leagueFixtures = await service.generateFixtures(
       'admin',
       competitionId,
+      false,
+      'Asia/Tokyo',
     );
+    expect((await row()).scheduleTimezone).toBe('Asia/Tokyo');
+    expect(
+      leagueFixtures.every(
+        (fixture) => fixture.scheduledAt.getUTCHours() === 15,
+      ),
+    ).toBe(true);
+    await expect(
+      service.generateFixtures('admin', competitionId, false, 'UTC'),
+    ).rejects.toThrow();
+    expect((await row()).scheduleTimezone).toBe('Asia/Tokyo');
     const slots = await participants();
     const bottom = slots.find((slot) => slot.displayName === 'External 4')!;
 
@@ -553,6 +620,20 @@ describe('Competition fixtures (PostgreSQL)', () => {
       (fixture) => fixture.stage === 'knockout',
     );
     expect(knockout).toHaveLength(3);
+    const latestLeagueTime = Math.max(
+      ...leagueFixtures.map((fixture) => fixture.scheduledAt.getTime()),
+    );
+    const firstKnockoutTime = Math.min(
+      ...knockout.map((fixture) => fixture.scheduledAt.getTime()),
+    );
+    expect(firstKnockoutTime).toBe(latestLeagueTime + 24 * 60 * 60 * 1000);
+    expect(
+      knockout.every(
+        (fixture) =>
+          fixture.scheduledAt.getUTCHours() === 15 &&
+          fixture.scheduledAt.getUTCMinutes() === 30,
+      ),
+    ).toBe(true);
     const openingIds = knockout
       .filter((fixture) => fixture.round === 1)
       .flatMap((fixture) => [

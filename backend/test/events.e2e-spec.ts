@@ -92,6 +92,22 @@ describe('Events (e2e)', () => {
     });
   });
 
+  it('rejects a past kickoff through the HTTP endpoint', async () => {
+    const { agent } = await newCoach();
+    const response = await agent
+      .post('/events')
+      .send({
+        title: 'Past training',
+        type: 'training',
+        scheduledAt: futureIso(-1),
+        location: 'Main field',
+      })
+      .expect(400);
+    expect((response.body as ErrorResponseBody).message).toBe(
+      'Choose a date and time in the future.',
+    );
+  });
+
   it('rejects a payload missing required fields', async () => {
     const { agent } = await newCoach();
 
@@ -235,7 +251,7 @@ describe('Events (e2e)', () => {
       .send({
         title: 'League match',
         type: 'match',
-        scheduledAt: new Date().toISOString(),
+        scheduledAt: futureIso(1),
         location: 'Main field',
         competitionId: leagueId,
       })

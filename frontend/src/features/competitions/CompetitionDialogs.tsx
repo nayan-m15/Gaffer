@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { formatLocalDate } from "@/features/events/event-utils";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,10 +34,6 @@ const weekdayOptions = [
 const knockoutSizes = [4, 8, 16, 32] as const;
 const TIME_HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
 const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0"));
-
-function utcDateValue(date = new Date()) {
-  return date.toISOString().slice(0, 10);
-}
 
 type Step = 1 | 2 | 3;
 
@@ -218,7 +215,7 @@ function CompetitionScheduleFields({
   allowedPlayingDays: number[]; onAllowedDaysChange: (days: number[]) => void;
   defaultKickoffTime: string; setDefaultKickoffTime: (value: string) => void;
 }) {
-  const today = utcDateValue();
+  const today = formatLocalDate(new Date());
 
   return (
     <>
@@ -283,7 +280,7 @@ function CompetitionTimePicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         <div className="mb-2 flex items-center justify-between gap-6 px-1">
-          <p className="text-xs font-medium">Kickoff time (UTC)</p>
+          <p className="text-xs font-medium">Kickoff time (local)</p>
           <p className="text-xs tabular-nums text-muted-foreground">{value || "Not selected"}</p>
         </div>
         <div className="flex gap-2">
@@ -339,7 +336,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
       ? (competition?.qualifierCount ?? 4) as 4 | 8 | 16 | 32
       : 4,
   );
-  const [startDate, setStartDate] = useState(competition?.startDate ?? new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(competition?.startDate ?? formatLocalDate(new Date()));
   const [allowedPlayingDays, setAllowedPlayingDays] = useState<number[]>(competition?.allowedPlayingDays?.length ? competition.allowedPlayingDays : [6]);
   const [defaultKickoffTime, setDefaultKickoffTime] = useState(competition?.defaultKickoffTime ?? "15:00");
 
@@ -383,7 +380,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
 
   const scheduleValid = Boolean(
     startDate &&
-    startDate >= utcDateValue() &&
+    startDate >= formatLocalDate(new Date()) &&
     /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(defaultKickoffTime) &&
     allowedPlayingDays.length,
   );
