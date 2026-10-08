@@ -1,20 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Cake,
+  Phone,
+  Settings,
+  Users,
   Check,
   Eye,
   EyeOff,
   KeyRound,
   Loader2,
   Mail,
-  Pencil,
-  Phone,
   Shield,
   Trash2,
   UserCircle,
-  Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,77 +37,359 @@ import {
 } from "@/services/profile";
 
 const PROFILE_QUERY_KEY = ["profile"] as const;
+export type AccountView = "profile" | "settings";
 
 interface ProfileEditorDialogProps {
-  isOpen: boolean;
+  view: AccountView | null;
   onClose: () => void;
+  onViewChange: (view: AccountView) => void;
 }
 
-/**
- * ProfileEditorDialog — modal for viewing and editing the current user's
- * profile.
- *
- * Opens from the sidebar's user area. Fetches the profile via TanStack Query
- * (enabled only while open) and persists name changes through PATCH /profile.
- * After a successful save the profile query is invalidated and the auth
- * session is refreshed so the sidebar immediately reflects the new name.
- */
 export function ProfileEditorDialog({
-  isOpen,
+  view,
   onClose,
+  onViewChange,
 }: ProfileEditorDialogProps) {
-  const { user, team, refreshSession } = useAuth();
-  const queryClient = useQueryClient();
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhoneNumber, setEditPhoneNumber] = useState("");
-  const [editSex, setEditSex] = useState<Sex | "">("");
-  const [editDateOfBirth, setEditDateOfBirth] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-
+  const { team, claimedAthletes, accountKind } = useAuth();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const profileQuery = useQuery({
     queryKey: PROFILE_QUERY_KEY,
     queryFn: getProfile,
-    enabled: isOpen,
+    enabled: view !== null,
   });
 
-  const updateMutation = useMutation({
-    mutationFn: updateProfile,
+  useEffect(() => {
+    if (!view) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLElement>("h2")?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const activeDialog = dialogs[dialogs.length - 1];
+      if (!activeDialog) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeDialog === dialogRef.current) onClose();
+        else
+          activeDialog
+            .querySelector<HTMLButtonElement>('button[aria-label^="Close"]')
+            ?.click();
+      }
+      if (event.key === "Tab") {
+        const focusable = Array.from(
+          activeDialog.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
+          ),
+        ).filter((element) => element.getClientRects().length > 0);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first) {
+          event.preventDefault();
+          activeDialog.focus();
+          return;
+        }
+        const current = document.activeElement;
+        if (
+          event.shiftKey &&
+          (current === first || !focusable.includes(current as HTMLElement))
+        ) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          (current === last || !focusable.includes(current as HTMLElement))
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+      else {
+        Array.from(document.querySelectorAll<HTMLElement>('[aria-label="Open account menu"], [aria-controls="mobile-more-menu"], [aria-label="Open navigation menu"]'))
+          .find((element) => element.getClientRects().length > 0)?.focus();
+      }
+    };
+  }, [view, onClose]);
+
+  if (!view) return null;
+  const profile = profileQuery.data;
+  const initials = (profile?.name ?? "")
+    .split(" ")
+    .map((part) => part.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-dialog-title"
+        tabIndex={-1}
+        className={cn(
+          "relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl",
+          view === "profile" ? "max-w-lg" : "max-w-2xl",
+        )}
+      >
+        <div className={cn("flex shrink-0 items-start justify-between gap-3", view === "settings" ? "px-5 pb-3 pt-4" : "px-6 pb-4 pt-6")}>
+          <div>
+            <h2
+              id="account-dialog-title"
+              tabIndex={-1}
+              className="text-lg font-bold text-foreground outline-none"
+            >
+              {view === "profile" ? "Profile" : "Account settings"}
+            </h2>
+            {view === "settings" && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manage your personal details, email, and password.
+              </p>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", view === "settings" ? "px-5 pb-4" : "px-6 pb-6")}>
+          {profileQuery.isPending ? (
+            <div
+              role="status"
+              className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
+            >
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Loading profile...
+            </div>
+          ) : profileQuery.isError ? (
+            <div role="alert" className="space-y-3 py-6 text-center">
+              <p className="text-sm text-destructive">
+                {profileQuery.error instanceof ApiError
+                  ? profileQuery.error.message
+                  : "Failed to load profile."}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => void profileQuery.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : profile ? (
+            view === "profile" ? (
+              <ProfileOverview
+                profile={profile}
+                initials={initials}
+                teamName={team?.name ?? claimedAthletes[0]?.teamName ?? null}
+                teamRole={
+                  team?.role ?? (accountKind === "player" ? "player" : null)
+                }
+                onSettings={() => onViewChange("settings")}
+              />
+            ) : (
+              <div className="space-y-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onViewChange("profile")}
+                >
+                  View profile
+                </Button>
+                <AccountSettingsContent key={profile.id} profile={profile} />
+              </div>
+            )
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileOverview({
+  profile,
+  initials,
+  teamName,
+  teamRole,
+  onSettings,
+}: {
+  profile: BackendProfile;
+  initials: string;
+  teamName: string | null;
+  teamRole: string | null;
+  onSettings: () => void;
+}) {
+  const joinedDate = new Date(profile.createdAt).toLocaleDateString("en-GB", {
+    month: "short",
+    year: "numeric",
   });
-  const { reset: resetMutation } = updateMutation;
+  return (
+    <>
+      {/* Avatar + identity */}
+      <div
+        className={cn("flex flex-col items-center text-center", "mb-5 gap-3")}
+      >
+        {profile.image ? (
+          <img
+            src={profile.image}
+            alt=""
+            className={cn("shrink-0 rounded-full object-cover", "size-20")}
+          />
+        ) : (
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-full bg-primary/20 font-bold text-primary",
+              "size-20 text-2xl",
+            )}
+          >
+            {initials || <UserCircle className="size-10" />}
+          </div>
+        )}
+        <div>
+          <p className="text-lg font-bold text-foreground">{profile.name}</p>
+          <p className="text-sm text-muted-foreground">{profile.email}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {teamRole && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              <Shield className="size-3" />
+              {teamRole}
+            </span>
+          )}
+          {profile.emailVerified && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">
+              <Check className="size-3" />
+              Verified
+            </span>
+          )}
+        </div>
+      </div>
 
-  // Reset to view mode whenever the dialog closes.
-  useEffect(() => {
-    if (!isOpen) {
-      setIsEditing(false);
-      setValidationError(null);
-      setShowSuccess(false);
-      resetMutation();
-    }
-  }, [isOpen, resetMutation]);
+      <dl className="space-y-1">
+        <DetailRow
+          icon={<UserCircle className="size-4" />}
+          label="Name"
+          value={profile.name}
+        />
+        <DetailRow
+          icon={<Mail className="size-4" />}
+          label="Email"
+          value={profile.email}
+        />
+        {teamRole && (
+          <DetailRow
+            icon={<Shield className="size-4" />}
+            label="Role"
+            value={teamRole}
+          />
+        )}
+        {teamName && (
+          <DetailRow
+            icon={<Users className="size-4" />}
+            label="Team"
+            value={teamName}
+          />
+        )}
+        {profile.phoneNumber && (
+          <DetailRow
+            icon={<Phone className="size-4" />}
+            label="Phone"
+            value={profile.phoneNumber}
+          />
+        )}
+        {profile.sex && (
+          <DetailRow
+            icon={<UserCircle className="size-4" />}
+            label="Sex"
+            value={formatSex(profile.sex)}
+          />
+        )}
+        {profile.dateOfBirth && (
+          <DetailRow
+            icon={<Cake className="size-4" />}
+            label="Age"
+            value={`${calculateAge(profile.dateOfBirth)} years`}
+          />
+        )}
+        <DetailRow
+          icon={<Mail className="size-4" />}
+          label="Member since"
+          value={joinedDate}
+        />
+      </dl>
 
-  // Auto-dismiss the success banner after a few seconds.
-  useEffect(() => {
-    if (!showSuccess) return;
-    const timer = setTimeout(() => setShowSuccess(false), 4000);
-    return () => clearTimeout(timer);
-  }, [showSuccess]);
+      <div className="mt-5 flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onSettings}
+          className="gap-1.5"
+        >
+          <Settings className="size-4" />
+          Account settings
+        </Button>
+      </div>
+    </>
+  );
+}
 
-  const handleEdit = () => {
-    setEditName(profileQuery.data?.name ?? user?.name ?? "");
-    setEditPhoneNumber(profileQuery.data?.phoneNumber ?? "");
-    setEditSex(profileQuery.data?.sex ?? "");
-    setEditDateOfBirth(profileQuery.data?.dateOfBirth ?? "");
+interface DetailRowProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}
+
+function DetailRow({ icon, label, value }: DetailRowProps) {
+  return (
+    <div className="flex items-center justify-between border-b border-border py-2.5 last:border-b-0">
+      <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+        <span className="text-muted-foreground/70">{icon}</span>
+        {label}
+      </div>
+      <p className="text-sm font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function AccountSettingsContent({ profile }: { profile: BackendProfile }) {
+  const { refreshSession } = useAuth();
+  const queryClient = useQueryClient();
+  const [editName, setEditName] = useState(profile.name);
+  const [editPhoneNumber, setEditPhoneNumber] = useState(
+    profile.phoneNumber ?? "",
+  );
+  const [editSex, setEditSex] = useState<Sex | "">(profile.sex ?? "");
+  const [editDateOfBirth, setEditDateOfBirth] = useState(
+    profile.dateOfBirth ?? "",
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const updateMutation = useMutation({ mutationFn: updateProfile });
+  const handleReset = () => {
+    setEditName(profile.name);
+    setEditPhoneNumber(profile.phoneNumber ?? "");
+    setEditSex(profile.sex ?? "");
+    setEditDateOfBirth(profile.dateOfBirth ?? "");
     setValidationError(null);
-    updateMutation.reset();
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setValidationError(null);
+    setShowSuccess(false);
     updateMutation.reset();
   };
 
@@ -139,315 +421,63 @@ export function ProfileEditorDialog({
     setValidationError(null);
 
     try {
-      await updateMutation.mutateAsync({
+      const updated = await updateMutation.mutateAsync({
         name: trimmed,
         phoneNumber: trimmedPhone,
         sex: sexValue,
         dateOfBirth: dobValue,
       });
-      await queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
+      queryClient.setQueryData(PROFILE_QUERY_KEY, updated);
+      setEditName(updated.name);
+      setEditPhoneNumber(updated.phoneNumber ?? "");
+      setEditSex(updated.sex ?? "");
+      setEditDateOfBirth(updated.dateOfBirth ?? "");
       await refreshSession();
-      setIsEditing(false);
       setShowSuccess(true);
     } catch {
       // Error surfaced via updateMutation.error below.
     }
   };
 
-  if (!isOpen) return null;
-
-  const initials = (profileQuery.data?.name ?? user?.name ?? "C")
-    .split(" ")
-    .map((part) => part.charAt(0))
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Dialog */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profile-title"
-        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
-      >
-        {/* Header stays fixed while only the content area scrolls when needed. */}
-        <div className="flex shrink-0 items-center justify-between px-6 pb-4 pt-6">
-          <h2
-            id="profile-title"
-            className="text-lg font-bold text-foreground"
-          >
-            Profile
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* Success banner */}
-          {showSuccess && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2.5 text-sm text-brand">
-            <Check className="size-4 shrink-0" />
-            Profile updated successfully.
-          </div>
-        )}
-
-        {/* Body */}
-        {profileQuery.isPending ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading profile…
-          </div>
-        ) : profileQuery.isError ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <AlertCircle className="size-8 text-destructive" />
-            <p className="text-sm text-muted-foreground">
-              {profileQuery.error instanceof ApiError
-                ? profileQuery.error.message
-                : "Failed to load profile."}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void profileQuery.refetch()}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : profileQuery.data ? (
-          <ProfileBody
-            profile={profileQuery.data}
-            initials={initials}
-            teamName={team?.name ?? null}
-            teamRole={team?.role ?? null}
-            isEditing={isEditing}
-            editName={editName}
-            editPhoneNumber={editPhoneNumber}
-            editSex={editSex}
-            editDateOfBirth={editDateOfBirth}
-            validationError={validationError}
-            mutationError={updateMutation.error ?? null}
-            isSaving={updateMutation.isPending}
-            onEditNameChange={setEditName}
-            onEditPhoneNumberChange={setEditPhoneNumber}
-            onEditSexChange={setEditSex}
-            onEditDateOfBirthChange={setEditDateOfBirth}
-            onEdit={handleEdit}
-            onCancel={handleCancelEdit}
-            onSave={handleSave}
-          />
-        ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Private sub-components ─────────────────────────────────────────────── */
-
-interface ProfileBodyProps {
-  profile: BackendProfile;
-  initials: string;
-  teamName: string | null;
-  teamRole: string | null;
-  isEditing: boolean;
-  editName: string;
-  editPhoneNumber: string;
-  editSex: Sex | "";
-  editDateOfBirth: string;
-  validationError: string | null;
-  mutationError: Error | null;
-  isSaving: boolean;
-  onEditNameChange: (value: string) => void;
-  onEditPhoneNumberChange: (value: string) => void;
-  onEditSexChange: (value: Sex | "") => void;
-  onEditDateOfBirthChange: (value: string) => void;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => Promise<void>;
-}
-
-function ProfileBody({
-  profile,
-  initials,
-  teamName,
-  teamRole,
-  isEditing,
-  editName,
-  editPhoneNumber,
-  editSex,
-  editDateOfBirth,
-  validationError,
-  mutationError,
-  isSaving,
-  onEditNameChange,
-  onEditPhoneNumberChange,
-  onEditSexChange,
-  onEditDateOfBirthChange,
-  onEdit,
-  onCancel,
-  onSave,
-}: ProfileBodyProps) {
-  const joinedDate = new Date(profile.createdAt).toLocaleDateString("en-GB", {
-    month: "short",
-    year: "numeric",
-  });
-
   return (
     <>
-      {/* Avatar + identity */}
-      <div className={cn("flex flex-col items-center text-center", isEditing ? "mb-4 gap-2" : "mb-5 gap-3")}>
-        {profile.image ? (
-          <img
-            src={profile.image}
-            alt=""
-            className={cn("shrink-0 rounded-full object-cover", isEditing ? "size-16" : "size-20")}
-          />
-        ) : (
-          <div className={cn("flex shrink-0 items-center justify-center rounded-full bg-primary/20 font-bold text-primary", isEditing ? "size-16 text-xl" : "size-20 text-2xl")}>
-            {initials || <UserCircle className="size-10" />}
-          </div>
-        )}
-        <div>
-          <p className="text-lg font-bold text-foreground">{profile.name}</p>
-          <p className="text-sm text-muted-foreground">{profile.email}</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {teamRole && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              <Shield className="size-3" />
-              {teamRole}
-            </span>
-          )}
-          {profile.emailVerified && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">
-              <Check className="size-3" />
-              Verified
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Edit form or read-only details */}
-      {isEditing ? (
-        <EditForm
-          currentEmail={profile.email}
-          editName={editName}
-          editPhoneNumber={editPhoneNumber}
-          editSex={editSex}
-          editDateOfBirth={editDateOfBirth}
-          validationError={validationError}
-          mutationError={mutationError}
-          isSaving={isSaving}
-          onSave={onSave}
-          onCancel={onCancel}
-          onNameChange={onEditNameChange}
-          onPhoneNumberChange={onEditPhoneNumberChange}
-          onSexChange={onEditSexChange}
-          onDateOfBirthChange={onEditDateOfBirthChange}
-        />
-      ) : (
-        <>
-          <dl className="space-y-1">
-            <DetailRow
-              icon={<UserCircle className="size-4" />}
-              label="Name"
-              value={profile.name}
-            />
-            <DetailRow
-              icon={<Mail className="size-4" />}
-              label="Email"
-              value={profile.email}
-            />
-            {teamRole && (
-              <DetailRow
-                icon={<Shield className="size-4" />}
-                label="Role"
-                value={teamRole}
-              />
-            )}
-            {teamName && (
-              <DetailRow
-                icon={<Users className="size-4" />}
-                label="Team"
-                value={teamName}
-              />
-            )}
-            {profile.phoneNumber && (
-              <DetailRow
-                icon={<Phone className="size-4" />}
-                label="Phone"
-                value={profile.phoneNumber}
-              />
-            )}
-            {profile.sex && (
-              <DetailRow
-                icon={<UserCircle className="size-4" />}
-                label="Sex"
-                value={formatSex(profile.sex)}
-              />
-            )}
-            {profile.dateOfBirth && (
-              <DetailRow
-                icon={<Cake className="size-4" />}
-                label="Age"
-                value={`${calculateAge(profile.dateOfBirth)} years`}
-              />
-            )}
-            <DetailRow
-              icon={<Mail className="size-4" />}
-              label="Member since"
-              value={joinedDate}
-            />
-          </dl>
-
-          <div className="mt-5 flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onEdit}
-              className="gap-1.5"
-            >
-              <Pencil className="size-4" />
-              Edit Profile
-            </Button>
-          </div>
-        </>
+      {showSuccess && (
+        <p
+          role="status"
+          className="rounded-lg border border-brand/30 bg-brand/10 p-3 text-sm text-brand"
+        >
+          Personal details saved.
+        </p>
       )}
+      <EditForm
+        currentEmail={profile.email}
+        editName={editName}
+        editPhoneNumber={editPhoneNumber}
+        editSex={editSex}
+        editDateOfBirth={editDateOfBirth}
+        validationError={validationError}
+        mutationError={updateMutation.error}
+        isSaving={updateMutation.isPending}
+        onSave={handleSave}
+        onCancel={handleReset}
+        onNameChange={(value) => {
+          setEditName(value);
+          setShowSuccess(false);
+        }}
+        onPhoneNumberChange={(value) => {
+          setEditPhoneNumber(value);
+          setShowSuccess(false);
+        }}
+        onSexChange={(value) => {
+          setEditSex(value);
+          setShowSuccess(false);
+        }}
+        onDateOfBirthChange={(value) => {
+          setEditDateOfBirth(value);
+          setShowSuccess(false);
+        }}
+      />
     </>
-  );
-}
-
-interface DetailRowProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}
-
-function DetailRow({ icon, label, value }: DetailRowProps) {
-  return (
-    <div className="flex items-center justify-between border-b border-border py-2.5 last:border-b-0">
-      <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-        <span className="text-muted-foreground/70">{icon}</span>
-        {label}
-      </div>
-      <p className="text-sm font-medium text-foreground">{value}</p>
-    </div>
   );
 }
 
@@ -491,6 +521,10 @@ function EditForm({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
+  const passwordStatusQuery = useQuery({
+    queryKey: ["password-status"],
+    queryFn: getPasswordStatus,
+  });
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -498,189 +532,106 @@ function EditForm({
   };
 
   const inputClass = cn(
-    "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
+    "h-9 min-w-0 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/50",
     errorMessage && "border-destructive",
     isSaving && "opacity-60",
   );
   const labelClass =
-    "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+    "mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-        {/* Name */}
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-3 rounded-xl border border-border bg-card p-4"
+        aria-labelledby="personal-details-title"
+      >
         <div>
-          <label className={labelClass} htmlFor="edit-name">
-            Name
-          </label>
-          <input
-            id="edit-name"
-            type="text"
-            value={editName}
-            onChange={(event) => onNameChange(event.target.value)}
-            disabled={isSaving}
-            autoFocus
-            maxLength={100}
-            className={inputClass}
-          />
+          <h2 id="personal-details-title" className="text-lg font-semibold">
+            Personal details
+          </h2>
         </div>
-
-        {/* Phone number */}
-        <div>
-          <label className={labelClass} htmlFor="edit-phone">
-            Phone Number
-          </label>
-          <input
-            id="edit-phone"
-            type="tel"
-            value={editPhoneNumber}
-            onChange={(event) => onPhoneNumberChange(event.target.value)}
-            disabled={isSaving}
-            placeholder="e.g. 07123 456789"
-            maxLength={30}
-            className={inputClass}
-          />
-        </div>
-
-        {/* Sex */}
-        <div>
-          <label className={labelClass} htmlFor="edit-sex">
-            Sex
-          </label>
-          <select
-            id="edit-sex"
-            value={editSex}
-            onChange={(event) =>
-              onSexChange(event.target.value as Sex | "")
-            }
-            disabled={isSaving}
-            className={inputClass}
-          >
-            <option value="">—</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
-          </select>
-        </div>
-
-        {/* Date of birth */}
-        <div>
-          <label className={labelClass} htmlFor="edit-dob">
-            Date of Birth
-          </label>
-          <input
-            id="edit-dob"
-            type="date"
-            value={editDateOfBirth}
-            onChange={(event) => onDateOfBirthChange(event.target.value)}
-            disabled={isSaving}
-            max={today}
-            className={inputClass}
-          />
-        </div>
-        </div>
-
-        {/* Account security actions stay compact and open in dedicated dialogs. */}
-        <div className="space-y-3 border-t border-border pt-4">
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Mail className="size-4 shrink-0 text-muted-foreground" />
-                Email address
-              </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {currentEmail}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEmailNotice(null);
-                setIsEmailDialogOpen(true);
-              }}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Name */}
+          <div>
+            <label className={labelClass} htmlFor="edit-name">
+              Name
+            </label>
+            <input
+              id="edit-name"
+              type="text"
+              value={editName}
+              onChange={(event) => onNameChange(event.target.value)}
               disabled={isSaving}
-              className="shrink-0"
-            >
-              Change
-            </Button>
+              maxLength={100}
+              className={inputClass}
+            />
           </div>
 
-          {emailNotice && (
-            <p className="flex items-center gap-1.5 text-sm text-brand">
-              <Check className="size-3.5 shrink-0" />
-              {emailNotice}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <KeyRound className="size-4 shrink-0 text-muted-foreground" />
-                Password
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Manage your password and email/password sign-in.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setPasswordNotice(null);
-                setIsPasswordDialogOpen(true);
-              }}
+          {/* Phone number */}
+          <div>
+            <label className={labelClass} htmlFor="edit-phone">
+              Phone Number
+            </label>
+            <input
+              id="edit-phone"
+              type="tel"
+              value={editPhoneNumber}
+              onChange={(event) => onPhoneNumberChange(event.target.value)}
               disabled={isSaving}
-              className="shrink-0"
-            >
-              Manage
-            </Button>
+              placeholder="e.g. 07123 456789"
+              maxLength={30}
+              className={inputClass}
+            />
           </div>
 
-          {passwordNotice && (
-            <p className="flex items-center gap-1.5 text-sm text-brand">
-              <Check className="size-3.5 shrink-0" />
-              {passwordNotice}
-            </p>
-          )}
-        </div>
-
-        {/* Destructive account actions are deliberately separated from normal profile controls. */}
-        <div className="border-t border-border pt-4">
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
-                <Trash2 className="size-4 shrink-0" />
-                Delete account
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Permanently remove your sign-in access and personal profile data.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsDeleteDialogOpen(true)}
+          {/* Sex */}
+          <div>
+            <label className={labelClass} htmlFor="edit-sex">
+              Sex
+            </label>
+            <select
+              id="edit-sex"
+              value={editSex}
+              onChange={(event) => onSexChange(event.target.value as Sex | "")}
               disabled={isSaving}
-              className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className={inputClass}
             >
-              Delete
-            </Button>
+              <option value="">—</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
+          </div>
+
+          {/* Date of birth */}
+          <div>
+            <label className={labelClass} htmlFor="edit-dob">
+              Date of Birth
+            </label>
+            <input
+              id="edit-dob"
+              type="date"
+              value={editDateOfBirth}
+              onChange={(event) => onDateOfBirthChange(event.target.value)}
+              disabled={isSaving}
+              max={today}
+              className={inputClass}
+            />
           </div>
         </div>
 
         {errorMessage && (
-          <p className="flex items-center gap-1.5 text-sm text-destructive">
+          <p
+            role="alert"
+            className="flex items-center gap-1.5 text-sm text-destructive"
+          >
             <AlertCircle className="size-3.5" />
             {errorMessage}
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -688,7 +639,7 @@ function EditForm({
             disabled={isSaving}
           >
             <X className="size-4" />
-            Cancel
+            Reset changes
           </Button>
           <StatefulButton
             type="submit"
@@ -703,10 +654,111 @@ function EditForm({
             ) : (
               <Check className="size-4" />
             )}
-            {isSaving ? "Saving…" : "Save Profile"}
+            {isSaving ? "Saving…" : "Save changes"}
           </StatefulButton>
         </div>
       </form>
+      {/* Account security actions stay compact and open in dedicated dialogs. */}
+      <section
+        aria-labelledby="security-title"
+        className="space-y-2 rounded-xl border border-border bg-card p-4"
+      >
+        <h2 id="security-title" className="text-lg font-semibold">
+          Email &amp; password
+        </h2>
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Mail className="size-4 shrink-0 text-muted-foreground" />
+              Email address
+            </div>
+            <p className="mt-0.5 break-all text-xs text-muted-foreground">
+              {currentEmail}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEmailNotice(null);
+              setIsEmailDialogOpen(true);
+            }}
+            disabled={isSaving}
+            className="shrink-0"
+          >
+            Change email
+          </Button>
+        </div>
+
+        {emailNotice && (
+          <p className="flex items-center gap-1.5 text-sm text-brand">
+            <Check className="size-3.5 shrink-0" />
+            {emailNotice}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <KeyRound className="size-4 shrink-0 text-muted-foreground" />
+              Password
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Manage your sign-in password.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPasswordNotice(null);
+              setIsPasswordDialogOpen(true);
+            }}
+            disabled={isSaving}
+            className="shrink-0"
+          >
+            {passwordStatusQuery.data
+              ? passwordStatusQuery.data.hasPassword
+                ? "Change password"
+                : "Set password"
+              : "Manage password"}
+          </Button>
+        </div>
+
+        {passwordNotice && (
+          <p className="flex items-center gap-1.5 text-sm text-brand">
+            <Check className="size-3.5 shrink-0" />
+            {passwordNotice}
+          </p>
+        )}
+      </section>
+
+      {/* Destructive account actions are deliberately separated from normal profile controls. */}
+      <section aria-label="Delete account">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+              <Trash2 className="size-4 shrink-0" />
+              Delete account
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Permanently remove your account and personal data.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isSaving}
+            className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            Delete
+          </Button>
+        </div>
+      </section>
 
       <EmailManagementDialog
         isOpen={isEmailDialogOpen}
