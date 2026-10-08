@@ -31,7 +31,10 @@ export default defineConfig({
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,
   },
-  fullyParallel: false,
+  // Lets `--shard` split individual tests rather than whole files, so the
+  // two CI shards stay roughly the same size: regression-ui.spec.ts alone is
+  // ~35 tests. With one worker per shard nothing actually runs concurrently.
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
