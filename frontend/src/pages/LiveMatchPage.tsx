@@ -470,6 +470,7 @@ export default function LiveMatchPage() {
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
   const lastAppliedClockRevisionRef = useRef<string | null>(null);
+  const applyingClockKeyRef = useRef<string | null>(null);
   const enteringIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -489,55 +490,62 @@ export default function LiveMatchPage() {
       match.eventStatus,
     ]);
     if (lastAppliedClockRevisionRef.current === clockKey) return;
-    let cancelled = false;
+    // A refetch that returns the same clock must not restart an application
+    // already in flight. Reading the local anchor can take seconds on a busy
+    // device, and restarting on every refetch meant a peer's pause or resume
+    // could go unapplied indefinitely. Only a newer clock supersedes it.
+    if (applyingClockKeyRef.current === clockKey) return;
+    applyingClockKeyRef.current = clockKey;
+    const superseded = () => applyingClockKeyRef.current !== clockKey;
     void (async () => {
-      const local = matchId ? await readClockAnchor(matchId) : null;
-      if (cancelled) return;
-      const serverElapsed = Math.max(
-        0,
-        match.clockElapsedMs +
-          (match.clockStartedAt
-            ? Date.now() - new Date(match.clockStartedAt).getTime()
-            : 0),
-      );
-      const supersededFullTime = local?.period === "full_time" &&
-        match.clockPeriod !== "full_time" && match.clockRevision > Number(local.authorityRevision);
-      if (supersededFullTime && local && matchId) markClockAnchorSynced(matchId, local.updatedAt);
-      const useLocal = Boolean(
-        match.eventStatus !== "completed" && matchId && local &&
-        !supersededFullTime && isClockAnchorPending(matchId),
-      );
-      const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
-      const nextPeriod = match.eventStatus === "completed"
-        ? "full_time"
-        : useLocal && local ? local.period : match.clockPeriod;
-      const nextRunning =
-        match.eventStatus !== "completed" &&
-        (useLocal && local ? local.running : Boolean(match.clockStartedAt));
-      if (local?.uncertain) {
-        setActionError(
-          "The offline match clock changed unexpectedly and was paused. Confirm the time before continuing.",
+      try {
+        const local = matchId ? await readClockAnchor(matchId) : null;
+        if (superseded()) return;
+        const serverElapsed = Math.max(
+          0,
+          match.clockElapsedMs +
+            (match.clockStartedAt
+              ? Date.now() - new Date(match.clockStartedAt).getTime()
+              : 0),
         );
+        const supersededFullTime = local?.period === "full_time" &&
+          match.clockPeriod !== "full_time" && match.clockRevision > Number(local.authorityRevision);
+        if (supersededFullTime && local && matchId) markClockAnchorSynced(matchId, local.updatedAt);
+        const useLocal = Boolean(
+          match.eventStatus !== "completed" && matchId && local &&
+          !supersededFullTime && isClockAnchorPending(matchId),
+        );
+        const elapsed = useLocal && local ? local.elapsedMs : serverElapsed;
+        const nextPeriod = match.eventStatus === "completed"
+          ? "full_time"
+          : useLocal && local ? local.period : match.clockPeriod;
+        const nextRunning =
+          match.eventStatus !== "completed" &&
+          (useLocal && local ? local.running : Boolean(match.clockStartedAt));
+        if (local?.uncertain) {
+          setActionError(
+            "The offline match clock changed unexpectedly and was paused. Confirm the time before continuing.",
+          );
+        }
+        baseRef.current = elapsed;
+        clockOriginRef.current = Date.now() - elapsed;
+        elapsedRef.current = elapsed;
+        setElapsedMs(elapsed);
+        setPeriod(nextPeriod);
+        setCheckIn(null);
+        const livePeriod =
+          nextPeriod === "first_half" || nextPeriod === "second_half";
+        const regulation =
+          nextPeriod === "second_half" ? SECOND_HALF_MS : FIRST_HALF_MS;
+        if (livePeriod && elapsed >= regulation) {
+          checkedMarksRef.current.add(nextPeriod);
+        }
+        setRunning(nextRunning);
+        lastAppliedClockRevisionRef.current = clockKey;
+      } finally {
+        if (!superseded()) applyingClockKeyRef.current = null;
       }
-      baseRef.current = elapsed;
-      clockOriginRef.current = Date.now() - elapsed;
-      elapsedRef.current = elapsed;
-      setElapsedMs(elapsed);
-      setPeriod(nextPeriod);
-      setCheckIn(null);
-      const livePeriod =
-        nextPeriod === "first_half" || nextPeriod === "second_half";
-      const regulation =
-        nextPeriod === "second_half" ? SECOND_HALF_MS : FIRST_HALF_MS;
-      if (livePeriod && elapsed >= regulation) {
-        checkedMarksRef.current.add(nextPeriod);
-      }
-      setRunning(nextRunning);
-      lastAppliedClockRevisionRef.current = clockKey;
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [matchId, matchQuery.data]);
 
   useEffect(() => {
