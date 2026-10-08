@@ -8,7 +8,7 @@ jest.mock('./auth', () => ({
       signInEmail: jest.fn(),
       changePassword: jest.fn(),
       setPassword: jest.fn(),
-      listAccounts: jest.fn(),
+      listUserAccounts: jest.fn(),
       signOut: jest.fn(),
     },
   },
@@ -61,7 +61,7 @@ const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
 const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
 const changePassword = auth.api.changePassword as unknown as jest.Mock;
 const setPassword = auth.api.setPassword as unknown as jest.Mock;
-const listAccounts = auth.api.listAccounts as unknown as jest.Mock;
+const listUserAccounts = auth.api.listUserAccounts as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
 const fromNodeHeadersMock = fromNodeHeaders as unknown as jest.Mock;
@@ -243,7 +243,7 @@ describe('AuthController', () => {
           {
             name: 'Ada Lovelace',
             email: 'ada@example.com',
-            password: 'password123',
+            password: 'Password123!',
             inviteToken: 'not-a-token',
           },
           res,
@@ -511,7 +511,7 @@ describe('AuthController', () => {
     } as never;
 
     it('reports when a credential password exists', async () => {
-      listAccounts.mockResolvedValue([
+      listUserAccounts.mockResolvedValue([
         { id: 'google-account', providerId: 'google' },
         { id: 'credential-account', providerId: 'credential' },
       ]);
@@ -522,7 +522,7 @@ describe('AuthController', () => {
     });
 
     it('reports OAuth-only accounts as having no password', async () => {
-      listAccounts.mockResolvedValue([
+      listUserAccounts.mockResolvedValue([
         { id: 'google-account', providerId: 'google' },
       ]);
 
@@ -538,7 +538,7 @@ describe('AuthController', () => {
     } as never;
 
     it('sets the first password for an OAuth-only account', async () => {
-      listAccounts.mockResolvedValue([
+      listUserAccounts.mockResolvedValue([
         { id: 'google-account', providerId: 'google' },
       ]);
       setPassword.mockResolvedValue({ status: true });
@@ -549,12 +549,14 @@ describe('AuthController', () => {
 
       expect(setPassword).toHaveBeenCalledWith({
         body: { newPassword: 'Newpassword456!' },
-        headers: undefined,
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
       });
     });
 
     it('refuses to overwrite an existing credential password without current-password verification', async () => {
-      listAccounts.mockResolvedValue([
+      listUserAccounts.mockResolvedValue([
         { id: 'credential-account', providerId: 'credential' },
       ]);
 
@@ -572,7 +574,7 @@ describe('AuthController', () => {
         controller.setPassword({ newPassword: 'short' }, req),
       ).rejects.toThrow('Password must be at least 8 characters.');
 
-      expect(listAccounts).not.toHaveBeenCalled();
+      expect(listUserAccounts).not.toHaveBeenCalled();
       expect(setPassword).not.toHaveBeenCalled();
     });
   });
@@ -599,7 +601,9 @@ describe('AuthController', () => {
           newPassword: 'Newpassword456!',
           revokeOtherSessions: true,
         },
-        headers: undefined,
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
       });
       expect(result).toEqual({ status: true });
     });
