@@ -547,7 +547,9 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
           'NOT TESTED: Cloud authentication/source configuration blocker',
       };
     },
-    240000,
+    // Each scenario makes dozens of sequential calls against the remote test
+    // database; the competition one takes about four minutes end to end.
+    480000,
   );
 
   it('reproduces clock operation ID reuse and checks intentional client conflict handling', async () => {

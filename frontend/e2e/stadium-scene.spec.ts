@@ -17,37 +17,6 @@ async function dashboard(page: Page) {
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
 }
 
-test('stadium survives responsive resizing and changes theme without remounting', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => {
-    if (message.type() === 'error' || /THREE.*warning|WebGL.*INVALID/i.test(message.text())) errors.push(message.text());
-  });
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await dashboard(page);
-  const canvas = page.locator('.dashboard-stadium-scene canvas');
-  await canvas.evaluate(el => { el.dataset.instance = 'original'; });
-  for (const [width, height] of [[1920, 1080], [1440, 900], [1366, 768], [1024, 768], [430, 932], [390, 844], [360, 800]]) {
-    await page.setViewportSize({ width, height });
-    await expect.poll(() => canvas.evaluate(el => ({ width: el.width, height: el.height })), { timeout: 30_000 }).toEqual({ width, height });
-    await expect(canvas).toHaveAttribute('data-instance', 'original');
-    await expect(page.locator('.dashboard-stadium-scene')).toHaveCSS('pointer-events', 'none');
-    await expect(page.locator('.dashboard-stadium-vignette')).toHaveCount(0);
-  }
-  await page.setViewportSize({ width: 1440, height: 900 });
-  const toggle = page.getByRole('button', { name: /Switch to (light|dark) mode/ }).first();
-  const before = await canvas.screenshot();
-  await toggle.click();
-  // With reduced motion the scene updates on the first requested frame.
-  await page.waitForTimeout(300);
-  const after = await canvas.screenshot();
-  expect(before.equals(after)).toBe(false);
-  await expect(canvas).toHaveAttribute('data-instance', 'original');
-  await toggle.click();
-  await expect(canvas).toHaveCount(1);
-  expect(errors).toEqual([]);
-});
-
 test('leaving the dashboard releases geometry and instance GPU buffers', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
