@@ -1,48 +1,60 @@
-# Swagger exposure policy (HARD-002)
+# Public Swagger policy
 
-Production Swagger is not required. External API consumers use
-[the public API contract](public-api.md) and
-[the PDF reference](Gaffer-Public-API-Reference.pdf). The application does not
-use Swagger at runtime.
+External developers and assessors need public, interactive documentation for
+Gaffer's anonymous read API. `/api/docs`, its UI assets, `/api/docs-json` and
+`/api/docs-yaml` are available without a session, API key or token in every
+environment, including production.
 
-`backend/src/swagger-config.ts` generates and registers Swagger only when
-`NODE_ENV` is exactly `development`. Production, staging, test, missing, and
-unrecognised environment values leave documentation unregistered. This covers
-the UI, its assets, `/api/docs-json`, and `/api/docs-yaml`; hiding only the UI
-would leave the schemas exposed. Public API endpoints continue to work.
+This supersedes the development-only HARD-002 policy introduced by commit
+`ac16ef6b08e686558c4d2a0f7f2d3c6e32e588ce`, which removed the production docs.
+Production still runs with `NODE_ENV=production`; enabling docs does not require
+changing the runtime environment.
 
-## Local development
+## Public contract
 
-Set `NODE_ENV=development` in the uncommitted root `.env`, as shown in
-`.env.example`, then run `npm run dev`. Developers with an existing `.env`
-must add this setting to enable Swagger. Open `http://localhost:3000/api/docs`.
-Swagger is intended for trusted local development; do not expose a development
-server to the public internet.
+`backend/src/swagger-config.ts` generates a schema scoped to `PublicApiModule`.
+It includes exactly these hand-written GET endpoints:
 
-## Production deployment
+- `/v1/formations`
+- `/v1/tactics`
+- `/v1/public-dashboard/filters`
+- `/v1/public-dashboard/matches`
+- `/v1/public-dashboard/players`
+- `/v1/public-dashboard/team-statistics`
 
-Set `NODE_ENV=production` in the hosting environment and restart/redeploy the
-backend. `npm --prefix backend run start:prod` also forces this value before
-loading the application, even if a copied local `.env` says `development`.
-Deployments using another startup command must set the hosting value explicitly.
-There is no production Swagger enablement override. Any future requirement
-needs a reviewed policy change with authentication or network restrictions
-covering both the UI and raw schemas.
+Query parameters, response shapes and expected validation errors are described
+by decorators and schemas in `backend/src/public-api/`. Runtime validation stays
+in `public-api.schemas.ts`. Swagger generates documentation, not API endpoints.
+The UI uses the same backend origin for "Try it out".
 
-After deployment, verify unauthenticated GET requests to `/api/docs`,
-`/api/docs/`, `/api/docs/swagger-ui-init.js`, `/api/docs-json`, and
-`/api/docs-yaml` return `404` from the backend. Confirm `/v1/formations`
-continues to return `200`. Local regression tests cover these routes without
-a database: `npm --prefix backend test -- --runInBand swagger-config.spec.ts`.
+Protected application routes are excluded from the public schema. Their guards,
+session requirements, team permissions and credentialed CORS policy remain in
+place. The six public API endpoints retain wildcard CORS without credentials.
+
+## Local and deployment verification
+
+Open `http://localhost:3000/api/docs` locally. After deployment, open
+`https://gaffer-api-ynaf.onrender.com/api/docs` in a signed-out browser.
+Verify the UI, `/api/docs/swagger-ui-init.js`, `/api/docs-json` and
+`/api/docs-yaml` return 200, and that the schema contains only the six paths
+above. Execute public requests through "Try it out" without credentials.
+Verify invalid filters return 400 and unknown catalog IDs return 404.
+
+Run the database-free HTTP regression tests:
+
+```sh
+npm --prefix backend test -- --runInBand swagger-config.spec.ts cors-config.spec.ts
+```
+
+These tests use the real public controllers and static catalog service, with a
+stubbed dashboard service. They verify production and other environment values,
+UI/assets/schemas, anonymous requests, public CORS and query validation.
 Local verification does not establish that production has been redeployed.
+Record the deployed revision, date and live responses separately.
 
-## Sensitive information review
+## Documentation content
 
-The Swagger builder uses static title, description, version, and tag metadata.
-Existing decorators in `backend/src/public-api/` and
-`backend/src/events/events.schemas.ts` contain generic coaching examples and
-schema fields, with no embedded credentials or secrets found in this review.
-Document generation does not query the database or add environment values.
-Keep credentials, tokens, connection strings, live user data, and internal
-deployment details out of examples, descriptions, defaults, and server URLs.
-Review these fields whenever adding or changing Swagger decorators.
+Keep secrets, credentials, connection strings and real user data out of schema
+metadata and examples. Schema generation does not query the database. New
+controllers added to `PublicApiModule` must be intentionally anonymous and
+reviewed as part of this public contract; regression tests check its route list.
