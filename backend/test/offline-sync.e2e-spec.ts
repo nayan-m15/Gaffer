@@ -277,7 +277,8 @@ describe('Offline collaborative sync (e2e)', () => {
       where id = ${awayMatchId}::uuid`);
     const opponentPlayerResult = await database.execute<{ id: string }>(sql`
       insert into opponent_match_players (match_id, shirt_number, name)
-      values (${awayMatchId}::uuid, 9, 'Offline0 Test') returning id`);
+      select ${awayMatchId}::uuid, 9, first_name || ' ' || last_name
+      from athletes where id = ${homeAthleteIds[0]}::uuid returning id`);
     const opponentPlayerId = opponentPlayerResult.rows[0].id;
     await database.execute(sql`
       insert into match_session_participants (session_id, team_id, side)

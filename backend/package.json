@@ -23,7 +23,7 @@
     "docs:api-reference": "node scripts/generate-public-api-reference.mjs",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "npm run test -- --watch",
-    "test:migrations": "node --test --test-isolation=none scripts/migration-plan.test.mjs",
+    "test:migrations": "node --test scripts/migration-plan.test.mjs",
     "test:cov": "npm run test -- --coverage",
     "posttest:cov": "node scripts/normalize-coverage.mjs",
     "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",

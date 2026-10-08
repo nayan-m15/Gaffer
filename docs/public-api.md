@@ -14,12 +14,12 @@ Reached through the frontend's existing Vercel rewrite as:
 
 ## What's served
 
-Both endpoints return static, shared coaching reference content — never a
+The formations and tactics endpoints return static, shared coaching reference content — never a
 team's saved game plan, squad selection, or any user/account data:
 
-- **Formations** (`backend/src/public-api/formations.data.ts`) — the eight
-  formations selectable on the Team Tactics screen. IDs mirror
-  `FORMATION_IDS` in `backend/src/game-plans/game-plans.schemas.ts`; keep
+- **Formations** (`backend/src/public-api/formations.data.ts`) — the supported
+  5-, 7- and 11-a-side formations, including custom slots. Each carries
+  `playerCount`. IDs mirror `FORMATION_IDS` in `backend/src/common/formations.ts`; keep
   both in sync if a formation is added or renamed.
 - **Tactics** (`backend/src/public-api/tactics.data.ts`) — the defensive and
   offensive tactical styles from
@@ -64,12 +64,23 @@ asserted from `test/public-api.e2e-spec.ts`).
 
 ## Documentation
 
-The public API controllers carry `@nestjs/swagger` decorators and are grouped
-under the "Public API" tag in the local Swagger UI at
-`http://localhost:3000/api/docs` when `NODE_ENV=development`.
-Production Swagger, including raw JSON/YAML schemas, is disabled under the
-[Swagger policy](swagger-policy.md). Use this document and
-[the PDF reference](Gaffer-Public-API-Reference.pdf) for external API consumers.
+Swagger UI is public at `/api/docs` in every environment, including production.
+After deployment, external developers can open
+`https://gaffer-api-ynaf.onrender.com/api/docs` without an account, API key or token.
+The local URL is `http://localhost:3000/api/docs`.
+
+The JSON and YAML schemas are available at `/api/docs-json` and `/api/docs-yaml`.
+They document exactly six public GET endpoints, grouped under "Public API" and
+"Public Dashboard", with query parameters, response fields and validation errors.
+Swagger's "Try it out" sends requests to the same backend serving the docs.
+Matches use `limit` 1–100 (default 50); players use `limit` 1–500 (default 200).
+Both accept `offset` ≥0 (default 0) and return `{success,count,limit,offset,data}`.
+Filters return `{success,data}`; team statistics return `{success,count,data}`.
+
+Protected application endpoints retain their existing session and authorization
+checks and are excluded from this public schema. See the
+[Swagger policy](swagger-policy.md) for verification and the
+[PDF reference](Gaffer-Public-API-Reference.pdf) for the catalog reference.
 
 ## Out of scope here
 
