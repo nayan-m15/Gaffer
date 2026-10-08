@@ -168,7 +168,6 @@ export default function PlayerEventsPage() {
       events={visibleEvents}
       eventDays={eventDays}
       teamName={teamName}
-      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
       readOnly
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
