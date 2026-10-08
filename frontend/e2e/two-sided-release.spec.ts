@@ -230,7 +230,7 @@ for (const { kind, firstConfirmation } of scenarios) {
         for (const coach of [home, away]) {
           await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
           await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
-          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+          await expect(coach.page.locator('.live-match-clock .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
         }
       } else {
         await body(away.context.request, 'post', `/matches/${awaySheet.id}/events`, {
@@ -269,7 +269,7 @@ for (const { kind, firstConfirmation } of scenarios) {
         for (const coach of [home, away]) {
           await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
           await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
-          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+          await expect(coach.page.locator('.live-match-clock .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
         }
       } else if (!verifyControls) {
         for (const [coach, sheet, period, running, elapsedMs] of [
@@ -286,7 +286,7 @@ for (const { kind, firstConfirmation } of scenarios) {
           for (const peer of [home, away]) {
             if (period === 'half_time') {
               await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
-              await expect(peer.page.locator('.live-match-score .tabular-nums').last()).toHaveText('45:00');
+              await expect(peer.page.locator('.live-match-clock .tabular-nums').last()).toHaveText('45:00');
               await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toContainText('2');
             } else {
               await expect(peer.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
@@ -305,8 +305,11 @@ for (const { kind, firstConfirmation } of scenarios) {
       for (const [index, coach] of confirmationOrder.entries()) {
         const sheet = coach === home ? homeSheet : awaySheet;
         const privateRead = await body(coach.context.request, 'get', `/matches/${sheet.id}`);
+        // Confirm the shared report version this coach has seen, as the app does.
+        const seenReport = await body(coach.context.request, 'get', reportUrl);
         await body(coach.context.request, 'post', `/matches/${sheet.id}/finalise`, {
           expectedRevision: privateRead.projection.revision,
+          expectedSessionRevision: seenReport.reportRevision,
         });
         const pending = await body(home.context.request, 'get', reportUrl);
         expect(pending.score).toEqual({ home: 2, away: 1 });
@@ -342,13 +345,14 @@ for (const { kind, firstConfirmation } of scenarios) {
     } finally {
       for (const context of contexts) await context.close().catch(() => undefined);
       // These test-owned sessions outlive cascading team-sheet cleanup.
-      // Release their confirmation actor FKs before removing test accounts.
+      // Release their confirmation actor FKs before removing test accounts,
+      // and unlock a finalised report, whose events are otherwise immutable.
       for (const competitionId of competitionIds) {
         await database.update(competitionFixtures).set({ linkedMatchId: null })
           .where(eq(competitionFixtures.competitionId, competitionId));
       }
       for (const sessionId of sessionIds) {
-        await database.update(matchSessions).set({ finalisedByUserId: null,
+        await database.update(matchSessions).set({ finalisedAt: null, finalisedByUserId: null,
           homeConfirmedByUserId: null, awayConfirmedByUserId: null })
           .where(eq(matchSessions.id, sessionId));
         await database.delete(matches).where(eq(matches.sharedMatchId, sessionId));

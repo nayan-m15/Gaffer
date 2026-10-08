@@ -419,7 +419,7 @@ test("shared logger follows peer halves and clock corrections with an unchanged 
   await page.route(`**/api/matches/sessions/${sessionId}/report`, route => json(route, report));
   await page.goto(`/matches/${MATCH_ID}/live`);
   const score = page.locator(".live-match-scoreline");
-  const timer = page.locator(".live-match-score .tabular-nums").last();
+  const timer = page.locator(".live-match-clock .tabular-nums").last();
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible({ timeout: 20000 });
   await expect(page.getByRole("region", { name: "Shared session result" })).toHaveCount(0);
   await expect(score).toHaveCount(1);
