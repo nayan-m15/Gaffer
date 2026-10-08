@@ -13,8 +13,8 @@ import {
   Award,
   BarChart3,
   CalendarDays,
+  ChevronDown,
   Clock3,
-  Filter as FilterIcon,
   MapPin,
   RotateCcw,
   Search,
@@ -48,8 +48,7 @@ import {
   type PublicTeam,
 } from "@/services/public-dashboard";
 
-const selectClassName =
-  "h-10 w-full min-w-0 rounded-xl border border-input bg-background/85 px-3 text-sm text-foreground shadow-sm outline-none backdrop-blur-sm transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50 dark:bg-background/75";
+const selectClassName = "public-dashboard-filter-select";
 
 type PositionCategory = "all" | PositionGroup;
 
@@ -62,11 +61,12 @@ const positionFilters: { id: PositionCategory; label: string }[] = [
 ];
 
 const dashboardSections = [
-  { id: "players", label: "Squad Showcase" },
-  { id: "matches", label: "Match Center" },
+  { id: "players", label: "Squad Showcase", icon: Users },
+  { id: "matches", label: "Match Center", icon: CalendarDays },
   {
     id: "team-statistics",
     label: "League Standings",
+    icon: BarChart3,
   },
 ] as const;
 
@@ -272,30 +272,10 @@ export default function PublicDashboard() {
           ref={filterBarRef}
           className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
         >
-          <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:p-4 dark:bg-card/70">
-              <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  <FilterIcon className="size-4 text-brand" />
-                  <span>Filter Portal Data</span>
-                  {activeFilterCount > 0 && (
-                    <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-extrabold text-brand-foreground">
-                      {activeFilterCount} Active
-                    </span>
-                  )}
-                </div>
+          <div className="public-dashboard-toolbar">
+            <PublicDashboardSectionNav sections={dashboardSections} />
 
-                {activeFilterCount > 0 && (
-                  <button
-                    onClick={resetFilters}
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand-dark"
-                    aria-label="Reset filters"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    <span className="hidden sm:inline">Reset Filters</span>
-                  </button>
-                )}
-              </div>
-
+            <div className="public-dashboard-filter-panel" role="group" aria-label="Filter portal data">
               <DashboardFilters
                 teams={filtersQuery.data?.teams ?? []}
                 seasons={availableSeasons}
@@ -310,8 +290,19 @@ export default function PublicDashboard() {
                 onCompetitionChange={setCompetitionId}
                 onStatusChange={setMatchStatus}
               />
-
-              <PublicDashboardSectionNav sections={dashboardSections} />
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="public-dashboard-filter-reset"
+                  aria-label="Reset filters"
+                  title="Reset filters"
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  <span className="sr-only" role="status">{activeFilterCount} active filters</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -651,10 +642,11 @@ function DashboardFilters({
   onStatusChange: (value: PublicMatchStatus | "") => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <FilterField label="Select Team">
+    <div className="public-dashboard-filter-grid">
+      <FilterField label="Select Team" icon={<Users />} active={Boolean(teamId)}>
         <select
           className={selectClassName}
+          aria-label="Select Team"
           value={teamId}
           disabled={loading}
           onChange={(event) => onTeamChange(event.target.value)}
@@ -667,9 +659,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Select Season">
+      <FilterField label="Select Season" icon={<CalendarDays />} active={Boolean(seasonId)}>
         <select
           className={selectClassName}
+          aria-label="Select Season"
           value={seasonId}
           disabled={loading}
           onChange={(event) => onSeasonChange(event.target.value)}
@@ -683,9 +676,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Select Competition">
+      <FilterField label="Select Competition" icon={<Trophy />} active={Boolean(competitionId)}>
         <select
           className={selectClassName}
+          aria-label="Select Competition"
           value={competitionId}
           disabled={loading}
           onChange={(event) => onCompetitionChange(event.target.value)}
@@ -698,9 +692,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Match Status">
+      <FilterField label="Match Status" icon={<Clock3 />} active={Boolean(status)}>
         <select
           className={selectClassName}
+          aria-label="Match Status"
           value={status}
           onChange={(event) =>
             onStatusChange(event.target.value as PublicMatchStatus | "")
@@ -716,11 +711,25 @@ function DashboardFilters({
   );
 }
 
-function FilterField({ label, children }: { label: string; children: ReactNode }) {
+function FilterField({
+  label,
+  icon,
+  active,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  active: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-      {label}
-      {children}
+    <label className="public-dashboard-filter-field" data-active={active}>
+      <span className="public-dashboard-filter-icon" aria-hidden="true">{icon}</span>
+      <span className="public-dashboard-filter-content">
+        <span className="public-dashboard-filter-label">{label}</span>
+        {children}
+      </span>
+      <ChevronDown className="public-dashboard-filter-chevron" aria-hidden="true" />
     </label>
   );
 }
@@ -728,7 +737,7 @@ function FilterField({ label, children }: { label: string; children: ReactNode }
 function PublicDashboardSectionNav({
   sections,
 }: {
-  sections: ReadonlyArray<{ id: string; label: string }>;
+  sections: ReadonlyArray<{ id: string; label: string; icon: typeof Users }>;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
@@ -823,20 +832,15 @@ function PublicDashboardSectionNav({
   }
 
   return (
-    <nav
-      className="mt-3 border-t border-border/60 pt-3"
-      aria-label="Public dashboard sections"
-    >
-      <div
-        ref={scrollerRef}
-        className="touch-pan-x overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <ul className="mx-auto flex w-max min-w-full justify-center gap-2">
+    <nav className="public-dashboard-section-nav" aria-label="Public dashboard sections">
+      <div ref={scrollerRef} className="public-dashboard-section-scroller">
+        <ul className="public-dashboard-section-list">
           {sections.map((section) => {
             const isActive = activeSection === section.id;
+            const Icon = section.icon;
 
             return (
-              <li key={section.id} className="shrink-0">
+              <li key={section.id}>
                 <a
                   href={`#${section.id}`}
                   data-section-id={section.id}
@@ -845,30 +849,10 @@ function PublicDashboardSectionNav({
                     event.preventDefault();
                     navigateToSection(section.id);
                   }}
-                  className={`group relative isolate flex min-h-10 items-center overflow-hidden rounded-full border px-4 text-xs font-bold outline-none transition-[color,background-color,border-color,box-shadow] duration-300 focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none sm:text-sm ${
-                    isActive
-                      ? "border-brand bg-brand text-brand-foreground shadow-md shadow-brand/20"
-                      : "border-border/80 bg-background/65 text-muted-foreground hover:border-brand/60 hover:text-brand-foreground dark:bg-background/50"
-                  }`}
+                  className="public-dashboard-section-link"
                 >
-                  {!isActive && (
-                    <span
-                      className="absolute left-1/2 top-full -z-10 size-3 -translate-x-1/2 rounded-full bg-brand transition-transform duration-500 ease-out group-hover:scale-[24] group-focus-visible:scale-[24] motion-reduce:transition-none"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="relative h-4 overflow-hidden leading-4">
-                    <span className="flex flex-col transition-transform duration-300 ease-out group-hover:-translate-y-1/2 group-focus-visible:-translate-y-1/2 motion-reduce:transform-none motion-reduce:transition-none">
-                      <span>{section.label}</span>
-                      <span aria-hidden="true">{section.label}</span>
-                    </span>
-                  </span>
-                  {isActive && (
-                    <span
-                      className="ml-2 size-1.5 rounded-full bg-brand-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--brand-foreground)_20%,transparent)]"
-                      aria-hidden="true"
-                    />
-                  )}
+                  <Icon aria-hidden="true" />
+                  <span>{section.label}</span>
                 </a>
               </li>
             );
