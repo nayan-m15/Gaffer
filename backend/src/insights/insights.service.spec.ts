@@ -327,6 +327,69 @@ describe('InsightsService', () => {
       expect(mockDatabaseService.database.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('reading stored insights', () => {
+    const storedRow = (overrides: Record<string, unknown> = {}) => ({
+      matchId: 'match-1',
+      status: 'ready',
+      narrativeText: 'A comfortable win.',
+      highlights: ['Two goals in ten minutes'],
+      generatedAt: new Date('2026-09-14T15:00:00.000Z'),
+      ...overrides,
+    });
+
+    it('returns a stored match insight as a summary', async () => {
+      selectResults.push([storedRow()]);
+
+      await expect(service.getForMatch('match-1')).resolves.toEqual({
+        matchId: 'match-1',
+        status: 'ready',
+        narrativeText: 'A comfortable win.',
+        highlights: ['Two goals in ten minutes'],
+        generatedAt: '2026-09-14T15:00:00.000Z',
+      });
+    });
+
+    it('returns null when a match has no insight yet', async () => {
+      selectResults.push([]);
+
+      await expect(service.getForMatch('match-1')).resolves.toBeNull();
+    });
+
+    it('reports a null generation time for an insight that never completed', async () => {
+      selectResults.push([
+        storedRow({ status: 'failed', generatedAt: null, narrativeText: null }),
+      ]);
+
+      await expect(service.getForMatch('match-1')).resolves.toMatchObject({
+        status: 'failed',
+        generatedAt: null,
+      });
+    });
+
+    it('maps the recent team insights onto summaries', async () => {
+      selectResults.push([
+        { insight: storedRow() },
+        { insight: storedRow({ matchId: 'match-2' }) },
+      ]);
+
+      await expect(service.getRecentForTeam('team-1', 5)).resolves.toEqual([
+        expect.objectContaining({ matchId: 'match-1' }),
+        expect.objectContaining({ matchId: 'match-2' }),
+      ]);
+    });
+
+    it('returns an empty list when a team has no ready insights', async () => {
+      selectResults.push([]);
+
+      await expect(service.getRecentForTeam('team-1', 5)).resolves.toEqual([]);
+    });
+
+    it('marks a reopened match insight stale without throwing', async () => {
+      await expect(service.markStale('match-1')).resolves.toBeUndefined();
+      expect(mockDatabaseService.database.update).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('InsightsService — season insights', () => {

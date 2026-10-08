@@ -1,5 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   ApiDashboardQuery,
   filtersSchema,
@@ -14,20 +19,37 @@ import {
   publicMatchesQuerySchema,
   publicPlayersQuerySchema,
 } from './public-api.schemas';
+import { PublicDashboardCacheService } from './public-dashboard-cache.service';
+import { PublicDashboardRateLimitGuard } from './public-dashboard-rate-limit.guard';
 import { PublicDashboardService } from './public-dashboard.service';
 
+/**
+ * Unauthenticated dashboard API.
+ *
+ * Every route is rate limited per caller and served through a short-lived
+ * response cache (SEC-008): these are the only anonymous endpoints that run
+ * real aggregation, so without both a single client could replay one URL and
+ * multiply database load at will. Responses are cached on the *validated*
+ * query, so equivalent requests written differently still share one entry.
+ */
 @ApiTags('Public Dashboard')
+@ApiResponse({ status: 429, description: 'Rate limit exceeded.' })
+@UseGuards(PublicDashboardRateLimitGuard)
 @Controller('v1/public-dashboard')
 export class PublicDashboardController {
   constructor(
     private readonly publicDashboardService: PublicDashboardService,
+    private readonly cache: PublicDashboardCacheService,
   ) {}
 
   @Get('filters')
   @ApiOperation({ summary: 'List public teams, competitions and seasons' })
   @ApiOkResponse({ schema: filtersSchema })
   async filters() {
-    const data = await this.publicDashboardService.getFilters();
+    const data = await this.cache.resolve(
+      PublicDashboardCacheService.key('filters', {}),
+      () => this.publicDashboardService.getFilters(),
+    );
     return { success: true, data };
   }
 
@@ -37,7 +59,10 @@ export class PublicDashboardController {
   @ApiOkResponse({ schema: listSchema(matchSchema, true) })
   async matches(@Query() query: unknown) {
     const dto = zodValidate(publicMatchesQuerySchema, query);
-    const data = await this.publicDashboardService.getMatches(dto);
+    const data = await this.cache.resolve(
+      PublicDashboardCacheService.key('matches', dto),
+      () => this.publicDashboardService.getMatches(dto),
+    );
     return {
       success: true,
       count: data.length,
@@ -53,7 +78,10 @@ export class PublicDashboardController {
   @ApiOkResponse({ schema: listSchema(playerSchema, true) })
   async players(@Query() query: unknown) {
     const dto = zodValidate(publicPlayersQuerySchema, query);
-    const data = await this.publicDashboardService.getPlayers(dto);
+    const data = await this.cache.resolve(
+      PublicDashboardCacheService.key('players', dto),
+      () => this.publicDashboardService.getPlayers(dto),
+    );
     return {
       success: true,
       count: data.length,
@@ -69,7 +97,10 @@ export class PublicDashboardController {
   @ApiOkResponse({ schema: listSchema(teamStatisticsSchema) })
   async teamStatistics(@Query() query: unknown) {
     const dto = zodValidate(publicDashboardQuerySchema, query);
-    const data = await this.publicDashboardService.getTeamStatistics(dto);
+    const data = await this.cache.resolve(
+      PublicDashboardCacheService.key('team-statistics', dto),
+      () => this.publicDashboardService.getTeamStatistics(dto),
+    );
     return { success: true, count: data.length, data };
   }
 }

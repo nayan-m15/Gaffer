@@ -158,11 +158,15 @@ export function ApiDashboardQuery(
       ApiQuery({
         name: 'limit',
         required: false,
+        // Keep in step with `publicMatchesQuerySchema` and
+        // `publicPlayersQuerySchema`: an over-cap limit is a 400, not a
+        // clamped response, so documenting a ceiling the API rejects would
+        // send clients straight into an error.
         schema: {
           type: 'integer',
           minimum: 1,
-          maximum: resource === 'matches' ? 100 : 500,
-          default: resource === 'matches' ? 50 : 200,
+          maximum: resource === 'matches' ? 100 : 200,
+          default: resource === 'matches' ? 50 : 100,
         },
       }),
       ApiQuery({

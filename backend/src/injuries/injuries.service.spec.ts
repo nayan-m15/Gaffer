@@ -821,4 +821,125 @@ describe('InjuriesService', () => {
       expect(readings.every((reading) => reading.percent === 100)).toBe(true);
     });
   });
+
+  describe('findAll', () => {
+    const listed = (overrides: Record<string, unknown> = {}) => ({
+      ...injuryRow(overrides),
+      firstName: 'Sam',
+      lastName: 'Striker',
+      squadNumber: 9,
+      position: 'ST',
+    });
+
+    it('lists every injury for the team when unfiltered', async () => {
+      mockDatabaseService.database = makeDatabase({
+        selects: [[injuries, [listed()]]],
+      }).database;
+
+      const result = await service.findAll(TEAM_ID);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: INJURY_ID });
+    });
+
+    it('adds derived recovery fields to each row', async () => {
+      mockDatabaseService.database = makeDatabase({
+        selects: [[injuries, [listed()]]],
+      }).database;
+
+      const [row] = await service.findAll(TEAM_ID);
+
+      expect(row).toHaveProperty('daysOut');
+      expect(row).toHaveProperty('returnVarianceDays');
+    });
+
+    it.each([
+      [{ status: 'open' as const }],
+      [{ status: 'closed' as const }],
+      [{ athleteId: ATHLETE_ID }],
+      [{ status: 'open' as const, athleteId: ATHLETE_ID }],
+    ])('re-reads the full history when filtering by %p', async (query) => {
+      // A filtered list still judges recurrence against the athlete's whole
+      // history, so a second, unfiltered read has to happen.
+      mockDatabaseService.database = makeDatabase({
+        selects: [
+          [injuries, [listed()]],
+          [injuries, [listed(), listed({ id: 'injury-2' })]],
+        ],
+      }).database;
+
+      await expect(service.findAll(TEAM_ID, query)).resolves.toHaveLength(1);
+    });
+
+    it('returns an empty list for a team with no injuries', async () => {
+      mockDatabaseService.database = makeDatabase({
+        selects: [[injuries, []]],
+      }).database;
+
+      await expect(service.findAll(TEAM_ID)).resolves.toEqual([]);
+    });
+  });
+
+  describe('addTimelineEntry', () => {
+    it('stores the entry against the injury and its author', async () => {
+      const db = makeDatabase({
+        selects: [[injuries, [injuryRow()]]],
+        inserted: [[injuryTimelineEntries, [{ id: 'entry-1' }]]],
+      });
+      mockDatabaseService.database = db.database;
+
+      await expect(
+        service.addTimelineEntry(TEAM_ID, USER_ID, INJURY_ID, {
+          kind: 'note',
+          occurredOn: '2026-09-20',
+          title: 'Light jogging',
+          detail: 'No pain reported.',
+        } as never),
+      ).resolves.toEqual({ id: 'entry-1' });
+
+      const entry = db.insertCalls.find(
+        (call) => call.table === injuryTimelineEntries,
+      );
+      expect(entry?.values).toMatchObject({
+        injuryId: INJURY_ID,
+        kind: 'note',
+        title: 'Light jogging',
+        detail: 'No pain reported.',
+        createdByUserId: USER_ID,
+      });
+    });
+
+    it('stores a null detail when none is supplied', async () => {
+      const db = makeDatabase({
+        selects: [[injuries, [injuryRow()]]],
+        inserted: [[injuryTimelineEntries, [{ id: 'entry-1' }]]],
+      });
+      mockDatabaseService.database = db.database;
+
+      await service.addTimelineEntry(TEAM_ID, USER_ID, INJURY_ID, {
+        kind: 'note',
+        occurredOn: '2026-09-20',
+        title: 'Light jogging',
+      } as never);
+
+      const entry = db.insertCalls.find(
+        (call) => call.table === injuryTimelineEntries,
+      );
+      expect(entry?.values).toMatchObject({ detail: null });
+    });
+
+    it('rejects an injury belonging to another team', async () => {
+      mockDatabaseService.database = makeDatabase({
+        selects: [[injuries, []]],
+      }).database;
+
+      await expect(
+        service.addTimelineEntry(TEAM_ID, USER_ID, INJURY_ID, {
+          kind: 'note',
+          occurredOn: '2026-09-20',
+          title: 'Light jogging',
+        } as never),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });
