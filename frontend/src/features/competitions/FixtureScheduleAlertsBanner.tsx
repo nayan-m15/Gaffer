@@ -1,6 +1,6 @@
 import { CalendarClock, CheckCircle2, Clock3, RefreshCcw } from "lucide-react";
 import { Link } from "react-router-dom";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 import { useFixtureScheduleAlerts } from "./hooks";
 import type { CompetitionFixtureScheduleAlert } from "./types";
