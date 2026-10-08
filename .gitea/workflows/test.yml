@@ -78,6 +78,7 @@ jobs:
       # and PRs used to share that one database and reset or migrate it under
       # each other mid-run (backend/scripts/ci-test-database.mjs).
       - name: Provision isolated test database
+        id: provision
         run: node backend/scripts/ci-test-database.mjs create api
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -85,8 +86,14 @@ jobs:
       - name: Run integration tests
         run: npm run test:integration
 
+      # always() covers a failed test step, which is the point, but it covers a
+      # cancelled job too - including one the runner dropped before checkout
+      # ran, where this script does not exist yet and node exits MODULE_NOT_FOUND,
+      # reporting a lost runner connection as a test failure. Gate on the database
+      # having actually been created; a run cancelled before that leaves nothing
+      # behind that the next create does not sweep.
       - name: Drop isolated test database
-        if: always()
+        if: always() && steps.provision.outcome == 'success'
         run: node backend/scripts/ci-test-database.mjs drop
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -201,6 +208,7 @@ jobs:
 
       # A private database per shard; see the api-tests job.
       - name: Provision isolated test database
+        id: provision
         run: node backend/scripts/ci-test-database.mjs create ui_1
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -223,7 +231,7 @@ jobs:
         run: npm run test:e2e:pwa
 
       - name: Drop isolated test database
-        if: always()
+        if: always() && steps.provision.outcome == 'success'
         run: node backend/scripts/ci-test-database.mjs drop
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -278,6 +286,7 @@ jobs:
 
       # A private database per shard; see the api-tests job.
       - name: Provision isolated test database
+        id: provision
         run: node backend/scripts/ci-test-database.mjs create ui_2
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -295,7 +304,7 @@ jobs:
         run: npm run test:e2e:ui -- --shard=2/2 --grep-invert @two-sided-release
 
       - name: Drop isolated test database
-        if: always()
+        if: always() && steps.provision.outcome == 'success'
         run: node backend/scripts/ci-test-database.mjs drop
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -352,6 +361,7 @@ jobs:
 
       # A private database per shard; see the api-tests job.
       - name: Provision isolated test database
+        id: provision
         run: node backend/scripts/ci-test-database.mjs create ui_release
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
@@ -369,7 +379,7 @@ jobs:
         run: npm run test:e2e:ui -- --grep @two-sided-release
 
       - name: Drop isolated test database
-        if: always()
+        if: always() && steps.provision.outcome == 'success'
         run: node backend/scripts/ci-test-database.mjs drop
         env:
           CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}

@@ -131,3 +131,20 @@ without the other leaves a stale entry on one side.
   reach Neon. The workflow already allows for slow IPv4/IPv6 selection through
   `NODE_OPTIONS`; a corporate or campus proxy needs `http_proxy`/`https_proxy`
   added to the `environment:` block in `compose.yaml`.
+
+## If a run dies part-way
+
+- `##[error]http2: client connection lost` at the end of *Set up job*, with
+  every later step skipped and *Drop isolated test database* the only one that
+  ran: the runner lost its connection to the instance and the job was
+  abandoned. No test failed. Campus networks and the reverse proxy in front of
+  `https://sdp.ms.wits.ac.za` both recycle idle HTTP/2 connections, and a
+  Wi-Fi or VPN flap on this machine does the same. Nothing in `config.yaml`
+  prevents the drop — its timeouts govern fetching and reporting, not holding
+  the connection open — so re-run the job. The runner itself reconnects
+  without help (`restart: unless-stopped` in `compose.yaml`). If it happens on
+  most runs, move the runner to a wired connection or onto a machine inside
+  the campus network.
+- Such a run leaks no databases. `create` sweeps every `ci_test_*` database
+  older than three hours at the start of the next run, which is what that
+  sweep in `backend/scripts/ci-test-database.mjs` is for.
