@@ -464,6 +464,9 @@ export default function LiveMatchPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const elapsedRef = useRef(0);
   const persistLockRef = useRef(false);
+  // Resolves when the in-flight persistEvent releases its lock.
+  const persistIdleRef = useRef<Promise<void>>(Promise.resolve());
+  const subInPendingRef = useRef(false);
   const primedIdsRef = useRef(false);
   const knownIdsRef = useRef(new Set<string>());
   const lastAppliedClockRevisionRef = useRef<string | null>(null);
@@ -1050,6 +1053,10 @@ export default function LiveMatchPage() {
         return false;
       }
       persistLockRef.current = true;
+      let releaseIdle = () => {};
+      persistIdleRef.current = new Promise((resolve) => {
+        releaseIdle = resolve;
+      });
       setActionError(null);
 
       const { eventType, detail } = resolvePersistedEventType(input, timeline);
@@ -1105,6 +1112,7 @@ export default function LiveMatchPage() {
         return false;
       } finally {
         persistLockRef.current = false;
+        releaseIdle();
       }
     },
     [
@@ -1390,35 +1398,45 @@ export default function LiveMatchPage() {
     }
   };
 
-  const completeSubIn = (incoming: MatchSquadAthlete | OpponentMatchPlayer) => {
+  const completeSubIn = async (incoming: MatchSquadAthlete | OpponentMatchPlayer) => {
     if (composer.kind !== "sub-in" && composer.kind !== "mandatory-sub-in") {
       return;
     }
-    if (composer.team === "own" && "firstName" in incoming) {
-      const outgoing = composer.outgoing as MatchSquadAthlete;
-      void persistEvent({
-        team: "own",
-        eventType: "substitution",
-        athleteId: outgoing.id,
-        detail: incoming.id,
-      });
-      return;
-    }
-    if (composer.team === "opponent" && "shirtNumber" in incoming) {
-      const outgoing = composer.outgoing;
-      void persistEvent({
-        team: "opponent",
-        eventType: "substitution",
-        opponentPlayerId:
-          outgoing !== "generic" && "shirtNumber" in outgoing
-            ? outgoing.id
-            : undefined,
-        opponentLabel:
-          outgoing !== "generic" && "shirtNumber" in outgoing
-            ? opponentShirtLabel(outgoing, visibility)
-            : oppName,
-        detail: incoming.id,
-      });
+    // The mandatory substitution opens while the injury is still being saved.
+    // Wait for that save instead of letting persistEvent's lock drop the tap,
+    // and ignore repeat taps meanwhile so only one substitution is logged.
+    if (subInPendingRef.current) return;
+    subInPendingRef.current = true;
+    try {
+      await persistIdleRef.current;
+      if (composer.team === "own" && "firstName" in incoming) {
+        const outgoing = composer.outgoing as MatchSquadAthlete;
+        await persistEvent({
+          team: "own",
+          eventType: "substitution",
+          athleteId: outgoing.id,
+          detail: incoming.id,
+        });
+        return;
+      }
+      if (composer.team === "opponent" && "shirtNumber" in incoming) {
+        const outgoing = composer.outgoing;
+        await persistEvent({
+          team: "opponent",
+          eventType: "substitution",
+          opponentPlayerId:
+            outgoing !== "generic" && "shirtNumber" in outgoing
+              ? outgoing.id
+              : undefined,
+          opponentLabel:
+            outgoing !== "generic" && "shirtNumber" in outgoing
+              ? opponentShirtLabel(outgoing, visibility)
+              : oppName,
+          detail: incoming.id,
+        });
+      }
+    } finally {
+      subInPendingRef.current = false;
     }
   };
 
@@ -1441,7 +1459,7 @@ export default function LiveMatchPage() {
       composer.team === "own" &&
       ownBench.some((player) => player.id === athlete.id)
     ) {
-      completeSubIn(athlete);
+      void completeSubIn(athlete);
       return;
     }
     if (
@@ -1477,7 +1495,7 @@ export default function LiveMatchPage() {
       composer.team === "opponent" &&
       oppState.bench.some((item) => item.id === player.id)
     ) {
-      completeSubIn(player);
+      void completeSubIn(player);
       return;
     }
     if (
