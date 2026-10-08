@@ -35,10 +35,12 @@ async function openReviews(page: Page) {
   return page.getByRole('dialog', { name: 'Event review', exact: true });
 }
 for (const { kind, firstConfirmation } of scenarios) {
-  test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, async ({ browser }, testInfo) => {
-    // The two real API accounts, fixture setup and exact-ID cleanup can take
-    // over four minutes against the remote test database, even with passing UI assertions.
-    test.setTimeout(360_000);
+  // Tagged so CI runs these long two-browser scenarios in their own job
+  // (.gitea/workflows/test.yml) instead of inside a shard.
+  test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, { tag: '@two-sided-release' }, async ({ browser }, testInfo) => {
+    // The two real API accounts, fixture setup and exact-ID cleanup take
+    // over five minutes against the remote test database, even with passing UI assertions.
+    test.setTimeout(480_000);
     test.skip(process.env.TWO_SIDED_LIVE_LOGGING_ENABLED !== 'true', 'Run with the controlled backend flag enabled.');
     const identities: TestIdentity[] = [];
     const contexts: BrowserContext[] = [];

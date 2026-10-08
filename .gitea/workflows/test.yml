@@ -216,7 +216,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui -- --shard=1/2
+        run: npm run test:e2e:ui -- --shard=1/2 --grep-invert @two-sided-release
 
       - name: Run production PWA tests
         if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
@@ -292,7 +292,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui -- --shard=2/2
+        run: npm run test:e2e:ui -- --shard=2/2 --grep-invert @two-sided-release
 
       - name: Drop isolated test database
         if: always()
@@ -305,6 +305,80 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: playwright-failure-artifacts-2
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  ui-tests-two-sided-release:
+    name: UI tests (two-coach release)
+    # The four two-browser release scenarios each take ~5 minutes against the
+    # real API and database, too long to fit inside a shard's 30-minute budget,
+    # so they run in parallel here (tagged @two-sided-release).
+    runs-on: ubuntu-latest
+    needs: api-tests
+    timeout-minutes: 50
+    env:
+      CI: "true"
+      TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
+      PORT: "3100"
+      BETTER_AUTH_URL: http://localhost:3100
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+          npm --prefix backend ci
+
+      # A private database per shard; see the api-tests job.
+      - name: Provision isolated test database
+        run: node backend/scripts/ci-test-database.mjs create ui_release
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Migrate the test database
+        run: npm --prefix backend run db:migrate:test
+
+      - name: Build application for browser tests
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e:ui -- --grep @two-sided-release
+
+      - name: Drop isolated test database
+        if: always()
+        run: node backend/scripts/ci-test-database.mjs drop
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-failure-artifacts-release
           path: |
             playwright-report/
             test-results/
