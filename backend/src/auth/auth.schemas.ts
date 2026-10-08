@@ -80,7 +80,6 @@ export const setPasswordSchema = z.object({
 });
 export type SetPasswordDto = z.infer<typeof setPasswordSchema>;
 
-
 export const requestPasswordResetSchema = z.object({
   email: z
     .string()
@@ -88,7 +87,9 @@ export const requestPasswordResetSchema = z.object({
     .email('Enter a valid email address.')
     .max(255, 'Email must be 255 characters or fewer.'),
 });
-export type RequestPasswordResetDto = z.infer<typeof requestPasswordResetSchema>;
+export type RequestPasswordResetDto = z.infer<
+  typeof requestPasswordResetSchema
+>;
 
 export const resetPasswordSchema = z.object({
   token: z.string().trim().min(1, 'Reset token is required.'),

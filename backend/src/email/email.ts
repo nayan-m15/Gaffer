@@ -116,7 +116,6 @@ export async function sendEmailChangeConfirmationEmail({
   });
 }
 
-
 export interface SendPasswordResetEmailInput {
   to: string;
   name: string;

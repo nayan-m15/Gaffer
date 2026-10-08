@@ -53,8 +53,7 @@ async function validateGoogleIdentity(
   }
 
   const profile = source.oauth.profile as
-    | { sub?: unknown; email?: unknown; email_verified?: unknown }
-    | undefined;
+    { sub?: unknown; email?: unknown; email_verified?: unknown } | undefined;
   const providerAccountId =
     typeof profile?.sub === 'string' ? profile.sub : undefined;
   const providerEmail = normalizeEmail(
@@ -100,7 +99,8 @@ async function validateGoogleIdentity(
   if (!linkedUser) {
     return {
       error: 'google_account_orphaned',
-      errorDescription: 'This Google sign-in is no longer connected to an active account.',
+      errorDescription:
+        'This Google sign-in is no longer connected to an active account.',
     };
   }
 
@@ -112,7 +112,6 @@ async function validateGoogleIdentity(
     };
   }
 }
-
 
 function rewriteEmailChangeVerificationUrl(url: string): string {
   try {
@@ -137,7 +136,9 @@ function isFinalEmailChangeVerification(request: Request | undefined): boolean {
   try {
     const callbackURL = new URL(request.url).searchParams.get('callbackURL');
     if (!callbackURL) return false;
-    return new URL(callbackURL, FRONTEND_URL).pathname === '/email-change/complete';
+    return (
+      new URL(callbackURL, FRONTEND_URL).pathname === '/email-change/complete'
+    );
   } catch {
     return false;
   }
@@ -180,9 +181,9 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
     revokeSessionsOnPasswordReset: true,
-    sendResetPassword: async ({ user, url }) => {
-      // Do not await this request: keeping the response timing uniform makes
-      // it harder to determine whether an email address has an account.
+    sendResetPassword: ({ user, url }) => {
+      // Send the email in the background without waiting for completion.
+      // This helps keep response timing consistent.
       void sendPasswordResetEmail({
         to: user.email,
         name: user.name,
@@ -190,6 +191,8 @@ export const auth = betterAuth({
       }).catch((error) => {
         console.error('Failed to send password reset email', error);
       });
+
+      return Promise.resolve();
     },
   },
   emailVerification: {

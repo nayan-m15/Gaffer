@@ -238,7 +238,6 @@ export class AuthController {
     await toNodeHandler(auth)(req, res);
   }
 
-
   @Post('forgot-password')
   async forgotPassword(@Body() body: unknown) {
     const dto = zodValidate(requestPasswordResetSchema, body);
@@ -336,8 +335,6 @@ export class AuthController {
     }
   }
 
-
-
   @UseGuards(AuthGuard)
   @Post('change-email')
   async changeEmail(
@@ -369,7 +366,6 @@ export class AuthController {
     }
   }
 
-
   @UseGuards(AuthGuard)
   @Get('password-status')
   async passwordStatus(@Req() req: AuthenticatedRequest) {
@@ -379,7 +375,9 @@ export class AuthController {
       });
 
       return {
-        hasPassword: accounts.some((account) => account.providerId === 'credential'),
+        hasPassword: accounts.some(
+          (account) => account.providerId === 'credential',
+        ),
       };
     } catch (error) {
       throw toHttpException(error);
@@ -388,10 +386,7 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @Post('set-password')
-  async setPassword(
-    @Body() body: unknown,
-    @Req() req: AuthenticatedRequest,
-  ) {
+  async setPassword(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
     const dto = zodValidate(setPasswordSchema, body);
     const headers = fromNodeHeaders(req.headers);
 

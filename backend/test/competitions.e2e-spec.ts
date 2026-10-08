@@ -778,7 +778,7 @@ describe('Shared competitions (e2e)', () => {
           clientRequestId: randomUUID(),
           team: 'opponent',
           eventType: 'goal',
-          opponentLabel: 'Home scorer',
+          opponentLabel: 'Home0 Fixture Player',
           minute: 7,
           period: 'first_half',
           matchElapsedMs: 7 * 60_000,

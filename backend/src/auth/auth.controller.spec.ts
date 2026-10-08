@@ -506,7 +506,9 @@ describe('AuthController', () => {
   });
 
   describe('passwordStatus', () => {
-    const req = { headers: { cookie: 'better-auth.session_token=signed-token' } } as never;
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
 
     it('reports when a credential password exists', async () => {
       listAccounts.mockResolvedValue([
@@ -514,21 +516,31 @@ describe('AuthController', () => {
         { id: 'credential-account', providerId: 'credential' },
       ]);
 
-      await expect(controller.passwordStatus(req)).resolves.toEqual({ hasPassword: true });
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: true,
+      });
     });
 
     it('reports OAuth-only accounts as having no password', async () => {
-      listAccounts.mockResolvedValue([{ id: 'google-account', providerId: 'google' }]);
+      listAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
 
-      await expect(controller.passwordStatus(req)).resolves.toEqual({ hasPassword: false });
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: false,
+      });
     });
   });
 
   describe('setPassword', () => {
-    const req = { headers: { cookie: 'better-auth.session_token=signed-token' } } as never;
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
 
     it('sets the first password for an OAuth-only account', async () => {
-      listAccounts.mockResolvedValue([{ id: 'google-account', providerId: 'google' }]);
+      listAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
       setPassword.mockResolvedValue({ status: true });
 
       await expect(
@@ -542,11 +554,15 @@ describe('AuthController', () => {
     });
 
     it('refuses to overwrite an existing credential password without current-password verification', async () => {
-      listAccounts.mockResolvedValue([{ id: 'credential-account', providerId: 'credential' }]);
+      listAccounts.mockResolvedValue([
+        { id: 'credential-account', providerId: 'credential' },
+      ]);
 
       await expect(
         controller.setPassword({ newPassword: 'Newpassword456!' }, req),
-      ).rejects.toThrow('A password is already set for this account. Use Change Password instead.');
+      ).rejects.toThrow(
+        'A password is already set for this account. Use Change Password instead.',
+      );
 
       expect(setPassword).not.toHaveBeenCalled();
     });
@@ -562,7 +578,9 @@ describe('AuthController', () => {
   });
 
   describe('changePassword', () => {
-    const req = { headers: { cookie: 'better-auth.session_token=signed-token' } } as never;
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
 
     it('verifies the current password, changes it and revokes other sessions', async () => {
       changePassword.mockResolvedValue({ status: true });
@@ -623,7 +641,9 @@ describe('AuthController', () => {
           },
           req,
         ),
-      ).rejects.toThrow('New password must be different from your current password.');
+      ).rejects.toThrow(
+        'New password must be different from your current password.',
+      );
 
       expect(changePassword).not.toHaveBeenCalled();
     });
@@ -642,5 +662,4 @@ describe('AuthController', () => {
       expect(changePassword).not.toHaveBeenCalled();
     });
   });
-
 });
