@@ -322,15 +322,17 @@ for (const { kind, firstConfirmation } of scenarios) {
       }
       for (const coach of [home, away]) {
         const sheet = coach === home ? homeSheet : awaySheet;
+        // A cold load of the report can take well over 20s with two browsers
+        // sharing a CI runner.
         await coach.page.goto(`/matches/${sheet.id}/report`);
         const status = coach.page.getByRole('region', { name: 'Shared session result' });
-        await expect(status).toContainText('Final result', { timeout: 20000 });
+        await expect(status).toContainText('Final result', { timeout: 45000 });
         await expect(status).toContainText('Home confirmed');
         await expect(status).toContainText('Away confirmed');
         await expect(status).toContainText('Home 2');
         await expect(status).toContainText('1 Away');
         await coach.page.reload();
-        await expect(status).toContainText('Final result', { timeout: 20000 });
+        await expect(status).toContainText('Final result', { timeout: 45000 });
       }
       if (competitionId) {
         const detail = await body(home.context.request, 'get', `/competitions/${competitionId}`);
