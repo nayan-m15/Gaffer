@@ -11,7 +11,7 @@ const inviteTokenField = teamInviteTokenSchema.optional();
 
 const newPasswordSchema = z
   .string()
-  .min(10, 'Password must be at least 10 characters.')
+  .min(8, 'Password must be at least 8 characters.')
   .max(128, 'Password must be 128 characters or fewer.')
   .regex(/[A-Z]/, 'Password must include at least one uppercase letter.')
   .regex(/[a-z]/, 'Password must include at least one lowercase letter.')

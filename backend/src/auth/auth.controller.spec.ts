@@ -553,8 +553,8 @@ describe('AuthController', () => {
 
     it('applies the same strong password policy to first-time passwords', async () => {
       await expect(
-        controller.setPassword({ newPassword: 'weakpass' }, req),
-      ).rejects.toThrow('Password must be at least 10 characters.');
+        controller.setPassword({ newPassword: 'short' }, req),
+      ).rejects.toThrow('Password must be at least 8 characters.');
 
       expect(listAccounts).not.toHaveBeenCalled();
       expect(setPassword).not.toHaveBeenCalled();
@@ -586,7 +586,7 @@ describe('AuthController', () => {
       expect(result).toEqual({ status: true });
     });
 
-    it('rejects a new password shorter than the ten-character minimum', async () => {
+    it('rejects a new password shorter than the eight-character minimum', async () => {
       await expect(
         controller.changePassword(
           {
@@ -595,7 +595,7 @@ describe('AuthController', () => {
           },
           req,
         ),
-      ).rejects.toThrow('Password must be at least 10 characters.');
+      ).rejects.toThrow('Password must be at least 8 characters.');
 
       expect(changePassword).not.toHaveBeenCalled();
     });
