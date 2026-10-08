@@ -11,13 +11,13 @@
   --logger-artwork: url("/liveLoggerBgDarkMobile.png");
 }
 .live-logger-page-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   background-color: var(--background);
-  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--background) 55%, transparent), var(--background) 850px), var(--logger-artwork);
-  background-position: center top;
+  background-image: var(--logger-artwork);
+  background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
