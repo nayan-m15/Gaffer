@@ -1071,9 +1071,9 @@ select:-webkit-autofill {
 }
 
 /* Public showcase sizing leaves room for controls without shrinking card text. */
-.public-player-showcase { height: 580px; }
+.public-player-showcase { height: 480px; }
 .public-player-carousel .depth-carousel__card {
-  width: min(360px, calc(100% - 88px)) !important;
+  width: min(300px, calc(100% - 88px)) !important;
   box-shadow: 0 8px 24px -16px color-mix(in srgb, var(--foreground) 25%, transparent);
   background: var(--card);
 }
@@ -1125,8 +1125,8 @@ select:-webkit-autofill {
 .public-player-carousel :is(button, [tabindex]):focus-visible,
 .public-player-carousel:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 @media (width < 640px) {
-  .public-player-showcase { height: 540px; }
-  .public-player-carousel .depth-carousel__card { height: 460px !important; }
+  .public-player-showcase { height: 460px; }
+  .public-player-carousel .depth-carousel__card { height: 380px !important; }
 }
 
 .public-player-carousel .depth-carousel__dot.is-active { width: 20px; background: transparent; }

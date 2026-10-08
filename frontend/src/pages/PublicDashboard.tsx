@@ -550,8 +550,8 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
       <DepthCarousel
         items={items}
         className="public-player-carousel"
-        cardWidth={360}
-        cardHeight={500}
+        cardWidth={300}
+        cardHeight={400}
         scaleToFit={false}
         depth={230}
         spread={110}
@@ -563,7 +563,7 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
         blur={4}
         autoplay
         loop
-        radius={26}
+        radius={22}
         ariaLabel="Squad showcase player cards"
       />
     </div>

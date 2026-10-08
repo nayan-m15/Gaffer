@@ -33,8 +33,8 @@ test('depth stack, controls, keyboard and looping preserve live player cards', a
   await openDashboard(page);
   await expect(activeCard(page).locator('h3')).toHaveText('Player0 Test');
   await expect(carousel(page)).toHaveCSS('perspective', '1650px');
-  await expect(carousel(page)).toHaveCSS('height', '580px');
-  await expect(cards(page).first()).toHaveCSS('border-radius', '26px');
+  await expect(carousel(page)).toHaveCSS('height', '480px');
+  await expect(cards(page).first()).toHaveCSS('border-radius', '22px');
   await expect.poll(() => cards(page).evaluateAll(elements => elements.filter(el => getComputedStyle(el).opacity === '1').length)).toBe(5);
   await page.getByRole('button', { name: 'Next slide', exact: true }).click();
   await expect(activeCard(page).locator('h3')).toHaveText('Player1 Test');
