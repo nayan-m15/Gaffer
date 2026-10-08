@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Medal, RefreshCcw, Trophy } from "lucide-react";
+import { RefreshCcw, Trophy } from "lucide-react";
 import { AppCard } from "@/components/app/AppCard";
 import { Button } from "@/components/ui/button";
 import { useCompetitionPlayerStats } from "./hooks";
@@ -61,7 +61,13 @@ export function CompetitionPlayerStats({ competitionId, participants }: { compet
             <th className="px-4 py-3 text-right">{categories.find((item) => item.key === category)?.label}</th>
           </tr></thead>
           <tbody>{players.map((player, index) => <tr key={player.athleteId} className="border-t border-border/70">
-            <td className="px-4 py-3 font-semibold">{index === 0 ? <Medal className="size-5 text-amber-500" aria-label="First place" /> : index + 1}</td>
+            <td className="px-4 py-3 font-semibold">
+              {index === 0 ? (
+                <span aria-label="1st place" title="1st place" className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/35 bg-primary/10 font-bold tabular-nums text-primary">1</span>
+              ) : (
+                <span className="inline-flex size-8 items-center justify-center tabular-nums">{index + 1}</span>
+              )}
+            </td>
             <td className="px-4 py-3"><span className="font-medium">{player.name}</span>{player.position && <span className="ml-2 text-xs text-muted-foreground">{player.position}</span>}</td>
             <td className="px-4 py-3 text-muted-foreground">{player.teamName}</td>
             <td className="px-4 py-3 text-right font-semibold tabular-nums">{player[category]}</td>
