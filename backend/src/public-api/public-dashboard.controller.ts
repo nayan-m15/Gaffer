@@ -1,5 +1,13 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiDashboardQuery,
+  filtersSchema,
+  listSchema,
+  matchSchema,
+  playerSchema,
+  teamStatisticsSchema,
+} from './public-api.openapi';
 import { zodValidate } from '../common/zod-validate';
 import {
   publicDashboardQuerySchema,
@@ -17,6 +25,7 @@ export class PublicDashboardController {
 
   @Get('filters')
   @ApiOperation({ summary: 'List public teams, competitions and seasons' })
+  @ApiOkResponse({ schema: filtersSchema })
   async filters() {
     const data = await this.publicDashboardService.getFilters();
     return { success: true, data };
@@ -24,6 +33,8 @@ export class PublicDashboardController {
 
   @Get('matches')
   @ApiOperation({ summary: 'List public match events' })
+  @ApiDashboardQuery('matches')
+  @ApiOkResponse({ schema: listSchema(matchSchema, true) })
   async matches(@Query() query: unknown) {
     const dto = zodValidate(publicMatchesQuerySchema, query);
     const data = await this.publicDashboardService.getMatches(dto);
@@ -38,6 +49,8 @@ export class PublicDashboardController {
 
   @Get('players')
   @ApiOperation({ summary: 'List public players and their statistics' })
+  @ApiDashboardQuery('players')
+  @ApiOkResponse({ schema: listSchema(playerSchema, true) })
   async players(@Query() query: unknown) {
     const dto = zodValidate(publicPlayersQuerySchema, query);
     const data = await this.publicDashboardService.getPlayers(dto);
@@ -52,6 +65,8 @@ export class PublicDashboardController {
 
   @Get('team-statistics')
   @ApiOperation({ summary: 'List public team standings' })
+  @ApiDashboardQuery('standings')
+  @ApiOkResponse({ schema: listSchema(teamStatisticsSchema) })
   async teamStatistics(@Query() query: unknown) {
     const dto = zodValidate(publicDashboardQuerySchema, query);
     const data = await this.publicDashboardService.getTeamStatistics(dto);
