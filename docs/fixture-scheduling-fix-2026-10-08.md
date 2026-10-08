@@ -19,7 +19,7 @@ fixed scheduling expectations as the real date advances.
 
 ## Database deployment
 
-Apply `backend/drizzle/0061_competition_schedule_timezone.sql` through the normal
+Apply `backend/drizzle/0063_competition_schedule_timezone.sql` through the normal
 migration process before deploying this backend. It adds
 `competitions.schedule_timezone` with a UTC default for existing rows and a
 seven-argument fixture generation function. The existing six-argument function

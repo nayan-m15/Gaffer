@@ -3,7 +3,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { SportLogo } from "@/components/brand/SportLogo";
-import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { useSidebar } from "@/hooks/useSidebar";
 import { cn } from "@/lib/utils";
 
 const StadiumScene = lazy(() =>
@@ -72,7 +73,7 @@ function AppShellContent() {
           <Outlet />
         </div>
         <div className="no-print relative z-20">
-          <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:py-3" : undefined} />
+          <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:mt-0 sm:py-3" : undefined} />
         </div>
       </main>
     </div>

@@ -7,7 +7,7 @@ export interface ChapterItem {
   label: string;
 }
 
-export const CHAPTERS: ChapterItem[] = [
+const CHAPTERS: ChapterItem[] = [
   { id: "home", label: "Overview" },
   { id: "philosophy", label: "Workflow" },
   { id: "roster", label: "Squad" },

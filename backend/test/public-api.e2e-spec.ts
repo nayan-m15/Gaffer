@@ -43,6 +43,7 @@ describe('Public API (e2e)', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -54,6 +55,17 @@ describe('Public API (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
+
+    // `clearAllMocks` drops the implementations above, and a fresh app per
+    // test also means a fresh cache and a fresh rate-limit window.
+    publicDashboardService.getFilters.mockResolvedValue({
+      teams: [{ id: 'team-1', name: 'Gaffer FC' }],
+      competitions: [],
+      seasons: [],
+    });
+    publicDashboardService.getMatches.mockResolvedValue([]);
+    publicDashboardService.getPlayers.mockResolvedValue([]);
+    publicDashboardService.getTeamStatistics.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -198,6 +210,71 @@ describe('Public API (e2e)', () => {
         'notes',
       ]) {
         expect(serialized).not.toContain(forbidden);
+      }
+    });
+
+    it('rejects a player page above the public cap (SEC-008)', async () => {
+      await request(app.getHttpServer())
+        .get('/v1/public-dashboard/players?limit=500')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/v1/public-dashboard/players?limit=200')
+        .expect(200);
+    });
+
+    it('serves a repeated identical request from cache (SEC-008)', async () => {
+      const url = '/v1/public-dashboard/players?limit=100';
+
+      const first = await request(app.getHttpServer()).get(url).expect(200);
+      const second = await request(app.getHttpServer()).get(url).expect(200);
+
+      expect(second.body).toEqual(first.body);
+      expect(publicDashboardService.getPlayers).toHaveBeenCalledTimes(1);
+    });
+
+    it('still queries separately for a different filter (SEC-008)', async () => {
+      await request(app.getHttpServer())
+        .get('/v1/public-dashboard/matches?limit=10')
+        .expect(200);
+      await request(app.getHttpServer())
+        .get('/v1/public-dashboard/matches?limit=20')
+        .expect(200);
+
+      expect(publicDashboardService.getMatches).toHaveBeenCalledTimes(2);
+    });
+
+    it('rate limits an anonymous flood with 429 (SEC-008)', async () => {
+      process.env.PUBLIC_DASHBOARD_RATE_LIMIT = '3:60';
+      try {
+        const url = '/v1/public-dashboard/filters';
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          await request(app.getHttpServer()).get(url).expect(200);
+        }
+
+        const rejected = await request(app.getHttpServer())
+          .get(url)
+          .expect(429);
+        expect((rejected.body as ErrorBody).message).toBe(
+          'Too many requests. Please try again later.',
+        );
+      } finally {
+        delete process.env.PUBLIC_DASHBOARD_RATE_LIMIT;
+      }
+    });
+
+    it('rejects a flood before it reaches query validation (SEC-008)', async () => {
+      process.env.PUBLIC_DASHBOARD_RATE_LIMIT = '1:60';
+      try {
+        await request(app.getHttpServer())
+          .get('/v1/public-dashboard/filters')
+          .expect(200);
+
+        // A malformed query would normally be a 400; the guard runs first.
+        await request(app.getHttpServer())
+          .get('/v1/public-dashboard/matches?teamId=not-a-uuid')
+          .expect(429);
+      } finally {
+        delete process.env.PUBLIC_DASHBOARD_RATE_LIMIT;
       }
     });
   });
