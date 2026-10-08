@@ -6,6 +6,9 @@ jest.mock('./auth', () => ({
       signUpEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
       signInEmail: jest.fn(),
+      changePassword: jest.fn(),
+      setPassword: jest.fn(),
+      listUserAccounts: jest.fn(),
       signOut: jest.fn(),
     },
   },
@@ -56,6 +59,9 @@ import { TeamsService } from '../teams/teams.service';
 
 const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
 const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
+const changePassword = auth.api.changePassword as unknown as jest.Mock;
+const setPassword = auth.api.setPassword as unknown as jest.Mock;
+const listUserAccounts = auth.api.listUserAccounts as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
 const fromNodeHeadersMock = fromNodeHeaders as unknown as jest.Mock;
@@ -150,7 +156,7 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
         },
         res,
       );
@@ -159,7 +165,7 @@ describe('AuthController', () => {
         body: {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           callbackURL: `${FRONTEND_URL}/login?verified=1`,
         },
         returnHeaders: true,
@@ -177,7 +183,7 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           inviteToken: INVITE_TOKEN,
         },
         res,
@@ -187,7 +193,7 @@ describe('AuthController', () => {
         body: {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           callbackURL: `${FRONTEND_URL}/join-team/${INVITE_TOKEN}`,
         },
         returnHeaders: true,
@@ -200,7 +206,7 @@ describe('AuthController', () => {
         {
           name: 'Ada',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           inviteToken: INVITE_TOKEN,
           inviteKind: 'competition',
         },
@@ -221,7 +227,7 @@ describe('AuthController', () => {
           {
             name: 'Ada',
             email: 'ada@example.com',
-            password: 'password123',
+            password: 'Password123!',
             inviteToken: INVITE_TOKEN,
             inviteKind: 'other',
           },
@@ -237,7 +243,7 @@ describe('AuthController', () => {
           {
             name: 'Ada Lovelace',
             email: 'ada@example.com',
-            password: 'password123',
+            password: 'Password123!',
             inviteToken: 'not-a-token',
           },
           res,
@@ -496,6 +502,168 @@ describe('AuthController', () => {
           email: 'ada@example.com',
         }),
       ).rejects.toThrow('Too many requests.');
+    });
+  });
+
+  describe('passwordStatus', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('reports when a credential password exists', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+        { id: 'credential-account', providerId: 'credential' },
+      ]);
+
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: true,
+      });
+    });
+
+    it('reports OAuth-only accounts as having no password', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
+
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: false,
+      });
+    });
+  });
+
+  describe('setPassword', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('sets the first password for an OAuth-only account', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
+      setPassword.mockResolvedValue({ status: true });
+
+      await expect(
+        controller.setPassword({ newPassword: 'Newpassword456!' }, req),
+      ).resolves.toEqual({ status: true });
+
+      expect(setPassword).toHaveBeenCalledWith({
+        body: { newPassword: 'Newpassword456!' },
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
+      });
+    });
+
+    it('refuses to overwrite an existing credential password without current-password verification', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'credential-account', providerId: 'credential' },
+      ]);
+
+      await expect(
+        controller.setPassword({ newPassword: 'Newpassword456!' }, req),
+      ).rejects.toThrow(
+        'A password is already set for this account. Use Change Password instead.',
+      );
+
+      expect(setPassword).not.toHaveBeenCalled();
+    });
+
+    it('applies the same strong password policy to first-time passwords', async () => {
+      await expect(
+        controller.setPassword({ newPassword: 'short' }, req),
+      ).rejects.toThrow('Password must be at least 8 characters.');
+
+      expect(listUserAccounts).not.toHaveBeenCalled();
+      expect(setPassword).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('verifies the current password, changes it and revokes other sessions', async () => {
+      changePassword.mockResolvedValue({ status: true });
+
+      const result = await controller.changePassword(
+        {
+          currentPassword: 'password123',
+          newPassword: 'Newpassword456!',
+        },
+        req,
+      );
+
+      expect(changePassword).toHaveBeenCalledWith({
+        body: {
+          currentPassword: 'password123',
+          newPassword: 'Newpassword456!',
+          revokeOtherSessions: true,
+        },
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
+      });
+      expect(result).toEqual({ status: true });
+    });
+
+    it('rejects a new password shorter than the eight-character minimum', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'password123',
+            newPassword: 'short',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Password must be at least 8 characters.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects a new password that does not meet the complexity requirements', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'password123',
+            newPassword: 'alllowercase123!',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Password must include at least one uppercase letter.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects reusing the current password as the new password', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'Password123!',
+            newPassword: 'Password123!',
+          },
+          req,
+        ),
+      ).rejects.toThrow(
+        'New password must be different from your current password.',
+      );
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('requires the current password before calling Better Auth', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: '',
+            newPassword: 'Newpassword456!',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Current password is required.');
+
+      expect(changePassword).not.toHaveBeenCalled();
     });
   });
 });
