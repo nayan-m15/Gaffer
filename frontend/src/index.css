@@ -922,6 +922,89 @@ select:-webkit-autofill {
   .public-dashboard-filter-panel { padding-left: 12px; }
 }
 
+/* Keep the public dashboard's mobile navigation and filters inside the viewport. */
+@media (max-width: 767px) {
+  .public-dashboard-page > header {
+    background: color-mix(in srgb, var(--background) 95%, transparent);
+    color: var(--foreground);
+  }
+
+  .public-dashboard-page > header nav > a {
+    color: var(--foreground);
+    text-shadow: none;
+  }
+
+  .public-dashboard-page > header nav button {
+    min-width: 44px;
+    min-height: 44px;
+    color: var(--foreground);
+  }
+
+  .public-dashboard-page > header nav button:hover {
+    background: var(--muted);
+    color: var(--brand);
+  }
+
+  .public-dashboard-page .public-dashboard-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    overflow: visible;
+    padding: 0 12px;
+  }
+
+  .public-dashboard-page .public-dashboard-section-nav { min-width: 0; }
+  .public-dashboard-page .public-dashboard-section-list {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .public-dashboard-page .public-dashboard-section-link {
+    min-height: 76px;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 4px;
+    font-size: 11px;
+    line-height: 14px;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .public-dashboard-page .public-dashboard-section-link > span {
+    display: flex;
+    min-height: 28px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .public-dashboard-page .public-dashboard-section-link > svg { width: 18px; height: 18px; }
+  .public-dashboard-page .public-dashboard-section-link::after { right: 4px; left: 4px; height: 3px; }
+
+  .public-dashboard-page .public-dashboard-filter-panel {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 8px 0 12px;
+  }
+
+  .public-dashboard-page .public-dashboard-filter-grid {
+    min-width: 0;
+    flex-basis: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+  }
+
+  .public-dashboard-page .public-dashboard-filter-field { gap: 6px; }
+  .public-dashboard-page .public-dashboard-filter-select { min-height: 32px; }
+  .public-dashboard-page .public-dashboard-filter-reset { width: auto; min-height: 44px; margin-left: auto; gap: 6px; padding: 0 8px; }
+  .public-dashboard-page .public-dashboard-filter-reset::after { content: "Reset"; font-size: 12px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .public-dashboard-section-link,
   .public-dashboard-section-link::after,

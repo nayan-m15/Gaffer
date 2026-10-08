@@ -767,10 +767,17 @@ function PublicDashboardSectionNav({
           }
         }
 
+        const mobileLayout = window.matchMedia("(max-width: 767px)").matches;
+        // Mobile's taller filter bar can leave adjacent sections in the observer
+        // band. Use current positions instead of cached entries after a jump.
+        const sectionTop = (entry: IntersectionObserverEntry) =>
+          mobileLayout
+            ? entry.target.getBoundingClientRect().top
+            : entry.boundingClientRect.top;
         const nextSection = [...visibleSections.values()].sort(
           (a, b) =>
-            Math.abs(a.boundingClientRect.top - window.innerHeight * 0.35) -
-            Math.abs(b.boundingClientRect.top - window.innerHeight * 0.35),
+            Math.abs(sectionTop(a) - window.innerHeight * 0.35) -
+            Math.abs(sectionTop(b) - window.innerHeight * 0.35),
         )[0]?.target.id;
 
         if (nextSection) {
