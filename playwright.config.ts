@@ -29,7 +29,9 @@ export default defineConfig({
   // only needs to cover roughly half the suite, not all of it.
   globalTimeout: process.env.CI ? 30 * 60_000 : undefined,
   expect: {
-    timeout: process.env.CI ? 15_000 : 5_000,
+    // On a shared CI runner a cold load of the match report or live logger
+    // routinely takes ~20s before its first element renders.
+    timeout: process.env.CI ? 30_000 : 5_000,
   },
   // Lets `--shard` split individual tests rather than whole files, so the
   // two CI shards stay roughly the same size: regression-ui.spec.ts alone is
