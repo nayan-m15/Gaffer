@@ -161,6 +161,7 @@ describe('CompetitionsController', () => {
         'user-1',
         COMPETITION_ID,
         false,
+        undefined,
       );
     });
 
@@ -173,6 +174,7 @@ describe('CompetitionsController', () => {
         'user-1',
         COMPETITION_ID,
         true,
+        undefined,
       );
     });
 

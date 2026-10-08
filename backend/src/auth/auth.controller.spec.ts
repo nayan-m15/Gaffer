@@ -180,7 +180,7 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
         },
         req,
         res,
@@ -204,7 +204,7 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
         },
         req,
         res,
