@@ -167,7 +167,6 @@ export default function EventsPage() {
       events={visibleEvents}
       eventDays={eventDays}
       teamName={team?.name}
-      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
       readOnly={!canManageEvents}
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
