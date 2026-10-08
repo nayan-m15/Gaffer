@@ -707,3 +707,83 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
   await expect(page.getByRole("button", { name: /12' Yellow Card/i })).toBeVisible(pageLoad);
   await expect(page.getByText("Manually adjusted")).toBeVisible();
 });
+
+
+async function mockLoggerPicker(page: Page, events?: unknown[]) {
+  const rows = events ?? Array.from({ length: 8 }, (_, index) => ({
+    id: "picker-" + index, teamId: "team-picker", title: "WITS vs Rivals " + index,
+    type: index === 7 ? "training" : "match",
+    status: index === 5 ? "completed" : index === 6 ? "cancelled" : "scheduled",
+    scheduledAt: index === 1 ? "2100-10-10T15:00:00Z" : "2020-10-08T15:00:00Z",
+    location: index === 2 ? "University sports complex with a very long venue name and training grounds" : "Main stadium",
+    competitionId: index === 0 ? "picker-league" : null,
+    matchId: index === 5 ? "picker-report" : null,
+    lineupConfirmedAt: index === 0 ? "2020-10-08T12:00:00Z" : null,
+  }));
+  await page.route("**/api/**", route => json(route, []));
+  await page.route("**/auth/session", route => json(route, session("Test Coach", "WITS", "picker")));
+  await page.route("**/api/events", route => json(route, rows));
+  await page.route("**/api/competitions/mine", route => json(route, [
+    { id: "picker-league", name: "University Premier League", type: "league" },
+  ]));
+}
+
+test("live logger picker searches all pages and resets pagination when filters change", async ({ page }) => {
+  await mockLoggerPicker(page);
+  await page.goto("/live-logger");
+  const matches = page.getByRole("list", { name: "Matches", exact: true });
+  await expect(matches.getByRole("listitem")).toHaveCount(4);
+  await expect(page.getByText("Showing 1–4 of 5 matches")).toBeVisible();
+  await page.getByRole("button", { name: "Next match page" }).click();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByText("Showing 5–5 of 5 matches")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search matches" }).fill(" premier ");
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await expect(matches.getByRole("heading", { name: "WITS vs Rivals 0" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page.getByText("Showing 1–4 of 5 matches")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search matches" }).fill("does not exist");
+  await expect(page.getByRole("heading", { name: "No matches found" })).toBeVisible();
+  await page.getByRole("button", { name: "Reset filters" }).click();
+  await expect(page.getByText("Showing 1–4 of 7 matches")).toBeVisible();
+});
+
+test("live logger picker preserves future locks, squad navigation and completed report navigation", async ({ page }) => {
+  await mockLoggerPicker(page);
+  await page.goto("/live-logger");
+  const matches = page.getByRole("list", { name: "Matches", exact: true });
+  const locked = matches.getByRole("listitem").filter({ hasText: "WITS vs Rivals 1" });
+  await expect(locked.getByText(/Unlocks/)).toBeVisible();
+  await expect(locked.getByRole("button")).toHaveCount(0);
+  await matches.getByRole("button", { name: /WITS vs Rivals 0/ }).click();
+  await expect(page).toHaveURL(new RegExp("/events/picker-0/confirm-squad$"));
+  await page.goto("/live-logger");
+  await page.getByRole("combobox", { name: "Filter matches by status" }).click();
+  await page.getByRole("option", { name: "Completed", exact: true }).click();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await matches.getByRole("button", { name: /View Match Report/ }).click();
+  await expect(page).toHaveURL(new RegExp("/matches/picker-report/report$"));
+  await page.goto("/live-logger");
+  await page.getByRole("combobox", { name: "Filter matches by status" }).click();
+  await page.getByRole("option", { name: "Cancelled", exact: true }).click();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await expect(matches.getByRole("button")).toHaveCount(0);
+});
+
+test("live logger picker fits mobile, tablet and desktop in both themes", async ({ page }) => {
+  await mockLoggerPicker(page);
+  await page.goto("/live-logger");
+  await expect(page.getByRole("heading", { name: "Live Logger", exact: true })).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(value => document.documentElement.classList.toggle("dark", value === "dark"), theme);
+    for (const width of [320, 390, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 960 });
+      await expect.poll(() => page.locator(".live-logger-page").evaluate(element => {
+        const toolbar = element.querySelector(".live-logger-toolbar")!;
+        return { page: element.scrollWidth <= element.clientWidth, toolbar: toolbar.scrollWidth <= toolbar.clientWidth };
+      }), { message: theme + " at " + width }).toEqual({ page: true, toolbar: true });
+      await expect(page.getByRole("combobox", { name: "Filter matches by status" })).toBeVisible();
+      await expect(page.getByRole("searchbox", { name: "Search matches" })).toBeVisible();
+    }
+  }
+});
