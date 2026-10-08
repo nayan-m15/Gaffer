@@ -1,18 +1,11 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
 
-interface SidebarContextValue {
-  expanded: boolean;
-  setExpanded: (expanded: boolean) => void;
-  toggle: () => void;
-}
+import { SidebarContext } from "@/hooks/useSidebar";
 
-const SidebarContext = createContext<SidebarContextValue | null>(null);
 const STORAGE_KEY = "gaffer-sidebar-expanded";
 
 /** Persisted application adaptation of Aceternity's collapsible sidebar. */
@@ -33,12 +26,4 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
       {children}
     </SidebarContext.Provider>
   );
-}
-
-export function useSidebar() {
-  const context = useContext(SidebarContext);
-  if (!context) {
-    throw new Error("useSidebar must be used within SidebarProvider");
-  }
-  return context;
 }

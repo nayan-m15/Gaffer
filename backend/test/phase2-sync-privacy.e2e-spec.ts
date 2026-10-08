@@ -111,6 +111,7 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
           teamId: c.team.id,
           firstName: `${prefix}${i}`,
           lastName: 'Synthetic',
+          squadNumber: i + 1,
         })),
       )
       .returning({ id: s.athletes.id });
@@ -393,7 +394,8 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
         201,
       );
       // A separate internal opponent identity deliberately differs from the
-      // originating side's athlete ID. The matcher must use actual side/time.
+      // originating side's athlete ID. The matcher uses public shirt number,
+      // actual side and time to recognise the same scorer across sheets.
       const [opponent] = await db
         .select()
         .from(s.opponentMatchPlayers)
@@ -545,7 +547,9 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
           'NOT TESTED: Cloud authentication/source configuration blocker',
       };
     },
-    240000,
+    // Each scenario makes dozens of sequential calls against the remote test
+    // database; the competition one takes about four minutes end to end.
+    480000,
   );
 
   it('reproduces clock operation ID reuse and checks intentional client conflict handling', async () => {

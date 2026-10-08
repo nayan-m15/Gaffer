@@ -1,0 +1,34 @@
+# gitea-runner configuration. Every option not listed here keeps its default;
+# run `docker run --rm docker.io/gitea/runner:4.1.0 config generate` to read them all.
+log:
+  level: info
+
+runner:
+  # How many jobs run at the same time. test.yml fans out into three UI jobs
+  # (two shards + the two-coach release job) after api-tests, so three lets the
+  # whole fan-out run in one wave. Each UI job drives Chromium with software
+  # WebGL, a Nest backend and a Vite build, so budget ~4 CPUs and ~4 GB per job
+  # and lower this if the host has less.
+  capacity: 3
+  # Above the 50-minute timeout-minutes of the longest job in test.yml.
+  timeout: 1h30m
+  # `runs-on: ubuntu-latest` in .gitea/workflows/test.yml runs in the image built
+  # from this directory's Dockerfile, which already carries Node 22 and Chromium.
+  labels:
+    - "ubuntu-latest:docker://sct-ci:latest"
+  default_image: "sct-ci:latest"
+
+cache:
+  # Serves actions/cache, which is what `actions/setup-node` with `cache: npm`
+  # uses, so the three `npm ci` steps restore from disk instead of the registry.
+  enabled: true
+  dir: /data/cache
+  repo_size_limit: 20GB
+
+container:
+  # sct-ci is built locally and has no registry to pull from.
+  force_pull: false
+  # Jobs do not need Docker themselves; do not mount the socket into them.
+  docker_host: "-"
+  privileged: false
+  valid_volumes: []

@@ -1,7 +1,8 @@
 import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { BentoGrid } from "@/components/ui/bento-grid";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { HoverEffect } from "@/components/ui/card-hover-effect";
