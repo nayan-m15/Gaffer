@@ -96,7 +96,12 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
       status: response.status,
       body: response.body as unknown,
     };
-    expect(response.status).toBe(status);
+    if (response.status !== status) {
+      throw new Error(
+        `HTTP ${name}: expected ${status}, received ${response.status}\n` +
+          `Response: ${JSON.stringify(response.body, null, 2)}`,
+      );
+    }
     return response.body as T;
   }
   async function coach(prefix: string): Promise<Coach> {
@@ -207,8 +212,8 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
         opponentName: 'Synthetic opponent',
         isHome: coach === away,
         startingAthleteIds: coach.athletes,
-        opponentSquadVisibility: 'numbers',
-        opponentSquad: [{ shirtNumber: 1 }],
+        opponentSquadVisibility: 'full',
+        opponentSquad: [{ shirtNumber: 1, name: 'phase2-home0 Synthetic' }],
       }),
       201,
     );

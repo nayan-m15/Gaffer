@@ -19,7 +19,7 @@ export interface SignUpResponseBody {
   emailVerificationRequired: boolean;
 }
 
-const PASSWORD = 'password123';
+const PASSWORD = 'GafferTest1!';
 
 /**
  * Signs up a fresh coach and returns an authenticated Supertest agent (the
