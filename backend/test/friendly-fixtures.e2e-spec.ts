@@ -78,7 +78,10 @@ interface MatchReadBody {
 
 /** An ISO 8601 datetime with a UTC offset, `hoursFromNow` in the future. */
 function futureIso(hoursFromNow: number): string {
-  return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString();
+  // Match-day tests still need a future kickoff when creating their event.
+  return new Date(
+    Date.now() + Math.max(60_000, hoursFromNow * 60 * 60 * 1000),
+  ).toISOString();
 }
 
 /** A schema-valid match body; the athletes are never on any team. */

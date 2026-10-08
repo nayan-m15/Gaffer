@@ -107,6 +107,24 @@ describe('EventsService', () => {
   });
 
   describe('create', () => {
+    it.each(['training', 'match'] as const)(
+      'rejects past %s events before writing an event or friendly request',
+      async (type) => {
+        const insert = jest.fn();
+        mockDatabaseService.database = { insert };
+        await expect(
+          service.create('user-id', {
+            title: 'Past event',
+            type,
+            scheduledAt: new Date(Date.now() - 60_000).toISOString(),
+            location: '',
+            friendlyOpponentTeamId:
+              type === 'match' ? 'opponent-team-id' : undefined,
+          }),
+        ).rejects.toThrow('Choose a date and time in the future.');
+        expect(insert).not.toHaveBeenCalled();
+      },
+    );
     it('accepts a shared competition linked through competition-team membership', async () => {
       const membershipQuery = selectChain([{ id: 'competition-id' }]);
       const returning = jest.fn().mockResolvedValue([
@@ -126,7 +144,7 @@ describe('EventsService', () => {
       const result = await service.create('user-id', {
         title: 'League match',
         type: 'match',
-        scheduledAt: '2026-10-10T15:00:00.000Z',
+        scheduledAt: new Date(Date.now() + 60_000).toISOString(),
         location: 'Home Ground',
         competitionId: 'competition-id',
       });
