@@ -1,5 +1,18 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  ApiDashboardQuery,
+  filtersSchema,
+  listSchema,
+  matchSchema,
+  playerSchema,
+  teamStatisticsSchema,
+} from './public-api.openapi';
 import { zodValidate } from '../common/zod-validate';
 import {
   publicDashboardQuerySchema,
@@ -31,6 +44,7 @@ export class PublicDashboardController {
 
   @Get('filters')
   @ApiOperation({ summary: 'List public teams, competitions and seasons' })
+  @ApiOkResponse({ schema: filtersSchema })
   async filters() {
     const data = await this.cache.resolve(
       PublicDashboardCacheService.key('filters', {}),
@@ -41,6 +55,8 @@ export class PublicDashboardController {
 
   @Get('matches')
   @ApiOperation({ summary: 'List public match events' })
+  @ApiDashboardQuery('matches')
+  @ApiOkResponse({ schema: listSchema(matchSchema, true) })
   async matches(@Query() query: unknown) {
     const dto = zodValidate(publicMatchesQuerySchema, query);
     const data = await this.cache.resolve(
@@ -58,6 +74,8 @@ export class PublicDashboardController {
 
   @Get('players')
   @ApiOperation({ summary: 'List public players and their statistics' })
+  @ApiDashboardQuery('players')
+  @ApiOkResponse({ schema: listSchema(playerSchema, true) })
   async players(@Query() query: unknown) {
     const dto = zodValidate(publicPlayersQuerySchema, query);
     const data = await this.cache.resolve(
@@ -75,6 +93,8 @@ export class PublicDashboardController {
 
   @Get('team-statistics')
   @ApiOperation({ summary: 'List public team standings' })
+  @ApiDashboardQuery('standings')
+  @ApiOkResponse({ schema: listSchema(teamStatisticsSchema) })
   async teamStatistics(@Query() query: unknown) {
     const dto = zodValidate(publicDashboardQuerySchema, query);
     const data = await this.cache.resolve(

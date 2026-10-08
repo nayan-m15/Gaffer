@@ -1,20 +1,24 @@
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { PublicApiModule } from './public-api/public-api.module';
 
-/** HARD-002: interactive docs and raw schemas are for local development only. */
+/** Public documentation is available in every environment, including production. */
 export function configureSwagger(app: INestApplication): void {
-  // Fail closed when the deployment environment is missing or unrecognised.
-  if (process.env.NODE_ENV !== 'development') return;
-
   const config = new DocumentBuilder()
-    .setTitle('Sport Coaching Tool API')
-    .setDescription('API foundation for the Sport Coaching Tool backend.')
+    .setTitle('Gaffer Public API')
+    .setDescription(
+      'Public, read-only football data. No account, API key or token is required.',
+    )
     .setVersion('0.1.0')
     .addTag(
       'Public API',
       'Externally accessible, unauthenticated GET endpoints.',
     )
     .build();
-  const document = SwaggerModule.createDocument(app, config);
+  // Document only the explicitly public controllers; protected application
+  // routes retain their existing guards and are outside this public contract.
+  const document = SwaggerModule.createDocument(app, config, {
+    include: [PublicApiModule],
+  });
   SwaggerModule.setup('api/docs', app, document);
 }
