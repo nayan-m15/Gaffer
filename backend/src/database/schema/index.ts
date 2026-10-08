@@ -100,6 +100,21 @@ export const verification = pgTable(
   (table) => [index('verification_identifier_index').on(table.identifier)],
 );
 
+/**
+ * Fixed-window counters backing the application-level rate limiter that
+ * protects the public auth routes (SEC-002). One row per `${policy}:${ip}`
+ * key: `count` requests since `window_started_at`, atomically incremented by
+ * `AuthRateLimitService`'s single upsert so every backend instance sharing
+ * this database shares the limit.
+ */
+export const authRateLimits = pgTable('auth_rate_limits', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull(),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const teamRole = pgEnum('team_role', ['coach', 'assistant']);
 export const eventType = pgEnum('event_type', ['match', 'training', 'meeting']);
 export const eventStatus = pgEnum('event_status', [

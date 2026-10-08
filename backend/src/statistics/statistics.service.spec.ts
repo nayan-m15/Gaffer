@@ -11,6 +11,16 @@ import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { StatisticsService } from './statistics.service';
 
+/** A Postgres unique-violation (SQLSTATE 23505) as the driver raises it. */
+function uniqueViolation(): Error {
+  return Object.assign(
+    new Error('duplicate key value violates unique constraint'),
+    {
+      code: '23505',
+    },
+  );
+}
+
 describe('StatisticsService', () => {
   let service: StatisticsService;
 
@@ -762,6 +772,563 @@ describe('StatisticsService', () => {
       });
 
       expect(result).toEqual({ status: 'failed', answer: null });
+    });
+  });
+
+  describe('competition and standing management', () => {
+    const TEAM = { id: 'team-1', name: 'Gaffer FC' };
+    const COMPETITION = 'competition-1';
+    const STANDING = 'standing-1';
+
+    /** A standing row shaped as `requireStandingAdmin` returns it. */
+    const standingRow = (overrides: Record<string, unknown> = {}) => ({
+      id: STANDING,
+      competitionId: COMPETITION,
+      teamName: 'Rovers',
+      position: 3,
+      played: 4,
+      won: 2,
+      drawn: 1,
+      lost: 1,
+      goalsFor: 7,
+      goalsAgainst: 5,
+      points: 7,
+      isOwnTeam: false,
+      competitionAdminUserId: 'user-1',
+      legacyOwnerTeamId: 'team-1',
+      ...overrides,
+    });
+
+    const adminCompetition = (overrides: Record<string, unknown> = {}) => [
+      {
+        competition: {
+          id: COMPETITION,
+          adminUserId: 'user-1',
+          teamId: 'team-1',
+          ...overrides,
+        },
+      },
+    ];
+
+    /** Restores permissive defaults; individual tests narrow them. */
+    beforeEach(() => {
+      mockTeamsService.findTeamForUser.mockResolvedValue(TEAM);
+      mockDatabaseService.database.select.mockImplementation(() =>
+        thenable([]),
+      );
+      mockDatabaseService.database.insert.mockImplementation(() => ({
+        values: jest.fn(() => ({
+          returning: jest.fn(() => Promise.resolve([{ id: COMPETITION }])),
+          then: (resolve: (v: unknown) => unknown) =>
+            Promise.resolve(undefined).then(resolve),
+        })),
+      }));
+      mockDatabaseService.database.update.mockImplementation(() => ({
+        set: jest.fn(() => ({
+          where: jest.fn(() => ({
+            returning: jest.fn(() => Promise.resolve([{ id: COMPETITION }])),
+          })),
+        })),
+      }));
+      mockDatabaseService.database.delete.mockImplementation(() => ({
+        where: jest.fn(() => Promise.resolve(undefined)),
+      }));
+    });
+
+    describe('createCompetition', () => {
+      it('creates the competition and adds the founding participant', async () => {
+        const result = await service.createCompetition('user-1', {
+          name: 'Sunday League',
+          type: 'league',
+        } as never);
+
+        expect(result).toEqual({ id: COMPETITION });
+        // Once for the competition, once for its participant row.
+        expect(mockDatabaseService.database.insert).toHaveBeenCalledTimes(2);
+      });
+
+      it('refuses to create a friendly through the legacy API', async () => {
+        await expect(
+          service.createCompetition('user-1', {
+            name: 'Kickabout',
+            type: 'friendly',
+          } as never),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('maps a duplicate name to a conflict', async () => {
+        mockDatabaseService.database.insert.mockImplementation(() => ({
+          values: jest.fn(() => ({
+            returning: jest.fn(() => Promise.reject(uniqueViolation())),
+          })),
+        }));
+
+        await expect(
+          service.createCompetition('user-1', {
+            name: 'Sunday League',
+            type: 'league',
+          } as never),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('rethrows an unrelated insert failure', async () => {
+        const failure = new Error('connection reset');
+        mockDatabaseService.database.insert.mockImplementation(() => ({
+          values: jest.fn(() => ({
+            returning: jest.fn(() => Promise.reject(failure)),
+          })),
+        }));
+
+        await expect(
+          service.createCompetition('user-1', {
+            name: 'Sunday League',
+            type: 'league',
+          } as never),
+        ).rejects.toBe(failure);
+      });
+
+      it('never leaves a competition without its founding participant', async () => {
+        const failure = new Error('participant insert failed');
+        let call = 0;
+        mockDatabaseService.database.insert.mockImplementation(() => {
+          call += 1;
+          return call === 1
+            ? {
+                values: jest.fn(() => ({
+                  returning: jest.fn(() =>
+                    Promise.resolve([{ id: COMPETITION }]),
+                  ),
+                })),
+              }
+            : { values: jest.fn(() => Promise.reject(failure)) };
+        });
+
+        await expect(
+          service.createCompetition('user-1', {
+            name: 'Sunday League',
+            type: 'league',
+          } as never),
+        ).rejects.toBe(failure);
+        expect(mockDatabaseService.database.delete).toHaveBeenCalled();
+      });
+
+      it('requires a team', async () => {
+        mockTeamsService.findTeamForUser.mockResolvedValue(null);
+
+        await expect(
+          service.createCompetition('user-1', {
+            name: 'Sunday League',
+            type: 'league',
+          } as never),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('updateCompetition', () => {
+      it('updates a competition the caller administers', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition()),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Renamed',
+          }),
+        ).resolves.toEqual({ id: COMPETITION });
+      });
+
+      it('refuses to turn a competition into a friendly', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition()),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            type: 'friendly',
+          } as never),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('maps a duplicate name to a conflict', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition()),
+        );
+        mockDatabaseService.database.update.mockImplementation(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn(() => Promise.reject(uniqueViolation())),
+            })),
+          })),
+        }));
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Taken',
+          }),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('rethrows an unrelated update failure', async () => {
+        const failure = new Error('connection reset');
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition()),
+        );
+        mockDatabaseService.database.update.mockImplementation(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn(() => Promise.reject(failure)),
+            })),
+          })),
+        }));
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Unlucky',
+          }),
+        ).rejects.toBe(failure);
+      });
+
+      it('reports an unknown competition as not found', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([]),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Renamed',
+          }),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('refuses a caller who is not the competition admin', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition({ adminUserId: 'someone-else' })),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Renamed',
+          }),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('still lets the founding coach manage a legacy competition', async () => {
+        // Rows predating the admin backfill carry a null adminUserId.
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition({ adminUserId: null })),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Renamed',
+          }),
+        ).resolves.toEqual({ id: COMPETITION });
+      });
+
+      it('refuses a legacy competition owned by another team', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(
+            adminCompetition({ adminUserId: null, teamId: 'other-team' }),
+          ),
+        );
+
+        await expect(
+          service.updateCompetition('user-1', COMPETITION, {
+            name: 'Renamed',
+          }),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('deleteCompetition', () => {
+      it('deletes a competition the caller administers', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition()),
+        );
+
+        await expect(
+          service.deleteCompetition('user-1', COMPETITION),
+        ).resolves.toEqual({ success: true });
+        expect(mockDatabaseService.database.delete).toHaveBeenCalled();
+      });
+
+      it('refuses a non-admin', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable(adminCompetition({ adminUserId: 'someone-else' })),
+        );
+
+        await expect(
+          service.deleteCompetition('user-1', COMPETITION),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('createStanding', () => {
+      const dto = {
+        teamName: 'Rovers',
+        position: 3,
+        played: 4,
+        won: 2,
+        drawn: 1,
+        lost: 1,
+        goalsFor: 7,
+        goalsAgainst: 5,
+        points: 7,
+      };
+
+      it('inserts a standing when nothing conflicts', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? adminCompetition() : []);
+        });
+        mockDatabaseService.database.insert.mockImplementation(() => ({
+          values: jest.fn(() => ({
+            returning: jest.fn(() => Promise.resolve([{ id: STANDING }])),
+          })),
+        }));
+
+        await expect(
+          service.createStanding('user-1', COMPETITION, dto as never),
+        ).resolves.toEqual({ id: STANDING });
+      });
+
+      it('rethrows a non-unique insert failure', async () => {
+        const failure = new Error('connection reset');
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? adminCompetition() : []);
+        });
+        mockDatabaseService.database.insert.mockImplementation(() => ({
+          values: jest.fn(() => ({
+            returning: jest.fn(() => Promise.reject(failure)),
+          })),
+        }));
+
+        await expect(
+          service.createStanding('user-1', COMPETITION, dto as never),
+        ).rejects.toBe(failure);
+      });
+
+      it('maps a late unique violation to a conflict', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? adminCompetition() : []);
+        });
+        mockDatabaseService.database.insert.mockImplementation(() => ({
+          values: jest.fn(() => ({
+            returning: jest.fn(() => Promise.reject(uniqueViolation())),
+          })),
+        }));
+
+        await expect(
+          service.createStanding('user-1', COMPETITION, dto as never),
+        ).rejects.toThrow(ConflictException);
+      });
+    });
+
+    describe('updateStanding', () => {
+      it('updates a standing in place when nothing changes identity', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? [standingRow()] : []);
+        });
+        mockDatabaseService.database.update.mockImplementation(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn(() => Promise.resolve([{ id: STANDING }])),
+            })),
+          })),
+        }));
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).resolves.toEqual({ id: STANDING });
+        // Only the admin lookup ran; no conflict probe was needed.
+        expect(mockDatabaseService.database.select).toHaveBeenCalledTimes(1);
+      });
+
+      it('probes for a conflict when the position changes', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? [standingRow()] : []);
+        });
+
+        await service.updateStanding('user-1', STANDING, {
+          position: 4,
+        });
+
+        expect(mockDatabaseService.database.select).toHaveBeenCalledTimes(2);
+      });
+
+      it('rejects a position already taken in the competition', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(
+            call === 1
+              ? [standingRow()]
+              : [{ position: 4, teamName: 'Another' }],
+          );
+        });
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { position: 4 }),
+        ).rejects.toThrow('position 4 already exists');
+      });
+
+      it('rejects a team name already taken in the competition', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(
+            call === 1
+              ? [standingRow()]
+              : [{ position: 9, teamName: 'United' }],
+          );
+        });
+
+        await expect(
+          service.updateStanding('user-1', STANDING, {
+            teamName: 'United',
+          }),
+        ).rejects.toThrow('"United" already exists');
+      });
+
+      it('maps a late unique violation to a conflict', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? [standingRow()] : []);
+        });
+        mockDatabaseService.database.update.mockImplementation(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn(() => Promise.reject(uniqueViolation())),
+            })),
+          })),
+        }));
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('rethrows an unrelated update failure', async () => {
+        const failure = new Error('connection reset');
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(call === 1 ? [standingRow()] : []);
+        });
+        mockDatabaseService.database.update.mockImplementation(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn(() => Promise.reject(failure)),
+            })),
+          })),
+        }));
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).rejects.toBe(failure);
+      });
+
+      it('reports an unknown standing as not found', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([]),
+        );
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('refuses a caller who does not administer the competition', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([standingRow({ competitionAdminUserId: 'someone-else' })]),
+        );
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('still lets the founding coach edit a legacy standing', async () => {
+        let call = 0;
+        mockDatabaseService.database.select.mockImplementation(() => {
+          call += 1;
+          return thenable(
+            call === 1 ? [standingRow({ competitionAdminUserId: null })] : [],
+          );
+        });
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).resolves.toBeDefined();
+      });
+
+      it('refuses a legacy standing owned by another team', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([
+            standingRow({
+              competitionAdminUserId: null,
+              legacyOwnerTeamId: 'other-team',
+            }),
+          ]),
+        );
+
+        await expect(
+          service.updateStanding('user-1', STANDING, { goalsFor: 9 }),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('validates the merged standing, not just the patch', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([standingRow()]),
+        );
+
+        await expect(
+          service.updateStanding('user-1', STANDING, {
+            position: -1,
+          }),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('deleteStanding', () => {
+      it('deletes a standing the caller administers', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([standingRow()]),
+        );
+
+        await expect(
+          service.deleteStanding('user-1', STANDING),
+        ).resolves.toEqual({ success: true });
+        expect(mockDatabaseService.database.delete).toHaveBeenCalled();
+      });
+
+      it('refuses a non-admin', async () => {
+        mockDatabaseService.database.select.mockImplementation(() =>
+          thenable([standingRow({ competitionAdminUserId: 'someone-else' })]),
+        );
+
+        await expect(
+          service.deleteStanding('user-1', STANDING),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('requires a team', async () => {
+        mockTeamsService.findTeamForUser.mockResolvedValue(null);
+
+        await expect(
+          service.deleteStanding('user-1', STANDING),
+        ).rejects.toThrow(ForbiddenException);
+      });
     });
   });
 });

@@ -136,7 +136,7 @@ describe('Public Swagger contract', () => {
     const document = response.body as OpenAPIObject;
     for (const [resource, maximum, defaultLimit] of [
       ['matches', 100, 50],
-      ['players', 500, 200],
+      ['players', 200, 100],
     ] as const) {
       const operation = document.paths['/v1/public-dashboard/' + resource].get!;
       expect(operation.parameters).toEqual(

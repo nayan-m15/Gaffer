@@ -41,7 +41,7 @@ GET /v1/tactics                -> { success, count, data: PublicTactic[] }
 GET /v1/tactics?id={id}        -> { success, count: 1, data: [PublicTactic] }
 GET /v1/public-dashboard/filters
 GET /v1/public-dashboard/matches?teamId=&competitionId=&seasonId=&status=
-GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=
+GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=&limit=&offset=
 GET /v1/public-dashboard/team-statistics?teamId=&competitionId=&seasonId=
 ```
 
@@ -49,8 +49,33 @@ GET /v1/public-dashboard/team-statistics?teamId=&competitionId=&seasonId=
 - `id` present but unknown → `404` with Nest's default `{ statusCode, message, error }` body.
 - Dashboard filter IDs must be UUIDs. Invalid filters return `400`; valid but
   unavailable/private IDs return empty data rather than revealing existence.
+- Paging is bounded: `matches` accepts `limit` 1–100 (default 50) and `players`
+  `limit` 1–200 (default 100). A larger `limit` is a `400`, not a clamped
+  response, so a client paging until it sees a short page is never silently
+  truncated.
 - Any other failure uses Nest's default `500` handler, which does not expose
   raw database errors.
+
+## Rate limiting and caching
+
+`/v1/public-dashboard/*` is the only unauthenticated group that queries the
+database, so it is throttled and cached (SEC-008). `/v1/formations` and
+`/v1/tactics` serve static in-process data and are not.
+
+- **Rate limit** — 120 requests per minute per client, plus a shared backstop
+  bucket keyed on the edge-observed IP that stops a caller rotating forged
+  forwarding headers. Exceeding either returns `429` with
+  `{"message": "Too many requests. Please try again later."}` before the query
+  runs. Both budgets are configurable (see `.env.example`).
+- **Caching** — responses are cached for 30 seconds per distinct set of
+  validated query parameters, and concurrent requests for the same uncached
+  parameters share one database query rather than each running their own. The
+  practical effect for a consumer is that polling faster than every 30 seconds
+  returns the same payload; the data is not live to the second.
+
+`backend/scripts/benchmark-public-dashboard.mjs` (`npm run
+benchmark:public-dashboard` in `backend/`) measures the worst-case player
+aggregation against a real database and prints its query plan.
 
 ## CORS
 
@@ -73,7 +98,7 @@ The JSON and YAML schemas are available at `/api/docs-json` and `/api/docs-yaml`
 They document exactly six public GET endpoints, grouped under "Public API" and
 "Public Dashboard", with query parameters, response fields and validation errors.
 Swagger's "Try it out" sends requests to the same backend serving the docs.
-Matches use `limit` 1–100 (default 50); players use `limit` 1–500 (default 200).
+Matches use `limit` 1–100 (default 50); players use `limit` 1–200 (default 100).
 Both accept `offset` ≥0 (default 0) and return `{success,count,limit,offset,data}`.
 Filters return `{success,data}`; team statistics return `{success,count,data}`.
 
