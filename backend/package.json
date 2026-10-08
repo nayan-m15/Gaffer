@@ -21,6 +21,7 @@
     "db:diagnose:powersync": "node scripts/diagnose-powersync-source.mjs",
     "health:offline": "node scripts/check-offline-health.mjs",
     "docs:api-reference": "node scripts/generate-public-api-reference.mjs",
+    "benchmark:public-dashboard": "node scripts/benchmark-public-dashboard.mjs",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "npm run test -- --watch",
     "test:migrations": "node --test scripts/migration-plan.test.mjs",
