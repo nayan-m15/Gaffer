@@ -491,6 +491,13 @@
       "when": 1791331203000,
       "tag": "0060_match_play_state",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1791331204000,
+      "tag": "0061_roster_player_label_comparison",
+      "breakpoints": true
     }
   ]
 }
