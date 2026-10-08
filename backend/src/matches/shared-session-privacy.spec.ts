@@ -90,10 +90,15 @@ describe('Phase 2 shared privacy and clock', () => {
       const event = await events.create(home.id, {
         title: 'Fresh friendly',
         type: 'match',
-        scheduledAt: scheduledAt.toISOString(),
+        scheduledAt: new Date(Date.now() + 60_000).toISOString(),
         location: 'Test ground',
         friendlyOpponentTeamId: away.team.id,
       });
+      // Simulate time passing after a valid future event was created.
+      await db
+        .update(schema.events)
+        .set({ scheduledAt })
+        .where(eq(schema.events.id, event.id));
       const accepted = await new FriendlyFixturesService(
         database,
         new TeamsService(database),
@@ -537,7 +542,7 @@ describe('Phase 2 shared privacy and clock', () => {
       title: 'Private notes test',
       type: 'match',
       location: 'Test ground',
-      scheduledAt: new Date(Date.now() - 86400000).toISOString(),
+      scheduledAt: new Date(Date.now() + 60_000).toISOString(),
       friendlyOpponentTeamId: away.team.id,
       notes: 'secret tactics and injury notes',
     });

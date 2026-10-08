@@ -505,6 +505,13 @@
       "when": 1791331204002,
       "tag": "0062_auth_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0063_competition_schedule_timezone",
+      "breakpoints": true
     }
   ]
 }
