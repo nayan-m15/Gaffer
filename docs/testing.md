@@ -11,7 +11,9 @@ label.
 | --- | --- | --- |
 | Code quality | `npm run lint` | Checks frontend and backend code quality. |
 | Build | `npm run build` | Type-checks and builds both applications. |
-| Backend unit | `npm test` | Runs isolated Jest service/controller tests. |
+| Backend unit and shared domain | `npm test` | Runs shared match-domain checks and isolated Jest service/controller tests. |
+| Frontend model | `npm --prefix frontend test` | Runs frontend models, PDF export, caching, and refresh tests in isolated processes. |
+| Migration regression | `npm run test:migrations` | Checks migration history and replays recent SQL against disposable PGlite databases. |
 | API/integration | `npm run test:integration` | Runs Supertest flows against a real test database, including authentication, authorization, team isolation, athletes, events, dashboards, and statistics. |
 | Browser/UI | `npm run test:e2e:ui` | Runs the main user journeys in Chromium against the real frontend, backend, and test database. |
 
@@ -32,9 +34,14 @@ PostgreSQL/Neon database. It must be different from `DATABASE_URL`.
 npm run lint
 npm run build
 npm test
+npm --prefix frontend test
+npm run test:migrations
 npm run test:integration
 npm run test:e2e:ui
 ```
+
+Frontend lint treats warnings as failures. Backend Jest options can be passed
+through the root command, for example `npm test -- --runInBand`.
 
 Before the first database-backed run, migrate the test database without writing
 the credential into a file:

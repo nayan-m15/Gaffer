@@ -94,409 +94,416 @@
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 13,
       "version": "7",
       "when": 1788790692701,
       "tag": "0011_add_team_invites",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 14,
       "version": "7",
       "when": 1789120000000,
       "tag": "0013_harden_match_integrity",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 15,
       "version": "7",
       "when": 1789200000000,
       "tag": "0014_nostalgic_la_nuit",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 16,
       "version": "7",
       "when": 1789119552109,
       "tag": "0015_absurd_carnage",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 17,
       "version": "7",
       "when": 1789126333335,
       "tag": "0016_strange_venus",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 18,
       "version": "7",
       "when": 1789131395527,
       "tag": "0017_season_statistics",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 19,
       "version": "7",
       "when": 1789200000001,
       "tag": "0018_acoustic_zaladane",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 20,
       "version": "7",
       "when": 1789200000002,
       "tag": "0019_yielding_sir_ram",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 21,
       "version": "7",
       "when": 1789296982997,
       "tag": "0020_futuristic_demogoblin",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 22,
       "version": "7",
       "when": 1789661739020,
       "tag": "0021_swift_skullbuster",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 23,
       "version": "7",
       "when": 1789749902618,
       "tag": "0022_perpetual_jimmy_woo",
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 24,
       "version": "7",
       "when": 1790180000000,
       "tag": "0022_shared_competition_teams",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
       "version": "7",
       "when": 1790180000001,
       "tag": "0023_competition_invites",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 26,
       "version": "7",
       "when": 1790180000002,
       "tag": "0023_repair_projection_schema",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 27,
       "version": "7",
       "when": 1790180000003,
       "tag": "0024_repair_shared_competitions",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 28,
       "version": "7",
       "when": 1790180000004,
       "tag": "0025_early_runaways",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "idx": 29,
       "version": "7",
       "when": 1790180000005,
       "tag": "0026_competition_match_results",
       "breakpoints": true
     },
     {
-      "idx": 29,
+      "idx": 30,
       "version": "7",
       "when": 1790180000006,
       "tag": "0024_offline_operations_hardening",
       "breakpoints": true
     },
     {
-      "idx": 30,
+      "idx": 31,
       "version": "7",
       "when": 1790180000006,
       "tag": "0027_competition_fixtures",
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 32,
       "version": "7",
       "when": 1790180000007,
       "tag": "0028_repair_competition_fixture_schema",
       "breakpoints": true
     },
     {
-      "idx": 32,
+      "idx": 33,
       "version": "7",
       "when": 1790180000008,
       "tag": "0029_competition_fixture_events",
       "breakpoints": true
     },
     {
-      "idx": 33,
+      "idx": 34,
       "version": "7",
       "when": 1790180000009,
       "tag": "0033_fixture_schedule_confirmation",
       "breakpoints": true
     },
     {
-      "idx": 34,
+      "idx": 35,
       "version": "7",
       "when": 1790180000010,
       "tag": "0034_merge_schema_reconciliation",
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 36,
       "version": "7",
       "when": 1790180000011,
       "tag": "0035_injuries_and_recovery",
       "breakpoints": true
     },
     {
-      "idx": 36,
+      "idx": 37,
       "version": "7",
       "when": 1790180000012,
       "tag": "0036_friendly_fixtures",
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 38,
       "version": "7",
       "when": 1790180000013,
       "tag": "0037_event_lineups",
       "breakpoints": true
     },
     {
-      "idx": 38,
+      "idx": 39,
       "version": "7",
       "when": 1790280470187,
       "tag": "0038_omniscient_stranger",
       "breakpoints": true
     },
     {
-      "idx": 39,
+      "idx": 40,
       "version": "7",
       "when": 1790285119767,
       "tag": "0039_spicy_korvac",
       "breakpoints": true
     },
     {
-      "idx": 40,
+      "idx": 41,
       "version": "7",
       "when": 1790368520000,
       "tag": "0036_concurrent_event_candidates",
       "breakpoints": true
     },
     {
-      "idx": 41,
+      "idx": 42,
       "version": "7",
       "when": 1790368525000,
       "tag": "0037_concurrent_event_resolution",
       "breakpoints": true
     },
     {
-      "idx": 42,
+      "idx": 43,
       "version": "7",
       "when": 1790368530000,
       "tag": "0040_goalkeeper_save",
       "breakpoints": true
     },
     {
-      "idx": 43,
+      "idx": 44,
       "version": "7",
       "when": 1790368535000,
       "tag": "0036_competition_players_per_side",
       "breakpoints": true
     },
     {
-      "idx": 44,
+      "idx": 45,
       "version": "7",
       "when": 1790368540000,
       "tag": "0037_game_plan_custom_formations",
       "breakpoints": true
     },
     {
-      "idx": 45,
+      "idx": 46,
       "version": "7",
       "when": 1790368545000,
       "tag": "0041_confirmed_lineup_snapshot",
       "breakpoints": true
     },
     {
-      "idx": 46,
+      "idx": 47,
       "version": "7",
       "when": 1790712000000,
       "tag": "0042_competition_team_verification",
       "breakpoints": true
     },
     {
-      "idx": 47,
+      "idx": 48,
       "version": "7",
       "when": 1790712005000,
       "tag": "0043_competition_team_verification_columns",
       "breakpoints": true
     },
     {
-      "idx": 48,
+      "idx": 49,
       "version": "7",
       "when": 1790935200000,
       "tag": "0044_event_venue_name",
       "breakpoints": true
     },
     {
-      "idx": 49,
+      "idx": 50,
       "version": "7",
       "when": 1790935205000,
       "tag": "0045_two_sided_match_sessions",
       "breakpoints": true
     },
     {
-      "idx": 50,
+      "idx": 51,
       "version": "7",
       "when": 1790935210000,
       "tag": "0046_match_session_event_identity",
       "breakpoints": true
     },
     {
-      "idx": 51,
+      "idx": 52,
       "version": "7",
       "when": 1790935215000,
       "tag": "0047_session_event_reconciliation",
       "breakpoints": true
     },
     {
-      "idx": 52,
+      "idx": 53,
       "version": "7",
       "when": 1790935220000,
       "tag": "0048_shared_review_disputes",
       "breakpoints": true
     },
     {
-      "idx": 53,
+      "idx": 54,
       "version": "7",
       "when": 1790935225000,
       "tag": "0049_session_result_confirmation",
       "breakpoints": true
     },
     {
-      "idx": 54,
+      "idx": 55,
       "version": "7",
       "when": 1790935230000,
       "tag": "0050_session_confirmation_actors",
       "breakpoints": true
     },
     {
-      "idx": 55,
+      "idx": 56,
       "version": "7",
       "when": 1790976000000,
       "tag": "0051_match_clock_session_identity",
       "breakpoints": true
     },
     {
-      "idx": 56,
+      "idx": 57,
       "version": "7",
       "when": 1791062400000,
       "tag": "0052_shared_session_integrity",
       "breakpoints": true
     },
     {
-      "idx": 57,
+      "idx": 58,
       "version": "7",
       "when": 1791158400000,
       "tag": "0053_session_confirmation_invalidation",
       "breakpoints": true
     },
     {
-      "idx": 58,
+      "idx": 59,
       "version": "7",
       "when": 1791244800000,
       "tag": "0054_shared_session_clock",
       "breakpoints": true
     },
     {
-      "idx": 59,
+      "idx": 60,
       "version": "7",
       "when": 1791244801000,
       "tag": "0045_game_plan_set_piece_roles",
       "breakpoints": true
     },
     {
-      "idx": 60,
+      "idx": 61,
       "version": "7",
       "when": 1791244802000,
       "tag": "0046_match_tactical_change_enum",
       "breakpoints": true
     },
     {
-      "idx": 61,
+      "idx": 62,
       "version": "7",
       "when": 1791244803000,
       "tag": "0047_match_tactical_change_ingest",
       "breakpoints": true
     },
     {
-      "idx": 62,
+      "idx": 63,
       "version": "7",
       "when": 1791244804000,
       "tag": "0048_game_plan_player_instructions",
       "breakpoints": true
     },
     {
-      "idx": 63,
+      "idx": 64,
       "version": "7",
       "when": 1791244805000,
       "tag": "0055_shared_review_visibility",
       "breakpoints": true
     },
     {
-      "idx": 64,
+      "idx": 65,
       "version": "7",
       "when": 1791244806000,
       "tag": "0056_shared_event_deletion",
       "breakpoints": true
     },
     {
-      "idx": 65,
+      "idx": 66,
       "version": "7",
       "when": 1791331200000,
       "tag": "0057_shared_report_approvals",
       "breakpoints": true
     },
     {
-      "idx": 66,
+      "idx": 67,
       "version": "7",
       "when": 1791331201000,
       "tag": "0058_duplicate_review_lifecycle",
       "breakpoints": true
     },
     {
-      "idx": 67,
+      "idx": 68,
       "version": "7",
       "when": 1791331202000,
       "tag": "0059_manual_unknown_player_candidates",
       "breakpoints": true
     },
     {
-      "idx": 68,
+      "idx": 69,
       "version": "7",
       "when": 1791331203000,
       "tag": "0060_match_play_state",
       "breakpoints": true
     },
     {
-      "idx": 69,
+      "idx": 70,
       "version": "7",
-      "when": 1791331204000,
-      "tag": "0061_auth_rate_limits",
+      "when": 1791331204001,
+      "tag": "0061_roster_player_label_comparison",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791331204002,
+      "tag": "0062_auth_rate_limits",
       "breakpoints": true
     }
   ]

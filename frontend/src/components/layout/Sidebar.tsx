@@ -5,7 +5,7 @@ import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
-import { useSidebar } from "@/components/ui/sidebar";
+import { useSidebar } from "@/hooks/useSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { motion, useReducedMotion } from "motion/react";
 import { listQueuedEvents } from "@/offline/match-store";

@@ -25,6 +25,9 @@ const scenarios = (['friendly', 'competition'] as const).flatMap((kind) =>
 );
 const verifyControls = process.env.TWO_SIDED_UI_INTERACTIONS === 'true';
 const verifyClockControls = process.env.TWO_SIDED_UI_CLOCK_CONTROLS === 'true';
+// State from the other coach reaches a page through polling plus the local
+// offline store, which can take well over 20s on a shared CI runner.
+const PEER_SYNC = { timeout: 45_000 };
 
 async function openReviews(page: Page) {
   await page.getByRole('button', { name: 'Match settings', exact: true }).click();
@@ -32,10 +35,12 @@ async function openReviews(page: Page) {
   return page.getByRole('dialog', { name: 'Event review', exact: true });
 }
 for (const { kind, firstConfirmation } of scenarios) {
-  test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, async ({ browser }, testInfo) => {
-    // The two real API accounts, fixture setup and exact-ID cleanup can take
-    // over four minutes against the remote test database, even with passing UI assertions.
-    test.setTimeout(360_000);
+  // Tagged so CI runs these long two-browser scenarios in their own job
+  // (.gitea/workflows/test.yml) instead of inside a shard.
+  test(`two coaches see the same ${kind} session with ${firstConfirmation}-first confirmation`, { tag: '@two-sided-release' }, async ({ browser }, testInfo) => {
+    // The two real API accounts, fixture setup and exact-ID cleanup take
+    // over five minutes against the remote test database, even with passing UI assertions.
+    test.setTimeout(480_000);
     test.skip(process.env.TWO_SIDED_LIVE_LOGGING_ENABLED !== 'true', 'Run with the controlled backend flag enabled.');
     const identities: TestIdentity[] = [];
     const contexts: BrowserContext[] = [];
@@ -114,13 +119,13 @@ for (const { kind, firstConfirmation } of scenarios) {
         await coach.page.goto(`/events/${eventId}/confirm-squad`);
         const homeVenue = coach.page.getByRole('button', { name: 'Home', exact: true });
         const awayVenue = coach.page.getByRole('button', { name: 'Away', exact: true });
-        await expect(homeVenue).toBeDisabled({ timeout: 20000 });
+        await expect(homeVenue).toBeDisabled(PEER_SYNC);
         await expect(awayVenue).toBeDisabled();
         await expect(homeVenue).toHaveAttribute('aria-pressed', coach === home ? 'true' : 'false');
         await expect(awayVenue).toHaveAttribute('aria-pressed', coach === away ? 'true' : 'false');
         await coach.page.goto(`/events/${eventId}/confirm-squad/opponent`);
-        await expect(coach.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible({ timeout: 20000 });
-        await expect(coach.page.getByText('Confirmed lineup · read only')).toBeVisible({ timeout: 20000 });
+        await expect(coach.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible(PEER_SYNC);
+        await expect(coach.page.getByText('Confirmed lineup · read only')).toBeVisible(PEER_SYNC);
       }
       if (verifyControls) {
         // Change the actual setup through controls, then revisit the peer view.
@@ -128,17 +133,17 @@ for (const { kind, firstConfirmation } of scenarios) {
         await home.page.getByRole('button').filter({ hasText: 'Home10 Release Player' }).click();
         await home.page.getByRole('button').filter({ hasText: 'Home11 Release Player' }).click();
         await home.page.getByRole('button', { name: 'Update confirmed lineup', exact: true }).click();
-        await expect(home.page.getByRole('button', { name: 'Lineup confirmed', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(home.page.getByRole('button', { name: 'Lineup confirmed', exact: true })).toBeVisible(PEER_SYNC);
         await away.page.reload();
-        await expect(away.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('heading', { name: 'Opponent lineup', exact: true })).toBeVisible(PEER_SYNC);
         const starters = away.page.getByRole('heading', { name: 'Starters', exact: true }).locator('..');
-        await expect(starters).toContainText('Home11 Release Player', { timeout: 20000 });
+        await expect(starters).toContainText('Home11 Release Player', PEER_SYNC);
         await expect(starters).not.toContainText('Home10 Release Player');
         // Restore using the same controls so the original scenario stays comparable.
         await home.page.getByRole('button').filter({ hasText: 'Home11 Release Player' }).click();
         await home.page.getByRole('button').filter({ hasText: 'Home10 Release Player' }).click();
         await home.page.getByRole('button', { name: 'Update confirmed lineup', exact: true }).click();
-        await expect(home.page.getByRole('button', { name: 'Lineup confirmed', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(home.page.getByRole('button', { name: 'Lineup confirmed', exact: true })).toBeVisible(PEER_SYNC);
       }
       const homeSheet = await body(home.context.request, 'post', `/events/${homeEventId}/start-match`, {
         opponentName: away.team.name, isHome: false, startingAthleteIds: home.squad.slice(0, 11).map((player) => player.id),
@@ -147,7 +152,7 @@ for (const { kind, firstConfirmation } of scenarios) {
       sessionIds.push(homeSheet.sharedMatchId);
       await home.page.goto(`/matches/${homeSheet.id}/live`);
       // The shared score is available before the opponent starts its sheet.
-      await expect(home.page.locator('.live-match-scoreline')).toBeVisible({ timeout: 20000 });
+      await expect(home.page.locator('.live-match-scoreline')).toBeVisible(PEER_SYNC);
       await expect(home.page.getByRole('region', { name: 'Shared session result' })).toHaveCount(0);
       const awaySheet = await body(away.context.request, 'post', `/events/${awayEventId}/start-match`, {
         opponentName: home.team.name, isHome: true, startingAthleteIds: away.squad.slice(0, 11).map((player) => player.id),
@@ -179,7 +184,7 @@ for (const { kind, firstConfirmation } of scenarios) {
       if (verifyControls) {
         await away.page.goto(`/matches/${awaySheet.id}/live`);
         await home.page.getByRole('dialog', { name: 'Start game', exact: true }).getByRole('button', { name: 'START GAME', exact: true }).click();
-        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible(PEER_SYNC);
         for (const viewport of [{ width: 1280, height: 540 }, { width: 390, height: 844 }]) {
           await home.page.setViewportSize(viewport);
           await expect(home.page.getByRole('button', { name: 'Match settings' })).toBeVisible();
@@ -206,31 +211,31 @@ for (const { kind, firstConfirmation } of scenarios) {
         await Promise.all([home, away].map(coach => coach.page.getByRole('button', { name: 'Goal', exact: true }).click()));
         await Promise.all([home, away].map(coach => coach.page.getByRole('button', { name: 'NO ASSIST', exact: true }).click()));
         const homeReview = await openReviews(home.page);
-        await expect(homeReview.getByRole('button', { name: 'Same event', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(homeReview.getByRole('button', { name: 'Same event', exact: true })).toBeVisible(PEER_SYNC);
         const awayReview = await openReviews(away.page);
-        await expect(awayReview.getByRole('button', { name: 'Same event', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(awayReview.getByRole('button', { name: 'Same event', exact: true })).toBeVisible(PEER_SYNC);
         await homeReview.getByRole('button', { name: 'Same event', exact: true }).click();
-        await expect(homeReview.getByText('No events need review.', { exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(homeReview.getByText('No events need review.', { exact: true })).toBeVisible(PEER_SYNC);
         await homeReview.getByRole('button', { name: 'Close', exact: true }).click();
         await awayReview.getByRole('button', { name: 'Close', exact: true }).click();
         const refreshedPeerReview = await openReviews(away.page);
-        await expect(refreshedPeerReview).toContainText('same event', { timeout: 20000 });
+        await expect(refreshedPeerReview).toContainText('same event', PEER_SYNC);
         await refreshedPeerReview.getByRole('button', { name: 'Close', exact: true }).click();
         for (const coach of [home, away]) {
-          await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, { timeout: 20000 });
+          await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, PEER_SYNC);
         }
         await away.page.getByRole('button', { name: 'Pause', exact: true }).click();
-        await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible(PEER_SYNC);
         await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
-        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible(PEER_SYNC);
         await home.page.getByRole('button', { name: 'Half Time', exact: true }).click();
         await home.page.getByRole('button', { name: 'YES, CONFIRM', exact: true }).click();
-        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible(PEER_SYNC);
         await away.page.getByRole('button', { name: 'START SECOND HALF', exact: true }).click();
         for (const coach of [home, away]) {
-          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible(PEER_SYNC);
           await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
-          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+          await expect(coach.page.locator('.live-match-clock .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
         }
       } else {
         await body(away.context.request, 'post', `/matches/${awaySheet.id}/events`, {
@@ -251,25 +256,25 @@ for (const { kind, firstConfirmation } of scenarios) {
       await away.page.goto(`/matches/${awaySheet.id}/live`);
       await home.page.reload();
       for (const coach of [home, away]) {
-        await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, { timeout: 20000 });
+        await expect(coach.page.locator('.live-match-scoreline')).toHaveText(/2\s*-\s*1/, PEER_SYNC);
         await expect(coach.page.getByRole('region', { name: 'Shared session result' })).toHaveCount(0);
         await expect(coach.page.locator('.live-pitch-panel').getByRole('button')).toHaveCount(22);
       }
       if (!verifyControls && verifyClockControls) {
         await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
-        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible(PEER_SYNC);
         await away.page.getByRole('button', { name: 'Pause', exact: true }).click();
-        await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(home.page.getByRole('dialog', { name: 'Match paused', exact: true })).toBeVisible(PEER_SYNC);
         await home.page.getByRole('dialog', { name: 'Match paused', exact: true }).getByRole('button').click();
-        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible(PEER_SYNC);
         await home.page.getByRole('button', { name: 'Half Time', exact: true }).click();
         await home.page.getByRole('button', { name: 'YES, CONFIRM', exact: true }).click();
-        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
+        await expect(away.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible(PEER_SYNC);
         await away.page.getByRole('button', { name: 'START SECOND HALF', exact: true }).click();
         for (const coach of [home, away]) {
-          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+          await expect(coach.page.getByText('2ND HALF', { exact: true })).toBeVisible(PEER_SYNC);
           await expect(coach.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
-          await expect(coach.page.locator('.live-match-score .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
+          await expect(coach.page.locator('.live-match-clock .tabular-nums').last()).toHaveText(/45:[0-5]\d/);
         }
       } else if (!verifyControls) {
         for (const [coach, sheet, period, running, elapsedMs] of [
@@ -285,13 +290,13 @@ for (const { kind, firstConfirmation } of scenarios) {
           });
           for (const peer of [home, away]) {
             if (period === 'half_time') {
-              await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible({ timeout: 20000 });
-              await expect(peer.page.locator('.live-match-score .tabular-nums').last()).toHaveText('45:00');
+              await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toBeVisible(PEER_SYNC);
+              await expect(peer.page.locator('.live-match-clock .tabular-nums').last()).toHaveText('45:00');
               await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toContainText('2');
             } else {
-              await expect(peer.page.getByText('2ND HALF', { exact: true })).toBeVisible({ timeout: 20000 });
+              await expect(peer.page.getByText('2ND HALF', { exact: true })).toBeVisible(PEER_SYNC);
               await expect(peer.page.getByRole('dialog', { name: 'Half time', exact: true })).toHaveCount(0);
-              await expect(peer.page.getByRole('button', { name: running ? 'Pause' : 'Resume', exact: true })).toBeVisible({ timeout: 20000 });
+              await expect(peer.page.getByRole('button', { name: running ? 'Pause' : 'Resume', exact: true })).toBeVisible(PEER_SYNC);
             }
           }
         }
@@ -305,8 +310,11 @@ for (const { kind, firstConfirmation } of scenarios) {
       for (const [index, coach] of confirmationOrder.entries()) {
         const sheet = coach === home ? homeSheet : awaySheet;
         const privateRead = await body(coach.context.request, 'get', `/matches/${sheet.id}`);
+        // Confirm the shared report version this coach has seen, as the app does.
+        const seenReport = await body(coach.context.request, 'get', reportUrl);
         await body(coach.context.request, 'post', `/matches/${sheet.id}/finalise`, {
           expectedRevision: privateRead.projection.revision,
+          expectedSessionRevision: seenReport.reportRevision,
         });
         const pending = await body(home.context.request, 'get', reportUrl);
         expect(pending.score).toEqual({ home: 2, away: 1 });
@@ -319,15 +327,17 @@ for (const { kind, firstConfirmation } of scenarios) {
       }
       for (const coach of [home, away]) {
         const sheet = coach === home ? homeSheet : awaySheet;
+        // A cold load of the report can take well over 20s with two browsers
+        // sharing a CI runner.
         await coach.page.goto(`/matches/${sheet.id}/report`);
         const status = coach.page.getByRole('region', { name: 'Shared session result' });
-        await expect(status).toContainText('Final result', { timeout: 20000 });
-        await expect(status).toContainText('Home confirmed');
-        await expect(status).toContainText('Away confirmed');
-        await expect(status).toContainText('Home 2');
-        await expect(status).toContainText('1 Away');
+        await expect(status).toContainText('Final result', { timeout: 45000 });
+        await expect(status).toContainText(`${home.team.name} confirmed`);
+        await expect(status).toContainText(`${away.team.name} confirmed`);
+        await expect(status).toContainText(`${home.team.name} 2`);
+        await expect(status).toContainText(`1 ${away.team.name}`);
         await coach.page.reload();
-        await expect(status).toContainText('Final result', { timeout: 20000 });
+        await expect(status).toContainText('Final result', { timeout: 45000 });
       }
       if (competitionId) {
         const detail = await body(home.context.request, 'get', `/competitions/${competitionId}`);
@@ -342,13 +352,14 @@ for (const { kind, firstConfirmation } of scenarios) {
     } finally {
       for (const context of contexts) await context.close().catch(() => undefined);
       // These test-owned sessions outlive cascading team-sheet cleanup.
-      // Release their confirmation actor FKs before removing test accounts.
+      // Release their confirmation actor FKs before removing test accounts,
+      // and unlock a finalised report, whose events are otherwise immutable.
       for (const competitionId of competitionIds) {
         await database.update(competitionFixtures).set({ linkedMatchId: null })
           .where(eq(competitionFixtures.competitionId, competitionId));
       }
       for (const sessionId of sessionIds) {
-        await database.update(matchSessions).set({ finalisedByUserId: null,
+        await database.update(matchSessions).set({ finalisedAt: null, finalisedByUserId: null,
           homeConfirmedByUserId: null, awayConfirmedByUserId: null })
           .where(eq(matchSessions.id, sessionId));
         await database.delete(matches).where(eq(matches.sharedMatchId, sessionId));
