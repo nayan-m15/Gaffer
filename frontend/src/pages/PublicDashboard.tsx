@@ -546,9 +546,13 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   })), [players]);
 
   return (
-    <div className="mt-4 min-w-0" style={{ height: '500px', position: 'relative' }}>
+    <div className="public-player-showcase relative mt-4 min-w-0">
       <DepthCarousel
         items={items}
+        className="public-player-carousel"
+        cardWidth={360}
+        cardHeight={500}
+        scaleToFit={false}
         depth={230}
         spread={110}
         tilt={12}
@@ -559,7 +563,7 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
         blur={4}
         autoplay
         loop
-        radius={23}
+        radius={26}
         ariaLabel="Squad showcase player cards"
       />
     </div>

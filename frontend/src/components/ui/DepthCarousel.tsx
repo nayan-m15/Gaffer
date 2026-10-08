@@ -15,6 +15,7 @@ interface DepthCarouselProps {
   items?: Array<string | DepthCarouselItem>;
   cardWidth?: number;
   cardHeight?: number;
+  scaleToFit?: boolean;
   radius?: number;
   tint?: string;
   depth?: number;
@@ -53,6 +54,7 @@ const DepthCarousel = ({
   items = DEFAULT_ITEMS,
   cardWidth = 300,
   cardHeight = 380,
+  scaleToFit = true,
   radius = 18,
   tint = '#05060a',
   depth = 220,
@@ -219,12 +221,12 @@ const DepthCarousel = ({
       const w = entries[0].contentRect.width;
       const cfg = cfgRef.current;
       const needed = cfg.cardWidth + Math.abs(cfg.spread) * 2 + 120;
-      scaleRef.current = clamp(w / needed, 0.4, 1);
+      scaleRef.current = scaleToFit ? clamp(w / needed, 0.4, 1) : 1;
       layout(posRef.current);
     });
     ro.observe(root);
     return () => ro.disconnect();
-  }, [layout]);
+  }, [layout, scaleToFit]);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -369,6 +371,15 @@ const DepthCarousel = ({
   }, [autoplay, autoplayDelay, count, navigateBy]);
 
   useEffect(() => {
+    const dots = rootRef.current?.querySelector<HTMLElement>('.depth-carousel__dots');
+    const selected = dots?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!dots || !selected || dots.scrollWidth <= dots.clientWidth) return;
+    if (selected.offsetLeft < dots.scrollLeft || selected.offsetLeft + selected.offsetWidth > dots.scrollLeft + dots.clientWidth) {
+      dots.scrollTo({ left: selected.offsetLeft - (dots.clientWidth - selected.offsetWidth) / 2 });
+    }
+  }, [active]);
+
+  useEffect(() => {
     focusRef.current = 0;
     posRef.current = 0;
     tweenRef.current?.kill();
@@ -466,7 +477,7 @@ const DepthCarousel = ({
       )}
 
       {showIndicators && count > 1 && (
-        <div className="depth-carousel__dots" role="group" aria-label="Slides">
+        <div className="depth-carousel__dots" role="group" aria-label="Slides" onPointerDown={event => event.stopPropagation()} onWheelCapture={event => event.stopPropagation()}>
           {data.map((_, i) => (
             <button
               key={i}
