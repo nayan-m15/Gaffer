@@ -41,6 +41,7 @@ export interface TeamEvent {
    * the status and opponent team fields are resolved per side, so each
    * calendar sees the *other* team as the opponent.
    */
+  friendlyPlayersPerSide?: 5 | 7 | 11 | null;
   friendlyFixtureId?: string | null;
   friendlyFixtureStatus?: FriendlyFixtureStatus | null;
   friendlyOpponentTeamId?: string | null;
@@ -77,6 +78,7 @@ export interface CreateEventInput {
    * Gaffer team. Omitted or null keeps free-text (non-Gaffer) opponents.
    */
   friendlyOpponentTeamId?: string | null;
+  friendlyPlayersPerSide?: 5 | 7 | 11;
 }
 
 export interface UpdateEventInput {
@@ -94,6 +96,7 @@ export interface UpdateEventInput {
   notes?: string | null;
   competitionId?: string | null;
   friendlyOpponentTeamId?: string | null;
+  friendlyPlayersPerSide?: 5 | 7 | 11;
 }
 
 export interface LocationSearchResult {

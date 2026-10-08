@@ -79,6 +79,7 @@ const createEventBaseSchema = z.object({
   // Manual match events only: the Gaffer team to request a friendly fixture
   // against. Null/omitted keeps free-text (non-Gaffer) opponents working.
   friendlyOpponentTeamId: z.uuid().nullable().optional(),
+  friendlyPlayersPerSide: z.union([z.literal(5), z.literal(7), z.literal(11)]).optional(),
   ...venueFieldsSchema.shape,
 });
 

@@ -1331,7 +1331,7 @@ export default function ConfirmSquadPage() {
   );
   const competitionPlayerCount = eventQuery.data?.competitionId
     ? (competitionQuery.data?.playersPerSide ?? null)
-    : null;
+    : (eventQuery.data?.friendlyPlayersPerSide ?? null);
   const compatibleGamePlans = useMemo(
     () =>
       competitionPlayerCount
