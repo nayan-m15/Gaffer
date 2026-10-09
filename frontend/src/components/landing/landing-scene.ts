@@ -727,12 +727,8 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   const tunnel = new THREE.Group();
   tunnel.name = "Gaffer player tunnel";
   const centre = ROOM_EXIT + TUNNEL_LENGTH / 2;
-  const bayCount = 6;
   const entranceHalfWidth = 5.15;
   const exitHalfWidth = 6.02;
-  const halfWidthChange = exitHalfWidth - entranceHalfWidth;
-  const runLength = Math.hypot(TUNNEL_LENGTH, halfWidthChange);
-  const wallAngle = Math.atan2(halfWidthChange, TUNNEL_LENGTH);
 
   const floorMap = tunnelFloorTexture(lowPower);
   const surfaceDetailMap = surfaceDetailTexture(lowPower, "Gaffer tunnel micro surface", 7, 4);
@@ -753,57 +749,60 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   const structuralMetal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
   const tunnelLight = new THREE.MeshStandardMaterial({ color: 0xeafff7, emissive: 0xbfffe8, emissiveIntensity: 1.42, roughness: .38 });
   const brandLight = new THREE.MeshStandardMaterial({ color: 0x00d99a, emissive: 0x00a875, emissiveIntensity: 1.25, roughness: .4 });
-  const hiddenEndCap = new THREE.MeshBasicMaterial({ visible: false });
-  const openEndedBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material, cast = false) => {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(...size),
-      [hiddenEndCap, hiddenEndCap, material, material, material, material],
-    );
-    mesh.position.set(...position);
-    mesh.castShadow = cast;
-    mesh.receiveShadow = true;
-    return mesh;
-  };
 
   // The slab spans the same two anchor planes as the former tunnel. The dark
   // resin finish picks up the bright stadium portal without becoming a mirror.
   tunnel.add(box([TUNNEL_LENGTH, .2, TUNNEL_WIDTH], [centre, -.07, 0], floorMaterial));
-  tunnel.add(box([TUNNEL_LENGTH, .23, 9.05], [centre, 4.11, 0], graphite, !lowPower));
-
-  for (const side of [-1, 1]) {
-    const rotationY = -side * wallAngle;
-    // Canted shoulder panels create the reference-inspired, framed silhouette:
-    // they retain the tunnel form while the lower sightline stays fully open.
-    const shoulder = openEndedBox([runLength, 2.12, .25], [centre, 3.27, side * 5.1], graphite, !lowPower);
-    shoulder.rotation.set(-side * .65, rotationY, 0);
-    tunnel.add(shoulder);
-
-    const guideLight = box([runLength - .75, .075, .13], [centre + .05, 3.6, side * 4.43], tunnelLight);
-    guideLight.rotation.y = -side * Math.atan2(.3, TUNNEL_LENGTH);
-    tunnel.add(guideLight);
-  }
-
-  // The upper rib system keeps the architectural rhythm without placing
-  // opaque wall blocks in the dressing-room sightline.
-  const ribShoulders = new THREE.InstancedMesh(new THREE.BoxGeometry(.2, 2.18, .31), structuralMetal, (bayCount + 1) * 2);
-  const ribCeiling = new THREE.InstancedMesh(new THREE.BoxGeometry(.22, .22, 8.9), structuralMetal, bayCount + 1);
-  const dummy = new THREE.Object3D();
-  for (let rib = 0; rib <= bayCount; rib += 1) {
-    const x = ROOM_EXIT + rib * TUNNEL_LENGTH / bayCount;
-    for (const side of [-1, 1]) {
-      const index = rib * 2 + (side > 0 ? 1 : 0);
-      dummy.position.set(x, 3.28, side * 5.1);
-      dummy.rotation.set(-side * .65, 0, 0); dummy.updateMatrix(); ribShoulders.setMatrixAt(index, dummy.matrix);
+  // One continuous shell, including the outer skin and both end rims. Shared
+  // profile vertices make every wall/cove/ceiling joint meet exactly. The
+  // unchanged floor closes the bottom at y=.03, without a duplicate floor face.
+  const floorY = .03, ceilingY = 3.995, cove = .24, thickness = .13;
+  const profile = (halfWidth: number, outer: boolean, outerRoof = ceilingY + thickness): THREE.Vector3[] => {
+    const width = halfWidth + (outer ? thickness : 0);
+    const roof = outer ? outerRoof : ceilingY;
+    const roofInset = outer ? 0 : cove;
+    return [
+      new THREE.Vector3(0, floorY, -width),
+      new THREE.Vector3(0, ceilingY - cove, -width),
+      new THREE.Vector3(0, roof, -width + roofInset),
+      new THREE.Vector3(0, roof, width - roofInset),
+      new THREE.Vector3(0, ceilingY - cove, width),
+      new THREE.Vector3(0, floorY, width),
+    ];
+  };
+  // Entry outer edge +/-5.28 meets the existing room doorway edge. Exit
+  // inner edge +/-5.65 meets the preserved portal pillars and walkout walls.
+  const inner = [profile(entranceHalfWidth, false), profile(exitHalfWidth - .37, false)];
+  // Square outer end rims seal to the unchanged room ceiling's underside
+  // (4.175) and the exit portal/header top joint (4.13), including the coves.
+  const outer = [profile(entranceHalfWidth, true, 4.175), profile(exitHalfWidth - .37, true, 4.13)];
+  [inner, outer].forEach(profiles => profiles.forEach((points, end) => {
+    points.forEach(point => { point.x = end === 0 ? ROOM_EXIT : TUNNEL_EXIT; });
+  }));
+  const positions: number[] = [];
+  const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => {
+    for (const point of [a, b, c, a, c, d]) positions.push(point.x, point.y, point.z);
+  };
+  for (let edge = 0; edge < 5; edge++) {
+    quad(inner[0][edge], inner[1][edge], inner[1][edge + 1], inner[0][edge + 1]);
+    quad(outer[0][edge + 1], outer[1][edge + 1], outer[1][edge], outer[0][edge]);
+    for (let end = 0; end < 2; end++) {
+      quad(inner[end][edge], inner[end][edge + 1], outer[end][edge + 1], outer[end][edge]);
     }
-    dummy.position.set(x, 3.98, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); ribCeiling.setMatrixAt(rib, dummy.matrix);
   }
-  ribShoulders.instanceMatrix.needsUpdate = true;
-  ribCeiling.instanceMatrix.needsUpdate = true;
-  tunnel.add(ribShoulders, ribCeiling);
+  const shellGeometry = new THREE.BufferGeometry();
+  shellGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  shellGeometry.computeVertexNormals();
+  graphite.side = THREE.DoubleSide;
+  const shell = new THREE.Mesh(shellGeometry, graphite);
+  shell.name = "Continuous player tunnel walls and chamfered ceiling";
+  shell.castShadow = !lowPower; shell.receiveShadow = true; tunnel.add(shell);
 
-  // Three quiet ceiling channels and the high side guides pull the eye toward
-  // daylight rather than making the space feel like a sci-fi corridor.
-  for (const z of [-2.72, 0, 2.72]) tunnel.add(box([TUNNEL_LENGTH - .8, .065, .18], [centre, 3.965, z], tunnelLight));
+  // Two parallel lengthwise strips, clear of the ceiling by .005m. Reuse
+  // the original animated emissive material; no new lights or pulse logic.
+  for (const z of [-2.72, 2.72]) {
+    tunnel.add(box([TUNNEL_LENGTH - .8, .02, .14], [centre, 3.98, z], tunnelLight));
+  }
 
   const addPortal = (x: number, halfWidth: number, texture: THREE.Texture, includeUprights: boolean) => {
     tunnel.add(roundedBox([.38, .5, halfWidth * 2], [x, 3.88, 0], structuralMetal, .06, !lowPower));
@@ -1029,7 +1028,6 @@ function buildLandingWalkout(stadium: THREE.Group, lowPower: boolean) {
   group.rotation.y = -Math.PI / 2;
   stadium.add(group);
   const charcoal = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92 });
-  const tunnelCharcoal = new THREE.MeshStandardMaterial({ color: 0x080e0c, roughness: .84 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
   const runnerMaterial = new THREE.MeshStandardMaterial({ color: 0x111815, roughness: 1 });
   const addBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material) => {
@@ -1038,22 +1036,9 @@ function buildLandingWalkout(stadium: THREE.Group, lowPower: boolean) {
     return mesh;
   };
 
-  // Inner side faces at +/-6.35 clear even the yawed shoulder ends. The
-  // roof underside is 4.45, above the original ceiling/shoulder/rib system.
-  for (const side of [-1, 1]) {
-    addBox([16.69, 4.42, .2], [-52.655, 2.24, side * 6.45], tunnelCharcoal);
-    // These returns sit forward of the shoulder/rib ends. Their inner
-    // edges touch the pillars' outer edges at +/-6.15; their forward ends
-    // align with the pillars/walkout junction at -44.31.
-    addBox([.05, 4.42, .2], [-44.335, 2.24, side * 6.25], tunnelCharcoal);
-    // Roof wings close the corners beside the narrower header without
-    // overlapping its side faces.
-    addBox([.44, .2, .3], [-44.53, 4.55, side * 6.4], tunnelCharcoal);
-  }
-  addBox([16.25, .2, 13.1], [-52.875, 4.55, 0], tunnelCharcoal);
-  // Roof-to-header return seals the space beside the narrower old ceiling.
-  addBox([.05, .22, 12.7], [-44.775, 4.34, 0], tunnelCharcoal);
-  addBox([.4, .72, 12.5], [-44.55, 4.59, 0], metal);
+  // The solid tunnel no longer needs a separate backing shell. Extend the
+  // retained header down to the old portal's top (4.13) to close that seam.
+  addBox([.4, .82, 12.5], [-44.55, 4.54, 0], metal);
 
   const brandTexture = canvasTexture(1024, 256, ctx => {
     ctx.fillStyle = "#080d0b"; ctx.fillRect(0, 0, 1024, 256);
