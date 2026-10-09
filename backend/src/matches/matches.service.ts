@@ -368,10 +368,12 @@ export class MatchesService {
 
     let competitionName: string | null = null;
     let competitionSeason: string | null = null;
+    let competitionMaxSubstitutes: number | null = null;
     if (match.competitionId) {
       const [competition] = await this.databaseService.database
         .select({
           name: competitions.name,
+          maxSubstitutes: competitions.maxSubstitutes,
           legacySeason: competitions.season,
           seasonName: seasons.name,
         })
@@ -380,6 +382,7 @@ export class MatchesService {
         .where(eq(competitions.id, match.competitionId))
         .limit(1);
       competitionName = competition?.name ?? null;
+      competitionMaxSubstitutes = competition?.maxSubstitutes ?? null;
       competitionSeason =
         competition?.seasonName ?? competition?.legacySeason ?? null;
     }
@@ -419,6 +422,7 @@ export class MatchesService {
       eventNotes: event.notes,
       competitionName,
       competitionSeason,
+      competitionMaxSubstitutes,
       opponentSquad,
       friendlyOpponentLineup,
     };
@@ -1348,6 +1352,7 @@ export class MatchesService {
       logged.team,
       dto.eventType ?? logged.eventType,
       dto.detail === undefined ? logged.detail : dto.detail,
+      logged.id,
     );
 
     const attribution = await this.resolveOpponentAttribution(match, {
@@ -2410,6 +2415,7 @@ export class MatchesService {
           target.team,
           type,
           input.detail === undefined ? target.detail : input.detail,
+          target.id,
         );
         replacement = { ...input };
         if (target.matchId === matchId)
@@ -2685,8 +2691,42 @@ export class MatchesService {
     team: 'own' | 'opponent',
     eventType: string,
     detail?: string | null,
+    excludeEventId?: string,
   ) {
     if (eventType !== 'substitution') return;
+
+    // Competition rule is a limit on substitutions PER SIDE, not bench size.
+    // Count only canonical non-voided events; corrections must not count the
+    // event being replaced. Friendlies retain their unrestricted behaviour.
+    const [match] = await this.databaseService.database
+      .select({ competitionId: matches.competitionId })
+      .from(matches)
+      .where(eq(matches.id, matchId))
+      .limit(1);
+    if (match?.competitionId) {
+      const [competition] = await this.databaseService.database
+        .select({ maxSubstitutes: competitions.maxSubstitutes })
+        .from(competitions)
+        .where(eq(competitions.id, match.competitionId))
+        .limit(1);
+      if (competition) {
+        const [row] = await this.databaseService.database
+          .select({ count: sql<number>`count(*)::int` })
+          .from(matchEvents)
+          .where(and(
+            eq(matchEvents.matchId, matchId),
+            eq(matchEvents.team, team),
+            eq(matchEvents.eventType, 'substitution'),
+            sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+            ...(excludeEventId ? [sql`${matchEvents.id} <> ${excludeEventId}::uuid`] : []),
+          ));
+        if ((row?.count ?? 0) >= competition.maxSubstitutes) {
+          throw new BadRequestException(
+            `Competition substitution limit reached (${competition.maxSubstitutes} per team).`,
+          );
+        }
+      }
+    }
     if (team === 'opponent' && !detail) return;
     if (!detail) {
       throw new BadRequestException('An incoming player is required.');
