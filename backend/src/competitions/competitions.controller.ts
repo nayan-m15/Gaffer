@@ -117,6 +117,13 @@ export class CompetitionsController {
     return this.competitionsService.listFixtures(user.id, id);
   }
 
+  @Get(':id/fixtures/:fixtureId/match-centre')
+  async fixtureMatchCentre(@CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fixtureId', ParseUUIDPipe) fixtureId: string) {
+    return this.competitionsService.getFixtureMatchCentre(user.id, id, fixtureId);
+  }
+
   @Post(':id/fixtures/generate')
   async generateFixtures(
     @CurrentUser() user: SessionUser,

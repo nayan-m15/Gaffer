@@ -9,7 +9,9 @@ import {
   RefreshCcw,
   ShieldCheck,
   Trophy,
+  FileText,
 } from "lucide-react";
+import { CompetitionMatchCentre } from "./CompetitionMatchCentre";
 import { AppCard } from "@/components/app/AppCard";
 import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { Button } from "@/components/ui/button";
@@ -657,6 +659,7 @@ function FixtureCard({
   const home = homeParticipant?.displayName ?? "TBD";
   const away = awayParticipant?.displayName ?? "TBD";
   const completed = fixture.status === "completed";
+  const [showReport, setShowReport] = useState(false);
   const ready = Boolean(homeParticipant && awayParticipant);
   const scheduleConfirmed = Boolean(fixture.scheduleConfirmedAt);
   const canRecord =
@@ -719,6 +722,12 @@ function FixtureCard({
         <ExternalScheduleActions fixture={fixture} participants={externalParticipants} actionBusy={actionBusy} onAccept={onAccept} onPropose={onPropose} />
       )}
 
+      {completed && (fixture.linkedMatchId || ("sharedSessionId" in fixture && fixture.sharedSessionId)) && (
+        <Button className="mt-3 w-full" size="sm" variant="outline" onClick={() => setShowReport(true)}>
+          <FileText className="size-3.5" />View Match Report
+        </Button>
+      )}
+      {showReport && <CompetitionMatchCentre competitionId={fixture.competitionId} fixtureId={fixture.id} home={home} away={away} homeTeamId={homeParticipant?.teamId ?? null} awayTeamId={awayParticipant?.teamId ?? null} onClose={() => setShowReport(false)} />}
       {canRecord && (
         <Button className="mt-3 w-full" size="sm" variant={featured ? "default" : "outline"} onClick={() => onRecordResult(fixture)}>
           <Plus className="size-3.5" />Record result

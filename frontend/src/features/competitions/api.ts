@@ -125,3 +125,14 @@ export const proposeCompetitionFixtureSchedule = (
 
 export const fetchCompetitionPlayerStats = (id: string) =>
   apiFetch<CompetitionPlayerStat[]>(`/competitions/${encodeURIComponent(id)}/player-stats`);
+
+export interface CompetitionMatchCentreEvent {
+  id: string; type: string; minute: number; teamId: string | null;
+  playerName: string; playerId: string | null;
+}
+export interface CompetitionMatchCentreData {
+  fixtureId: string; homeScore: number | null; awayScore: number | null;
+  hasReport: boolean; events: CompetitionMatchCentreEvent[];
+}
+export const fetchCompetitionMatchCentre = (competitionId: string, fixtureId: string) =>
+  apiFetch<CompetitionMatchCentreData>(`/competitions/${encodeURIComponent(competitionId)}/fixtures/${encodeURIComponent(fixtureId)}/match-centre`);

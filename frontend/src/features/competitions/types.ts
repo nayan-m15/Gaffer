@@ -88,6 +88,7 @@ export interface CompetitionResult {
   playedAt: string;
   source: "live_logged" | "manual";
   linkedMatchId: string | null;
+  sharedSessionId: string | null;
   createdAt: string;
 }
 
@@ -124,6 +125,7 @@ export interface CompetitionFixture {
   nextFixtureId: string | null;
   nextFixtureSlot: "home" | "away" | null;
   linkedMatchId: string | null;
+  sharedSessionId: string | null;
   legacyResultId: string | null;
   scheduleRevision: number;
   homeScheduleResponse: CompetitionFixtureScheduleResponse;

@@ -1096,6 +1096,70 @@ export class CompetitionsService {
     if (detail?.code === 'P0001') throw new ConflictException(detail.message);
   }
 
+  /** Sanitized, read-only match centre: never expose private team tactics or notes. */
+  async getFixtureMatchCentre(userId: string, competitionId: string, fixtureId: string) {
+    await this.findOne(userId, competitionId);
+    const [fixture] = await this.databaseService.database.select()
+      .from(competitionFixtures).where(and(eq(competitionFixtures.id, fixtureId), eq(competitionFixtures.competitionId, competitionId))).limit(1);
+    if (!fixture) throw new NotFoundException('Fixture not found.');
+    if (fixture.status !== 'completed') throw new BadRequestException('The match has not finished.');
+    const rows = await this.databaseService.database.execute(sql`
+      with raw as (
+        select me.id, me.match_id, me.event_type::text as type, me.minute,
+          me.team::text as recorded_team, me.detail, me.athlete_id,
+          me.opponent_label, e.team_id as logger_team_id,
+          case when me.team = 'own' then e.team_id
+            when own_ct.id = f.home_competition_team_id then away_ct.team_id
+            when own_ct.id = f.away_competition_team_id then home_ct.team_id
+            else null end as credited_team_id
+        from match_events me
+        join matches m on m.id = me.match_id
+        join events e on e.id = m.event_id
+        join competition_fixtures f on f.id = e.competition_fixture_id
+        join competition_teams own_ct on own_ct.team_id = e.team_id and own_ct.competition_id = f.competition_id
+        join competition_teams home_ct on home_ct.id = f.home_competition_team_id
+        join competition_teams away_ct on away_ct.id = f.away_competition_team_id
+        where f.id = ${fixtureId}::uuid and f.competition_id = ${competitionId}::uuid
+          and f.status = 'completed' and e.status = 'completed'
+          and (m.shared_match_id is null or m.shared_match_id = f.shared_session_id)
+          and me.lifecycle_status not in ('voided','needs_review')
+          and me.event_type in ('goal','assist','yellow_card','red_card','substitution','goalkeeper_save','penalty')
+      ), resolved as (
+        select r.*, coalesce(own_a.id, opponent_a.id) as player_id,
+          case when own_a.id is not null then concat_ws(' ',own_a.first_name,own_a.last_name) when opponent_a.id is not null then concat_ws(' ',opponent_a.first_name,opponent_a.last_name) else r.opponent_label end as player_name
+        from raw r
+        left join athletes own_a on r.recorded_team = 'own' and own_a.id = r.athlete_id and own_a.team_id = r.credited_team_id
+        left join lateral (
+          select a.id,a.first_name,a.last_name from athletes a
+          where r.recorded_team = 'opponent' and a.team_id = r.credited_team_id
+            and r.opponent_label ~ '^#[0-9]+[[:space:]]+'
+            and a.squad_number::text = substring(r.opponent_label from '^#([0-9]+)')
+            and lower(trim(a.first_name || ' ' || a.last_name)) = lower(trim(regexp_replace(r.opponent_label,'^#[0-9]+[[:space:]]+','')))
+          limit 1
+        ) opponent_a on true
+      ), numbered as (
+        select *, row_number() over (
+          partition by credited_team_id, type, minute, coalesce(player_id::text,opponent_label, id::text), recorded_team
+          order by id) as occurrence from resolved
+      )
+      select distinct on (credited_team_id,type,minute,coalesce(player_id::text,opponent_label,id::text),occurrence)
+        id::text as id, type, minute, credited_team_id::text as team_id,
+        player_name, detail, player_id::text as player_id
+      from numbered
+      order by credited_team_id,type,minute,coalesce(player_id::text,opponent_label,id::text),occurrence,
+        case when recorded_team='own' then 0 else 1 end,id
+    `);
+    const events = (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id), type: String(row.type), minute: Number(row.minute),
+      teamId: row.team_id ? String(row.team_id) : null,
+      playerName: row.player_name ? String(row.player_name) : 'Unknown player',
+      // Do not expose raw detail, which can include internal identifiers or private notes.
+      playerId: row.player_id ? String(row.player_id) : null,
+    })).sort((a,b) => a.minute-b.minute || a.id.localeCompare(b.id));
+    return { fixtureId, homeScore: fixture.homeScore, awayScore: fixture.awayScore,
+      hasReport: events.length > 0, events };
+  }
+
   async listFixtures(userId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
       .select({ id: competitions.id })
