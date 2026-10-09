@@ -842,8 +842,6 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {team?.role === "coach" && <FixtureScheduleAlertsBanner compact />}
-
         {team && (
           <section aria-labelledby="quick-actions-heading">
             <SectionTitle
@@ -886,6 +884,8 @@ export default function DashboardPage() {
             />
           </section>
         )}
+
+        {team?.role === "coach" && <FixtureScheduleAlertsBanner compact />}
 
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <div
