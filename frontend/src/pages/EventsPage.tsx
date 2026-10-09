@@ -102,13 +102,7 @@ export default function EventsPage() {
     [now],
   );
 
-  /**
-   * Clicking a date on the calendar:
-   * - If the day has events, opens DayEventsDialog popup (Samsung style).
-   * - If the day has no events, directly opens EventFormDialog to add an event.
-   *   Assistants get no create flow, so an empty day does nothing for them.
-   */
-  const handleDayClick = useCallback(
+  const selectDayAndSyncCursor = useCallback(
     (date: Date) => {
       setSelectedDate(date);
       if (view === "week") {
@@ -120,6 +114,19 @@ export default function EventsPage() {
       } else if (!isSameMonth(date, cursor)) {
         setCursor(date);
       }
+    },
+    [cursor, view],
+  );
+
+  /**
+   * Clicking a date on the calendar:
+   * - If the day has events, opens DayEventsDialog popup (Samsung style).
+   * - If the day has no events, directly opens EventFormDialog to add an event.
+   *   Assistants get no create flow, so an empty day does nothing for them.
+   */
+  const handleDayClick = useCallback(
+    (date: Date) => {
+      selectDayAndSyncCursor(date);
 
       const dayEvents = getDayEvents(eventsByDay, date);
       if (dayEvents.length === 0) {
@@ -132,24 +139,15 @@ export default function EventsPage() {
         setPanel({ kind: "day", date });
       }
     },
-    [canManageEvents, cursor, eventsByDay, isPastCalendarDay, view],
+    [canManageEvents, eventsByDay, isPastCalendarDay, selectDayAndSyncCursor],
   );
 
   const handleMobileDayClick = useCallback(
     (date: Date) => {
-      setSelectedDate(date);
-      if (view === "week") {
-        const currentWeek = startOfWeek(cursor, { weekStartsOn: WEEK_STARTS_ON });
-        const targetWeek = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
-        if (currentWeek.getTime() !== targetWeek.getTime()) {
-          setCursor(date);
-        }
-      } else if (!isSameMonth(date, cursor)) {
-        setCursor(date);
-      }
+      selectDayAndSyncCursor(date);
       setPanel({ kind: "day", date });
     },
-    [cursor, view],
+    [selectDayAndSyncCursor],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
