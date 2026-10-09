@@ -586,8 +586,13 @@ export default function LiveMatchPage() {
   const maxCompetitionSubs = matchQuery.data?.competitionMaxSubstitutes ?? null;
   const ownSubstitutions = timeline.filter((e) => e.eventType === "substitution" && e.team === "own").length;
   const opponentSubstitutions = timeline.filter((e) => e.eventType === "substitution" && e.team === "opponent").length;
-  const substitutionsRemaining = (side: "own" | "opponent") =>
-    maxCompetitionSubs === null ? null : Math.max(0, maxCompetitionSubs - (side === "own" ? ownSubstitutions : opponentSubstitutions));
+  const substitutionsRemaining = useCallback(
+    (side: "own" | "opponent") =>
+      maxCompetitionSubs === null
+        ? null
+        : Math.max(0, maxCompetitionSubs - (side === "own" ? ownSubstitutions : opponentSubstitutions)),
+    [maxCompetitionSubs, ownSubstitutions, opponentSubstitutions],
+  );
 
 
   /**
@@ -1145,6 +1150,8 @@ export default function LiveMatchPage() {
       updateEvent,
       closeComposer,
       handleLoggedEventFollowUp,
+      maxCompetitionSubs,
+      substitutionsRemaining,
     ],
   );
 
