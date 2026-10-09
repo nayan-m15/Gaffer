@@ -403,6 +403,19 @@ function loggingForLabel(
 export default function LiveMatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const [isPhone, setIsPhone] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 640px)").matches
+      : false,
+  );
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const handleChange = (event: MediaQueryListEvent) => setIsPhone(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    setIsPhone(mediaQuery.matches);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+  const orientation = isPhone ? "vertical" : "horizontal";
   const { team } = useAuth();
 
   const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
@@ -2041,13 +2054,18 @@ export default function LiveMatchPage() {
           </h2>
           <div className="relative min-h-0 flex-1">
             <LivePitch
-              className="live-pitch-panel-landscape"
+              className={cn(
+                "live-pitch-panel-landscape",
+                isPhone && "live-pitch-panel-portrait",
+              )}
+              orientation={orientation}
               layout="full"
               ownHalf={ownHalf}
               ownColor={ownColor}
               oppColor={oppColor}
             >
               <LivePitchPlayers
+                orientation={orientation}
                 ownPlaced={ownPlaced}
                 oppPlaced={oppPlaced}
                 ownColor={ownColor}

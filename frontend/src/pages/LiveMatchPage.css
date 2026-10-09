@@ -465,6 +465,12 @@
     --live-marker-inset: 0.75rem;
   }
 
+  .live-match .live-pitch-panel-portrait {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 68 / 105;
+  }
+
   .live-pitch-panel-landscape .live-squad-token {
     width: clamp(1rem, 5.5vw, 1.35rem);
     height: clamp(1rem, 5.5vw, 1.35rem);
