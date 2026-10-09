@@ -13,6 +13,7 @@ import { subscribeToDataChanges } from "@/lib/data-changes";
 import { clearPendingClaimToken } from "@/services/claims";
 import { discardQueuedItems, setOfflineUserScope } from "@/offline/match-store";
 
+import { resolveLogoutAction, shouldRetryLogout } from "./secure-logout";
 import {
   AuthContext,
   type SessionUser,
@@ -52,6 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
   const activeUserIdRef = useRef<string | null>(null);
+  // Armed by a sign-out whose server revocation failed; retried when
+  // connectivity returns so the still-live HttpOnly session finally ends.
+  const [pendingLogout, setPendingLogout] = useState<{
+    userId: string;
+    pendingData?: "retain" | "discard";
+  } | null>(null);
   const cachedSessionKey = "gaffer-offline-session";
   const rememberedSessionKey = "gaffer-remember-session";
 
@@ -232,11 +239,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async (options?: {
     pendingData?: "retain" | "discard";
+    /** Internal: automatic retries pass false to skip the blocking alert. */
+    notifyFailure?: boolean;
   }) => {
     try {
       await apiFetch("/auth/sign-out", { method: "POST" });
-    } catch {
-      // Clear client state even if server logout request fails.
+    } catch (error) {
+      const action = resolveLogoutAction(
+        error instanceof ApiError ? error.status : null,
+      );
+      if (!action.clearLocalState) {
+        // The session cookie is HttpOnly — only the server can revoke it —
+        // so a request that never completed leaves the session possibly
+        // live. Clearing local state now would falsely show a signed-out UI
+        // while this browser still authenticates. Keep the user signed in,
+        // tell them why, and retry automatically once connectivity returns.
+        // Throwing lets every caller's existing catch keep its follow-up
+        // (navigation, invite retry) from running as if logout had worked.
+        setSessionError(action.message);
+        const userId = activeUserIdRef.current;
+        if (userId) {
+          // Re-arming the same intent must keep the state object: a new one
+          // would re-run the retry effect (and its mount-time attempt) after
+          // every failed background retry.
+          setPendingLogout((previous) =>
+            previous &&
+            previous.userId === userId &&
+            previous.pendingData === options?.pendingData
+              ? previous
+              : { userId, pendingData: options?.pendingData },
+          );
+        }
+        // Background retries stay silent: the user was already told the
+        // sign-out finishes automatically once reachable, and repeated
+        // dialogs would only interrupt with news they already have.
+        if (options?.notifyFailure !== false) window.alert(action.message);
+        throw error;
+      }
+      // 401: the server has no session for this browser, so falling through
+      // to the clear below is safe — there is nothing left to revoke.
     }
     await queryClient.cancelQueries();
     queryClient.clear();
@@ -250,8 +291,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTeam(null);
     setClaimedAthletes([]);
     setSessionError(null);
+    setPendingLogout(null);
     setStatus("unauthenticated");
   }, [queryClient]);
+
+  // A failed logout is retried when connectivity returns ("online") or when
+  // the tab becomes visible again while online (mobile browsers resuming
+  // often don't fire "online"). Guarded by session identity: a stale retry
+  // must never sign out an account the user signed in with afterwards.
+  useEffect(() => {
+    if (!pendingLogout) return;
+    const attempt = () => {
+      if (!shouldRetryLogout(pendingLogout, activeUserIdRef.current)) {
+        setPendingLogout(null);
+        return;
+      }
+      void signOut({
+        pendingData: pendingLogout.pendingData,
+        notifyFailure: false,
+      }).catch(() => undefined); // still unreachable: the retry stays armed
+    };
+    const attemptIfOnline = () => {
+      if (navigator.onLine) attempt();
+    };
+    window.addEventListener("online", attempt);
+    document.addEventListener("visibilitychange", attemptIfOnline);
+    // Connectivity may have returned while the failure alert was blocking
+    // the page — no "online" event fires for that — so try once immediately.
+    attemptIfOnline();
+    return () => {
+      window.removeEventListener("online", attempt);
+      document.removeEventListener("visibilitychange", attemptIfOnline);
+    };
+  }, [pendingLogout, signOut]);
 
   // Fire-and-forget from the caller's point of view: the backend always
   // returns success here regardless of whether the address has an account,

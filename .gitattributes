@@ -13,3 +13,7 @@
 *.ttf -text binary
 *.otf -text binary
 *.zip -text binary
+
+# Read inside Linux containers, where a trailing CR breaks a shell line
+# continuation in the Dockerfile and confuses the runner's YAML parser.
+.gitea/runner/* text eol=lf

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ProfileEditorDialog, type AccountView } from "@/components/profile/ProfileEditorDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { SportLogo } from "@/components/brand/SportLogo";
-import { ProfileEditorDialog } from "@/components/profile/ProfileEditorDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,9 @@ import {
   X,
   Shield,
   Trophy,
+  Settings,
+  UserRound,
+  ChevronsUpDown,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -138,7 +142,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [accountView, setAccountView] = useState<AccountView | null>(null);
+  const closeAccount = useCallback(() => setAccountView(null), []);
+  const openAccount = (view: AccountView) => { setIsMobileOpen(false); setAccountView(view); };
   const { expanded, toggle } = useSidebar();
   const reduceMotion = useReducedMotion();
 
@@ -207,16 +213,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
       {/* Footer */}
       <div className="border-t border-sidebar-border/70 px-4 py-4">
-        {/* Profile — clickable to open the profile editor (coach only) */}
-        {resolvedVariant !== "player" && (
-        <button
-          onClick={() => {
-            setIsMobileOpen(false);
-            setIsProfileOpen(true);
-          }}
-          className="mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="View and edit profile"
-        >
+        {/* Profile — available to coaches, assistants, and players. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Open account menu" title="Profile and account settings">
           <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/20 text-sm font-bold text-primary">
             {user?.image ? (
               <img
@@ -225,19 +224,25 @@ export function Sidebar({ className, variant }: SidebarProps) {
                 className="size-full rounded-full object-cover"
               />
             ) : (
-              (user?.name?.charAt(0).toUpperCase() ?? "C")
+              (user?.name?.charAt(0).toUpperCase() ??
+                (resolvedVariant === "player" ? "P" : "C"))
             )}
           </div>
           <div className={cn("min-w-0 flex-1", !expanded && "lg:hidden")}>
             <p className="truncate text-sm font-medium text-sidebar-foreground">
-              {user?.name ?? "Coach"}
+              {user?.name ?? (resolvedVariant === "player" ? "Player" : "Coach")}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {team?.name ?? "Your Team"}
+              Profile & settings
             </p>
           </div>
-        </button>
-        )}
+          <ChevronsUpDown className={cn("size-4 shrink-0 text-muted-foreground", !expanded && "lg:hidden")} aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start">
+            <DropdownMenuItem onClick={() => openAccount("profile")}><UserRound />View profile</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openAccount("settings")}><Settings />Account settings</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {resolvedVariant === "player" && (
           <nav aria-label="Legal navigation" className="mb-3 border-b border-sidebar-border/70 pb-3 lg:hidden">
@@ -313,10 +318,13 @@ export function Sidebar({ className, variant }: SidebarProps) {
           hasTeam={Boolean(team)}
           theme={theme}
           onToggleTheme={toggleTheme}
-          onProfile={() => setIsProfileOpen(true)}
+          onProfile={() => openAccount("profile")}
+          onSettings={() => openAccount("settings")}
           onSignOut={() => void handleSignOut()}
         />
       )}
+
+      <ProfileEditorDialog view={accountView} onClose={closeAccount} onViewChange={setAccountView} />
 
       {/* Player routes retain their existing mobile navigation. */}
       {resolvedVariant === "player" && <button
@@ -358,11 +366,6 @@ export function Sidebar({ className, variant }: SidebarProps) {
         </div>
       )}
 
-      {/* Profile editor modal */}
-      <ProfileEditorDialog
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-      />
     </>
   );
 }

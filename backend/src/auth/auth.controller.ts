@@ -15,8 +15,17 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard';
+import {
+  AuthRateLimitService,
+  resolveRateLimitIdentity,
+} from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import {
+  changeEmailSchema,
+  changePasswordSchema,
+  setPasswordSchema,
+  requestPasswordResetSchema,
+  resetPasswordSchema,
   resendVerificationEmailSchema,
   signInSchema,
   signUpSchema,
@@ -165,13 +174,24 @@ export class AuthController {
     private readonly teamsService: TeamsService,
     private readonly authService: AuthService,
     private readonly athletesService: AthletesService,
+    private readonly rateLimiter: AuthRateLimitService,
   ) {}
 
   @Post('sign-up')
   async signUp(
     @Body() body: unknown,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Sign-up spends a verification email (and a user row), not a credential
+    // attempt, so it draws from the email policy alongside the resend route.
+    // The identity carries both tiers: the per-user IP Vercel reports and the
+    // edge-observed IP the backstop is keyed on.
+    await this.rateLimiter.enforce(
+      'email',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(signUpSchema, body);
 
     // Only the Better Auth call is wrapped: an error here really is an auth
@@ -202,7 +222,12 @@ export class AuthController {
   }
 
   @Post('send-verification-email')
-  async sendVerificationEmail(@Body() body: unknown) {
+  async sendVerificationEmail(@Body() body: unknown, @Req() req: Request) {
+    await this.rateLimiter.enforce(
+      'email',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(resendVerificationEmailSchema, body);
 
     try {
@@ -233,12 +258,66 @@ export class AuthController {
     await toNodeHandler(auth)(req, res);
   }
 
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: unknown) {
+    const dto = zodValidate(requestPasswordResetSchema, body);
+
+    try {
+      await auth.api.requestPasswordReset({
+        body: {
+          email: dto.email,
+          redirectTo: `${FRONTEND_URL}/reset-password`,
+        },
+      });
+    } catch (error) {
+      // Better Auth deliberately avoids disclosing whether an email exists.
+      // Preserve that behaviour for ordinary account-not-found responses, but
+      // still surface service/database failures that stop the flow entirely.
+      if (isNonDisclosingVerificationError(error)) {
+        return { status: true };
+      }
+      throw toHttpException(error);
+    }
+
+    return { status: true };
+  }
+
+  // Better Auth's emailed reset link lands on a tokenized GET route first.
+  // Proxy that request so Better Auth can validate the token and redirect the
+  // browser to FRONTEND_URL/reset-password?token=... (or ?error=INVALID_TOKEN).
+  @Get('reset-password/:token')
+  async openResetPasswordLink(@Req() req: Request, @Res() res: Response) {
+    await toNodeHandler(auth)(req, res);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() body: unknown) {
+    const dto = zodValidate(resetPasswordSchema, body);
+
+    try {
+      await auth.api.resetPassword({
+        body: {
+          token: dto.token,
+          newPassword: dto.newPassword,
+        },
+      });
+      return { status: true };
+    } catch (error) {
+      throw toHttpException(error);
+    }
+  }
+
   @Post('sign-in')
   async signIn(
     @Body() body: unknown,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    await this.rateLimiter.enforce(
+      'password',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(signInSchema, body);
 
     try {
@@ -277,6 +356,113 @@ export class AuthController {
       // Better Auth deliberately returns the uniform "Invalid email or
       // password" 401 whether the address is unknown, Google-only, or the
       // password is wrong — preventing account enumeration.
+      throw toHttpException(error);
+    }
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('change-email')
+  async changeEmail(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+    @CurrentUser() user: AuthenticatedRequest['user'],
+  ) {
+    const dto = zodValidate(changeEmailSchema, body);
+
+    if (dto.newEmail.toLowerCase() === user.email.toLowerCase()) {
+      throw new HttpException(
+        'New email address must be different from your current email address.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    try {
+      await auth.api.changeEmail({
+        body: {
+          newEmail: dto.newEmail,
+          callbackURL: `${FRONTEND_URL}/email-change/approved?email=${encodeURIComponent(dto.newEmail)}`,
+        },
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      return { status: true };
+    } catch (error) {
+      throw toHttpException(error);
+    }
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('password-status')
+  async passwordStatus(@Req() req: AuthenticatedRequest) {
+    try {
+      const accounts = await auth.api.listUserAccounts({
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      return {
+        hasPassword: accounts.some(
+          (account) => account.providerId === 'credential',
+        ),
+      };
+    } catch (error) {
+      throw toHttpException(error);
+    }
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('set-password')
+  async setPassword(@Body() body: unknown, @Req() req: AuthenticatedRequest) {
+    const dto = zodValidate(setPasswordSchema, body);
+    const headers = fromNodeHeaders(req.headers);
+
+    try {
+      // OAuth-only users have no credential account. Only permit this endpoint
+      // for that state so an existing password can never be replaced without
+      // verifying the current password through /change-password.
+      const accounts = await auth.api.listUserAccounts({ headers });
+      if (accounts.some((account) => account.providerId === 'credential')) {
+        throw new HttpException(
+          'A password is already set for this account. Use Change Password instead.',
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      await auth.api.setPassword({
+        body: { newPassword: dto.newPassword },
+        headers,
+      });
+
+      return { status: true };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw toHttpException(error);
+    }
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('change-password')
+  async changePassword(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const dto = zodValidate(changePasswordSchema, body);
+
+    try {
+      await auth.api.changePassword({
+        body: {
+          currentPassword: dto.currentPassword,
+          newPassword: dto.newPassword,
+          // A password change is a security-sensitive action. Keep this
+          // browser signed in, but invalidate sessions on other devices.
+          revokeOtherSessions: true,
+        },
+        headers: fromNodeHeaders(req.headers),
+      });
+
+      return { status: true };
+    } catch (error) {
       throw toHttpException(error);
     }
   }

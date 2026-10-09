@@ -6,6 +6,7 @@ import { AthleteDetailPanel } from "@/components/roster/AthleteDetailPanel";
 import { AthleteFormDialog } from "@/components/roster/AthleteFormDialog";
 import { ClaimInviteDialog } from "@/components/roster/ClaimInviteDialog";
 import { AssistantInviteDialog } from "@/components/roster/AssistantInviteDialog";
+import { RemoveAssistantConfirmDialog } from "@/components/roster/RemoveAssistantConfirmDialog";
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
 import type { Athlete } from "@/components/roster/data";
 import "@/components/roster/roster-light.css";
@@ -37,11 +38,14 @@ import {
   type UpdateAthleteInput,
 } from "@/services/athletes";
 import { useAuth } from "@/hooks/useAuth";
+import { assistantRemovalErrorCopy } from "@/services/assistant-removal";
 import {
   createTeamInvite,
   getTeamAssistants,
   getTeamInvites,
+  removeTeamAssistant,
   revokeTeamInvite,
+  type TeamAssistantSummary,
   type TeamInviteResult,
 } from "@/services/team-invites";
 
@@ -108,6 +112,9 @@ export default function AthletesPage() {
   // Assistant-invite dialog state
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteResult, setInviteResult] = useState<TeamInviteResult | null>(null);
+
+  // Assistant-removal confirmation state
+  const [assistantToRemove, setAssistantToRemove] = useState<TeamAssistantSummary | null>(null);
 
   const activeQuery = useQuery({
     queryKey: QUERY_KEY_ACTIVE,
@@ -263,6 +270,14 @@ export default function AthletesPage() {
     mutationFn: revokeTeamInvite,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY_TEAM_INVITES });
+    },
+  });
+
+  const removeAssistantMutation = useMutation({
+    mutationFn: removeTeamAssistant,
+    onSuccess: () => {
+      setAssistantToRemove(null);
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY_TEAM_ASSISTANTS });
     },
   });
 
@@ -606,6 +621,16 @@ export default function AthletesPage() {
                         <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
                           Active
                         </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAssistantToRemove(assistant)}
+                          className="gap-1 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Remove
+                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -785,6 +810,26 @@ export default function AthletesPage() {
             : null
         }
         result={inviteResult}
+      />
+
+      <RemoveAssistantConfirmDialog
+        isOpen={assistantToRemove !== null}
+        onClose={() => {
+          setAssistantToRemove(null);
+          removeAssistantMutation.reset();
+        }}
+        onConfirm={() => {
+          if (assistantToRemove) {
+            removeAssistantMutation.mutate(assistantToRemove.id);
+          }
+        }}
+        assistantName={assistantToRemove?.name ?? ""}
+        isRemoving={removeAssistantMutation.isPending}
+        errorMessage={
+          removeAssistantMutation.error
+            ? assistantRemovalErrorCopy(removeAssistantMutation.error)
+            : null
+        }
       />
 
       {canManageRoster && (

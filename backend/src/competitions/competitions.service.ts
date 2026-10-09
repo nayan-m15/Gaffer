@@ -1065,6 +1065,12 @@ export class CompetitionsService {
       );
     }
     const scheduledAt = new Date(dto.scheduledAt);
+    const now = new Date();
+    if (scheduledAt.getTime() <= now.getTime()) {
+      throw new BadRequestException(
+        'Choose a date and time in the future for the reschedule proposal.',
+      );
+    }
     if (scheduledAt.getTime() === context.fixture.scheduledAt.getTime()) {
       throw new BadRequestException(
         'Choose a different date or time for the reschedule proposal.',
@@ -1074,7 +1080,6 @@ export class CompetitionsService {
     const response = actor.participant.teamId
       ? ('accepted' as const)
       : ('external_confirmed' as const);
-    const now = new Date();
     const common = {
       scheduledAt,
       scheduleRevision: sql<number>`${competitionFixtures.scheduleRevision} + 1`,
@@ -1129,12 +1134,16 @@ export class CompetitionsService {
     userId: string,
     competitionId: string,
     regenerate = false,
+    timezone?: string,
   ) {
     const competition = await this.requireAdmin(userId, competitionId);
     const participants = await this.listParticipants(competitionId);
+    const scheduleTimezone = timezone ?? competition.scheduleTimezone;
     const plan = planFixtures(
       competition,
       participants.map((row) => row.id),
+      new Date(),
+      scheduleTimezone,
     );
     // The function locks the competition, rechecks the inputs and writes the
     // whole plan atomically. This works with Neon's HTTP driver.
@@ -1144,12 +1153,14 @@ export class CompetitionsService {
         competition[key as keyof typeof competition],
       ]),
     );
+    expected.schedule_timezone = competition.scheduleTimezone;
     try {
       await this.databaseService.database
         .execute(sql`select generate_competition_fixtures(
         ${competitionId}::uuid, ${userId}::text, ${JSON.stringify(expected)}::jsonb,
         ${JSON.stringify(participants.map((row) => row.id))}::jsonb,
-        ${JSON.stringify(plan)}::jsonb, ${regenerate}::boolean)`);
+        ${JSON.stringify(plan)}::jsonb, ${regenerate}::boolean,
+        ${scheduleTimezone}::text)`);
     } catch (error) {
       this.rethrowFixtureGuard(error);
       if (isUniqueViolation(error))

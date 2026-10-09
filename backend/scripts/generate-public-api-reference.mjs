@@ -6,9 +6,8 @@
  * describes the contract from the source of truth (the controllers,
  * schemas and static catalogs under `src/public-api/`) so the examples
  * shown here are hand-kept in sync with that code, not fetched live.
- * For an interactive view of the local contract, use the development-only
- * Swagger UI at http://localhost:3000/api/docs (NODE_ENV=development).
- * Production Swagger is disabled under docs/swagger-policy.md.
+ * Public Swagger documents all six public routes at /api/docs in every
+ * environment. See docs/swagger-policy.md for deployment verification.
  *
  *   node backend/scripts/generate-public-api-reference.mjs
  *
@@ -381,8 +380,8 @@ drawParagraph(
   y,
   contentWidth,
   `Swagger UI documents these routes under the "Public API" tag at ` +
-    `http://localhost:3000/api/docs when NODE_ENV=development. Production ` +
-    `Swagger is disabled; external consumers should use this reference and docs/public-api.md.`,
+    `https://gaffer-api-ynaf.onrender.com/api/docs after deployment. ` +
+    `No account, API key or token is required. Local docs: http://localhost:3000/api/docs.`,
 );
 
 /* ── Page 2: GET /v1/formations ── */

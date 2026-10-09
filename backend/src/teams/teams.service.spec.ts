@@ -4,6 +4,16 @@ import { DatabaseService } from '../database/database.service';
 import { teamMembers, teams } from '../database/schema';
 import { TeamsService } from './teams.service';
 
+/** A Postgres unique-violation (SQLSTATE 23505) as the driver raises it. */
+function uniqueViolation(): Error {
+  return Object.assign(
+    new Error('duplicate key value violates unique constraint'),
+    {
+      code: '23505',
+    },
+  );
+}
+
 /**
  * Stubs a drizzle select chain. Each queued `results` entry resolves one
  * `.limit()` call, in the order the service performs its selects.
@@ -248,6 +258,82 @@ describe('TeamsService', () => {
       await expect(
         service.addAssistantMember('team-id', 'assistant-user-id'),
       ).rejects.toBe(dbError);
+    });
+  });
+
+  describe('createTeamForUser', () => {
+    /** Wires select/insert/delete for one `createTeamForUser` call. */
+    const wire = (options: {
+      existing?: unknown[];
+      memberInsert?: () => Promise<unknown>;
+      teamInsert?: () => Promise<unknown[]>;
+    }) => {
+      const deleteWhere = jest.fn().mockResolvedValue(undefined);
+      let insertCall = 0;
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(selectChain(options.existing ?? [])),
+        insert: jest.fn(() => {
+          insertCall += 1;
+          return insertCall === 1
+            ? {
+                values: jest.fn(() => ({
+                  returning:
+                    options.teamInsert ??
+                    jest.fn(() =>
+                      Promise.resolve([{ id: 'team-1', name: 'Gaffer FC' }]),
+                    ),
+                })),
+              }
+            : {
+                values:
+                  options.memberInsert ?? jest.fn(() => Promise.resolve()),
+              };
+        }),
+        delete: jest.fn(() => ({ where: deleteWhere })),
+      };
+      return { deleteWhere };
+    };
+
+    it('creates the team and makes the caller its coach', async () => {
+      wire({});
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC', '#ff0000'),
+      ).resolves.toMatchObject({
+        id: 'team-1',
+        name: 'Gaffer FC',
+        role: 'coach',
+      });
+    });
+
+    it('refuses a second team for the same account', async () => {
+      wire({ existing: [{ id: 'team-0', name: 'Existing', role: 'coach' }] });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('removes the orphaned team when the membership insert fails', async () => {
+      const { deleteWhere } = wire({
+        memberInsert: jest.fn(() => Promise.reject(new Error('insert failed'))),
+      });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow('insert failed');
+      expect(deleteWhere).toHaveBeenCalled();
+    });
+
+    it('maps a racing second membership to a conflict', async () => {
+      const { deleteWhere } = wire({
+        memberInsert: jest.fn(() => Promise.reject(uniqueViolation())),
+      });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow(ConflictException);
+      expect(deleteWhere).toHaveBeenCalled();
     });
   });
 });
