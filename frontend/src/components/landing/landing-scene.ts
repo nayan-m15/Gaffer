@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createGafferStadium } from "./gaffer-stadium";
 
 export interface LandingSceneController {
@@ -383,11 +384,14 @@ function crestTexture() {
   });
 }
 
-function numberTexture(number: number) {
-  return canvasTexture(128, 160, ctx => {
-    ctx.clearRect(0, 0, 128, 160);
-    ctx.fillStyle = "#f1f4f1"; ctx.font = "900 100px Inter,Arial,sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(number), 64, 86);
+function numberTexture(number: number, fabric: THREE.Texture, lowPower: boolean) {
+  // Bake the print into the fabric: one lit surface, no floating decal mesh.
+  const size = lowPower ? 128 : 256;
+  return canvasTexture(size, size, ctx => {
+    ctx.drawImage(fabric.image, 0, 0, size, size);
+    ctx.fillStyle = "#f1f4f1"; ctx.font = `900 ${Math.round(size * .36)}px Inter,Arial,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(number), size * .5, size * (1 - .5 / 1.32), size * .28);
   });
 }
 
@@ -456,6 +460,18 @@ function shirtFabricTexture(lowPower: boolean) {
     ctx.fillRect(size * .34, size * .24, size * .32, size * .04);
     ctx.fillStyle = "rgba(0,0,0,.16)";
     ctx.fillRect(size * .24, size * .9, size * .52, size * .035);
+
+    // Sleeve-edge trim is painted on the same UVs as the curved fabric.
+    ctx.strokeStyle = "#00d99a";
+    ctx.lineWidth = size * .025;
+    ctx.lineCap = "round";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo((side * .755 + .76) / 1.52 * size, (1 - (.33 + .62) / 1.32) * size);
+      ctx.quadraticCurveTo((side * .735 + .76) / 1.52 * size, (1 - (.16 + .62) / 1.32) * size,
+        (side * .62 + .76) / 1.52 * size, (1 - (.055 + .62) / 1.32) * size);
+      ctx.stroke();
+    }
   });
   texture.name = "Landing shirt fabric";
   return texture;
@@ -526,63 +542,135 @@ function surfaceDetailTexture(lowPower: boolean, name: string, repeatX: number, 
 interface DressingRoomKit {
   metal: THREE.Material; wood: THREE.Material; woodDark: THREE.Material; cushion: THREE.Material;
   warmLight: THREE.Material; greenLight: THREE.Material; green: THREE.Material; white: THREE.Material;
-  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material; shirt: THREE.Material;
+  boot: THREE.Material; towel: THREE.Material; bottle: THREE.Material; shirt: THREE.MeshPhysicalMaterial;
   shirtGeometry: THREE.BufferGeometry;
+  shirtCollarGeometry: THREE.BufferGeometry;
 }
 
 const LOCKER_CONFIG = { count: 7, startX: -77.8, endX: -63.1, width: 1.82, depth: 1.12, height: 3.62 };
 export const DRESSING_ROOM_SHIRT_NUMBERS = [1, 4, 5, 8, 10, 11, 9, 2, 3, 6, 7, 14, 17, 21] as const;
 
-function shirtGeometry() {
-  const outline = new THREE.Shape();
-  outline.moveTo(-.39, -.6);
-  outline.lineTo(-.39, .18);
-  outline.lineTo(-.63, .05);
-  outline.lineTo(-.79, .37);
-  outline.lineTo(-.49, .61);
-  outline.lineTo(-.18, .7);
-  outline.quadraticCurveTo(0, .5, .18, .7);
-  outline.lineTo(.49, .61);
-  outline.lineTo(.79, .37);
-  outline.lineTo(.63, .05);
-  outline.lineTo(.39, .18);
-  outline.lineTo(.39, -.6);
-  outline.closePath();
-  const geometry = new THREE.ExtrudeGeometry(outline, {
-    depth: .045,
-    bevelEnabled: true,
-    bevelSegments: 1,
-    steps: 1,
-    bevelSize: .012,
-    bevelThickness: .012,
-    curveSegments: 4,
+function shirtSurface(x: number, y: number, side: number) {
+  const height = THREE.MathUtils.clamp((y + .62) / 1.32, 0, 1);
+  const torso = Math.max(0, 1 - (x / .44) ** 2);
+  const roundness = .065 * torso * Math.sin(Math.PI * height);
+  const folds = .014 * Math.sin(x * 34 + .9) * torso * (1 - height) ** 1.3;
+  const sag = .025 * torso * Math.sin(Math.PI * height);
+  return new THREE.Vector3(x, y - sag, side * (.022 + roundness + folds));
+}
+
+function shirtNeckline() {
+  return new THREE.CubicBezierCurve(
+    new THREE.Vector2(-.18, .66), new THREE.Vector2(-.11, .49),
+    new THREE.Vector2(.11, .49), new THREE.Vector2(.18, .66),
+  );
+}
+
+function shirtGeometry(lowPower: boolean) {
+  // Both boundaries are monotonic in X, so each strip fills the silhouette
+  // with real interior vertices rather than triangulating only its outline.
+  const upper = [
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(-.76, .35), new THREE.Vector2(-.69, .53), new THREE.Vector2(-.49, .60)),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(-.49, .60), new THREE.Vector2(-.34, .69), new THREE.Vector2(-.18, .66)),
+    shirtNeckline(),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(.18, .66), new THREE.Vector2(.34, .69), new THREE.Vector2(.49, .60)),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(.49, .60), new THREE.Vector2(.69, .53), new THREE.Vector2(.76, .35)),
+  ];
+  const lower = [
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(-.76, .26), new THREE.Vector2(-.735, .16), new THREE.Vector2(-.62, .055)),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(-.62, .055), new THREE.Vector2(-.47, .10), new THREE.Vector2(-.41, .18)),
+    new THREE.CubicBezierCurve(new THREE.Vector2(-.41, .18), new THREE.Vector2(-.395, .02), new THREE.Vector2(-.385, -.45), new THREE.Vector2(-.365, -.55)),
+    new THREE.CubicBezierCurve(new THREE.Vector2(-.365, -.55), new THREE.Vector2(-.18, -.62), new THREE.Vector2(.18, -.62), new THREE.Vector2(.365, -.55)),
+    new THREE.CubicBezierCurve(new THREE.Vector2(.365, -.55), new THREE.Vector2(.385, -.45), new THREE.Vector2(.395, .02), new THREE.Vector2(.41, .18)),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(.41, .18), new THREE.Vector2(.47, .10), new THREE.Vector2(.62, .055)),
+    new THREE.QuadraticBezierCurve(new THREE.Vector2(.62, .055), new THREE.Vector2(.735, .16), new THREE.Vector2(.76, .26)),
+  ];
+  const boundaryY = (curves: Array<THREE.QuadraticBezierCurve | THREE.CubicBezierCurve>, x: number) => {
+    const curve = curves.find(value => x <= (value instanceof THREE.CubicBezierCurve ? value.v3.x : value.v2.x)) ?? curves[curves.length - 1];
+    let start = 0, end = 1;
+    for (let i = 0; i < 16; i += 1) {
+      const middle = (start + end) / 2;
+      if (curve.getPoint(middle).x < x) start = middle; else end = middle;
+    }
+    return curve.getPoint((start + end) / 2).y;
+  };
+  const columns = lowPower ? 24 : 40, rows = lowPower ? 16 : 28;
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const addVertex = (x: number, y: number, side: number) => {
+    const point = shirtSurface(x, y, side);
+    positions.push(point.x, point.y, point.z);
+    uvs.push((x + .76) / 1.52, (y + .62) / 1.32);
+  };
+  const faceSize = (columns + 1) * (rows + 1);
+  const bounds = Array.from({ length: columns + 1 }, (_, column) => {
+    const x = -.76 + column / columns * 1.52;
+    return { x, bottom: boundaryY(lower, x), top: boundaryY(upper, x) };
   });
-  geometry.translate(0, 0, -.0225);
+  for (const side of [1, -1]) {
+    const offset = side === 1 ? 0 : faceSize;
+    for (let row = 0; row <= rows; row += 1) {
+      for (let column = 0; column <= columns; column += 1) {
+        const { x, bottom, top } = bounds[column];
+        addVertex(x, THREE.MathUtils.lerp(bottom, top, row / rows), side);
+        if (row < rows && column < columns) {
+          const a = offset + row * (columns + 1) + column, b = a + 1, c = a + columns + 1, d = c + 1;
+          if (side === 1) indices.push(a, b, c, b, d, c); else indices.push(a, c, b, b, c, d);
+        }
+      }
+    }
+  }
+  // Duplicate only the perimeter for the thin edge's own normals.
+  const perimeter: number[] = [];
+  for (let column = 0; column <= columns; column += 1) perimeter.push(column);
+  for (let row = 1; row <= rows; row += 1) perimeter.push(row * (columns + 1) + columns);
+  for (let column = columns - 1; column >= 0; column -= 1) perimeter.push(rows * (columns + 1) + column);
+  for (let row = rows - 1; row > 0; row -= 1) perimeter.push(row * (columns + 1));
+  const rimStart = positions.length / 3;
+  for (const vertex of perimeter) for (const offset of [0, faceSize]) {
+    const index = vertex + offset;
+    positions.push(positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2]);
+    uvs.push(uvs[index * 2], uvs[index * 2 + 1]);
+  }
+  perimeter.forEach((_, index) => {
+    const a = rimStart + index * 2, b = rimStart + ((index + 1) % perimeter.length) * 2;
+    indices.push(a, a + 1, b, b, a + 1, b + 1);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  // Print only the front; the back and edge retain the shared plain fabric.
+  const frontIndices = columns * rows * 6;
+  geometry.addGroup(0, frontIndices, 0);
+  geometry.addGroup(frontIndices, indices.length - frontIndices, 1);
   geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
   geometry.name = "Proportioned Gaffer shirt";
   return geometry;
 }
 
-function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
+function shirtCollarGeometry(lowPower: boolean) {
+  const neckline = shirtNeckline();
+  const points = neckline.getPoints(lowPower ? 12 : 20).map(point => {
+    const surface = shirtSurface(point.x, point.y, 1);
+    surface.z += .006;
+    return surface;
+  });
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), lowPower ? 12 : 20, .014, 6, false);
+}
+
+function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture, index: number) {
   const group = new THREE.Group();
   group.name = "Dressing room shirt";
-  const body = new THREE.Mesh(kit.shirtGeometry, kit.shirt);
-  body.position.z = .012; body.castShadow = true;
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(.145, .024, 6, 16, Math.PI), kit.green);
-  collar.position.set(0, .585, .05); collar.rotation.z = Math.PI;
-  const numberMat = new THREE.MeshBasicMaterial({ map: numberMap, transparent: true, depthWrite: false });
-  const digits = new THREE.Mesh(new THREE.PlaneGeometry(.42, .53), numberMat); digits.position.set(0, -.12, .068);
-  const cuffLeft = box([.29, .045, .024], [-.625, .24, .058], kit.green); cuffLeft.rotation.z = .68;
-  const cuffRight = box([.29, .045, .024], [.625, .24, .058], kit.green); cuffRight.rotation.z = -.68;
-  const seamMaterial = new THREE.LineBasicMaterial({ color: 0xdfe9e4, transparent: true, opacity: .16 });
-  const folds = new THREE.LineSegments(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-.22, .45, .064), new THREE.Vector3(-.09, -.3, .064),
-      new THREE.Vector3(.22, .45, .064), new THREE.Vector3(.09, -.3, .064),
-      new THREE.Vector3(-.08, .18, .064), new THREE.Vector3(.08, .18, .064),
-    ]),
-    seamMaterial,
-  );
+  group.userData.shirtNumber = DRESSING_ROOM_SHIRT_NUMBERS[index];
+  const material = kit.shirt.clone();
+  material.map = numberMap;
+  const body = new THREE.Mesh(kit.shirtGeometry, [material, kit.shirt]);
+  body.position.z = .012; body.castShadow = true; body.receiveShadow = true;
+  const collar = new THREE.Mesh(kit.shirtCollarGeometry, kit.green);
+  collar.position.z = .012;
+  group.rotation.x = Math.sin((index + 1) * 1.31) * .025;
+  group.rotation.z = Math.sin((index + 1) * 2.17) * .028;
   const hanger = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-.43, .55, -.03), new THREE.Vector3(0, .77, -.03), new THREE.Vector3(.43, .55, -.03),
@@ -590,7 +678,7 @@ function createShirt(kit: DressingRoomKit, numberMap: THREE.Texture) {
     new THREE.LineBasicMaterial({ color: 0xbac2be }),
   );
   const hook = new THREE.Mesh(new THREE.TorusGeometry(.07, .012, 5, 12, Math.PI * 1.45), kit.metal); hook.position.set(0,.83,-.016); hook.rotation.z = -.75;
-  group.add(body, collar, digits, cuffLeft, cuffRight, folds, hanger, hook);
+  group.add(body, collar, hanger, hook);
   return group;
 }
 
@@ -638,7 +726,7 @@ function createLockerRow(side: number, lowPower: boolean, kit: DressingRoomKit, 
     const handle = roundedBox([.055, .3, .055], [x + side * .42, 2.43, frontZ - side * .045], kit.metal, .018);
     handle.rotation.x = side > 0 ? Math.PI : 0;
     group.add(handle);
-    const shirt = createShirt(kit, numberMaps[i]);
+    const shirt = createShirt(kit, numberMaps[i], i + (side > 0 ? LOCKER_CONFIG.count : 0));
     shirt.position.set(x, 2.5, side * 7.47); if (side > 0) shirt.rotation.y = Math.PI; group.add(shirt);
     if ((i + (side > 0 ? 1 : 0)) % 3 === 0) {
       const boot = box([.47, .16, .18], [x - .17, .36, side * 7.72], kit.boot); boot.rotation.y = side * .18; group.add(boot);
@@ -895,7 +983,7 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   const bottleMat = new THREE.MeshStandardMaterial({color:0x4fb9a8,roughness:.35,transparent:true,opacity:.82});
   const shirtFabricMap = shirtFabricTexture(lowPower);
   const shirt = new THREE.MeshPhysicalMaterial({ map: shirtFabricMap, color: 0xffffff, roughness: .92, metalness: .02, clearcoat: .02, clearcoatRoughness: .9, side: THREE.DoubleSide });
-  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat, shirt, shirtGeometry: shirtGeometry() };
+  const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat, shirt, shirtGeometry: shirtGeometry(lowPower), shirtCollarGeometry: shirtCollarGeometry(lowPower) };
   const dummy = new THREE.Object3D();
 
   scene.add(
@@ -924,7 +1012,7 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   ventSlats.instanceMatrix.needsUpdate = true; scene.add(ventSlats);
 
   if (new Set(DRESSING_ROOM_SHIRT_NUMBERS).size !== DRESSING_ROOM_SHIRT_NUMBERS.length) throw new Error("Dressing-room shirt numbers must be unique");
-  const numberMaps = DRESSING_ROOM_SHIRT_NUMBERS.map(numberTexture);
+  const numberMaps = DRESSING_ROOM_SHIRT_NUMBERS.map(number => numberTexture(number, shirtFabricMap, lowPower));
   scene.add(
     createLockerRow(-1, lowPower, dressingKit, numberMaps.slice(0, LOCKER_CONFIG.count)),
     createLockerRow(1, lowPower, dressingKit, numberMaps.slice(LOCKER_CONFIG.count)),
@@ -1194,9 +1282,165 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
   const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;if(Math.abs(difference)<.00008){currentProgress=targetProgress;updateCamera(currentProgress);render();return;}currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(targetProgress-currentProgress)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
+  // Keep the synchronous shirts until both assets and every replacement are ready.
+  let loadedShirt: THREE.Object3D | null = null;
+  let kitImage: HTMLImageElement | null = null;
+  let shirtLoadFailed = false, shirtsSwapped = false;
+  const modelTextures = new Set<THREE.Texture>();
+  const modelMaterials = new Set<THREE.Material>();
+  const collectResources = (roots: THREE.Object3D[]) => {
+    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+    roots.forEach(root => root.traverse(object => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+      geometries.add(object.geometry);
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => materials.add(material));
+    }));
+    return { geometries, materials };
+  };
+  const releaseLoadedShirt = () => {
+    if (!loadedShirt) return;
+    const resources = collectResources([loadedShirt]);
+    resources.geometries.forEach(value => value.dispose());
+    resources.materials.forEach(value => {
+      Object.values(value).forEach(property => { if (property instanceof THREE.Texture) modelTextures.add(property); });
+      value.dispose();
+    });
+    loadedShirt = null;
+  };
+  const failShirtLoad = (error: unknown) => {
+    if (!shirtLoadFailed && !disposed) console.warn("Landing shirt assets could not be loaded; keeping fallback shirts.", error);
+    shirtLoadFailed = true;
+    releaseLoadedShirt();
+    modelMaterials.forEach(value => value.dispose()); modelMaterials.clear();
+    modelTextures.forEach(value => value.dispose()); modelTextures.clear();
+    kitImage = null;
+  };
+  const swapShirts = () => {
+    if (disposed || shirtLoadFailed || !loadedShirt || !kitImage || shirtsSwapped) return;
+    let scale = .18, clearance = NaN;
+    let check = "source model";
+    let failedBounds: Array<{ check: string; number: number; bound: number; limit: number; sway: number }> = [];
+    try {
+      const groups: THREE.Group[] = [];
+      scene.traverse(object => { if (object instanceof THREE.Group && object.name === "Dressing room shirt") groups.push(object); });
+      const sourceShirt = loadedShirt.getObjectByName("Shirt");
+      if (!(sourceShirt instanceof THREE.Mesh)) throw new Error("Landing model is missing the Shirt mesh");
+      const sourceBounds = new THREE.Box3().setFromObject(loadedShirt);
+      const centerX = (sourceBounds.min.x + sourceBounds.max.x) / 2;
+      // Existing hook top is about .90 above the group; cushion top is 1.17.
+      const hookTop = .90, surfaceTop = 1.17, minimumClearance = .15;
+      scene.updateMatrixWorld(true);
+      check = "canvas texture";
+      const replacements = groups.map(group => {
+        // World Z points into each locker in opposite directions. Keep the
+        // old group's measured back extent, including its hanger and hook.
+        const oldBounds = new THREE.Box3().setFromObject(group);
+        const intoLocker = Math.sign(group.position.z);
+        const backLimit = intoLocker > 0 ? oldBounds.max.z - group.position.z : group.position.z - oldBounds.min.z;
+        const canvas = document.createElement("canvas");
+        const size = lowPower ? 256 : 512, R = size / 1024;
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Landing kit canvas is unavailable");
+        ctx.drawImage(kitImage!, 0, 0, size, size);
+        ctx.fillStyle = "#f1f4f1"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `900 ${160 * R}px Inter, Arial, sans-serif`;
+        ctx.fillText(String(group.userData.shirtNumber), 251 * R, 258 * R);
+        ctx.font = `900 ${230 * R}px Inter, Arial, sans-serif`;
+        ctx.fillText(String(group.userData.shirtNumber), 773 * R, 303 * R);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.flipY = false; texture.encoding = THREE.sRGBEncoding;
+        texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+        modelTextures.add(texture);
+        const material = new THREE.MeshStandardMaterial({ map: texture, roughness: .9, metalness: 0, side: THREE.DoubleSide });
+        modelMaterials.add(material);
+        const model = loadedShirt!.clone(true);
+        model.traverse(object => {
+          if (!(object instanceof THREE.Mesh)) return;
+          const isShirt = object.name === "Shirt";
+          if (isShirt) object.material = material;
+          object.castShadow = isShirt && !lowPower; object.receiveShadow = isShirt;
+        });
+        return { group, model, intoLocker, backLimit, topLimit: oldBounds.max.y + .05 };
+      });
+      check = "placement bounds";
+      for (;;) {
+        clearance = Infinity;
+        failedBounds = [];
+        replacements.forEach(({ group, model, intoLocker, backLimit, topLimit }) => {
+          model.scale.setScalar(scale);
+          model.position.set(-centerX * scale, hookTop - sourceBounds.max.y * scale, .08);
+          // Test both ends of the first shirt's possible scroll sway as well as
+          // the unchanged deterministic tilt. No bounds work runs per frame.
+          const probe = new THREE.Group();
+          probe.position.copy(group.position); probe.rotation.copy(group.rotation);
+          probe.add(model);
+          const baseRoll = group === animatedShirt ? shirtBaseRoll : group.rotation.z;
+          for (const sway of group === animatedShirt ? [-.024, 0, .024] : [0]) {
+            probe.rotation.z = baseRoll + sway;
+            probe.updateMatrixWorld(true);
+            const bounds = new THREE.Box3().setFromObject(model.getObjectByName("Shirt")!);
+            clearance = Math.min(clearance, bounds.min.y - surfaceTop);
+            const modelBounds = new THREE.Box3().setFromObject(model);
+            const backExtent = intoLocker > 0 ? modelBounds.max.z - group.position.z : group.position.z - modelBounds.min.z;
+            // Keep the same hem/opening checks; compare top and back with the
+            // measured fallback rather than absolute room coordinates.
+            const halfOpening = LOCKER_CONFIG.width / 2 - .12;
+            const record = (name: string, bound: number, limit: number) => {
+              failedBounds.push({ check: name, number: group.userData.shirtNumber, bound, limit, sway });
+            };
+            if (bounds.min.y - surfaceTop < minimumClearance) record("hem clearance", bounds.min.y - surfaceTop, minimumClearance);
+            if (bounds.min.x < group.position.x - halfOpening) record("opening min.x", bounds.min.x, group.position.x - halfOpening);
+            if (bounds.max.x > group.position.x + halfOpening) record("opening max.x", bounds.max.x, group.position.x + halfOpening);
+            if (modelBounds.max.y > topLimit) record("hook top max.y", modelBounds.max.y, topLimit);
+            if (backExtent > backLimit) record("back depth into locker", backExtent, backLimit);
+          }
+          probe.remove(model);
+        });
+        if (failedBounds.length === 0 && clearance >= minimumClearance) break;
+        if (scale <= .15) throw new Error("Landing model placement rejected");
+        scale = Math.max(.15, scale - .005);
+      }
+      const removed = groups.flatMap(group => [...group.children]);
+      const fallback = collectResources(removed);
+      check = "swap and disposal";
+      replacements.forEach(({ group, model }) => {
+        group.remove(...group.children); group.add(model);
+        group.userData.shirtModelScale = scale;
+        group.userData.shirtModelClearance = clearance;
+        model.traverse(object => { object.updateMatrix(); object.matrixAutoUpdate = false; });
+      });
+      // Shared locker materials remain alive; only unreferenced fallback assets go.
+      const live = collectResources([scene]);
+      fallback.geometries.forEach(value => { if (!live.geometries.has(value)) value.dispose(); });
+      fallback.materials.forEach(value => { if (!live.materials.has(value)) value.dispose(); });
+      collectResources([loadedShirt]).materials.forEach(value => {
+        if (!live.materials.has(value)) value.dispose();
+      });
+      loadedShirt = null; kitImage = null; shirtsSwapped = true;
+      numberMaps.forEach(value => value.dispose()); numberMaps.length = 0;
+      const fabricIsLive = [...live.materials].some(material => Object.values(material).some(value => value === shirtFabricMap));
+      if (fabricIsLive) modelTextures.add(shirtFabricMap); else shirtFabricMap.dispose();
+      console.info("Landing shirts swapped", { scale, minimumClearance: clearance });
+      // The existing request coalesces with an outstanding scroll frame.
+      start();
+    } catch (error) { failShirtLoad({ check, scale, clearance, failedBounds, error }); }
+  };
+  new GLTFLoader().load("/models/landing-shirt.glb", gltf => {
+    loadedShirt = gltf.scene;
+    if (disposed || shirtLoadFailed) {
+      releaseLoadedShirt(); modelTextures.forEach(value => value.dispose()); modelTextures.clear();
+      return;
+    }
+    swapShirts();
+  }, undefined, failShirtLoad);
+  new THREE.ImageLoader().load("/models/landing-shirt-kit.jpg", image => {
+    if (disposed || shirtLoadFailed) return;
+    kitImage = image; swapShirts();
+  }, undefined, failShirtLoad);
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.05:width<1280?1.28:1.45,budget=lowPower?760000:width<1280?1250000:1750000;
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }

@@ -102,13 +102,7 @@ export default function EventsPage() {
     [now],
   );
 
-  /**
-   * Clicking a date on the calendar:
-   * - If the day has events, opens DayEventsDialog popup (Samsung style).
-   * - If the day has no events, directly opens EventFormDialog to add an event.
-   *   Assistants get no create flow, so an empty day does nothing for them.
-   */
-  const handleDayClick = useCallback(
+  const selectDayAndSyncCursor = useCallback(
     (date: Date) => {
       setSelectedDate(date);
       if (view === "week") {
@@ -120,6 +114,19 @@ export default function EventsPage() {
       } else if (!isSameMonth(date, cursor)) {
         setCursor(date);
       }
+    },
+    [cursor, view],
+  );
+
+  /**
+   * Desktop calendar day clicks:
+   * - An empty today/future day opens the create form directly for coaches.
+   * - Otherwise the day dialog opens, including empty days for assistants.
+   * Mobile uses handleMobileDayClick, which always opens the day dialog.
+   */
+  const handleDayClick = useCallback(
+    (date: Date) => {
+      selectDayAndSyncCursor(date);
 
       const dayEvents = getDayEvents(eventsByDay, date);
       if (dayEvents.length === 0) {
@@ -132,7 +139,15 @@ export default function EventsPage() {
         setPanel({ kind: "day", date });
       }
     },
-    [canManageEvents, cursor, eventsByDay, isPastCalendarDay, view],
+    [canManageEvents, eventsByDay, isPastCalendarDay, selectDayAndSyncCursor],
+  );
+
+  const handleMobileDayClick = useCallback(
+    (date: Date) => {
+      selectDayAndSyncCursor(date);
+      setPanel({ kind: "day", date });
+    },
+    [selectDayAndSyncCursor],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
@@ -336,6 +351,7 @@ export default function EventsPage() {
             competitionOptions={competitionOptions}
             onMatchFilterChange={setMatchFilter}
             onSelectDate={handleDayClick}
+            onSelectMobileDay={handleMobileDayClick}
             onNavigate={navigate}
             onToday={goToToday}
             onCreateEvent={(date) =>

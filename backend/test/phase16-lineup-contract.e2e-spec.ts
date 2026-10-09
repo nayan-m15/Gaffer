@@ -54,6 +54,12 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
     return { ...c, athletes: roster.map((a) => a.id) };
   }
   const scheduledAt = () => new Date(Date.now() - 86400000).toISOString();
+  // Creation rejects past kickoffs while starting a match rejects anything
+  // before match day (compared by calendar date), so new events are booked a
+  // minute ahead on today's date to satisfy both. Rows that must look
+  // historical are moved back by the direct database updates below, which
+  // bypass creation validation.
+  const futureScheduledAt = () => new Date(Date.now() + 60_000).toISOString();
   function lineup(c: Coach) {
     return {
       startingAthleteIds: c.athletes.slice(0, 11),
@@ -98,7 +104,7 @@ describe('Phase 1.6 lineup contract HTTP evidence', () => {
         .send({
           title: b.team.name,
           type: 'match',
-          scheduledAt: scheduledAt(),
+          scheduledAt: futureScheduledAt(),
           location: 'Synthetic ground',
           friendlyOpponentTeamId: b.team.id,
         })

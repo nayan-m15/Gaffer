@@ -25,6 +25,6 @@ process.env.BREVO_API_KEY = '';
 // auth endpoints from the same loopback address against this one shared test
 // database — production-sized budgets would be exhausted by unrelated suites
 // long before any of them finished. These budgets are effectively unlimited;
-// auth-rate-limit.e2e-spec.ts pins its own small budgets per test instead.
+// any suite needing a real limit pins its own small budgets per test instead.
 process.env.AUTH_SIGN_IN_RATE_LIMIT ??= '10000:60';
 process.env.AUTH_EMAIL_RATE_LIMIT ??= '10000:60';

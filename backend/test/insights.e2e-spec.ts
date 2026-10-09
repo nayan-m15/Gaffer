@@ -28,6 +28,11 @@ function pastIso(days: number): string {
   return date.toISOString();
 }
 
+/** An ISO 8601 datetime one day ahead, used to satisfy event creation. */
+function futureIso(): string {
+  return new Date(Date.now() + 86_400_000).toISOString();
+}
+
 /**
  * Insight generation runs fire-and-forget after `POST /finalise` responds
  * (see MatchesService.finaliseProjection), so tests poll briefly rather than
@@ -101,11 +106,17 @@ describe('Match insights (e2e)', () => {
       .send({
         title: `vs ${opponent}`,
         type: 'match',
-        scheduledAt: pastIso(1),
+        scheduledAt: futureIso(),
         location: 'Main field',
       })
       .expect(201);
     const eventId = (event.body as { id: string }).id;
+    // Creation rejects past kickoffs, so the historical date is applied
+    // with a follow-up update, which carries no such restriction.
+    await agent
+      .patch(`/events/${eventId}`)
+      .send({ scheduledAt: pastIso(1) })
+      .expect(200);
 
     const started = await agent.post(`/events/${eventId}/start-match`).send({
       opponentName: opponent,

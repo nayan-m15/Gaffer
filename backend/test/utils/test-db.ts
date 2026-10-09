@@ -148,7 +148,10 @@ async function cleanupUserWithRetry(
       await cleanupUser(identity);
       return;
     } catch (err) {
-      if (attempt === attempts || !isDatabaseConnectionError(err)) {
+      if (
+        attempt === attempts ||
+        !(isDatabaseConnectionError(err) || isDeadlock(err))
+      ) {
         throw err;
       }
       await new Promise((resolve) =>
@@ -156,6 +159,23 @@ async function cleanupUserWithRetry(
       );
     }
   }
+}
+
+/**
+ * Concurrent cleanups can delete teams that cascade into the same shared rows
+ * (two-account fixtures share a competition) in opposite orders. Postgres then
+ * aborts one side with SQLSTATE 40P01, and retrying it succeeds once the other
+ * side has committed.
+ */
+function isDeadlock(err: unknown): boolean {
+  const cause = err instanceof Error ? err.cause : undefined;
+  return [err, cause].some(
+    (e) =>
+      typeof e === 'object' &&
+      e !== null &&
+      ((e as { code?: unknown }).code === '40P01' ||
+        (e instanceof Error && /deadlock detected/i.test(e.message))),
+  );
 }
 
 /**
