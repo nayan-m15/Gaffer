@@ -96,7 +96,12 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
       status: response.status,
       body: response.body as unknown,
     };
-    expect(response.status).toBe(status);
+    if (response.status !== status) {
+      throw new Error(
+        `HTTP ${name}: expected ${status}, received ${response.status}\n` +
+          `Response: ${JSON.stringify(response.body, null, 2)}`,
+      );
+    }
     return response.body as T;
   }
   async function coach(prefix: string): Promise<Coach> {
@@ -118,13 +123,19 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
     return { ...c, athletes: athletes.map((a) => a.id) };
   }
   const scheduledAt = () => new Date(Date.now() - 86400000).toISOString();
+  // Creation rejects past kickoffs while starting a match rejects anything
+  // before match day (compared by calendar date), so new events are booked a
+  // minute ahead on today's date to satisfy both. Rows that must look
+  // historical are moved back by the direct database updates below, which
+  // bypass creation validation.
+  const futureScheduledAt = () => new Date(Date.now() + 60_000).toISOString();
   async function friendly() {
     const event = await http<Event>(
       'friendly-create-' + randomUUID(),
       home.agent.post('/events').send({
         title: 'phase2 fresh friendly',
         type: 'match',
-        scheduledAt: scheduledAt(),
+        scheduledAt: futureScheduledAt(),
         location: 'Synthetic ground',
         friendlyOpponentTeamId: away.team.id,
       }),
@@ -207,8 +218,8 @@ describe('Phase 2 real PostgreSQL and HTTP', () => {
         opponentName: 'Synthetic opponent',
         isHome: coach === away,
         startingAthleteIds: coach.athletes,
-        opponentSquadVisibility: 'numbers',
-        opponentSquad: [{ shirtNumber: 1 }],
+        opponentSquadVisibility: 'full',
+        opponentSquad: [{ shirtNumber: 1, name: 'phase2-home0 Synthetic' }],
       }),
       201,
     );

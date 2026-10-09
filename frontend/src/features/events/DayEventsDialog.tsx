@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, isBefore, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
 import {
   Dialog,
@@ -43,6 +43,7 @@ export function DayEventsDialog({
   const dayNumber = format(date, "d");
   const weekdayName = format(date, "EEEE");
   const dateSubLabel = format(date, "dd MMM");
+  const isPastDay = isBefore(startOfDay(date), startOfDay(now));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,7 +129,7 @@ export function DayEventsDialog({
         </div>
 
         {/* Bottom "Add on [Date] +" Capsule Button (Samsung Calendar style) */}
-        {!readOnly && (
+        {!readOnly && !isPastDay && (
           <button
             type="button"
             onClick={() => {

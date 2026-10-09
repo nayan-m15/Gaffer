@@ -100,6 +100,21 @@ export const verification = pgTable(
   (table) => [index('verification_identifier_index').on(table.identifier)],
 );
 
+/**
+ * Fixed-window counters backing the application-level rate limiter that
+ * protects the public auth routes (SEC-002). One row per `${policy}:${ip}`
+ * key: `count` requests since `window_started_at`, atomically incremented by
+ * `AuthRateLimitService`'s single upsert so every backend instance sharing
+ * this database shares the limit.
+ */
+export const authRateLimits = pgTable('auth_rate_limits', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull(),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const teamRole = pgEnum('team_role', ['coach', 'assistant']);
 export const eventType = pgEnum('event_type', ['match', 'training', 'meeting']);
 export const eventStatus = pgEnum('event_status', [
@@ -261,9 +276,6 @@ export const playerClaimInvites = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
     usedByUserId: text('used_by_user_id').references(() => user.id),
-    proposedName: text('proposed_name'),
-    proposedTeamId: uuid('proposed_team_id').references(() => teams.id),
-    requestedByUserId: text('requested_by_user_id').references(() => user.id),
     ...timestamps,
   },
   (table) => [
@@ -729,7 +741,8 @@ export const competitions = pgTable(
       .default(1)
       .notNull(),
     startDate: date('start_date'),
-    // UTC weekdays: Sunday=0 ... Saturday=6; kickoff is explicitly UTC.
+    // Local weekdays: Sunday=0 ... Saturday=6, in the generation timezone.
+    scheduleTimezone: text('schedule_timezone').default('UTC').notNull(),
     allowedPlayingDays: integer('allowed_playing_days')
       .array()
       .default(sql`ARRAY[6]::integer[]`)

@@ -24,7 +24,7 @@ import {
   matches,
   standings,
 } from '../database/schema';
-import { planFixtures } from './competition-fixtures';
+import { fixtureCalendarDate, planFixtures } from './competition-fixtures';
 import { fixtureResultSourceMatches } from '../matches/session-finalisation';
 import { sessionHasTimedOutConfirmation } from '../matches/session-finalisation';
 
@@ -502,7 +502,9 @@ export async function ensureHybridKnockoutStage(
         fixture.scheduledAt > latest ? fixture.scheduledAt : latest,
       new Date(0),
     );
-  const knockoutStart = new Date(latestLeague);
+  const knockoutStart = new Date(
+    `${fixtureCalendarDate(latestLeague, competition.scheduleTimezone)}T00:00:00.000Z`,
+  );
   knockoutStart.setUTCDate(knockoutStart.getUTCDate() + 1);
   const plan = planFixtures(
     {

@@ -97,6 +97,11 @@ function pastDate(days: number): string {
   return pastIso(days).slice(0, 10);
 }
 
+/** An ISO 8601 datetime one day ahead, used to satisfy event creation. */
+function futureIso(): string {
+  return new Date(Date.now() + 86_400_000).toISOString();
+}
+
 describe('Statistics and seasons (e2e)', () => {
   let app: INestApplication<App>;
   const identities: TestIdentity[] = [];
@@ -156,11 +161,17 @@ describe('Statistics and seasons (e2e)', () => {
       .send({
         title: `vs ${options.opponent}`,
         type: 'match',
-        scheduledAt: pastIso(options.daysAgo),
+        scheduledAt: futureIso(),
         location: 'Main field',
       })
       .expect(201);
     const eventId = (event.body as { id: string }).id;
+    // Creation rejects past kickoffs, so the historical date is applied
+    // with a follow-up update, which carries no such restriction.
+    await agent
+      .patch(`/events/${eventId}`)
+      .send({ scheduledAt: pastIso(options.daysAgo) })
+      .expect(200);
 
     const started = await agent.post(`/events/${eventId}/start-match`).send({
       opponentName: options.opponent,
@@ -583,11 +594,17 @@ describe('Statistics and seasons (e2e)', () => {
           .send({
             title: 'vs Bench Test FC',
             type: 'match',
-            scheduledAt: pastIso(1),
+            scheduledAt: futureIso(),
             location: 'Main field',
           })
           .expect(201);
         const eventId = (event.body as { id: string }).id;
+        // Creation rejects past kickoffs, so the historical date is applied
+        // with a follow-up update, which carries no such restriction.
+        await substituteAgent
+          .patch(`/events/${eventId}`)
+          .send({ scheduledAt: pastIso(1) })
+          .expect(200);
         const started = await substituteAgent
           .post(`/events/${eventId}/start-match`)
           .send({

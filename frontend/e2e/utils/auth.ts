@@ -12,7 +12,12 @@ export const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 /** Where the Nest API (and its Better Auth handler) listens. */
 export const BACKEND_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
 
-export const E2E_PASSWORD = 'password123';
+/**
+ * Sign-up enforces a password policy (8+ characters with an uppercase, a
+ * lowercase, a number and a symbol), so this must satisfy all four rules or
+ * every registerVerifiedUser call fails with a 400.
+ */
+export const E2E_PASSWORD = 'Password123!';
 
 /** Same TTL the backend's auth e2e suite mints its tokens with. */
 const VERIFICATION_TTL_SECONDS = 60 * 60;

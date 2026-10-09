@@ -10,7 +10,7 @@ import {
   type TestIdentity,
 } from './utils/test-db';
 
-const PASSWORD = 'password123';
+const PASSWORD = 'GafferTest1!';
 
 // Same shape team-invites issues: base64url of 32 random bytes (43 chars).
 // Only the shape matters here — the callback routing is per-request and the
