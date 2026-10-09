@@ -109,3 +109,13 @@ export function confirmEventLineup(
     body: JSON.stringify(input),
   });
 }
+
+export type CompetitionSuspension = {
+  athleteId: string;
+  remainingMatches: number;
+  reason: "red_card" | "yellow_accumulation";
+};
+
+export function fetchCompetitionSuspensions(eventId: string) {
+  return apiFetch<CompetitionSuspension[]>(`/events/${eventId}/competition-suspensions`);
+}

@@ -46,6 +46,10 @@ import {
 } from '../friendly-fixtures/friendly-fixtures.service';
 import { TeamsService } from '../teams/teams.service';
 import {
+  getCompetitionSuspensions,
+  assertSuspensionEligibility,
+} from './competition-discipline';
+import {
   DEFAULT_FORMATION_ID,
   getFormationPlayerCount,
 } from '../common/formations';
@@ -495,6 +499,19 @@ export class EventsService {
    * lookup. Open to every team member, mirroring the start-match access
    * model; once the match starts, this confirmed snapshot becomes read-only.
    */
+  async competitionSuspensions(userId: string, eventId: string) {
+    const team = await this.requireTeam(userId);
+    const event = await this.requireEvent(team.id, eventId);
+    if (event.type !== 'match') throw new NotFoundException('Match not found.');
+    return getCompetitionSuspensions(
+      this.databaseService,
+      team.id,
+      event.competitionId,
+      event.scheduledAt,
+      event.competitionFixtureId,
+    );
+  }
+
   async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
@@ -520,10 +537,10 @@ export class EventsService {
         'This match has already started — the squad is managed from the Live Logger.',
       );
     }
-
     const formationPlayerCount = dto.formationId
       ? getFormationPlayerCount(dto.formationId)
       : null;
+
     if (dto.formationId && !formationPlayerCount) {
       throw new BadRequestException('Formation is not supported.');
     }
@@ -531,6 +548,7 @@ export class EventsService {
     const competition = event.competitionId
       ? await this.requireTeamCompetition(team.id, event.competitionId)
       : null;
+
     const requiredStarterCount =
       competition?.playersPerSide ??
       event.friendlyPlayersPerSide ??
@@ -546,12 +564,23 @@ export class EventsService {
         `This match is ${requiredStarterCount}-a-side. Choose a compatible formation.`,
       );
     }
+
     if (dto.startingAthleteIds.length !== requiredStarterCount) {
       throw new BadRequestException(
         `This match format requires exactly ${requiredStarterCount} starting athletes.`,
       );
     }
 
+    assertSuspensionEligibility(
+      [...dto.startingAthleteIds, ...(dto.benchAthleteIds ?? [])],
+      await getCompetitionSuspensions(
+        this.databaseService,
+        team.id,
+        event.competitionId,
+        event.scheduledAt,
+        event.competitionFixtureId,
+      ),
+    );
     await this.loadSelectableTeamAthletes(
       team.id,
       dto.startingAthleteIds,
@@ -1096,6 +1125,17 @@ export class EventsService {
         `This match format requires exactly ${requiredStarterCount} starting athletes.`,
       );
     }
+
+    assertSuspensionEligibility(
+      [...dto.startingAthleteIds, ...(dto.benchAthleteIds ?? [])],
+      await getCompetitionSuspensions(
+        this.databaseService,
+        team.id,
+        event.competitionId,
+        event.scheduledAt,
+        event.competitionFixtureId,
+      ),
+    );
 
     const { teamAthletes, requestedIds } =
       await this.loadSelectableTeamAthletes(

@@ -102,6 +102,7 @@ export interface MatchRecord {
   eventNotes?: string | null;
   competitionName: string | null;
   competitionSeason?: string | null;
+  competitionMaxSubstitutes?: number | null;
   opponentSquad: OpponentMatchPlayer[];
   /** Present on GET /matches/:id for linked Gaffer friendlies and competition fixtures. */
   friendlyOpponentLineup?: OpponentLineupView;

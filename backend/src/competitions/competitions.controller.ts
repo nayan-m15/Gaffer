@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -54,6 +55,32 @@ export class CompetitionsController {
     return this.competitionsService.listMine(user.id);
   }
 
+  @Patch(':id/hidden')
+  async setHidden(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { hidden?: boolean },
+  ) {
+    if (typeof body?.hidden !== 'boolean') {
+      throw new BadRequestException('hidden must be a boolean');
+    }
+
+    return this.competitionsService.setHidden(user.id, id, body.hidden);
+  }
+
+  @Patch(':id/archive')
+  async setArchived(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { archived?: boolean },
+  ) {
+    if (typeof body?.archived !== 'boolean') {
+      throw new BadRequestException('archived must be a boolean');
+    }
+
+    return this.competitionsService.setArchived(user.id, id, body.archived);
+  }
+
   @Get('schedule-alerts')
   async scheduleAlerts(@CurrentUser() user: SessionUser) {
     return this.competitionsService.listFixtureScheduleAlerts(user.id);
@@ -93,12 +120,33 @@ export class CompetitionsController {
     return { success: true };
   }
 
+  @Get(':id/player-stats')
+  async playerStats(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.competitionsService.getPlayerStats(user.id, id);
+  }
+
   @Get(':id/fixtures')
   async fixtures(
     @CurrentUser() user: SessionUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.competitionsService.listFixtures(user.id, id);
+  }
+
+  @Get(':id/fixtures/:fixtureId/match-centre')
+  async fixtureMatchCentre(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fixtureId', ParseUUIDPipe) fixtureId: string,
+  ) {
+    return this.competitionsService.getFixtureMatchCentre(
+      user.id,
+      id,
+      fixtureId,
+    );
   }
 
   @Post(':id/fixtures/generate')
@@ -108,6 +156,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(generateFixturesSchema, body ?? {});
+
     return this.competitionsService.generateFixtures(
       user.id,
       id,
@@ -124,6 +173,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(fixtureScheduleAcceptSchema, body ?? {});
+
     return this.competitionsService.acceptFixtureSchedule(
       user.id,
       id,
@@ -140,6 +190,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(fixtureScheduleProposalSchema, body);
+
     return this.competitionsService.proposeFixtureSchedule(
       user.id,
       id,
@@ -155,6 +206,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(createCompetitionResultSchema, body);
+
     return this.competitionsService.createManualResult(user.id, id, dto);
   }
 
@@ -166,6 +218,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(updateCompetitionResultSchema, body);
+
     return this.competitionsService.updateManualResult(
       user.id,
       id,
@@ -192,6 +245,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(createCompetitionTeamSchema, body);
+
     return this.competitionsService.addParticipant(user.id, id, dto);
   }
 
@@ -203,6 +257,7 @@ export class CompetitionsController {
     @Body() body: unknown,
   ) {
     const dto = zodValidate(renameCompetitionTeamSchema, body);
+
     return this.competitionsService.renameParticipant(
       user.id,
       id,
@@ -223,6 +278,7 @@ export class CompetitionsController {
       id,
       competitionTeamId,
     );
+
     return { success: true };
   }
 }

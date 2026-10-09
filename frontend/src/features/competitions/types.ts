@@ -30,6 +30,8 @@ export interface Competition {
   season: string | null;
   seasonId: string | null;
   isAdmin: boolean;
+  archivedAt: string | null;
+  hiddenByMe: boolean;
   createdAt: string;
   format: CompetitionFormat | null;
   configuredTeamCount: number | null;
@@ -86,6 +88,7 @@ export interface CompetitionResult {
   playedAt: string;
   source: "live_logged" | "manual";
   linkedMatchId: string | null;
+  sharedSessionId: string | null;
   createdAt: string;
 }
 
@@ -122,6 +125,7 @@ export interface CompetitionFixture {
   nextFixtureId: string | null;
   nextFixtureSlot: "home" | "away" | null;
   linkedMatchId: string | null;
+  sharedSessionId: string | null;
   legacyResultId: string | null;
   scheduleRevision: number;
   homeScheduleResponse: CompetitionFixtureScheduleResponse;
@@ -154,6 +158,21 @@ export interface CompetitionInvite {
   proposedName?: string | null;
   requestedByUserId?: string | null;
 }
+export type CompetitionPlayerStat = {
+  athleteId: string;
+  name: string;
+  position: string | null;
+  teamId: string;
+  teamName: string;
+  goals: number;
+  assists: number;
+  goalContributions: number;
+  saves: number;
+  appearances: number;
+  yellowCards: number;
+  redCards: number;
+};
+
 export type CompetitionFixtureScheduleAlertState =
   | "action_required"
   | "awaiting_response"
@@ -173,4 +192,3 @@ export interface CompetitionFixtureScheduleAlert {
   confirmedAt: string | null;
   updatedAt: string;
 }
-

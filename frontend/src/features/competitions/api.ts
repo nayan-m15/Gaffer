@@ -9,6 +9,7 @@ import type {
   CompetitionResult,
   CompetitionResultInput,
   CompetitionSummary,
+  CompetitionPlayerStat,
   Participant,
 } from "./types";
 
@@ -36,6 +37,12 @@ export const createCompetition = (input: CompetitionInput) =>
 
 export const updateCompetition = (id: string, input: Partial<CompetitionInput>) =>
   apiFetch<Competition>(`/competitions/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+
+export const setCompetitionHidden = (id: string, hidden: boolean) =>
+  apiFetch<{ hidden: boolean }>(`/competitions/${encodeURIComponent(id)}/hidden`, { method: "PATCH", body: JSON.stringify({ hidden }) });
+
+export const setCompetitionArchived = (id: string, archived: boolean) =>
+  apiFetch<{ archived: boolean }>(`/competitions/${encodeURIComponent(id)}/archive`, { method: "PATCH", body: JSON.stringify({ archived }) });
 
 export const deleteCompetition = (id: string) =>
   apiFetch<{ success: boolean }>(`/competitions/${id}`, { method: "DELETE" });
@@ -119,3 +126,17 @@ export const proposeCompetitionFixtureSchedule = (
     { method: "POST", body: JSON.stringify(input) },
   );
 
+
+export const fetchCompetitionPlayerStats = (id: string) =>
+  apiFetch<CompetitionPlayerStat[]>(`/competitions/${encodeURIComponent(id)}/player-stats`);
+
+export interface CompetitionMatchCentreEvent {
+  id: string; type: string; minute: number; teamId: string | null;
+  playerName: string; playerId: string | null;
+}
+export interface CompetitionMatchCentreData {
+  fixtureId: string; homeScore: number | null; awayScore: number | null;
+  hasReport: boolean; events: CompetitionMatchCentreEvent[];
+}
+export const fetchCompetitionMatchCentre = (competitionId: string, fixtureId: string) =>
+  apiFetch<CompetitionMatchCentreData>(`/competitions/${encodeURIComponent(competitionId)}/fixtures/${encodeURIComponent(fixtureId)}/match-centre`);
