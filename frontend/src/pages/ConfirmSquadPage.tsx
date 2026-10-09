@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchCompetitionSuspensions } from "@/features/events/api";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
 import {
   Loader2,
@@ -951,6 +953,7 @@ function StartingSquadSection({
   beforeMatchDay,
   sortedAthletes,
   startingIds,
+  suspendedIds,
   onSuggest,
   onToggle,
   formationId,
@@ -967,6 +970,7 @@ function StartingSquadSection({
   beforeMatchDay: boolean;
   sortedAthletes: BackendAthlete[];
   startingIds: Set<string>;
+  suspendedIds: Set<string>;
   onSuggest: () => void;
   onToggle: (athleteId: string) => void;
   formationId: string;
@@ -1014,6 +1018,8 @@ function StartingSquadSection({
           {sortedAthletes.map((athlete) => {
             const selected = startingIds.has(athlete.id);
             const injured = athlete.status === "injured";
+            const suspended = suspendedIds.has(athlete.id);
+            const unavailable = injured || suspended;
             const style = roleStyle(athlete.position);
             const positionLabel = (athlete.position ?? "—").toUpperCase();
             return (
@@ -1021,11 +1027,11 @@ function StartingSquadSection({
                 <button
                   type="button"
                   onClick={() => onToggle(athlete.id)}
-                  disabled={injured}
+                  disabled={unavailable}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                    injured ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70" : selected ? "border-primary/70 bg-primary/5" : "border-border bg-card hover:border-primary/40",
+                    unavailable ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70" : selected ? "border-primary/70 bg-primary/5" : "border-border bg-card hover:border-primary/40",
                   )}
                 >
                   <span className={cn("flex h-10 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold", style.avatar)}>
@@ -1038,8 +1044,8 @@ function StartingSquadSection({
                     </span>
                     {selected && suggestionReasons?.[athlete.id] && <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">{suggestionReasons[athlete.id]}</span>}
                   </span>
-                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", injured ? "bg-red-500/10 text-red-600 dark:text-red-400" : selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                    {injured ? "Injured" : selected ? "Starting" : "Bench"}
+                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", unavailable ? "bg-red-500/10 text-red-600 dark:text-red-400" : selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                    {injured ? "Injured" : suspended ? "Suspended" : selected ? "Starting" : "Bench"}
                   </span>
                 </button>
               </li>
@@ -1273,6 +1279,16 @@ export default function ConfirmSquadPage() {
   );
   const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
+  const suspensionQuery = useQuery({
+    queryKey: ["competition-suspensions", eventId],
+    queryFn: () => fetchCompetitionSuspensions(eventId!),
+    enabled: Boolean(eventId && eventQuery.data?.competitionId),
+    staleTime: 0,
+  });
+  const suspendedIds = useMemo(
+    () => new Set((suspensionQuery.data ?? []).map((item) => item.athleteId)),
+    [suspensionQuery.data],
+  );
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
   const confirmLineup = useConfirmEventLineup(eventId ?? "");
@@ -1344,8 +1360,8 @@ export default function ConfirmSquadPage() {
         DEFAULT_FORMATION_ID,
     );
   const selectableAthletes = useMemo(
-    () => athletes.filter((athlete) => athlete.status !== "injured"),
-    [athletes],
+    () => athletes.filter((athlete) => athlete.status !== "injured" && !suspendedIds.has(athlete.id)),
+    [athletes, suspendedIds],
   );
   const selectableRosterIds = useMemo(
     () => new Set(selectableAthletes.map((athlete) => athlete.id)),
@@ -1827,6 +1843,7 @@ export default function ConfirmSquadPage() {
     eventQuery.isLoading ||
     athletesQuery.isLoading ||
     gamePlansQuery.isLoading ||
+    (Boolean(eventQuery.data?.competitionId) && suspensionQuery.isLoading) ||
     Boolean(eventQuery.data?.competitionFixtureId && competitionQuery.isLoading)
   ) {
     return (
@@ -1843,11 +1860,12 @@ export default function ConfirmSquadPage() {
     eventQuery.isError ||
     athletesQuery.isError ||
     gamePlansQuery.isError ||
+    (Boolean(eventQuery.data?.competitionId) && suspensionQuery.isError) ||
     (eventQuery.data?.competitionFixtureId && competitionQuery.isError)
   ) {
     const error =
       eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error ??
-      competitionQuery.error;
+      competitionQuery.error ?? suspensionQuery.error;
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
@@ -2092,6 +2110,7 @@ export default function ConfirmSquadPage() {
         fixtureDateConfirmed={fixtureDateConfirmed}
         beforeMatchDay={beforeMatchDay}
         sortedAthletes={sortedAthletes}
+        suspendedIds={suspendedIds}
         startingIds={startingIds}
         onSuggest={handleSuggestXI}
         onToggle={toggleStarter}

@@ -121,6 +121,14 @@ export class EventsController {
    * match. Like starting a match, every team member can call this — the
    * lineup is only shared with an accepted Gaffer friendly opponent.
    */
+  @Get(':eventId/competition-suspensions')
+  async competitionSuspensions(
+    @CurrentUser() user: AuthenticatedRequest['user'],
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.eventsService.competitionSuspensions(user.id, eventId);
+  }
+
   @Put(':eventId/lineup')
   async confirmLineup(
     @CurrentUser() user: AuthenticatedRequest['user'],
