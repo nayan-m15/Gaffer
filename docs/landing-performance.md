@@ -6,7 +6,9 @@ Work stays on `fix/performance-dashboard-audit` as explicitly requested. The ori
 
 The landing implementation is committed at `91f04fe5` by the user. This follow-up completes measurement and documentation without creating a commit, pushing, merging or deploying. The accompanying [results file](landing-performance-results.json) records full revisions, frontend file hashes, individual measurements, generated image sizes and bundle sizes.
 
-## Implemented behavior
+## Measured implementation
+
+After these measurements, the user requested removal of the stadium image shown before the scene loads. The current landing page uses a plain dark background during initialization and fallback, and the unused generated stadium WebP variants were removed. The original PNG remains in use on HowItWorksPage. The measurements below describe the earlier image-backed version; they have not been rerun for this visual change.
 
 - An optimized responsive static background remains behind the canvas during initialization and failure, preserving the existing opacity transition.
 - Reduced motion, data-saving preferences and constrained memory/CPU select the static background before importing Three.js. A small worker probes software-renderer capability; unsupported worker WebGL falls through to the existing main-thread WebGL path. The main renderer retains its own software-renderer check.
