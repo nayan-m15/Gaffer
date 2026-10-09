@@ -176,6 +176,9 @@ export function EventDetailDialog({
               <StatusBadge status={displayEventStatus(event, now)} />
             </div>
             <DetailRow label="Type" value={eventTypeLabel(event.type)} />
+            {event.type === "match" && !event.competitionId ? (
+              <DetailRow label="Match format" value={`${("friendlyPlayersPerSide" in event ? event.friendlyPlayersPerSide : null) ?? 11}-a-side`} />
+            ) : null}
             <DetailRow label="Date & time" value={formatEventDateTime(event.scheduledAt, event.weatherTimezone)} />
             <EventLocationSection event={event} />
             {generatedFixture && event.status === "scheduled" && (

@@ -836,7 +836,7 @@ function SavedGamePlanSection({
                   selected ? "border-primary bg-primary/5" : "border-border",
                 )}
               >
-                <MiniPitch formationId={plan.formationId} />
+                <MiniPitch formationId={plan.formationId} customPositions={plan.customPositions} />
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{plan.name}</span>
@@ -954,6 +954,7 @@ function StartingSquadSection({
   onSuggest,
   onToggle,
   formationId,
+  customPositions,
   assignments,
   athletes,
 }: {
@@ -970,6 +971,7 @@ function StartingSquadSection({
   onSuggest: () => void;
   onToggle: (athleteId: string) => void;
   formationId: string;
+  customPositions?: BackendGamePlan["customPositions"];
   assignments: PitchAssignments;
   athletes: BackendAthlete[];
 }) {
@@ -1049,6 +1051,7 @@ function StartingSquadSection({
         <SquadFormationPreview
           className="lg:sticky lg:top-4"
           formationId={formationId}
+          customPositions={customPositions}
           assignments={assignments}
           athletes={athletes}
         />
@@ -1285,6 +1288,9 @@ export default function ConfirmSquadPage() {
   const [startingIds, setStartingIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Unlike the default no-plan state on initial load, an explicit roster pick
+  // must not restore positions or tactics from an earlier confirmed lineup.
+  const [freshRosterSelection, setFreshRosterSelection] = useState(false);
   const [opponentName, setOpponentName] = useState("");
   const [opponentCompetitionTeamId, setOpponentCompetitionTeamId] = useState<string | null>(null);
   const [manualIsHome, setIsHome] = useState(true);
@@ -1328,7 +1334,17 @@ export default function ConfirmSquadPage() {
   );
   const competitionPlayerCount = eventQuery.data?.competitionId
     ? (competitionQuery.data?.playersPerSide ?? null)
-    : null;
+    : (eventQuery.data?.friendlyPlayersPerSide ?? null);
+  const compatibleGamePlans = useMemo(
+    () =>
+      competitionPlayerCount
+        ? gamePlans.filter(
+            (plan) =>
+              getFormationPlayerCount(plan.formationId) === competitionPlayerCount,
+          )
+        : gamePlans,
+    [competitionPlayerCount, gamePlans],
+  );
   const selectedPlanSummary = useMemo(
     () =>
       selectedGamePlanId
@@ -1339,7 +1355,7 @@ export default function ConfirmSquadPage() {
   const startingTarget =
     competitionPlayerCount ??
     getFormationPlayerCount(
-      gamePlanQuery.data?.formationId ??
+      (selectedGamePlanId ? gamePlanQuery.data?.formationId : null) ??
         selectedPlanSummary?.formationId ??
         DEFAULT_FORMATION_ID,
     );
@@ -1417,7 +1433,7 @@ export default function ConfirmSquadPage() {
   const appliedLineupRef = useRef<string | null>(null);
   useEffect(() => {
     const lineup = lineupQuery.data;
-    if (!lineup || !eventId || appliedLineupRef.current === eventId) {
+    if (!lineup || !eventId || freshRosterSelection || appliedLineupRef.current === eventId) {
       return;
     }
     if (!athletesQuery.data) {
@@ -1426,7 +1442,7 @@ export default function ConfirmSquadPage() {
     }
     appliedLineupRef.current = eventId;
     setStartingIds(new Set(lineup.startingAthleteIds));
-  }, [athletesQuery.data, eventId, lineupQuery.data]);
+  }, [athletesQuery.data, eventId, lineupQuery.data, freshRosterSelection]);
 
   const competitionParticipants = useMemo(
     () =>
@@ -1523,11 +1539,12 @@ export default function ConfirmSquadPage() {
   const previewFormationId =
     selectedPlan?.formationId ??
     selectedPlanSummary?.formationId ??
-    (!selectedGamePlanId ? confirmedLineup?.formationId : null) ??
+    (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.formationId : null) ??
     getDefaultFormationIdForPlayerCount(startingTarget);
   const previewCustomPositions =
     selectedPlan?.customPositions ??
-    (!selectedGamePlanId ? confirmedLineup?.customPositions : null) ??
+    selectedPlanSummary?.customPositions ??
+    (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.customPositions : null) ??
     null;
   const previewAssignments = useMemo(() => {
     const athleteById = new Map(
@@ -1538,14 +1555,17 @@ export default function ConfirmSquadPage() {
       [...startingIds],
       (id) => athleteById.get(id)?.position ?? null,
       selectedPlan?.assignments ??
-        (!selectedGamePlanId ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
+        selectedPlanSummary?.assignments ??
+        (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
       previewCustomPositions,
     );
   }, [
     athletes,
     selectedPlan?.assignments,
+    selectedPlanSummary?.assignments,
     selectedGamePlanId,
     confirmedLineup?.pitchAssignments,
+    freshRosterSelection,
     previewCustomPositions,
     previewFormationId,
     startingIds,
@@ -1560,7 +1580,7 @@ export default function ConfirmSquadPage() {
       if (!confirmedIds.has(id)) return true;
     }
     // Confirmation is a full tactical snapshot, not just a list of IDs.
-    const currentBench = benchIdsFromRoster(athletes, startingIds, gamePlanQuery.data);
+    const currentBench = benchIdsFromRoster(athletes, startingIds, selectedPlan ?? undefined);
     if (currentBench.length !== confirmedLineup.benchAthleteIds.length ||
         currentBench.some((id) => !confirmedLineup.benchAthleteIds.includes(id))) return true;
     if (confirmedLineup.formationId && confirmedLineup.formationId !== previewFormationId) return true;
@@ -1569,7 +1589,7 @@ export default function ConfirmSquadPage() {
     if (canonicalSnapshot(confirmedLineup.customPositions ?? null) !==
         canonicalSnapshot(previewCustomPositions)) return true;
     return false;
-  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, gamePlanQuery.data, athletes]);
+  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, selectedPlan, athletes]);
   // Lineups can be confirmed before match day for advance sharing.
   const canConfirmLineup =
     startingCount === startingTarget &&
@@ -1718,7 +1738,7 @@ export default function ConfirmSquadPage() {
         benchAthleteIds: benchIdsFromRoster(
           athletes,
           startingIds,
-          gamePlanQuery.data,
+          selectedPlan ?? undefined,
         ),
         formationId: previewFormationId,
         pitchAssignments: previewAssignments,
@@ -1742,8 +1762,8 @@ export default function ConfirmSquadPage() {
             rsvpQuery.data.map((row) => [row.id, row.rsvpStatus]),
           )
         : undefined,
-      gamePlanAssignments: gamePlanQuery.data?.assignments,
-      gamePlanSubstituteIds: gamePlanQuery.data?.substituteIds,
+      gamePlanAssignments: selectedPlan?.assignments,
+      gamePlanSubstituteIds: selectedPlan?.substituteIds,
     });
     setStartingIds(new Set(suggestion.startingIds));
     setSuggestionReasons(suggestion.reasons);
@@ -1779,7 +1799,7 @@ export default function ConfirmSquadPage() {
         benchAthleteIds: benchIdsFromRoster(
           athletes,
           startingIds,
-          gamePlanQuery.data,
+          selectedPlan ?? undefined,
         ),
         opponentSquadVisibility: linkedOpponent ? "none" : opponentSquadVisibility,
         teamColor: ownColor,
@@ -1795,6 +1815,9 @@ export default function ConfirmSquadPage() {
                 ...(player.position ? { position: player.position } : {}),
               })),
             }),
+        formationId: previewFormationId,
+        pitchAssignments: previewAssignments,
+        customPositions: previewCustomPositions,
         ...(selectedGamePlanId
           ? { gamePlanId: selectedGamePlanId }
           : {}),
@@ -1811,9 +1834,18 @@ export default function ConfirmSquadPage() {
 
   const handlePlanSelection = (planId: string | null) => {
     if (planId === null) {
+      // Reset even when Pick from roster is already selected. This mirrors
+      // starting a new plan in Team Management, without a page reload.
+      appliedGamePlanIdRef.current = null;
+      if (eventId) appliedLineupRef.current = eventId;
       setSelectedGamePlanId(null);
+      setFreshRosterSelection(true);
+      setStartingIds(new Set());
+      setSuggestionReasons(null);
+      setSubmitError(null);
       return;
     }
+    setFreshRosterSelection(false);
     const reselectingPlan = selectedGamePlanId === planId;
     if (reselectingPlan) appliedGamePlanIdRef.current = null;
     setSelectedGamePlanId(planId);
@@ -1827,7 +1859,7 @@ export default function ConfirmSquadPage() {
     eventQuery.isLoading ||
     athletesQuery.isLoading ||
     gamePlansQuery.isLoading ||
-    Boolean(eventQuery.data?.competitionFixtureId && competitionQuery.isLoading)
+    Boolean(eventQuery.data?.competitionId && competitionQuery.isLoading)
   ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1843,7 +1875,7 @@ export default function ConfirmSquadPage() {
     eventQuery.isError ||
     athletesQuery.isError ||
     gamePlansQuery.isError ||
-    (eventQuery.data?.competitionFixtureId && competitionQuery.isError)
+    (eventQuery.data?.competitionId && competitionQuery.isError)
   ) {
     const error =
       eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error ??
@@ -2071,9 +2103,9 @@ export default function ConfirmSquadPage() {
       </div>
 
       <SavedGamePlanSection
-        gamePlans={gamePlans}
+        gamePlans={compatibleGamePlans}
         selectedGamePlanId={selectedGamePlanId}
-        loading={gamePlanQuery.isFetching}
+        loading={gamePlanQuery.isLoading && !gamePlanQuery.data}
         error={gamePlanQuery.isError
           ? gamePlanQuery.error instanceof Error
             ? gamePlanQuery.error.message
@@ -2096,6 +2128,7 @@ export default function ConfirmSquadPage() {
         onSuggest={handleSuggestXI}
         onToggle={toggleStarter}
         formationId={previewFormationId}
+        customPositions={previewCustomPositions}
         assignments={previewAssignments}
         athletes={athletes}
       />

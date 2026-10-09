@@ -111,6 +111,7 @@ type EventFormValues = {
   notes: string;
   competitionId: string;
   opponentTeamId: string | null;
+  friendlyPlayersPerSide: 5 | 7 | 11;
 };
 
 function commonEventInput(values: EventFormValues) {
@@ -129,6 +130,7 @@ function commonEventInput(values: EventFormValues) {
       values.type === "match" && values.competitionId !== "none"
         ? values.competitionId
         : null,
+    friendlyPlayersPerSide: values.type === 'match' && values.competitionId === 'none' ? values.friendlyPlayersPerSide : undefined,
     friendlyOpponentTeamId:
       values.type === "match" && values.competitionId === "none"
         ? values.opponentTeamId
@@ -213,6 +215,7 @@ export function EventFormDialog({
   const [locating, setLocating] = useState(false);
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
+  const [friendlyPlayersPerSide, setFriendlyPlayersPerSide] = useState<5 | 7 | 11>(11);
   const [opponentPick, setOpponentPick] = useState("");
   const [gafferOpponentPick, setGafferOpponentPick] =
     useState<GafferTeamSearchResult | null>(null);
@@ -279,6 +282,7 @@ export function EventFormDialog({
       setVenueSearchEnabled(!savedPlaceMatchesLocation && event.location.trim().length >= 3);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
+      setFriendlyPlayersPerSide(event.friendlyPlayersPerSide ?? 11);
       setGafferOpponentPick(
         event.friendlyOpponentTeamId && event.friendlyOpponentTeamName
           ? {
@@ -302,6 +306,7 @@ export function EventFormDialog({
       setVenueSearchEnabled(false);
       setNotes("");
       setCompetitionId("none");
+      setFriendlyPlayersPerSide(11);
       setGafferOpponentPick(null);
     }
     setOpponentPick("");
@@ -457,6 +462,7 @@ export function EventFormDialog({
       notes: notes.trim(),
       competitionId,
       opponentTeamId: gafferOpponentPick?.id ?? null,
+      friendlyPlayersPerSide,
     };
 
     try {
@@ -562,6 +568,22 @@ export function EventFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+          ) : null}
+
+          {type === "match" && competitionId === "none" ? (
+            <Field label="Match Format">
+              <Select value={String(friendlyPlayersPerSide)} onValueChange={(value) => setFriendlyPlayersPerSide(Number(value) as 5 | 7 | 11)} items={[{ value: '5', label: '5-a-side' }, { value: '7', label: '7-a-side' }, { value: '11', label: '11-a-side' }]} modal={false} disabled={friendlyFixtureLocked || Boolean(event?.lineupConfirmedAt)}>
+                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
+                  <SelectValue placeholder="Match format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5-a-side</SelectItem>
+                  <SelectItem value="7">7-a-side</SelectItem>
+                  <SelectItem value="11">11-a-side</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">Each team must confirm {friendlyPlayersPerSide} starting players.</p>
             </Field>
           ) : null}
 
