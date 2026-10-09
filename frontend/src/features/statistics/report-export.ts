@@ -283,6 +283,14 @@ export async function exportTeamReportPdf(data: TeamReportData, signal?: AbortSi
   pdf.save(`Gaffer_Team_Performance_Report_${suffix}.pdf`);
 }
 
+/** Build a shareable file from the exact PDF renderer used by Export and Print. */
+export async function createTeamReportPdfFile(data: TeamReportData, signal?: AbortSignal): Promise<File> {
+  const pdf = await buildTeamReportPdf(data, signal);
+  signal?.throwIfAborted();
+  const suffix = safeReportFilename(data.context.teamName, data.context.generatedAt);
+  return new File([pdf.output("blob")], `Gaffer_Team_Performance_Report_${suffix}.pdf`, { type: "application/pdf" });
+}
+
 /** Use the exact same chart-bearing PDF for printing as for downloading. */
 export async function printTeamReportPdf(data: TeamReportData, printTab: Window, signal?: AbortSignal): Promise<void> {
   const closeOnAbort = () => { if (!printTab.closed) printTab.close(); };

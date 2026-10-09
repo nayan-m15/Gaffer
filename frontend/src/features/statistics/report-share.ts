@@ -1,23 +1,25 @@
-import { buildTeamReportCsv, safeReportFilename, type TeamReportData } from "./team-report-model";
-
-export async function shareTeamReport(data: TeamReportData): Promise<"shared" | "copied" | "cancelled"> {
-  const { context, overview } = data;
-  const summary = [
-    "Gaffer Team Performance Report — " + context.teamName,
-    context.seasonName + " · " + context.competitionName,
-    overview.matchesPlayed + " played · " + overview.wins + "W " + overview.draws + "D " + overview.losses + "L · " + overview.goalsFor + "-" + overview.goalsAgainst + " goals",
-  ].join("\n");
-  const file = new File([buildTeamReportCsv(data)], "Gaffer_Team_Performance_" + safeReportFilename(context.teamName, context.generatedAt) + ".csv", { type: "text/csv;charset=utf-8" });
-  try {
-    // Called directly from the confirmation click to preserve user activation.
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ title: "Gaffer report — " + context.teamName, text: summary, files: [file] });
+/** Share the same chart-bearing PDF used by Print and Export PDF. */
+export async function shareTeamReport(file: File): Promise<"shared" | "downloaded" | "cancelled"> {
+  if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ title: file.name.replace(/\.pdf$/i, ""), files: [file] });
       return "shared";
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return "cancelled";
+      // A browser may expose Web Share but still deny file sharing; fall back to download.
+      console.warn("Native PDF sharing unavailable; downloading instead", error);
     }
-    await navigator.clipboard.writeText(summary);
-    return "copied";
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") return "cancelled";
-    throw error;
+  }
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  try {
+    link.href = url;
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    return "downloaded";
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }

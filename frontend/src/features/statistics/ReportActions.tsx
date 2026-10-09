@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Download, FileText, Loader2, Printer, Share2, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { exportTeamReportCsv, exportTeamReportPdf, printTeamReportPdf } from "./report-export";
+import { createTeamReportPdfFile, exportTeamReportCsv, exportTeamReportPdf, printTeamReportPdf } from "./report-export";
 import { shareTeamReport } from "./report-share";
 
 import { TeamPerformanceReport } from "./TeamPerformanceReport";
@@ -15,6 +15,7 @@ type Operation = {
   data: TeamReportData;
   controller: AbortController;
   pending: boolean;
+  shareFile?: File;
 };
 
 export function ReportActions({ data }: { data: TeamReportData }) {
@@ -60,13 +61,27 @@ export function ReportActions({ data }: { data: TeamReportData }) {
       mode,
       data: { overview: data.overview, context: { ...data.context, generatedAt: new Date() } },
       controller: new AbortController(),
-      pending: mode === "pdf" || mode === "csv",
+      pending: mode === "pdf" || mode === "csv" || mode === "share",
     };
     current.current = next;
     returnFocus.current = document.activeElement as HTMLElement;
     setNotice(null);
     setExportOpen(false);
     setOperation(next);
+    if (mode === "share") {
+      // Prepare the PDF before the confirmation click so navigator.share is invoked
+      // directly in a user gesture (awaiting jsPDF would lose user activation).
+      void createTeamReportPdfFile(next.data, next.controller.signal).then((file) => {
+        if (current.current !== next || next.controller.signal.aborted) return;
+        next.shareFile = file;
+        next.pending = false;
+        setOperation({ ...next });
+      }).catch((error) => {
+        if (next.controller.signal.aborted) return;
+        console.error("Report PDF preparation failed", error);
+        finish(next, { tone: "error", message: "The PDF could not be generated for sharing. Please try again." });
+      });
+    }
     return next;
   };
 
@@ -80,7 +95,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
   const closePreview = () => {
     const active = current.current;
     // Native sharing must settle before another operation can start.
-    if (!active || (active.mode === "share" && active.pending)) return;
+    if (!active || (active.mode === "share" && active.pending && active.shareFile)) return;
     active.controller.abort();
     finish(active);
   };
@@ -113,10 +128,11 @@ export function ReportActions({ data }: { data: TeamReportData }) {
         await printTeamReportPdf(active.data, printTab, active.controller.signal);
         finish(active);
       } else {
-        const result = await shareTeamReport(active.data);
+        if (!active.shareFile) throw new Error("Shared PDF is not ready");
+        const result = await shareTeamReport(active.shareFile);
         finish(active, result === "cancelled" ? undefined : {
           tone: "success",
-          message: result === "shared" ? "Report shared." : "Report summary copied to the clipboard.",
+          message: result === "shared" ? "Report shared." : "PDF downloaded. Attach the file to share it.",
         });
       }
     } catch (error) {
@@ -124,7 +140,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
       console.error("Report action failed", error);
       finish(active, { tone: "error", message: active.mode === "print"
         ? "The report could not be printed. Please allow popups and try again."
-        : "The report could not be shared or copied. Please try again." });
+        : "The PDF could not be shared or downloaded. Please try again." });
     }
   };
 
@@ -154,7 +170,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
             className="flex max-h-[90dvh] min-w-0 flex-col gap-4 overflow-hidden sm:max-w-5xl"
             initialFocus={cancelRef}
             finalFocus={returnFocus}
-            showCloseButton={!(preview.mode === "share" && preview.pending)}
+            showCloseButton={!(preview.mode === "share" && preview.pending && preview.shareFile)}
           >
             <DialogHeader className="shrink-0 pr-8">
               <DialogTitle>{preview.mode === "print" ? "Print" : "Share"} team performance report</DialogTitle>
@@ -165,9 +181,9 @@ export function ReportActions({ data }: { data: TeamReportData }) {
             </div>
             <DialogFooter className="shrink-0">
               {preview.pending && <p role="status" className="mr-auto self-center text-xs text-muted-foreground">
-                {preview.mode === "print" ? "Preparing or printing… Close preview when finished if your browser does not close it automatically." : "Sharing…"}
+                {preview.mode === "print" ? "Preparing or printing… Close preview when finished if your browser does not close it automatically." : preview.shareFile ? "Sharing…" : "Preparing PDF with graphs…"}
               </p>}
-              <Button ref={cancelRef} variant="outline" onClick={closePreview} disabled={preview.mode === "share" && preview.pending}>
+              <Button ref={cancelRef} variant="outline" onClick={closePreview} disabled={preview.mode === "share" && preview.pending && !!preview.shareFile}>
                 {preview.pending ? "Close preview" : "Cancel"}
               </Button>
               <Button disabled={preview.pending} onClick={() => void proceed()}>
