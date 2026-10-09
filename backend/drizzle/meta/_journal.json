@@ -526,6 +526,13 @@
       "when": 1791417600002,
       "tag": "0065_competition_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791417600003,
+      "tag": "0066_allow_competition_archiving",
+      "breakpoints": true
     }
   ]
 }
