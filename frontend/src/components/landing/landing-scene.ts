@@ -723,6 +723,38 @@ function createEquipmentArea(lowPower: boolean, kit: DressingRoomKit) {
 function smooth(edge0: number, edge1: number, value: number) { const t = THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1); return t * t * (3 - 2 * t); }
 
 
+function tunnelRunnerTexture(lowPower: boolean) {
+  const size = lowPower ? 256 : 512;
+  const texture = canvasTexture(size, size, ctx => {
+    ctx.fillStyle = "#0b261e"; ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = "#164634"; ctx.lineWidth = size * .012;
+    ctx.beginPath(); ctx.arc(size / 2, size / 2, size * .25, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#237052"; ctx.font = `900 ${size * .36}px Inter,Arial,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("G", size / 2, size * .52);
+  });
+  texture.name = "GAFFER green runner / 3.5m repeat";
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+function tunnelRunner(profile: Array<[number, number]>, lowPower: boolean) {
+  const map = tunnelRunnerTexture(lowPower);
+  const positions: number[] = [], uv: number[] = [], indices: number[] = [];
+  profile.forEach(([x, y], i) => {
+    positions.push(x, y, -2, x, y, 2);
+    // Absolute tunnel X keeps the G repeat phase identical across both runners.
+    uv.push(0, (x - ROOM_EXIT) / 3.5, 1, (x - ROOM_EXIT) / 3.5);
+    if (i) { const a = (i - 1) * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setIndex(indices); geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map, roughness: 1 }));
+  mesh.name = "GAFFER carpet runner"; mesh.receiveShadow = true;
+  return { mesh, map };
+}
+
 function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   const tunnel = new THREE.Group();
   tunnel.name = "Gaffer player tunnel";
@@ -804,6 +836,86 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
     tunnel.add(box([TUNNEL_LENGTH - .8, .02, .14], [centre, 3.98, z], tunnelLight));
   }
 
+  const detailTextures: THREE.Texture[] = [];
+  const wallHalfWidth = (x: number) => entranceHalfWidth + (x - ROOM_EXIT) * .5 / TUNNEL_LENGTH;
+  const phrases = [
+    "EVERY GREAT PERFORMANCE IS PLANNED LONG BEFORE KICKOFF",
+    "KNOW YOUR SQUAD. TRUST THE PLAN. OWN THE TOUCHLINE.",
+  ];
+  phrases.forEach((phrase, wall) => {
+    const side = wall === 0 ? -1 : 1;
+    const width = lowPower ? 1024 : 2048, height = lowPower ? 128 : 256;
+    const texture = canvasTexture(width, height, ctx => {
+      ctx.clearRect(0, 0, width, height);
+      ctx.font = `900 ${height * .6}px Inter,Arial,sans-serif`;
+      ctx.textBaseline = "middle";
+      const padding = width * .025, measured = ctx.measureText(phrase).width;
+      ctx.translate(padding, height / 2);
+      ctx.scale((width - padding * 2) / measured, 1);
+      let x = 0;
+      phrase.split(" ").forEach(word => {
+        ctx.fillStyle = /^(KICKOFF|TOUCHLINE\.)$/.test(word) ? "#00d99a" : "#ffffff";
+        ctx.fillText(word, x, 0); x += ctx.measureText(`${word} `).width;
+      });
+    });
+    texture.name = wall === 0 ? "Left tunnel quote" : "Right tunnel quote";
+    detailTextures.push(texture);
+    const x0 = ROOM_EXIT + 1, x1 = TUNNEL_EXIT - 1;
+    const z0 = side * (wallHalfWidth(x0) - .005), z1 = side * (wallHalfWidth(x1) - .005);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+      x0, 1.55, z0, x1, 1.55, z1, x1, 2.45, z1, x0, 2.45, z0,
+    ], 3));
+    // On the right wall the reader's screen-right points toward decreasing X.
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(wall === 0
+      ? [0, 0, 1, 0, 1, 1, 0, 1] : [1, 0, 0, 0, 0, 1, 1, 1], 2));
+    geometry.setIndex(wall === 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]);
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false });
+    const quote = new THREE.Mesh(geometry, material);
+    quote.name = texture.name; tunnel.add(quote);
+  });
+
+  const segments = lowPower ? 8 : 16;
+  const segmentLength = TUNNEL_LENGTH / segments;
+  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x00d99a, emissiveIntensity: 1.5, roughness: .4 });
+  // Three's instance colors normally modulate only diffuse color. Apply the
+  // same brightness to emission so dim segments really are dim, with one material.
+  runwayMaterial.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>",
+      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance *= vColor;\n#endif");
+  };
+  runwayMaterial.customProgramCacheKey = () => "gaffer-runway-instance-emission";
+  const runway = new THREE.InstancedMesh(new THREE.BoxGeometry((segmentLength - .035) * Math.hypot(1, .5 / TUNNEL_LENGTH), .025, .018), runwayMaterial, segments * 2);
+  runway.name = "Scroll reactive tunnel runway";
+  const segmentTransform = new THREE.Object3D(), brightness = new THREE.Color();
+  for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+    const side = sideIndex === 0 ? -1 : 1;
+    for (let i = 0; i < segments; i++) {
+      const x = ROOM_EXIT + (i + .5) * segmentLength;
+      segmentTransform.position.set(x, .14, side * (wallHalfWidth(x) - .012));
+      segmentTransform.rotation.y = -side * Math.atan2(.5, TUNNEL_LENGTH);
+      segmentTransform.updateMatrix(); runway.setMatrixAt(sideIndex * segments + i, segmentTransform.matrix);
+      runway.setColorAt(sideIndex * segments + i, brightness.setRGB(.04, .04, .04));
+    }
+  }
+  runway.instanceMatrix.needsUpdate = true; runway.frustumCulled = false; tunnel.add(runway);
+  let lastPhase = -1;
+  const updateRunway = (progress: number, reducedMotion: boolean) => {
+    const phase = reducedMotion ? 1 : THREE.MathUtils.clamp((progress - .24) / .26, 0, 1);
+    if (phase === lastPhase) return;
+    lastPhase = phase;
+    for (let i = 0; i < segments; i++) {
+      // Lead by two segments: the next section switches on before arrival.
+      const lit = phase === 0 ? 0 : smooth((i - 2) / segments, (i - 1) / segments, phase);
+      const level = .04 + .96 * lit;
+      brightness.setRGB(level, level, level);
+      runway.setColorAt(i, brightness); runway.setColorAt(segments + i, brightness);
+    }
+    if (runway.instanceColor) runway.instanceColor.needsUpdate = true;
+  };
+  const carpet = tunnelRunner([[-61, .034], [-44.70, .034], [-44.67, .0965], [-44.5, .0965]], lowPower);
+  detailTextures.push(carpet.map); tunnel.add(carpet.mesh);
+
   const addPortal = (x: number, halfWidth: number, texture: THREE.Texture, includeUprights: boolean) => {
     tunnel.add(roundedBox([.38, .5, halfWidth * 2], [x, 3.88, 0], structuralMetal, .06, !lowPower));
     if (includeUprights) {
@@ -829,7 +941,7 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   // masks z-fighting while leaving the existing pitch-side connection intact.
   tunnel.add(box([.34, .075, TUNNEL_WIDTH], [TUNNEL_EXIT, .055, 0], structuralMetal));
   scene.add(tunnel);
-  return { floorMap, surfaceDetailMap, entranceSignMap, exitSignMap, tunnelLight, brandLight };
+  return { floorMap, surfaceDetailMap, entranceSignMap, exitSignMap, tunnelLight, brandLight, detailTextures, runway, updateRunway };
 }
 
 function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
@@ -1029,7 +1141,6 @@ function buildLandingWalkout(stadium: THREE.Group, lowPower: boolean) {
   stadium.add(group);
   const charcoal = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
-  const runnerMaterial = new THREE.MeshStandardMaterial({ color: 0x111815, roughness: 1 });
   const addBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material) => {
     const mesh = box(size, position, material, !lowPower);
     group.add(mesh);
@@ -1094,9 +1205,9 @@ function buildLandingWalkout(stadium: THREE.Group, lowPower: boolean) {
     addBox([.5, 1.3, .6], [-38.25, .7, side * 5.95], metal);
     sign(.48, .7, [-37.99, .78, side * 5.95], Math.PI / 2);
   }
-  // Clear the original threshold's forward edge (-44.33); top is .065,
-  // 1.5 cm above the apron. Stop at the grass edge without extending over it.
-  addBox([5.8, .015, 4], [-41.4, .0575, 0], runnerMaterial);
+  // Match the tunnel runner's width, artwork and absolute UV phase. Continue
+  // over the preserved threshold, then down to 4mm above the apron.
+  group.add(tunnelRunner([[-44.5, .0965], [-44.33, .0965], [-44.30, .054], [-38.5, .054]], lowPower).mesh);
 
   // The builder omits central seats in rows 0..11 for its native tunnel.
   // Rows 8..11 have intact decks above our roof (first deck y=5.46).
@@ -1241,6 +1352,7 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     }
   });
   const updateEnvironmentalMotion=(progress:number)=>{
+    roomAssets.tunnelAssets.updateRunway(progress,reducedMotion);
     if(reducedMotion){
       if(animatedShirt)animatedShirt.rotation.z=shirtBaseRoll;
       roomAssets.tunnelAssets.tunnelLight.emissiveIntensity=1.42;
@@ -1431,5 +1543,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);scene.remove(stadium.group);disposeStadium(stadium.group);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);scene.remove(stadium.group);disposeStadium(stadium.group);tunnelAssets.runway.dispose();const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();tunnelAssets.detailTextures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
