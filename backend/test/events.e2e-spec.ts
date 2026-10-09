@@ -295,6 +295,13 @@ describe('Events (e2e)', () => {
         return (athlete.body as IdBody).id;
       }),
     );
+    // Starting a match is refused before match day, compared by calendar
+    // date, so a kickoff an hour out falls on tomorrow late in the day.
+    // Move it into the past first; updates have no future-only rule.
+    await agent
+      .patch(`/events/${event.id}`)
+      .send({ scheduledAt: futureIso(-1) })
+      .expect(200);
     const started = await agent
       .post(`/events/${event.id}/start-match`)
       .send({
