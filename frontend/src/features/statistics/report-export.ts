@@ -1,4 +1,5 @@
 import type { jsPDF as JsPdfType } from "jspdf";
+import { rollingChartRows, cumulativeChartRows, periodChartRows } from "./season-trends-model";
 import { formatDate, formatDiff, formatRate } from "./formatting";
 import {
   buildTeamReportCsv,
@@ -13,10 +14,13 @@ function downloadBlob(blob: Blob, filename: string): void {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  try {
+    document.body.append(link);
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function exportTeamReportCsv(data: TeamReportData): void {
@@ -29,6 +33,74 @@ export function exportTeamReportCsv(data: TeamReportData): void {
 }
 
 type Pdf = InstanceType<typeof JsPdfType>;
+
+type ChartSeries = { label: string; values: number[]; color: [number, number, number] };
+
+/** Native PDF vectors keep exports independent of screen/theme/temporary DOM. */
+function drawChart(pdf: Pdf, title: string, labels: string[], series: ChartSeries[], top: number, bars = false): void {
+  const left = 24, right = 192, bottom = top + 54;
+  const maximum = Math.max(1, ...series.flatMap((item) => item.values));
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
+  pdf.setTextColor(24, 24, 24);
+  pdf.text(title, 14, top - 6);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  for (let tick = 0; tick <= 3; tick++) {
+    const y = bottom - tick * 18;
+    pdf.setDrawColor(220, 220, 220);
+    pdf.line(left, y, right, y);
+    pdf.text((maximum * tick / 3).toFixed(1), left - 2, y + 1, { align: "right" });
+  }
+  const xAt = (index: number) => left + (right - left) * index / Math.max(labels.length - 1, 1);
+  series.forEach((item, seriesIndex) => {
+    pdf.setDrawColor(...item.color);
+    pdf.setFillColor(...item.color);
+    pdf.setLineWidth(0.6);
+    item.values.forEach((value, index) => {
+      const y = bottom - value / maximum * 54;
+      if (bars) {
+        const width = (right - left) / Math.max(labels.length, 1);
+        pdf.rect(left + index * width + width * 0.15, y, width * 0.7, bottom - y, "F");
+      } else if (index > 0) {
+        pdf.line(xAt(index - 1), bottom - item.values[index - 1] / maximum * 54, xAt(index), y);
+      }
+    });
+    pdf.setTextColor(...item.color);
+    pdf.text(item.label, left + seriesIndex * 56, bottom + 14);
+  });
+  pdf.setTextColor(80, 80, 80);
+  const stride = Math.max(1, Math.ceil(labels.length / 8));
+  labels.forEach((label, index) => {
+    if (index % stride !== 0 && index !== labels.length - 1) return;
+    const x = bars ? left + (index + 0.5) * (right - left) / labels.length : xAt(index);
+    pdf.text(pdf.splitTextToSize(label, 26), x, bottom + 5, { align: "center" });
+  });
+}
+
+function drawReportCharts(pdf: Pdf, data: TeamReportData): void {
+  const { overview } = data;
+  if (overview.form.rolling.length < 2) return;
+  const rolling = rollingChartRows(overview.form.rolling, overview.rollingWindow);
+  const cumulative = cumulativeChartRows(overview.form.cumulative);
+  pdf.addPage();
+  drawChart(pdf, "Form trend - rolling " + overview.rollingWindow + " matches", rolling.map(row => row.label), [
+    { label: "Goals scored", values: rolling.map(row => row.goalsFor), color: [4, 120, 87] },
+    { label: "Goals conceded", values: rolling.map(row => row.goalsAgainst), color: [194, 65, 69] },
+    { label: "Points per match", values: rolling.map(row => row.pointsPerGame), color: [37, 99, 235] },
+  ], 28);
+  drawChart(pdf, "Points progression", cumulative.map(row => row.label), [
+    { label: "Cumulative points", values: cumulative.map(row => row.points), color: [37, 99, 235] },
+  ], 117);
+  if (overview.periods.splits.length >= 2) {
+    const periods = periodChartRows(overview.periods.splits, "pointsPerGame");
+    drawChart(pdf, "Period comparison - points per match", periods.map(row => row.label), [
+      { label: "Points per match", values: periods.map(row => row.value), color: [4, 120, 87] },
+    ], 206, true);
+  }
+}
+
+
 
 function drawTable(
   pdf: Pdf,
@@ -72,25 +144,28 @@ function drawTable(
   drawHeader();
 
   for (const row of rows) {
-    if (y + rowHeight > 282) newPage();
+    const lines = row.map((cell, index) => pdf.splitTextToSize(cell, Math.max(widths[index] - 3, 4)) as string[]);
+    const height = Math.max(rowHeight, ...lines.map((cell) => cell.length * 3.2 + 3));
+    if (y + height > 282) newPage();
     pdf.setDrawColor(222, 222, 222);
-    pdf.line(left, y + rowHeight, 196, y + rowHeight);
+    pdf.line(left, y + height, 196, y + height);
     pdf.setTextColor(45, 45, 45);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7.5);
     let x = left;
-    row.forEach((cell, index) => {
-      const clipped = pdf.splitTextToSize(cell, Math.max(widths[index] - 3, 4))[0] ?? "";
-      pdf.text(clipped, x + 1.5, y + 4.8);
+    lines.forEach((cell, index) => {
+      pdf.text(cell, x + 1.5, y + 4.8);
       x += widths[index];
     });
-    y += rowHeight;
+    y += height;
   }
   return y + 9;
 }
 
-export async function exportTeamReportPdf(data: TeamReportData): Promise<void> {
+export async function exportTeamReportPdf(data: TeamReportData, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const { jsPDF } = await import("jspdf");
+  signal?.throwIfAborted();
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const { overview, context } = data;
   pdf.setProperties({
@@ -125,6 +200,7 @@ export async function exportTeamReportPdf(data: TeamReportData): Promise<void> {
     ["Win %", formatRate(overview.winRate)], ["Points", overview.points],
     ["Goals for", overview.goalsFor], ["Goals against", overview.goalsAgainst],
     ["Goal diff", formatDiff(overview.goalDifference)], ["Clean sheets", overview.cleanSheets],
+    ["Avg goals for", overview.avgGoalsFor.toFixed(2)], ["Avg goals against", overview.avgGoalsAgainst.toFixed(2)],
   ] as const;
   stats.forEach(([label, value], index) => {
     const col = index % 5;
@@ -142,7 +218,7 @@ export async function exportTeamReportPdf(data: TeamReportData): Promise<void> {
     pdf.text(label.toUpperCase(), x + 2, y + 10.5);
   });
 
-  let y = 99;
+  let y = 116;
   const highlights = reportHighlights(overview);
   if (highlights.length > 0) {
     pdf.setTextColor(24, 24, 24);
@@ -175,14 +251,16 @@ export async function exportTeamReportPdf(data: TeamReportData): Promise<void> {
   drawTable(
     pdf,
     "Player performance",
-    ["Player", "Apps", "Goals", "Assists", "Yellow", "Red"],
+    ["Player", "Apps", "Goals", "Assists", "Yellow", "Red", "Saves"],
     overview.players.map((player) => [
       player.name, String(player.appearances), String(player.goals),
-      String(player.assists), String(player.yellowCards), String(player.redCards),
+      String(player.assists), String(player.yellowCards), String(player.redCards), String(player.saves ?? 0),
     ]),
     y,
-    [72, 22, 22, 22, 22, 22],
+    [62, 20, 20, 20, 20, 20, 20],
   );
+
+  drawReportCharts(pdf, data);
 
   const pageCount = pdf.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
@@ -195,5 +273,6 @@ export async function exportTeamReportPdf(data: TeamReportData): Promise<void> {
   }
 
   const suffix = safeReportFilename(context.teamName, context.generatedAt);
+  signal?.throwIfAborted();
   pdf.save(`Gaffer_Team_Performance_Report_${suffix}.pdf`);
 }
