@@ -1338,7 +1338,7 @@ function buildPitchAndStadium(
   buildLandingWalkout(stadium.group, lowPower);
   scene.add(stadium.group);
   const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(DARK_SKY_TOP)},bottomColor:{value:new THREE.Color(DARK_SKY_BOTTOM)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);float t=smoothstep(0.0,1.0,pow(h,.86));gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(138,lowPower?32:64,lowPower?18:32),skyMat));
-  scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.58));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1024,lowPower?512:1024);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
+  const stadiumFill=new THREE.HemisphereLight(0xaecbc4,0x17201b,.58);scene.add(stadiumFill);const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1024,lowPower?512:1024);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
   const daylightSun=new THREE.DirectionalLight(0xfff1d6,.85);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=false;daylightSun.shadow.mapSize.set(512,512);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;daylightSun.visible=false;scene.add(daylightSun,daylightSun.target);
   const roomLight=new THREE.PointLight(0xffdfaa,.34,22,2);roomLight.position.set(-70,3.45,0);
   const lockerLightLeft=new THREE.PointLight(0xffc978,.38,10,2);lockerLightLeft.position.set(-70.8,2.7,-5.7);
@@ -1356,9 +1356,16 @@ function buildPitchAndStadium(
   const pitchFillRight=new THREE.DirectionalLight(0xe8f1e9,lowPower?.09:.16);pitchFillRight.position.set(-28,34,38);pitchFillRight.target.position.set(2,0,8);pitchFillRight.castShadow=false;
   const pitchRimLeft=new THREE.PointLight(0x85d7b0,lowPower?.05:.11,42,2);pitchRimLeft.position.set(-18,7,-28);
   const pitchRimRight=new THREE.PointLight(0x85d7b0,lowPower?.05:.11,42,2);pitchRimRight.position.set(-18,7,28);
+  // Bowl-local (x,y,z) rotates to landing (z,y,-x), including targets.
+  const roofCorners=lowPower?[[-40,-54],[40,54]]:[[-40,-54],[40,-54],[-40,54],[40,54]];
+  const stadiumFloodlights=roofCorners.map(([x,z])=>{
+    const light=new THREE.SpotLight(0xe3edff,0,190,.85,.7,1);
+    light.position.set(z,45.35,-x);light.target.position.set(z*.2,0,-x*.3);
+    light.castShadow=false;light.visible=false;scene.add(light,light.target);return light;
+  });
   scene.add(roomLight,lockerLightLeft,lockerLightRight,roomAccentLeft,roomAccentRight,portalLight,exitLight,tunnelFill,tunnelAccentLeft,tunnelAccentRight,pitchFillLeft,pitchFillLeft.target,pitchFillRight,pitchFillRight.target,pitchRimLeft,pitchRimRight);
 
-  return { stadium, skyMat, daylightSun, lighting: { roomLight, lockerLightLeft, lockerLightRight, roomAccentLeft, roomAccentRight, portalLight, tunnelFill, tunnelAccentLeft, tunnelAccentRight, exitLight, pitchFillLeft, pitchFillRight, pitchRimLeft, pitchRimRight } };
+  return { stadium, skyMat, daylightSun, lighting: { stadiumFill, sun, stadiumFloodlights, roomLight, lockerLightLeft, lockerLightRight, roomAccentLeft, roomAccentRight, portalLight, tunnelFill, tunnelAccentLeft, tunnelAccentRight, exitLight, pitchFillLeft, pitchFillRight, pitchRimLeft, pitchRimRight } };
 }
 export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
@@ -1406,12 +1413,16 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     lighting.roomAccentLeft.intensity=(lowPower?.1:.16)*(1-.5*tunnelArrival); lighting.roomAccentRight.intensity=(lowPower?.1:.16)*(1-.5*tunnelArrival);
     lighting.portalLight.intensity=.2+.18*tunnelArrival; lighting.tunnelFill.intensity=(lowPower?.12:.18)+.06*tunnelArrival; lighting.exitLight.intensity=.55+1.1*stadiumReveal;
     lighting.tunnelAccentLeft.intensity=((lowPower?.06:.11)+.08*tunnelArrival)*themeBoost; lighting.tunnelAccentRight.intensity=((lowPower?.06:.11)+.08*tunnelArrival)*themeBoost;
-    // Broad stadium floodlighting brightens the whole field evenly; no local hot spots.
-    lighting.pitchFillLeft.intensity=((lowPower?.09:.16)+.18*stadiumReveal)*themeBoost; lighting.pitchFillRight.intensity=((lowPower?.09:.16)+.18*stadiumReveal)*themeBoost;
-    lighting.pitchRimLeft.intensity=((lowPower?.05:.11)+.08*stadiumReveal)*(lightMode?1:.92); lighting.pitchRimRight.intensity=((lowPower?.05:.11)+.08*stadiumReveal)*(lightMode?1:.92);
+    // Retire the old pitch fills as roof-level bowl illumination takes over.
+    lighting.pitchFillLeft.intensity=(lowPower?.09:.16)*(1-stadiumReveal)*themeBoost; lighting.pitchFillRight.intensity=(lowPower?.09:.16)*(1-stadiumReveal)*themeBoost;
+    lighting.pitchRimLeft.intensity=(lowPower?.05:.11)*(1-stadiumReveal)*themeBoost; lighting.pitchRimRight.intensity=(lowPower?.05:.11)*(1-stadiumReveal)*themeBoost;
+    lighting.stadiumFill.intensity=THREE.MathUtils.lerp(.58,lightMode?1.05:lowPower?.78:.65,stadiumReveal);
+    lighting.sun.intensity=THREE.MathUtils.lerp(1.08,lightMode?0:.3,stadiumReveal);
+    daylightSun.intensity=THREE.MathUtils.lerp(.85,1.8,stadiumReveal);
+    for(const light of lighting.stadiumFloodlights){light.intensity=(lightMode?.08:1.03)*stadiumReveal;light.visible=stadiumReveal>0;}
     // Keep exposure controlled so white UI/lines stay crisp and the pitch does not wash out.
     renderer.toneMappingExposure=(lightMode?.99:.91)+stadiumReveal*(lightMode?.09:.07);
-    if(scene.fog instanceof THREE.Fog){scene.fog.near=THREE.MathUtils.lerp(18,30,stadiumReveal);scene.fog.far=THREE.MathUtils.lerp(lowPower?126:164,lowPower?156:206,stadiumReveal);}
+    if(scene.fog instanceof THREE.Fog){scene.fog.color.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);scene.fog.near=lightMode?120:100;scene.fog.far=300;}
   };
   applyEnvironmentTheme();
   const shirtObject = scene.getObjectByName("Dressing room shirt");
