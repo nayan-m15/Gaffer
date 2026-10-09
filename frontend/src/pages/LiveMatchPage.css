@@ -481,6 +481,41 @@
     max-width: 1.9rem;
   }
 
+  .live-match .live-pitch-panel-portrait .live-player-name {
+    width: 4.25rem;
+    max-width: 4.25rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    hyphens: none;
+    text-align: center;
+    font-size: 0.5rem;
+    line-height: 1.15;
+  }
+
+  .live-match .live-pitch-panel-portrait [data-marker-badge] {
+    scale: 0.6;
+    transform-origin: bottom right;
+  }
+
+  .live-match .live-pitch-panel-portrait [data-marker-badge="assist"] {
+    transform-origin: bottom left;
+  }
+
+  .live-match .live-pitch-panel-portrait [data-marker-badge="save"] {
+    transform-origin: top right;
+  }
+
+  .live-match .live-pitch-panel-portrait [data-marker-badge="sub-in"],
+  .live-match .live-pitch-panel-portrait [data-marker-badge="sub-out"] {
+    transform-origin: top left;
+  }
+
+  .live-match .live-pitch-panel-portrait [data-marker-badge="card"] {
+    transform-origin: left center;
+  }
+
   .live-match-bench-area .live-bench-list {
     flex-wrap: wrap;
     overflow: visible;
