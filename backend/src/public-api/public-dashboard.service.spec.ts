@@ -425,9 +425,11 @@ describe('PublicDashboardService', () => {
           team: { id: 'team-1', name: 'Gaffer FC' },
           statistics: {
             appearances: 0,
+            starts: 0,
             minutesPlayed: 0,
             goals: 0,
             assists: 0,
+            saves: 0,
             yellowCards: 0,
             redCards: 0,
           },
@@ -464,33 +466,67 @@ describe('PublicDashboardService', () => {
     });
 
     it('marks the filtered team’s own standing row', async () => {
-      select.mockReturnValue(
-        queryResult([
-          {
-            id: 'standing-1',
-            teamName: 'Gaffer FC',
-            position: 2,
-            played: 1,
-            won: 0,
-            drawn: 1,
-            lost: 0,
-            goalsFor: 1,
-            goalsAgainst: 1,
-            points: 1,
-            isOwnTeam: true,
-            ownerTeam: { id: 'team-1', name: 'Gaffer FC' },
-            competition: {
-              id: 'competition-1',
+      select
+        .mockReturnValueOnce(
+          queryResult([
+            {
+              id: COMPETITION,
               name: 'League',
               type: 'league',
+              format: 'league',
+              pointsWin: 3,
+              pointsDraw: 1,
+              pointsLoss: 0,
+              teamId: TEAM,
+              teamName: 'Gaffer FC',
+              seasonId: SEASON,
+              seasonName: '2026/27',
             },
-            season: { id: 'season-1', name: '2026/27' },
-          },
-        ]),
-      );
+          ]),
+        )
+        .mockReturnValueOnce(
+          queryResult([
+            {
+              id: 'slot-1',
+              competitionId: COMPETITION,
+              teamId: TEAM,
+              displayName: 'Gaffer FC',
+              originalDisplayName: null,
+            },
+            {
+              id: 'slot-2',
+              competitionId: COMPETITION,
+              teamId: 'opponent-team',
+              displayName: 'Opponents',
+              originalDisplayName: null,
+            },
+          ]),
+        )
+        .mockReturnValueOnce(queryResult([]))
+        .mockReturnValueOnce(
+          queryResult([
+            {
+              id: 'fixture-1',
+              competitionId: COMPETITION,
+              stage: 'league',
+              status: 'completed',
+              homeCompetitionTeamId: 'slot-1',
+              awayCompetitionTeamId: 'slot-2',
+              homeScore: 1,
+              awayScore: 1,
+            },
+          ]),
+        );
 
-      const [standing] = await service.getTeamStatistics({ teamId: TEAM });
-      expect(standing).toMatchObject({ isOwnTeam: true, goalDifference: 0 });
+      const standings = await service.getTeamStatistics({ teamId: TEAM });
+      const ownStanding = standings.find((row) => row.teamName === 'Gaffer FC');
+      expect(ownStanding).toMatchObject({
+        isOwnTeam: true,
+        goalDifference: 0,
+        played: 1,
+        drawn: 1,
+        points: 1,
+      });
     });
   });
 });
