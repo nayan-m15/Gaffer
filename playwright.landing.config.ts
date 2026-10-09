@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Tests use route mocks, so no backend or database is needed.
 export default defineConfig({
   testDir: './frontend/e2e',
-  testMatch: ['landing-scene.spec.ts', 'landing-theme.spec.ts', 'stadium-scene.spec.ts', 'regression-ui.spec.ts'],
+  testMatch: ['landing-scene.spec.ts', 'landing-theme.spec.ts', 'stadium-scene.spec.ts', 'regression-ui.spec.ts', 'public-dashboard-carousel.spec.ts'],
   timeout: 60_000,
   expect: { timeout: 10_000 },
   workers: 1,

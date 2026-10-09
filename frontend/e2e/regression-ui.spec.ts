@@ -715,7 +715,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('searchbox', { name: 'Search players by name' }).fill('Beyond');
     await expect(page.locator('#players')).toContainText('Showing 1 players');
     expect(requests.some(url => url.searchParams.get('search') === 'Beyond' && url.searchParams.get('offset') === '0')).toBe(true);
-    await page.getByRole('button', { name: 'GK', exact: true }).click();
+    await page.getByRole('button', { name: 'Goalkeepers', exact: true }).click();
     await expect.poll(() => requests.some(url => url.searchParams.get('position') === 'GK' && url.searchParams.get('offset') === '0')).toBe(true);
     expect(syncTokenRequests).toBe(0);
     await page.screenshot({ path: 'test-results/public-dashboard-' + width + '.png', fullPage: true });

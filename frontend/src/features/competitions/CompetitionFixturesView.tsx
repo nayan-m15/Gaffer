@@ -687,7 +687,8 @@ function FixtureCard({
 
   return (
     <div
-      className={`group relative min-w-0 overflow-hidden rounded-2xl border bg-background/75 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg ${
+      id={`fixture-${fixture.id}`}
+      className={`group relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border bg-background/75 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg ${
         featured
           ? "border-primary/35 bg-primary/[0.035] shadow-[0_0_28px_color-mix(in_oklab,var(--primary)_10%,transparent)]"
           : "border-border/90"

@@ -777,6 +777,292 @@ select:-webkit-autofill {
   }
 }
 
+/* Public dashboard: section navigation on the left, filter controls on the right. */
+.public-dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  padding: 0 16px;
+  box-shadow: 0 12px 36px rgb(15 23 42 / 12%);
+  scrollbar-color: var(--brand) transparent;
+  scrollbar-width: thin;
+}
+
+.public-dashboard-section-nav { flex: 0 0 auto; }
+.public-dashboard-filter-toggle { display: none; }
+.public-dashboard-section-scroller { position: relative; }
+.public-dashboard-section-list { display: flex; width: max-content; }
+.public-dashboard-section-list > li { flex: 0 0 auto; }
+
+.public-dashboard-section-link {
+  position: relative;
+  display: flex;
+  min-height: 86px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.public-dashboard-section-link > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  stroke-width: 1.7;
+}
+
+.public-dashboard-section-link::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 4px;
+  background: var(--brand);
+  content: "";
+  transform: scaleX(0);
+  transition: transform 160ms ease;
+}
+
+.public-dashboard-section-link[aria-current],
+.public-dashboard-section-link:hover { color: var(--brand); }
+.public-dashboard-section-link[aria-current]::after { transform: scaleX(1); }
+.public-dashboard-section-link:hover { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+
+.public-dashboard-toolbar :where(a, button, select):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+  border-radius: 6px;
+}
+
+.public-dashboard-filter-panel {
+  display: flex;
+  flex: 1 1 620px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+  border-left: 1px solid var(--border);
+  padding: 0 0 0 20px;
+}
+
+.public-dashboard-filter-reset {
+  display: inline-flex;
+  width: 32px;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.public-dashboard-filter-reset:hover { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+
+.public-dashboard-filter-grid {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr);
+  gap: 8px;
+}
+
+.public-dashboard-filter-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: var(--muted-foreground);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.public-dashboard-filter-field:hover,
+.public-dashboard-filter-field:focus-within,
+.public-dashboard-filter-field[data-active="true"] {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.public-dashboard-filter-icon > svg { width: 16px; height: 16px; stroke-width: 1.7; }
+.public-dashboard-filter-icon { flex-shrink: 0; }
+.public-dashboard-filter-content { min-width: 0; flex: 1; }
+.public-dashboard-filter-label { display: block; font-size: 10px; font-weight: 500; }
+
+.public-dashboard-filter-select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 16px 0 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.public-dashboard-filter-select:disabled { opacity: 0.5; cursor: wait; }
+.public-dashboard-filter-select option { background: var(--card); color: var(--foreground); }
+.public-dashboard-filter-chevron { position: absolute; right: 10px; bottom: 15px; width: 12px; height: 12px; pointer-events: none; }
+
+/* Stack before navigation and four filters become cramped on smaller screens. */
+@media (max-width: 1279px) {
+  .public-dashboard-toolbar { flex-direction: column; align-items: stretch; gap: 0; }
+  .public-dashboard-section-list { margin-inline: auto; }
+  .public-dashboard-section-link { min-height: 60px; }
+  .public-dashboard-filter-panel {
+    flex: 0 1 auto;
+    margin: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 12px 0;
+  }
+}
+
+@media (max-width: 639px) {
+  .public-dashboard-toolbar { gap: 12px; padding: 0 12px; }
+  .public-dashboard-section-link { min-height: 74px; }
+  .public-dashboard-filter-panel { padding-left: 12px; }
+}
+
+/* Keep the public dashboard's mobile navigation and filters inside the viewport. */
+@media (max-width: 767px) {
+  .public-dashboard-page > header {
+    background: color-mix(in srgb, var(--background) 95%, transparent);
+    color: var(--foreground);
+  }
+
+  .public-dashboard-page > header nav > a {
+    color: var(--foreground);
+    text-shadow: none;
+  }
+
+  .public-dashboard-page > header nav button {
+    min-width: 44px;
+    min-height: 44px;
+    color: var(--foreground);
+  }
+
+  .public-dashboard-page > header nav button:hover {
+    background: var(--muted);
+    color: var(--brand);
+  }
+
+  .public-dashboard-page .public-dashboard-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 0 8px;
+    overflow: visible;
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+
+  .public-dashboard-filter-toggle {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 10px;
+    border-left: 1px solid var(--border);
+    color: var(--foreground);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .public-dashboard-filter-toggle[aria-expanded="true"] { color: var(--brand); }
+  .public-dashboard-filter-count {
+    border-radius: 999px;
+    background: var(--brand);
+    padding: 1px 5px;
+    color: var(--background);
+    font-size: 10px;
+  }
+
+  .public-dashboard-page .public-dashboard-section-nav { min-width: 0; }
+  .public-dashboard-page .public-dashboard-section-list {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .public-dashboard-page .public-dashboard-section-link {
+    min-height: 44px;
+    padding: 8px 4px;
+  }
+
+  .public-dashboard-page .public-dashboard-section-link > span {
+    display: none;
+  }
+
+  .public-dashboard-page .public-dashboard-section-link > svg { width: 18px; height: 18px; }
+  .public-dashboard-page .public-dashboard-section-link::after { right: 4px; left: 4px; height: 3px; }
+
+  .public-dashboard-page .public-dashboard-filter-panel {
+    grid-column: 1 / -1;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 8px 0 4px;
+  }
+
+  .public-dashboard-page .public-dashboard-filter-panel[data-mobile-open="false"] { display: none; }
+
+  .public-dashboard-page .public-dashboard-filter-grid {
+    min-width: 0;
+    flex-basis: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .public-dashboard-page .public-dashboard-filter-field { gap: 6px; padding: 4px 8px; }
+  .public-dashboard-page .public-dashboard-filter-select { height: 26px; }
+  .public-dashboard-page .public-dashboard-filter-reset { width: auto; min-height: 44px; margin-left: auto; gap: 6px; padding: 0 8px; }
+  .public-dashboard-page .public-dashboard-filter-reset::after { content: "Reset"; font-size: 12px; }
+
+  .public-dashboard-hero { padding-top: 24px; }
+  .public-dashboard-hero h1 { font-size: 32px; line-height: 1.1; }
+  .public-dashboard-hero p { font-size: 13px; line-height: 1.5; }
+  .public-dashboard-content { padding-top: 24px; gap: 32px; }
+  .public-dashboard-section-heading {
+    flex-direction: row;
+    padding: 12px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .public-dashboard-section-heading > span { width: 32px; height: 32px; border-radius: 10px; }
+  .public-dashboard-section-heading h2 { font-size: 20px; }
+  .public-dashboard-section-heading p { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-dashboard-section-link,
+  .public-dashboard-section-link::after,
+  .public-dashboard-filter-field { transition: none; }
+}
+
 /* Keep the shared navigation readable without making it opaque. */
 .public-dashboard-page > header {
   background: color-mix(in srgb, var(--background) 76%, transparent);
@@ -846,3 +1132,313 @@ select:-webkit-autofill {
     rgba(0, 0, 0, 0.55) 100%
   );
 }
+
+/* Statistics use the normal themed dashboard on screen and expand into a
+ * complete, print-friendly A4 report in the browser print dialog. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    color-scheme: light !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    min-width: 0;
+    background: #fff !important;
+    color: #171717 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #root,
+  .app-shell,
+  .app-shell-main,
+  .app-shell-content,
+  .statistics-page,
+  .statistics-page-content {
+    position: static !important;
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .statistics-page,
+  .statistics-page * {
+    visibility: visible !important;
+  }
+
+  .app-shell-main {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .statistics-page {
+    width: auto !important;
+    max-width: none !important;
+
+    /* Printing is always rendered with a light report palette, regardless of
+     * the active app theme. Keep these semantic tokens in sync with the light
+     * theme because statistics components use both shadcn and surface tokens. */
+    --brand: #047857;
+    --brand-dark: #065f46;
+    --brand-light: #059669;
+    --brand-foreground: #fff;
+
+    --surface-page: #fff;
+    --surface-sidebar: #fff;
+    --surface-header: #fff;
+    --surface-card: #fff;
+    --surface-nested: #f5f4f2;
+    --surface-elevated: #efedea;
+    --surface-hover: #ece9e5;
+    --surface-active: #dedbd6;
+
+    --text-primary: #171717;
+    --text-secondary: #3f423f;
+    --text-muted: #5f625f;
+    --text-disabled: #858985;
+
+    --border-subtle: #e4e1dd;
+    --border-default: #d9d6d2;
+    --border-strong: #a8a39d;
+
+    --success: #047857;
+    --warning: #b45309;
+    --danger: #c24145;
+    --info: #1d4ed8;
+
+    --background: #fff;
+    --foreground: #171717;
+    --card: #fff;
+    --card-foreground: #171717;
+    --popover: #fff;
+    --popover-foreground: #171717;
+    --primary: #047857;
+    --primary-foreground: #fff;
+    --secondary: #e8e5e1;
+    --secondary-foreground: #171717;
+    --muted: #e8e5e1;
+    --muted-foreground: #5f625f;
+    --accent: #e8e5e1;
+    --accent-foreground: #171717;
+    --destructive: #c24145;
+    --border: #d9d6d2;
+    --input: #a8a39d;
+    --ring: #047857;
+
+    color: #171717 !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .statistics-page > header {
+    max-width: none !important;
+    padding: 0 0 6mm !important;
+  }
+
+  .statistics-page-content {
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .statistics-page :where(.stats-print-keep, .stats-chart-section, .report-keep, .report-cover, tr) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .statistics-page :where(.report-table-section, tbody) {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .statistics-page thead {
+    display: table-header-group;
+  }
+
+  .statistics-page :where(.bg-card, [class*="bg-card"], .report-cover) {
+    background: #fff !important;
+  }
+
+  /* Tailwind surface utilities resolve through semantic CSS variables above,
+   * but these explicit print rules protect the report from theme leakage if a
+   * component introduces a dark surface utility later. */
+  .statistics-page :where(
+    .bg-surface-card,
+    [class*="bg-surface-card"],
+    .bg-surface-nested,
+    [class*="bg-surface-nested"]
+  ) {
+    background: #fff !important;
+  }
+
+  .statistics-page :where(
+    .bg-surface-elevated,
+    [class*="bg-surface-elevated"]
+  ) {
+    background: #efedea !important;
+  }
+
+  .statistics-page :where(
+    .bg-surface-active,
+    [class*="bg-surface-active"]
+  ) {
+    background: #dedbd6 !important;
+  }
+
+  .statistics-page :where(.text-foreground, [class*="text-foreground"]) {
+    color: #171717 !important;
+  }
+
+  .statistics-page :where(.text-muted-foreground, [class*="text-muted-foreground"]) {
+    color: #5f625f !important;
+  }
+
+  .statistics-page :where(.border-border, [class*="border-border"]) {
+    border-color: #d9d6d2 !important;
+  }
+
+  .statistics-page :where(.overflow-x-auto, .overflow-y-auto, .overflow-auto) {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .statistics-page table {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .statistics-page .stats-chart {
+    display: block !important;
+    width: 100% !important;
+    height: 58mm !important;
+    min-height: 58mm !important;
+    overflow: visible !important;
+  }
+
+  .statistics-page .stats-chart > .recharts-responsive-container {
+    display: block !important;
+    width: 100% !important;
+    height: 58mm !important;
+    min-width: 1px !important;
+    min-height: 58mm !important;
+    overflow: visible !important;
+  }
+
+  .statistics-page .stats-chart :where(.recharts-wrapper, .recharts-surface) {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 1px !important;
+    min-height: 1px !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .statistics-page .stats-chart :where(svg, path, rect, line, text, g) {
+    visibility: visible !important;
+  }
+
+  .statistics-page .report-document-footer {
+    display: block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Public showcase sizing leaves room for controls without shrinking card text. */
+.public-player-showcase { height: 480px; }
+.public-player-carousel .depth-carousel__card {
+  width: min(300px, calc(100% - 88px)) !important;
+  box-shadow: 0 8px 24px -16px color-mix(in srgb, var(--foreground) 25%, transparent);
+  background: var(--card);
+}
+.public-player-carousel .depth-carousel__arrow {
+  width: 44px;
+  height: 44px;
+  color: var(--foreground);
+  background: var(--card);
+  border-color: var(--border);
+}
+.public-player-carousel .depth-carousel__arrow:hover { border-color: var(--brand); }
+.public-player-carousel .depth-carousel__arrow--prev { left: 0; }
+.public-player-carousel .depth-carousel__arrow--next { right: 0; }
+.public-player-carousel { touch-action: auto; }
+.public-player-carousel .depth-carousel__stage { touch-action: pan-y; }
+.public-player-carousel .depth-carousel__counter {
+  bottom: 4px;
+  height: 24px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+}
+.public-player-carousel .depth-carousel__dots {
+  width: max-content;
+  max-width: 100%;
+  height: 24px;
+  bottom: 4px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  gap: 0;
+  padding: 0;
+  background: var(--card);
+}
+.public-player-carousel .depth-carousel__dots::-webkit-scrollbar { display: none; }
+.public-player-carousel .depth-carousel__dot {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 24px;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+.public-player-carousel .depth-carousel__dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+.public-player-carousel .depth-carousel__dot.is-active::before { background: var(--brand); }
+.public-player-carousel :is(button, [tabindex]):focus-visible,
+.public-player-carousel:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (width < 768px) {
+  .public-player-showcase { height: 344px; }
+  .public-player-carousel .depth-carousel__card {
+    width: min(220px, calc(100% - 88px)) !important;
+    height: 280px !important;
+    border-radius: 16px !important;
+  }
+  .public-player-card { padding: 12px; }
+  .public-player-card-badge { height: 28px; min-width: 38px; font-size: 14px; }
+  .public-player-card-identity { margin-block: 8px; gap: 8px; }
+  .public-player-card-avatar { width: 32px; height: 32px; }
+  .public-player-card-avatar > svg { width: 20px; height: 20px; }
+  .public-player-card-surname { font-size: 10px; line-height: 12px; }
+  .public-player-card h3 { margin-top: 2px; font-size: 16px; line-height: 20px; }
+  .public-player-card dl { margin-top: 10px; column-gap: 8px; row-gap: 6px; }
+  .public-player-card dt { font-size: 11px; line-height: 14px; }
+  .public-player-card dd { margin-top: 2px; font-size: 20px; }
+}
+
+.public-player-carousel .depth-carousel__dot.is-active { width: 20px; background: transparent; }

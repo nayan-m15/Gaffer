@@ -91,24 +91,30 @@ INSERT INTO match_events VALUES ('00000000-0000-4000-8000-000000000050','0000000
     expect(players[0].statistics).toEqual({
       appearances: 1,
       minutesPlayed: 20,
+      starts: 0,
       goals: 2,
       assists: 1,
+      saves: 0,
       yellowCards: 1,
       redCards: 0,
     });
     expect(players[1].statistics).toEqual({
       appearances: 1,
       minutesPlayed: 90,
+      starts: 1,
       goals: 0,
       assists: 0,
+      saves: 0,
       yellowCards: 0,
       redCards: 0,
     });
     expect(players[2].statistics).toEqual({
       appearances: 0,
       minutesPlayed: 0,
+      starts: 0,
       goals: 0,
       assists: 0,
+      saves: 0,
       yellowCards: 0,
       redCards: 0,
     });
@@ -117,6 +123,65 @@ INSERT INTO match_events VALUES ('00000000-0000-4000-8000-000000000050','0000000
     );
     expect(await service.getPlayers({ limit: 1, offset: 3 })).toEqual([]);
   });
+
+  it('aggregates starts and goalkeeper saves only from completed matches', async () => {
+    await pg.exec('BEGIN');
+    try {
+      await pg.exec(`
+        INSERT INTO athlete_match_stats (id, athlete_id, match_id, started, minutes_played)
+          VALUES ('${id(43)}', '${id(11)}', '${id(31)}', true, 90);
+        INSERT INTO match_events (id, match_id, athlete_id, team, event_type)
+          VALUES ('${id(60)}', '${id(30)}', '${id(11)}', 'own', 'goalkeeper_save'),
+                 ('${id(61)}', '${id(31)}', '${id(11)}', 'own', 'goalkeeper_save');
+      `);
+      const players = await service.getPlayers({ limit: 10, offset: 0 });
+      expect(
+        players.find((player) => player.id === id(11))?.statistics,
+      ).toMatchObject({
+        appearances: 1,
+        starts: 1,
+        saves: 1,
+        minutesPlayed: 90,
+      });
+      expect(
+        players.find((player) => player.id === id(10))?.statistics.starts,
+      ).toBe(0);
+    } finally {
+      await pg.exec('ROLLBACK');
+    }
+  });
+
+  it.each([
+    ['FWD', 'CF'],
+    ['FWD', 'centre-forward'],
+    ['FWD', 'LW'],
+    ['MID', 'DM'],
+    ['MID', 'AM'],
+    ['MID', 'defensive midfielder'],
+    ['DEF', 'LWB'],
+    ['DEF', 'RWB'],
+    ['DEF', 'centre_back'],
+    ['GK', 'goalkeeper'],
+  ] as const)(
+    'filters the %s showcase group using the %s position alias',
+    async (position, alias) => {
+      await pg.exec('BEGIN');
+      try {
+        await pg.query('UPDATE athletes SET position = $1 WHERE id = $2', [
+          alias,
+          id(10),
+        ]);
+        const players = await service.getPlayers({
+          limit: 10,
+          offset: 0,
+          position,
+        });
+        expect(players.map((player) => player.id)).toContain(id(10));
+      } finally {
+        await pg.exec('ROLLBACK');
+      }
+    },
+  );
 
   it('applies name, position, team, competition and season filters before pagination', async () => {
     expect(
