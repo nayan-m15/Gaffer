@@ -12,7 +12,12 @@ export const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 /** Where the Nest API (and its Better Auth handler) listens. */
 export const BACKEND_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
 
-export const E2E_PASSWORD = 'password123';
+/**
+ * Sign-up enforces a password policy (8+ characters with an uppercase, a
+ * lowercase, a number and a symbol), so this must satisfy all four rules or
+ * every registerVerifiedUser call fails with a 400.
+ */
+export const E2E_PASSWORD = 'Password123!';
 
 /** Same TTL the backend's auth e2e suite mints its tokens with. */
 const VERIFICATION_TTL_SECONDS = 60 * 60;
@@ -115,6 +120,25 @@ export async function registerVerifiedUser(
   );
 }
 
+/**
+ * Signs in through the real API the way the app does. The frontend's Origin
+ * is sent because Better Auth's login CSRF check rejects a sign-in that
+ * carries cookies (verification already set one) but no Origin.
+ */
+export async function signInThroughApi(
+  request: APIRequestContext,
+  email: string,
+  password = E2E_PASSWORD,
+): Promise<void> {
+  await expectOk(
+    await request.post(`${BACKEND_URL}/auth/sign-in`, {
+      data: { email, password },
+      headers: { Origin: FRONTEND_URL },
+    }),
+    'sign-in',
+  );
+}
+
 export interface SeededInvite {
   token: string;
   inviteUrl: string;
@@ -134,12 +158,7 @@ export async function seedCoachWithInvite(
   assistantEmail: string,
 ): Promise<SeededInvite> {
   await registerVerifiedUser(request, coach.email, 'E2E Coach');
-  await expectOk(
-    await request.post(`${BACKEND_URL}/auth/sign-in`, {
-      data: { email: coach.email, password: E2E_PASSWORD },
-    }),
-    'coach sign-in',
-  );
+  await signInThroughApi(request, coach.email);
   await expectOk(
     await request.post(`${BACKEND_URL}/teams`, {
       data: { name: coach.teamName },

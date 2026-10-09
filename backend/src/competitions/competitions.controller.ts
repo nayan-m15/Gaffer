@@ -107,6 +107,7 @@ export class CompetitionsController {
       user.id,
       id,
       dto.regenerate,
+      dto.timezone,
     );
   }
 

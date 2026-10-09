@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, isBefore, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
 import {
   Dialog,
@@ -43,11 +43,12 @@ export function DayEventsDialog({
   const dayNumber = format(date, "d");
   const weekdayName = format(date, "EEEE");
   const dateSubLabel = format(date, "dd MMM");
+  const isPastDay = isBefore(startOfDay(date), startOfDay(now));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <AnimatedModalContent className="sm:max-w-md p-5 rounded-3xl">
-        <DialogHeader className="gap-0.5 pb-2">
+      <AnimatedModalContent className="sm:max-w-md p-5 rounded-3xl max-sm:max-h-[calc(100dvh-2rem)] max-sm:flex max-sm:flex-col">
+        <DialogHeader className="gap-0.5 pb-2 max-sm:shrink-0">
           <DialogTitle className="flex items-baseline gap-2.5 text-foreground">
             <span className="text-2xl sm:text-3xl font-black tracking-tight">{dayNumber}</span>
             <span className="text-xl sm:text-2xl font-bold tracking-tight">{weekdayName}</span>
@@ -58,7 +59,7 @@ export function DayEventsDialog({
         </DialogHeader>
 
         {/* Events list */}
-        <div className="flex flex-col gap-2 my-2 max-h-[360px] overflow-y-auto pr-0.5">
+        <div className="flex flex-col gap-2 my-2 max-h-[360px] overflow-y-auto pr-0.5 max-sm:min-h-0 max-sm:max-h-none max-sm:flex-auto max-sm:[&>button]:shrink-0">
           {events.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               No events scheduled for this day.
@@ -128,7 +129,7 @@ export function DayEventsDialog({
         </div>
 
         {/* Bottom "Add on [Date] +" Capsule Button (Samsung Calendar style) */}
-        {!readOnly && (
+        {!readOnly && !isPastDay && (
           <button
             type="button"
             onClick={() => {
@@ -139,6 +140,7 @@ export function DayEventsDialog({
               "mt-2 w-full rounded-full bg-muted/80 hover:bg-muted text-foreground py-3 px-5",
               "flex items-center justify-between text-sm font-bold transition-all duration-150 active:scale-[0.99] border border-border/50 shadow-xs",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              "max-sm:shrink-0",
             )}
           >
             <span>Add on {dateSubLabel}</span>

@@ -5,6 +5,7 @@ import {
   isDatabaseConnectionError,
 } from '../../src/database/drizzle';
 import {
+  authRateLimits,
   injuries,
   injuryTimelineEntries,
   matchSessionParticipants,
@@ -147,7 +148,10 @@ async function cleanupUserWithRetry(
       await cleanupUser(identity);
       return;
     } catch (err) {
-      if (attempt === attempts || !isDatabaseConnectionError(err)) {
+      if (
+        attempt === attempts ||
+        !(isDatabaseConnectionError(err) || isDeadlock(err))
+      ) {
         throw err;
       }
       await new Promise((resolve) =>
@@ -155,6 +159,23 @@ async function cleanupUserWithRetry(
       );
     }
   }
+}
+
+/**
+ * Concurrent cleanups can delete teams that cascade into the same shared rows
+ * (two-account fixtures share a competition) in opposite orders. Postgres then
+ * aborts one side with SQLSTATE 40P01, and retrying it succeeds once the other
+ * side has committed.
+ */
+function isDeadlock(err: unknown): boolean {
+  const cause = err instanceof Error ? err.cause : undefined;
+  return [err, cause].some(
+    (e) =>
+      typeof e === 'object' &&
+      e !== null &&
+      ((e as { code?: unknown }).code === '40P01' ||
+        (e instanceof Error && /deadlock detected/i.test(e.message))),
+  );
 }
 
 /**
@@ -169,4 +190,17 @@ export async function verifyUserEmail(email: string): Promise<void> {
     .update(user)
     .set({ emailVerified: true })
     .where(eq(user.email, email));
+}
+
+/**
+ * Clears the auth rate-limit counters.
+ *
+ * Rate-limit rows are keyed by client IP, and the rate-limit e2e spec draws
+ * its IPs from a fixed documentation range, so rows left behind by a previous
+ * jest invocation would pre-exhaust the buckets its tests pin. The counters
+ * are pure ephemeral state — no other suite's assertions depend on them — so
+ * a wholesale clear is safe even while suites run in parallel.
+ */
+export async function clearAuthRateLimits(): Promise<void> {
+  await testDb.delete(authRateLimits);
 }

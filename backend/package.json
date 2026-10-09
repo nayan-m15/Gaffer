@@ -21,9 +21,10 @@
     "db:diagnose:powersync": "node scripts/diagnose-powersync-source.mjs",
     "health:offline": "node scripts/check-offline-health.mjs",
     "docs:api-reference": "node scripts/generate-public-api-reference.mjs",
+    "benchmark:public-dashboard": "node scripts/benchmark-public-dashboard.mjs",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "npm run test -- --watch",
-    "test:migrations": "node --test --test-isolation=none scripts/migration-plan.test.mjs",
+    "test:migrations": "node --test scripts/migration-plan.test.mjs",
     "test:cov": "npm run test -- --coverage",
     "posttest:cov": "node scripts/normalize-coverage.mjs",
     "test:debug": "node --experimental-vm-modules --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
@@ -41,7 +42,7 @@
     "@nestjs/platform-socket.io": "^11.1.29",
     "@nestjs/swagger": "^11.4.6",
     "@nestjs/websockets": "^11.1.29",
-    "better-auth": "^1.6.27",
+    "better-auth": "^1.7.7",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "reflect-metadata": "^0.2.2",
@@ -51,7 +52,10 @@
     "zod": "^4.4.3"
   },
   "overrides": {
-    "proxy-addr": "^2.0.8"
+    "proxy-addr": "^2.0.8",
+    "@nestjs/swagger": {
+      "js-yaml": "5.4.3"
+    }
   },
   "devDependencies": {
     "@babel/plugin-transform-modules-commonjs": "^7.29.7",
