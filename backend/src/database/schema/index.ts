@@ -11,6 +11,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -725,6 +726,7 @@ export const competitions = pgTable(
     adminUserId: text('admin_user_id').references(() => user.id, {
       onDelete: 'set null',
     }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     // Null configuration preserves competitions created by legacy callers.
     format: competitionFormat('format'),
     configuredTeamCount: integer('configured_team_count'),
@@ -792,6 +794,12 @@ export const competitions = pgTable(
     uniqueIndex('competitions_name_lower_unique').on(sql`lower(${table.name})`),
   ],
 );
+
+// Personal feed preferences; this does not affect other participants.
+export const hiddenCompetitions = pgTable('hidden_competitions', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+}, (table) => [primaryKey({ columns: [table.userId, table.competitionId] })]);
 
 // One participating team slot in a shared competition. A linked participant
 // carries the real application team in `teamId`; a slot the admin added ahead

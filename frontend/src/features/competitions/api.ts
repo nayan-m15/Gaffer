@@ -34,6 +34,12 @@ export const createCompetition = (input: CompetitionInput) =>
 export const updateCompetition = (id: string, input: Partial<CompetitionInput>) =>
   apiFetch<Competition>(`/competitions/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 
+export const setCompetitionHidden = (id: string, hidden: boolean) =>
+  apiFetch<{ hidden: boolean }>(`/competitions/${encodeURIComponent(id)}/hidden`, { method: "PATCH", body: JSON.stringify({ hidden }) });
+
+export const setCompetitionArchived = (id: string, archived: boolean) =>
+  apiFetch<{ archived: boolean }>(`/competitions/${encodeURIComponent(id)}/archive`, { method: "PATCH", body: JSON.stringify({ archived }) });
+
 export const deleteCompetition = (id: string) =>
   apiFetch<{ success: boolean }>(`/competitions/${id}`, { method: "DELETE" });
 

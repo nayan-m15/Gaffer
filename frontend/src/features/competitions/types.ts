@@ -30,6 +30,8 @@ export interface Competition {
   season: string | null;
   seasonId: string | null;
   isAdmin: boolean;
+  archivedAt: string | null;
+  hiddenByMe: boolean;
   createdAt: string;
   format: CompetitionFormat | null;
   configuredTeamCount: number | null;

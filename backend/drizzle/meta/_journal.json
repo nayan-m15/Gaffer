@@ -512,6 +512,20 @@
       "when": 1791417600000,
       "tag": "0063_competition_schedule_timezone",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791417600001,
+      "tag": "0064_friendly_match_formats",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1791417600002,
+      "tag": "0065_competition_archiving",
+      "breakpoints": true
     }
   ]
 }

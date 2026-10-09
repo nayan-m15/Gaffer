@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Plus, Search, Settings2, Trash2, Trophy } from "lucide-react";
+import { Archive, ArchiveRestore, EyeOff, ArrowLeft, Pencil, Plus, Search, Settings2, Trash2, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppCard } from "@/components/app/AppCard";
 import { GafferAiAssistant } from "@/features/ai-assistant/GafferAiAssistant";
@@ -9,7 +9,7 @@ import { StandingsDisplay } from "@/components/standings/StandingsDisplay";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useCompetition, useCompetitionFixtures, useCompetitionInvites, useCompetitionSearch, useMyCompetitions, useCompetitionMutation } from "./hooks";
-import { addParticipant, deleteCompetition, deleteCompetitionResult, generateCompetitionFixtures, inviteCoach, removeParticipant, renameParticipant, resolveTeamVerification, revokeInvite } from "./api";
+import { addParticipant, setCompetitionHidden, setCompetitionArchived, deleteCompetition, deleteCompetitionResult, generateCompetitionFixtures, inviteCoach, removeParticipant, renameParticipant, resolveTeamVerification, revokeInvite } from "./api";
 import { CompetitionActionDialog, CompetitionFormDialog, RequestError, type ActionDialogConfig } from "./CompetitionDialogs";
 import { CompetitionResultDialog } from "./CompetitionResultDialog";
 import { CompetitionFixturesView } from "./CompetitionFixturesView";
@@ -48,14 +48,22 @@ export default function CompetitionsPage() {
   );
 }
 
-function CompetitionList({ rows, empty, basePath }: { rows: CompetitionSummary[]; empty: string; basePath: string }) {
+function CompetitionList({ rows, empty, basePath, onToggleHidden, busyId, showHidden = false }: {
+  rows: CompetitionSummary[]; empty: string; basePath: string;
+  onToggleHidden?: (row: CompetitionSummary) => void; busyId?: string | null; showHidden?: boolean;
+}) {
   if (!rows.length) return <p className="py-5 text-sm text-muted-foreground">{empty}</p>;
   return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => (
-    <Link key={row.id} to={`${basePath}/${row.id}`} className="rounded-xl border border-border p-4 transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <div className="flex items-start justify-between gap-3"><h3 className="break-words font-semibold">{row.name}</h3>{row.isAdmin && <span className={badgeClass}>Admin</span>}</div>
-      <p className="mt-2 text-sm text-muted-foreground">{formatLabel(row.type, row.format)}{row.season ? ` · ${row.season}` : ""}</p>
-      <p className="mt-3 text-sm">{row.participantCount}{row.configuredTeamCount ? ` / ${row.configuredTeamCount}` : ""} {row.participantCount === 1 ? "team" : "teams"}</p>
-    </Link>
+    <div key={row.id} className="rounded-xl border border-border p-4 transition-colors hover:border-primary/50 hover:bg-primary/5">
+      <Link to={`${basePath}/${row.id}`} className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <div className="flex items-start justify-between gap-3"><h3 className="break-words font-semibold">{row.name}</h3><div className="flex flex-wrap gap-1">{row.isAdmin && <span className={badgeClass}>Admin</span>}{row.archivedAt && <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">Archived</span>}</div></div>
+        <p className="mt-2 text-sm text-muted-foreground">{formatLabel(row.type, row.format)}{row.season ? ` · ${row.season}` : ""}</p>
+        <p className="mt-3 text-sm">{row.participantCount}{row.configuredTeamCount ? ` / ${row.configuredTeamCount}` : ""} {row.participantCount === 1 ? "team" : "teams"}</p>
+      </Link>
+      {onToggleHidden && <div className="mt-3 border-t border-border pt-3"><Button size="sm" variant="ghost" disabled={busyId === row.id} onClick={() => onToggleHidden(row)}>
+        {showHidden ? <ArchiveRestore className="size-4" /> : <EyeOff className="size-4" />}{showHidden ? "Show in my feed" : "Hide from my feed"}
+      </Button></div>}
+    </div>
   ))}</div>;
 }
 
@@ -70,6 +78,15 @@ function CompetitionWorkspace() {
   const [term, setTerm] = useState("");
   const search = useCompetitionSearch(term);
   const [creating, setCreating] = useState(false);
+  const [feedView, setFeedView] = useState<"active" | "archived" | "hidden">("active");
+  const hide = useCompetitionMutation(({ id, hidden }: { id: string; hidden: boolean }) => setCompetitionHidden(id, hidden));
+  const [hideError, setHideError] = useState("");
+  const toggleHidden = (row: CompetitionSummary) => {
+    setHideError("");
+    hide.mutate({ id: row.id, hidden: !row.hiddenByMe }, { onError: (error) => setHideError(error.message) });
+  };
+  const feedRows = mine.data?.filter((row) => feedView === "hidden" ? row.hiddenByMe : !row.hiddenByMe && (feedView === "archived" ? Boolean(row.archivedAt) : !row.archivedAt)) ?? [];
+
 
   useEffect(() => {
     const nextTerm = input.trim();
@@ -87,7 +104,12 @@ function CompetitionWorkspace() {
         {mine.isPending && <p role="status" className="text-sm text-muted-foreground">Loading your competitions...</p>}
         <RequestError error={mine.error} />
         {mine.isError && <Button variant="outline" onClick={() => void mine.refetch()}>Retry</Button>}
-        {mine.data && <CompetitionList rows={mine.data} basePath={basePath} empty="Your team has no leagues or cups yet." />}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Competition feed filter">
+          {([ ["active", "Active"], ["archived", "Archived"], ["hidden", "Hidden by me"] ] as const).map(([key, label]) =>
+            <Button key={key} size="sm" variant={feedView === key ? "default" : "outline"} onClick={() => setFeedView(key)}>{label}</Button>)}
+        </div>
+        {hideError && <p role="alert" className="text-sm text-destructive">{hideError}</p>}
+        {mine.data && <CompetitionList rows={feedRows} basePath={basePath} onToggleHidden={toggleHidden} busyId={hide.isPending ? hide.variables?.id : null} showHidden={feedView === "hidden"} empty={feedView === "hidden" ? "You have not hidden any competitions." : feedView === "archived" ? "No archived competitions." : "No active competitions. Check Archived or Hidden by me."} />}
       </AppCard>
       <AppCard className="space-y-5">
         <div><h2 className="text-lg font-semibold">Find a League or Competition</h2><p className="mt-1 text-sm text-muted-foreground">Search by name to open the same shared competition view.</p></div>
@@ -620,7 +642,7 @@ function SharedCompetitionDetailsContent({
       onCloseResult={onCloseResult}
       onCloseAction={onCloseAction}
     />
-    {competition.isAdmin && !participantAddDisabled && <GafferAiAssistant context="competitions" competitionId={id} onEntityCreated={onEntityCreated} />}
+    {competition.isAdmin && !competition.archivedAt && !participantAddDisabled && <GafferAiAssistant context="competitions" competitionId={id} onEntityCreated={onEntityCreated} />}
   </>;
 }
 
@@ -677,6 +699,9 @@ function CompetitionDetails({ id }: { id: string }) {
   const [resultFixture, setResultFixture] = useState<CompetitionFixture | null>(null);
   const [action, setAction] = useState<ActionDialogConfig | null>(null);
   const [notice, setNotice] = useState("");
+  const archive = useCompetitionMutation((archived: boolean) => setCompetitionArchived(id, archived));
+  const hideDetail = useCompetitionMutation((hidden: boolean) => setCompetitionHidden(id, hidden));
+  const [lifecycleError, setLifecycleError] = useState("");
   const generate = useCompetitionMutation((regenerate: boolean) => generateCompetitionFixtures(id, regenerate));
 
   const format = competition && isShared ? competitionFormat(competition) : "league";
@@ -708,15 +733,32 @@ function CompetitionDetails({ id }: { id: string }) {
   const openFixtureResult = (fixture: CompetitionFixture) => { setResultFixture(fixture); setEditingResult("new"); };
 
   return <>
+    {competition && <AppCard className="mx-6 mb-4 space-y-3 sm:mx-8 lg:mx-10">
+      {competition.archivedAt && <p className="text-sm text-muted-foreground"><Archive className="mr-2 inline size-4" />This competition has been archived. Its historical fixtures, standings and player statistics remain available.</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={hideDetail.isPending} onClick={() => { setLifecycleError(""); hideDetail.mutate(!competition.hiddenByMe, { onError: (error) => setLifecycleError(error.message) }); }}>
+          <EyeOff className="size-4" />{competition.hiddenByMe ? "Show in my feed" : "Hide from my feed"}
+        </Button>
+        {competition.isAdmin && <Button size="sm" variant="outline" disabled={archive.isPending} onClick={() => {
+          const archived = !competition.archivedAt;
+          if (!window.confirm(archived ? "Archive this competition for everyone? Results and standings will remain available." : "Restore this competition for everyone?")) return;
+          setLifecycleError(""); archive.mutate(archived, { onError: (error) => setLifecycleError(error.message) });
+        }}>
+          {competition.archivedAt ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+          {competition.archivedAt ? "Restore competition" : "Archive competition"}
+        </Button>}
+      </div>
+      {lifecycleError && <p role="alert" className="text-sm text-destructive">{lifecycleError}</p>}
+    </AppCard>}
     <PageHeader title={isShared ? competition.name : "Competition details"}
       subtitle={isShared ? `${formatLabel(competition.type, competition.format)}${competition.season ? ` · ${competition.season}` : ""}` : undefined}
       actions={<div className="flex flex-wrap items-center gap-2">
-        {competition?.isAdmin && isShared && <a href="#settings" className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"><Settings2 className="size-4" />Settings</a>}
+        {competition?.isAdmin && !competition.archivedAt && isShared && <a href="#settings" className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"><Settings2 className="size-4" />Settings</a>}
         <Link to={basePath} className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"><ArrowLeft className="size-4" />All competitions</Link>
       </div>} />
     <CompetitionDetailsContent
       id={id}
-      competition={competition}
+      competition={competition?.archivedAt ? { ...competition, isAdmin: false } : competition}
       isShared={isShared}
       format={format}
       fixtures={fixtures}
@@ -728,7 +770,7 @@ function CompetitionDetails({ id }: { id: string }) {
       detailIsError={detail.isError}
       invites={invites}
       teamId={team?.id}
-      canRespond={team?.role === "coach"}
+      canRespond={team?.role === "coach" && !competition?.archivedAt}
       settingsLocked={settingsLocked}
       rosterLocked={rosterLocked}
       participantAddDisabled={participantAddDisabled}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -52,6 +53,18 @@ export class CompetitionsController {
   @Get('mine')
   async listMine(@CurrentUser() user: SessionUser) {
     return this.competitionsService.listMine(user.id);
+  }
+
+  @Patch(':id/hidden')
+  async setHidden(@CurrentUser() user: SessionUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: { hidden?: boolean }) {
+    if (typeof body?.hidden !== 'boolean') throw new BadRequestException('hidden must be a boolean');
+    return this.competitionsService.setHidden(user.id, id, body.hidden);
+  }
+
+  @Patch(':id/archive')
+  async setArchived(@CurrentUser() user: SessionUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: { archived?: boolean }) {
+    if (typeof body?.archived !== 'boolean') throw new BadRequestException('archived must be a boolean');
+    return this.competitionsService.setArchived(user.id, id, body.archived);
   }
 
   @Post()

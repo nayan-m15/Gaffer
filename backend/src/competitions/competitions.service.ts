@@ -33,6 +33,7 @@ import {
   competitionFixtures,
   competitions,
   competitionTeams,
+  hiddenCompetitions,
   events,
   matches,
   standings,
@@ -93,6 +94,8 @@ export interface CompetitionView extends Partial<
   seasonId: string | null;
   isAdmin: boolean;
   createdAt: Date;
+  archivedAt: Date | null;
+  hiddenByMe: boolean;
 }
 
 export interface CompetitionSummaryView extends CompetitionView {
@@ -172,6 +175,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
         participantCount: count(competitionTeams.id),
       })
       .from(competitions)
@@ -214,6 +219,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
         participantCount: sql<number>`(
           select count(*)::int
           from competition_teams all_participants
@@ -263,6 +270,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
       })
       .from(competitions)
       .where(eq(competitions.id, competitionId))
@@ -292,6 +301,36 @@ export class CompetitionsService {
       standings: competitionStandings,
       results,
     };
+  }
+
+  /** Hide is per user; archive is global and administrator-only. */
+  async setHidden(userId: string, competitionId: string, hidden: boolean) {
+    const [exists] = await this.databaseService.database.select({ id: competitions.id })
+      .from(competitions).where(eq(competitions.id, competitionId)).limit(1);
+    if (!exists) throw new NotFoundException('Competition not found.');
+    const teamId = await this.findViewerTeamId(userId);
+    const [member] = teamId ? await this.databaseService.database.select({ id: competitionTeams.id })
+      .from(competitionTeams).where(and(eq(competitionTeams.competitionId, competitionId), eq(competitionTeams.teamId, teamId))).limit(1) : [];
+    if (!member) throw new ForbiddenException('Only competition participants can hide this competition.');
+    if (hidden) await this.databaseService.database.insert(hiddenCompetitions)
+      .values({ userId, competitionId }).onConflictDoNothing();
+    else await this.databaseService.database.delete(hiddenCompetitions)
+      .where(and(eq(hiddenCompetitions.userId, userId), eq(hiddenCompetitions.competitionId, competitionId)));
+    return { hidden };
+  }
+
+  async setArchived(userId: string, competitionId: string, archived: boolean) {
+    const current = await this.requireAdmin(userId, competitionId, true);
+    if (archived && !current.archivedAt) {
+      const [active] = await this.databaseService.database.select({ id: competitionFixtures.id })
+        .from(competitionFixtures).where(and(eq(competitionFixtures.competitionId, competitionId),
+          eq(competitionFixtures.status, 'in_progress'))).limit(1);
+      if (active) throw new ConflictException('Finish or cancel live fixtures before archiving this competition.');
+    }
+    await this.databaseService.database.update(competitions)
+      .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
+      .where(eq(competitions.id, competitionId));
+    return { archived };
   }
 
   /* ── Competition CRUD ───────────────────────────────────────────────────── */
@@ -360,6 +399,8 @@ export class CompetitionsService {
       seasonId: competition.seasonId,
       isAdmin: true,
       createdAt: competition.createdAt,
+      archivedAt: null,
+      hiddenByMe: false,
       participants: await this.listParticipants(competition.id),
     };
   }
@@ -422,6 +463,8 @@ export class CompetitionsService {
       seasonId: updated.seasonId,
       isAdmin: true,
       createdAt: updated.createdAt,
+      archivedAt: updated.archivedAt,
+      hiddenByMe: false,
     };
   }
 
@@ -1259,6 +1302,9 @@ export class CompetitionsService {
     competitionId: string,
     fixtureId: string,
   ) {
+    const [competition] = await this.databaseService.database.select({ archivedAt: competitions.archivedAt })
+      .from(competitions).where(eq(competitions.id, competitionId)).limit(1);
+    if (competition?.archivedAt) throw new ConflictException('This competition is archived.');
     const [fixture] = await this.databaseService.database
       .select()
       .from(competitionFixtures)
@@ -1371,7 +1417,7 @@ export class CompetitionsService {
     return target;
   }
 
-  private async requireAdmin(userId: string, competitionId: string) {
+  private async requireAdmin(userId: string, competitionId: string, allowArchived = false) {
     const [competition] = await this.databaseService.database
       .select()
       .from(competitions)
@@ -1382,6 +1428,9 @@ export class CompetitionsService {
       throw new NotFoundException('Competition not found.');
     }
 
+    if (competition.archivedAt && !allowArchived) {
+      throw new ConflictException('This competition is archived. Restore it before making changes.');
+    }
     return competition;
   }
 
