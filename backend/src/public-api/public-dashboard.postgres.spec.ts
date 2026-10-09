@@ -80,10 +80,12 @@ INSERT INTO match_events VALUES ('00000000-0000-4000-8000-000000000050','0000000
       ALTER TABLE athlete_match_stats ADD COLUMN yellow_cards int DEFAULT 99;
       ALTER TABLE athlete_match_stats ADD COLUMN red_cards int DEFAULT 99;
     `);
-  });
+    // PGlite compiles and starts PostgreSQL WASM on the first query. Shared
+    // CI runners need the same setup budget as the other real SQL fixtures.
+  }, 60_000);
   afterAll(async () => {
-    await pg.close();
-  });
+    await pg?.close();
+  }, 30_000);
 
   it('counts completed own-team events once and preserves substitution appearances, zero stats and page order', async () => {
     const players = await service.getPlayers({ limit: 10, offset: 0 });
