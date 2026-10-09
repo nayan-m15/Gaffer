@@ -1,4 +1,5 @@
 import { getCompetitionMatchEventAppearance } from "./competitionMatchEventAppearance";
+export { getCompetitionMatchEventAppearance } from "./competitionMatchEventAppearance";
 
 export function CompetitionMatchEventGraphic({ type }: { type: string }) {
   const appearance = getCompetitionMatchEventAppearance(type);
