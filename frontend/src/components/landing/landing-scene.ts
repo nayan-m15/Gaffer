@@ -1317,6 +1317,9 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
   };
   const swapShirts = () => {
     if (disposed || shirtLoadFailed || !loadedShirt || !kitImage || shirtsSwapped) return;
+    let scale = .18, clearance = NaN;
+    let check = "source model";
+    let failedBounds: Array<{ check: string; number: number; bound: number; limit: number; sway: number }> = [];
     try {
       const groups: THREE.Group[] = [];
       scene.traverse(object => { if (object instanceof THREE.Group && object.name === "Dressing room shirt") groups.push(object); });
@@ -1326,8 +1329,14 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
       const centerX = (sourceBounds.min.x + sourceBounds.max.x) / 2;
       // Existing hook top is about .90 above the group; cushion top is 1.17.
       const hookTop = .90, surfaceTop = 1.17, minimumClearance = .15;
-      let scale = .18;
+      scene.updateMatrixWorld(true);
+      check = "canvas texture";
       const replacements = groups.map(group => {
+        // World Z points into each locker in opposite directions. Keep the
+        // old group's measured back extent, including its hanger and hook.
+        const oldBounds = new THREE.Box3().setFromObject(group);
+        const intoLocker = Math.sign(group.position.z);
+        const backLimit = intoLocker > 0 ? oldBounds.max.z - group.position.z : group.position.z - oldBounds.min.z;
         const canvas = document.createElement("canvas");
         const size = lowPower ? 256 : 512, R = size / 1024;
         canvas.width = canvas.height = size;
@@ -1352,12 +1361,13 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
           if (isShirt) object.material = material;
           object.castShadow = isShirt && !lowPower; object.receiveShadow = isShirt;
         });
-        return { group, model };
+        return { group, model, intoLocker, backLimit, topLimit: oldBounds.max.y + .05 };
       });
-      let clearance = Infinity;
+      check = "placement bounds";
       for (;;) {
         clearance = Infinity;
-        replacements.forEach(({ group, model }) => {
+        failedBounds = [];
+        replacements.forEach(({ group, model, intoLocker, backLimit, topLimit }) => {
           model.scale.setScalar(scale);
           model.position.set(-centerX * scale, hookTop - sourceBounds.max.y * scale, .08);
           // Test both ends of the first shirt's possible scroll sway as well as
@@ -1371,22 +1381,29 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
             probe.updateMatrixWorld(true);
             const bounds = new THREE.Box3().setFromObject(model.getObjectByName("Shirt")!);
             clearance = Math.min(clearance, bounds.min.y - surfaceTop);
-            // Stay inside the clear locker opening, in front of handles/rail,
-            // below the overhead shelf and away from the dividing posts.
+            const modelBounds = new THREE.Box3().setFromObject(model);
+            const backExtent = intoLocker > 0 ? modelBounds.max.z - group.position.z : group.position.z - modelBounds.min.z;
+            // Keep the same hem/opening checks; compare top and back with the
+            // measured fallback rather than absolute room coordinates.
             const halfOpening = LOCKER_CONFIG.width / 2 - .12;
-            if (bounds.min.x < group.position.x - halfOpening || bounds.max.x > group.position.x + halfOpening ||
-                bounds.max.y >= 3.43 || Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z)) >= 7.4675) {
-              clearance = -Infinity;
-            }
+            const record = (name: string, bound: number, limit: number) => {
+              failedBounds.push({ check: name, number: group.userData.shirtNumber, bound, limit, sway });
+            };
+            if (bounds.min.y - surfaceTop < minimumClearance) record("hem clearance", bounds.min.y - surfaceTop, minimumClearance);
+            if (bounds.min.x < group.position.x - halfOpening) record("opening min.x", bounds.min.x, group.position.x - halfOpening);
+            if (bounds.max.x > group.position.x + halfOpening) record("opening max.x", bounds.max.x, group.position.x + halfOpening);
+            if (modelBounds.max.y > topLimit) record("hook top max.y", modelBounds.max.y, topLimit);
+            if (backExtent > backLimit) record("back depth into locker", backExtent, backLimit);
           }
           probe.remove(model);
         });
-        if (clearance >= minimumClearance) break;
-        if (scale <= .15) throw new Error("Landing model cannot clear the locker cushion by .15 units");
+        if (failedBounds.length === 0 && clearance >= minimumClearance) break;
+        if (scale <= .15) throw new Error("Landing model placement rejected");
         scale = Math.max(.15, scale - .005);
       }
       const removed = groups.flatMap(group => [...group.children]);
       const fallback = collectResources(removed);
+      check = "swap and disposal";
       replacements.forEach(({ group, model }) => {
         group.remove(...group.children); group.add(model);
         group.userData.shirtModelScale = scale;
@@ -1402,10 +1419,12 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
       });
       loadedShirt = null; kitImage = null; shirtsSwapped = true;
       numberMaps.forEach(value => value.dispose()); numberMaps.length = 0;
-      shirtFabricMap.dispose();
+      const fabricIsLive = [...live.materials].some(material => Object.values(material).some(value => value === shirtFabricMap));
+      if (fabricIsLive) modelTextures.add(shirtFabricMap); else shirtFabricMap.dispose();
+      console.info("Landing shirts swapped", { scale, minimumClearance: clearance });
       // The existing request coalesces with an outstanding scroll frame.
       start();
-    } catch (error) { failShirtLoad(error); }
+    } catch (error) { failShirtLoad({ check, scale, clearance, failedBounds, error }); }
   };
   new GLTFLoader().load("/models/landing-shirt.glb", gltf => {
     loadedShirt = gltf.scene;
