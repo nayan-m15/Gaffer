@@ -145,9 +145,18 @@ export async function getPublicMatches(
   return getAllPages<PublicMatch>("matches", filters, 100, 1);
 }
 
+/**
+ * Pages must stay within the server's cap (200, see
+ * `backend/src/public-api/public-api.schemas.ts`) — asking for more is a 400,
+ * not a clamped response. Three pages in flight keeps a large roster loading
+ * in roughly the same wall time as the old single 500-row page.
+ */
 export async function getPublicPlayers(filters: PublicDashboardQuery) {
-  return getAllPages<PublicPlayer>("players", filters, 500, 3);
+  return getAllPages<PublicPlayer>("players", filters, PLAYER_PAGE_SIZE, 3);
 }
+
+/** Kept in step with `publicPlayersQuerySchema.limit`'s maximum. */
+const PLAYER_PAGE_SIZE = 200;
 
 async function getAllPages<T>(
   resource: "matches" | "players",

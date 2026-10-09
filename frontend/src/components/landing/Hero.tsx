@@ -1,5 +1,5 @@
 import { ArrowRight, BarChart3, LogIn } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
 

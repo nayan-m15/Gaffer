@@ -92,6 +92,22 @@ describe('Events (e2e)', () => {
     });
   });
 
+  it('rejects a past kickoff through the HTTP endpoint', async () => {
+    const { agent } = await newCoach();
+    const response = await agent
+      .post('/events')
+      .send({
+        title: 'Past training',
+        type: 'training',
+        scheduledAt: futureIso(-1),
+        location: 'Main field',
+      })
+      .expect(400);
+    expect((response.body as ErrorResponseBody).message).toBe(
+      'Choose a date and time in the future.',
+    );
+  });
+
   it('rejects a payload missing required fields', async () => {
     const { agent } = await newCoach();
 
@@ -235,7 +251,7 @@ describe('Events (e2e)', () => {
       .send({
         title: 'League match',
         type: 'match',
-        scheduledAt: new Date().toISOString(),
+        scheduledAt: futureIso(1),
         location: 'Main field',
         competitionId: leagueId,
       })
@@ -279,6 +295,13 @@ describe('Events (e2e)', () => {
         return (athlete.body as IdBody).id;
       }),
     );
+    // Starting a match is refused before match day, compared by calendar
+    // date, so a kickoff an hour out falls on tomorrow late in the day.
+    // Move it into the past first; updates have no future-only rule.
+    await agent
+      .patch(`/events/${event.id}`)
+      .send({ scheduledAt: futureIso(-1) })
+      .expect(200);
     const started = await agent
       .post(`/events/${event.id}/start-match`)
       .send({

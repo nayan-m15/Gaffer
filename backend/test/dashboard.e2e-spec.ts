@@ -99,11 +99,17 @@ describe('Dashboard (e2e)', () => {
       .send({
         title: `vs ${options.opponent}`,
         type: 'match',
-        scheduledAt: pastIso(options.daysAgo),
+        scheduledAt: futureIso(24),
         location: 'Main field',
       })
       .expect(201);
     const eventId = (event.body as { id: string }).id;
+    // Creation rejects past kickoffs, so the historical date is applied
+    // with a follow-up update, which carries no such restriction.
+    await agent
+      .patch(`/events/${eventId}`)
+      .send({ scheduledAt: pastIso(options.daysAgo) })
+      .expect(200);
 
     const started = await agent
       .post(`/events/${eventId}/start-match`)

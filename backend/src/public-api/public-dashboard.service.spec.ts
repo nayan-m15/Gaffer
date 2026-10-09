@@ -351,4 +351,146 @@ describe('PublicDashboardService', () => {
       .mockReturnValue(queryResult([]));
     await expect(service.getTeamStatistics({})).resolves.toEqual([]);
   });
+
+  describe('filters', () => {
+    const TEAM = '83ff97e6-a665-4605-9e72-c6f810d90202';
+    const COMPETITION = '0a4b2d16-1f2c-4f0e-9c5a-2a5a4a9c1b33';
+    const SEASON = '2b6c1f90-77a1-4c62-9f1e-0d2a4f6b8c10';
+
+    it('skips the stats query entirely when no athlete matches the page', async () => {
+      select.mockReturnValueOnce(queryResult([]));
+
+      await expect(
+        service.getPlayers({ limit: 100, offset: 0 }),
+      ).resolves.toEqual([]);
+      // Only the page-of-ids query ran; the expensive fan-out was never issued.
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      [{ teamId: TEAM }],
+      [{ competitionId: COMPETITION }],
+      [{ seasonId: SEASON }],
+      [{ competitionId: COMPETITION, seasonId: SEASON }],
+      [{ teamId: TEAM, competitionId: COMPETITION, seasonId: SEASON }],
+    ])(
+      'applies player filters %p without widening the page',
+      async (filter) => {
+        const where = jest.fn();
+        const page = queryResult([{ id: 'athlete-1' }]);
+        page.where = where.mockReturnValue(page);
+        select.mockReturnValueOnce(page).mockReturnValueOnce(queryResult([]));
+
+        await service.getPlayers({ ...filter, limit: 100, offset: 0 });
+
+        expect(where).toHaveBeenCalledTimes(1);
+        expect(select).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('returns an entry for every athlete on the page, even with no stats', async () => {
+      select
+        .mockReturnValueOnce(queryResult([{ id: 'athlete-1' }]))
+        .mockReturnValueOnce(
+          queryResult([
+            {
+              id: 'athlete-1',
+              firstName: 'Sam',
+              lastName: 'Keeper',
+              position: 'GK',
+              squadNumber: 1,
+              teamId: 'team-1',
+              teamName: 'Gaffer FC',
+              matchId: null,
+              eventStatus: null,
+              minutesPlayed: null,
+              appeared: false,
+              goals: 0,
+              assists: 0,
+              yellowCards: 0,
+              redCards: 0,
+            },
+          ]),
+        );
+
+      await expect(
+        service.getPlayers({ limit: 100, offset: 0 }),
+      ).resolves.toEqual([
+        {
+          id: 'athlete-1',
+          firstName: 'Sam',
+          lastName: 'Keeper',
+          position: 'GK',
+          squadNumber: 1,
+          team: { id: 'team-1', name: 'Gaffer FC' },
+          statistics: {
+            appearances: 0,
+            minutesPlayed: 0,
+            goals: 0,
+            assists: 0,
+            yellowCards: 0,
+            redCards: 0,
+          },
+        },
+      ]);
+    });
+
+    it.each([
+      [{ teamId: TEAM }],
+      [{ competitionId: COMPETITION }],
+      [{ seasonId: SEASON }],
+      [{ status: 'completed' as const }],
+      [{ teamId: TEAM, status: 'scheduled' as const }],
+    ])('applies match filters %p', async (filter) => {
+      const chain = queryResult([]);
+      select.mockReturnValue(chain);
+
+      await expect(
+        service.getMatches({ ...filter, limit: 50, offset: 0 }),
+      ).resolves.toEqual([]);
+      expect(chain.limit).toHaveBeenCalledWith(50);
+      expect(chain.offset).toHaveBeenCalledWith(0);
+    });
+
+    it.each([
+      [{ teamId: TEAM }],
+      [{ competitionId: COMPETITION }],
+      [{ seasonId: SEASON }],
+      [{ teamId: TEAM, competitionId: COMPETITION, seasonId: SEASON }],
+    ])('applies standings filters %p', async (filter) => {
+      select.mockReturnValue(queryResult([]));
+
+      await expect(service.getTeamStatistics(filter)).resolves.toEqual([]);
+    });
+
+    it('marks the filtered team’s own standing row', async () => {
+      select.mockReturnValue(
+        queryResult([
+          {
+            id: 'standing-1',
+            teamName: 'Gaffer FC',
+            position: 2,
+            played: 1,
+            won: 0,
+            drawn: 1,
+            lost: 0,
+            goalsFor: 1,
+            goalsAgainst: 1,
+            points: 1,
+            isOwnTeam: true,
+            ownerTeam: { id: 'team-1', name: 'Gaffer FC' },
+            competition: {
+              id: 'competition-1',
+              name: 'League',
+              type: 'league',
+            },
+            season: { id: 'season-1', name: '2026/27' },
+          },
+        ]),
+      );
+
+      const [standing] = await service.getTeamStatistics({ teamId: TEAM });
+      expect(standing).toMatchObject({ isOwnTeam: true, goalDifference: 0 });
+    });
+  });
 });

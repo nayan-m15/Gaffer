@@ -73,6 +73,13 @@ export class EventsService {
 
   async create(userId: string, dto: CreateEventDto) {
     const team = await this.requireTeam(userId);
+    const scheduledAt = new Date(dto.scheduledAt);
+    if (
+      !Number.isFinite(scheduledAt.getTime()) ||
+      scheduledAt.getTime() <= Date.now()
+    ) {
+      throw new BadRequestException('Choose a date and time in the future.');
+    }
     const competitionId = dto.type === 'match' ? dto.competitionId : null;
     if (competitionId) {
       await this.requireTeamCompetition(team.id, competitionId);
@@ -108,7 +115,7 @@ export class EventsService {
           teamId: team.id,
           title: dto.title,
           type: dto.type,
-          scheduledAt: new Date(dto.scheduledAt),
+          scheduledAt,
           location: dto.location,
           venueName: dto.venueName,
           venueAddress: dto.venueAddress,

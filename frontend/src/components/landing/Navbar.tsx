@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Menu, X, Sun, Moon } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useTheme } from "@/hooks/useTheme";
 import { brand } from "@/data/brand";

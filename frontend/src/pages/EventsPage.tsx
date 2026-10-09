@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isSameMonth, startOfWeek } from "date-fns";
+import { isBefore, isSameMonth, startOfDay, startOfWeek } from "date-fns";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -97,13 +97,12 @@ export default function EventsPage() {
     setSelectedDate(today);
   }, []);
 
-  /**
-   * Clicking a date on the calendar:
-   * - If the day has events, opens DayEventsDialog popup (Samsung style).
-   * - If the day has no events, directly opens EventFormDialog to add an event.
-   *   Assistants get no create flow, so an empty day does nothing for them.
-   */
-  const handleDayClick = useCallback(
+  const isPastCalendarDay = useCallback(
+    (date: Date) => isBefore(startOfDay(date), startOfDay(now)),
+    [now],
+  );
+
+  const selectDayAndSyncCursor = useCallback(
     (date: Date) => {
       setSelectedDate(date);
       if (view === "week") {
@@ -115,17 +114,40 @@ export default function EventsPage() {
       } else if (!isSameMonth(date, cursor)) {
         setCursor(date);
       }
+    },
+    [cursor, view],
+  );
+
+  /**
+   * Desktop calendar day clicks:
+   * - An empty today/future day opens the create form directly for coaches.
+   * - Otherwise the day dialog opens, including empty days for assistants.
+   * Mobile uses handleMobileDayClick, which always opens the day dialog.
+   */
+  const handleDayClick = useCallback(
+    (date: Date) => {
+      selectDayAndSyncCursor(date);
 
       const dayEvents = getDayEvents(eventsByDay, date);
       if (dayEvents.length === 0) {
-        if (canManageEvents) {
+        if (canManageEvents && !isPastCalendarDay(date)) {
           setPanel({ kind: "create", date });
+        } else {
+          setPanel({ kind: "day", date });
         }
       } else {
         setPanel({ kind: "day", date });
       }
     },
-    [canManageEvents, cursor, eventsByDay, view],
+    [canManageEvents, eventsByDay, isPastCalendarDay, selectDayAndSyncCursor],
+  );
+
+  const handleMobileDayClick = useCallback(
+    (date: Date) => {
+      selectDayAndSyncCursor(date);
+      setPanel({ kind: "day", date });
+    },
+    [selectDayAndSyncCursor],
   );
 
   const handleOpenEvent = useCallback((event: TeamEvent) => {
@@ -167,7 +189,6 @@ export default function EventsPage() {
       events={visibleEvents}
       eventDays={eventDays}
       teamName={team?.name}
-      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
       readOnly={!canManageEvents}
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {
@@ -202,7 +223,10 @@ export default function EventsPage() {
           now={now}
           onSelectDate={handleDayClick}
           onCreateEvent={handleDayClick}
-          readOnly={!canManageEvents}
+          readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
         />
       )}
       {view === "week" && (
@@ -219,7 +243,10 @@ export default function EventsPage() {
           month={cursor}
           events={visibleEvents}
           now={now}
-          readOnly={!canManageEvents}
+          readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
           onOpenEvent={handleOpenEvent}
           onCreateEvent={() => setPanel({ kind: "create" })}
         />
@@ -315,12 +342,16 @@ export default function EventsPage() {
             eventsByDay={eventsByDay}
             visibleEvents={visibleEvents}
             hiddenTypes={hiddenTypes}
-            readOnly={!canManageEvents}
+            readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
             onToggleType={handleToggleType}
             matchFilter={matchFilter}
             competitionOptions={competitionOptions}
             onMatchFilterChange={setMatchFilter}
             onSelectDate={handleDayClick}
+            onSelectMobileDay={handleMobileDayClick}
             onNavigate={navigate}
             onToday={goToToday}
             onCreateEvent={(date) =>
@@ -337,7 +368,10 @@ export default function EventsPage() {
             view={view}
             label={label}
             hiddenTypes={hiddenTypes}
-            readOnly={!canManageEvents}
+            readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
             onToggleType={handleToggleType}
             matchFilter={matchFilter}
             competitionOptions={competitionOptions}
@@ -401,14 +435,21 @@ export default function EventsPage() {
         date={panel.kind === "day" ? panel.date : null}
         events={panel.kind === "day" ? getDayEvents(eventsByDay, panel.date) : []}
         now={now}
-        readOnly={!canManageEvents}
+        readOnly={
+          !canManageEvents ||
+          (panel.kind === "day" && isPastCalendarDay(panel.date))
+        }
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });
           }
         }}
         onSelectEvent={handleOpenEvent}
-        onAddEvent={(date) => setPanel({ kind: "create", date })}
+        onAddEvent={(date) => {
+          if (!isPastCalendarDay(date)) {
+            setPanel({ kind: "create", date });
+          }
+        }}
       />
 
       <EventFormDialog
@@ -416,7 +457,6 @@ export default function EventsPage() {
         event={panel.kind === "edit" ? (selectedEvent ?? undefined) : undefined}
         initialDate={panel.kind === "create" ? panel.date : undefined}
         initialType={panel.kind === "create" ? panel.type : undefined}
-        allowPastDate={panel.kind === "create" && panel.date !== undefined}
         onOpenChange={(open) => {
           if (!open) {
             setPanel({ kind: "closed" });

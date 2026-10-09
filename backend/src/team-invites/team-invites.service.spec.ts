@@ -6,7 +6,7 @@ import {
 import { createHash } from 'node:crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
-import { teamInvites } from '../database/schema';
+import { teamInvites, teamMembers } from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import { TeamInvitesService } from './team-invites.service';
 
@@ -201,6 +201,42 @@ describe('TeamInvitesService', () => {
       await expect(
         service.revokeInvite('team-id', 'other-teams-invite-id'),
       ).rejects.toThrow('Invite not found.');
+    });
+  });
+
+  describe('removeAssistant', () => {
+    it('deletes the assistant membership row for the team', async () => {
+      const removeChain = {
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([{ id: 'member-id' }]),
+        }),
+      };
+      const remove = jest.fn().mockReturnValue(removeChain);
+      mockDatabaseService.database = { delete: remove };
+
+      await expect(
+        service.removeAssistant('team-id', 'member-id'),
+      ).resolves.toBeUndefined();
+
+      expect(remove).toHaveBeenCalledWith(teamMembers);
+      expect(removeChain.where).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects with 404 when the id is unknown, on another team, or a coach', async () => {
+      const removeChain = {
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([]),
+        }),
+      };
+      const remove = jest.fn().mockReturnValue(removeChain);
+      mockDatabaseService.database = { delete: remove };
+
+      // The where-clause scopes the delete to (id, coach's team,
+      // role='assistant'), so a coach row and another team's member both
+      // match nothing and surface as the same 404.
+      const removal = service.removeAssistant('team-id', 'coach-member-id');
+      await expect(removal).rejects.toBeInstanceOf(NotFoundException);
+      await expect(removal).rejects.toThrow('Assistant not found.');
     });
   });
 
