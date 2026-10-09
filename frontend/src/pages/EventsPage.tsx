@@ -119,10 +119,10 @@ export default function EventsPage() {
   );
 
   /**
-   * Clicking a date on the calendar:
-   * - If the day has events, opens DayEventsDialog popup (Samsung style).
-   * - If the day has no events, directly opens EventFormDialog to add an event.
-   *   Assistants get no create flow, so an empty day does nothing for them.
+   * Desktop calendar day clicks:
+   * - An empty today/future day opens the create form directly for coaches.
+   * - Otherwise the day dialog opens, including empty days for assistants.
+   * Mobile uses handleMobileDayClick, which always opens the day dialog.
    */
   const handleDayClick = useCallback(
     (date: Date) => {

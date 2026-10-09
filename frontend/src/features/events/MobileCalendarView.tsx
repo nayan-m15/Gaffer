@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -601,6 +601,7 @@ function MobileAgendaList({
   onCreateEvent: () => void;
   readOnly?: boolean;
 }) {
+  const [showPastEvents, setShowPastEvents] = useState(false);
   const groups = useMemo(() => {
     const map = new Map<string, TeamEvent[]>();
     for (const evt of events) {
@@ -615,27 +616,42 @@ function MobileAgendaList({
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [events]);
 
-  if (groups.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-8 text-center shadow-xs">
-        <CalendarDays className="size-8 text-muted-foreground/60" />
-        <p className="mt-2 text-sm font-semibold text-foreground">No events found</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {readOnly ? "Your team has no events yet." : "Create an event to fill the agenda schedule."}
-        </p>
-        {!readOnly && (
-          <Button size="sm" className="mt-4 gap-1.5" onClick={onCreateEvent}>
-            <Plus className="size-3.5" />
-            New Event
-          </Button>
-        )}
-      </div>
-    );
-  }
+  const todayKey = toDayKey(now);
+  const hasPastEvents = groups.some(([dayKey]) => dayKey < todayKey);
+  const visibleGroups = showPastEvents
+    ? groups
+    : groups.filter(([dayKey]) => dayKey >= todayKey);
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-[calc(8rem+env(safe-area-inset-bottom))]">
-      {groups.map(([dayKey, dayEvents]) => {
+      {hasPastEvents && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-full text-xs font-semibold"
+          aria-pressed={showPastEvents}
+          onClick={() => setShowPastEvents((current) => !current)}
+        >
+          {showPastEvents ? "Hide past events" : "Show past events"}
+        </Button>
+      )}
+      {visibleGroups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-8 text-center shadow-xs">
+          <CalendarDays className="size-8 text-muted-foreground/60" />
+          <p className="mt-2 text-sm font-semibold text-foreground">
+            {showPastEvents ? "No events found" : "No upcoming events"}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {readOnly ? "No events to show for these dates." : "Create an event to fill the agenda schedule."}
+          </p>
+          {!readOnly && (
+            <Button size="sm" className="mt-4 gap-1.5" onClick={onCreateEvent}>
+              <Plus className="size-3.5" />
+              New Event
+            </Button>
+          )}
+        </div>
+      ) : visibleGroups.map(([dayKey, dayEvents]) => {
         const [y, m, d] = dayKey.split("-").map(Number);
         const date = new Date(y, m - 1, d);
         return (
