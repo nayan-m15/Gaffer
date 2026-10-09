@@ -748,3 +748,136 @@ test('public dashboard preserves loaded players after a rate-limited page and re
   await expect(page.getByRole('button', { name: 'Load more players', exact: true })).toHaveCount(0);
   expect(laterRequests).toBe(2);
 });
+
+async function mockLoggerPicker(page: Page, events?: unknown[]) {
+  const rows = events ?? Array.from({ length: 8 }, (_, index) => ({
+    id: "picker-" + index, teamId: "team-picker", title: "WITS vs Rivals " + index,
+    type: index === 7 ? "training" : "match",
+    status: index === 5 ? "completed" : index === 6 ? "cancelled" : "scheduled",
+    scheduledAt: index === 1 ? "2100-10-10T15:00:00Z" : "2020-10-08T15:00:00Z",
+    location: index === 2 ? "University sports complex with a very long venue name and training grounds" : "Main stadium",
+    competitionId: index === 0 ? "picker-league" : null,
+    matchId: index === 5 ? "picker-report" : null,
+    lineupConfirmedAt: index === 0 ? "2020-10-08T12:00:00Z" : null,
+  }));
+  await page.route("**/api/**", route => json(route, []));
+  await page.route("**/auth/session", route => json(route, session("Test Coach", "WITS", "picker")));
+  await page.route("**/api/events", route => json(route, rows));
+  await page.route("**/api/competitions/mine", route => json(route, [
+    { id: "picker-league", name: "University Premier League", type: "league" },
+  ]));
+}
+
+test("live logger picker searches all pages and resets pagination when filters change", async ({ page }) => {
+  await mockLoggerPicker(page, Array.from({ length: 26 }, (_, index) => ({
+    id: "search-" + index, title: "WITS vs Rivals " + index, type: "match", status: "scheduled",
+    scheduledAt: new Date(Date.UTC(2020, 9, index + 1)).toISOString(),
+    competitionId: index === 0 ? "picker-league" : null,
+  })));
+  await page.goto("/live-logger");
+  const matches = page.getByRole("list", { name: "Matches", exact: true });
+  await expect(matches.getByRole("listitem")).toHaveCount(10);
+  await expect(page.getByRole("status")).toContainText("Showing 1–10 of 26 matches");
+  const nextPage = page.getByRole("button", { name: "Next match page" });
+  await nextPage.focus();
+  await nextPage.press("Enter");
+  await expect(nextPage).toBeFocused();
+  await expect(matches.getByRole("listitem")).toHaveCount(10);
+  await expect(page.getByRole("status")).toContainText("Showing 11–20 of 26 matches");
+  const search = page.getByRole("searchbox", { name: "Search matches" });
+  await search.fill(" premier ");
+  await expect(search).toBeFocused();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await expect(matches.getByRole("heading", { name: "WITS vs Rivals 0" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page.getByRole("status")).toContainText("Showing 1–10 of 26 matches");
+  await page.getByRole("searchbox", { name: "Search matches" }).fill("does not exist");
+  await expect(page.getByRole("heading", { name: "No matches found" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("No matches found");
+  await page.getByRole("button", { name: "Reset filters" }).click();
+  await expect(page.getByRole("status")).toContainText("Showing 1–10 of 26 matches");
+});
+
+test("live logger picker prioritizes today and supports sorting and page sizes", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-09T12:00:00Z"));
+  const dates = [
+    "2026-10-01T12:00:00Z", "2026-10-11T12:00:00Z", "2026-10-09T16:00:00Z",
+    "2026-10-08T12:00:00Z", "2026-10-10T12:00:00Z", "2026-10-09T08:00:00Z", "invalid",
+    ...Array.from({ length: 18 }, (_, index) => new Date(Date.UTC(2020, 0, index + 1)).toISOString()),
+  ];
+  await mockLoggerPicker(page, dates.map((scheduledAt, index) => ({
+    id: "ordered-" + index, title: "Ordered match " + index, type: "match", status: "scheduled", scheduledAt,
+  })));
+  await page.goto("/live-logger");
+  const matches = page.getByRole("list", { name: "Matches", exact: true });
+  const titles = matches.getByRole("heading");
+  await expect(titles).toHaveCount(10);
+  expect((await titles.allTextContents()).slice(0, 4)).toEqual([
+    "Ordered match 5", "Ordered match 2", "Ordered match 3", "Ordered match 0",
+  ]);
+  await page.getByRole("button", { name: "Next match page" }).click();
+  await page.getByRole("combobox", { name: "Matches per page" }).click();
+  await page.getByRole("option", { name: "20", exact: true }).click();
+  await expect(titles).toHaveCount(20);
+  await expect(page.getByRole("status")).toContainText("Page 1 of 2");
+  await page.getByRole("button", { name: "Next match page" }).click();
+  await page.getByRole("combobox", { name: "Sort matches" }).click();
+  await page.getByRole("option", { name: "Newest first", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Page 1 of 2");
+  await expect(titles.first()).toHaveText("Ordered match 1");
+  await page.getByRole("combobox", { name: "Matches per page" }).click();
+  await page.getByRole("option", { name: "50", exact: true }).click();
+  await expect(titles).toHaveCount(25);
+  await expect(titles.last()).toHaveText("Ordered match 6");
+  await expect(page.getByRole("navigation", { name: "Match pages" })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Sort matches" }).click();
+  await page.getByRole("option", { name: "Oldest first", exact: true }).click();
+  await expect(titles.first()).toHaveText("Ordered match 7");
+  await expect(titles.last()).toHaveText("Ordered match 6");
+  await page.getByRole("combobox", { name: "Sort matches" }).click();
+  await page.getByRole("option", { name: "Recommended", exact: true }).click();
+  expect((await titles.allTextContents()).slice(-3)).toEqual(["Ordered match 4", "Ordered match 1", "Ordered match 6"]);
+});
+
+test("live logger picker preserves future locks, squad navigation and completed report navigation", async ({ page }) => {
+  await mockLoggerPicker(page);
+  await page.goto("/live-logger");
+  const matches = page.getByRole("list", { name: "Matches", exact: true });
+  const locked = matches.getByRole("listitem").filter({ hasText: "WITS vs Rivals 1" });
+  await expect(locked.getByText(/Unlocks/)).toBeVisible();
+  await expect(locked.getByRole("button")).toHaveCount(0);
+  await matches.getByRole("button", { name: /WITS vs Rivals 0/ }).click();
+  await expect(page).toHaveURL(new RegExp("/events/picker-0/confirm-squad$"));
+  await page.goto("/live-logger");
+  await page.getByRole("combobox", { name: "Filter matches by status" }).click();
+  await page.getByRole("option", { name: "Completed", exact: true }).click();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await matches.getByRole("button", { name: /View Match Report/ }).click();
+  await expect(page).toHaveURL(new RegExp("/matches/picker-report/report$"));
+  await page.goto("/live-logger");
+  await page.getByRole("combobox", { name: "Filter matches by status" }).click();
+  await page.getByRole("option", { name: "Cancelled", exact: true }).click();
+  await expect(matches.getByRole("listitem")).toHaveCount(1);
+  await expect(matches.getByRole("button")).toHaveCount(0);
+});
+
+test("live logger picker fits mobile, tablet and desktop in both themes", async ({ page }) => {
+  await mockLoggerPicker(page);
+  await page.goto("/live-logger");
+  await expect(page.getByRole("heading", { name: "Live Logger", exact: true })).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(value => document.documentElement.classList.toggle("dark", value === "dark"), theme);
+    for (const width of [320, 390, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 960 });
+      await expect.poll(() => page.locator(".live-logger-page").evaluate(element => {
+        const toolbar = element.querySelector(".live-logger-toolbar")!;
+        return { page: element.scrollWidth <= element.clientWidth, toolbar: toolbar.scrollWidth <= toolbar.clientWidth };
+      }), { message: theme + " at " + width }).toEqual({ page: true, toolbar: true });
+      await expect(page.getByRole("combobox", { name: "Filter matches by status" })).toBeVisible();
+      await expect(page.getByRole("searchbox", { name: "Search matches" })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Sort matches" })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Matches per page" })).toBeVisible();
+      await expect.poll(() => page.locator(".live-logger-list-options").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+  }
+});
