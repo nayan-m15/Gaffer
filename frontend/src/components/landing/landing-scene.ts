@@ -911,11 +911,248 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   const ballTexture=footballTexture(), footballMat = new THREE.MeshStandardMaterial({map:ballTexture,roughness:.72});
   scene.add(createEquipmentArea(lowPower, dressingKit));
   const tunnelAssets = buildPremiumTunnel(scene, lowPower);
-  scene.add(box([10.5,.18,TUNNEL_WIDTH],[-39.25,-.04,0],dark));
+  scene.add(box([6,.18,TUNNEL_WIDTH],[-41.5,-.04,0],dark));
 
   return { floorTexture, roomSurfaceDetail, crestMap, numberMaps, ballTexture, shirtFabricMap, footballMat, metal, green, dark, dummy, light, cushion, tunnelAssets };
 }
 
+
+// Landing-only clearance: never mutate the shared stadium builder or materials.
+function clearLandingStadium(group: THREE.Group) {
+  const bounds = (x0: number, x1: number, z: number, y0 = -.4, y1 = 4.7) =>
+    new THREE.Box3(new THREE.Vector3(x0, y0, -z), new THREE.Vector3(x1, y1, z));
+  const room = bounds(-80, -60.5, 9.5);
+  const covered = bounds(-61.5, -44.31, 6.6);
+  const route = bounds(-44.31, -38.5, 6.25);
+  const apron = bounds(-44.5, -38.5, 6.4);
+  // Include the entire native tunnel ceiling, not just its lower half.
+  const nativeTunnel = bounds(-51.21, -40.49, 3.71, -.01, 5.01);
+  const nativeRails = bounds(-42.04, -37.26, 3.54, -.04, 1.04);
+  const conflicts = [room, covered, route];
+  const replacedMaterials = new Set<THREE.Material>();
+  const replacedGeometry = new Set<THREE.BufferGeometry>();
+  const planes = (volume: THREE.Box3) => [
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), volume.min.x),
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), -volume.max.x),
+    new THREE.Plane(new THREE.Vector3(0, -1, 0), volume.min.y),
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), -volume.max.y),
+    new THREE.Plane(new THREE.Vector3(0, 0, -1), volume.min.z),
+    new THREE.Plane(new THREE.Vector3(0, 0, 1), -volume.max.z),
+  ];
+  const clip = (mesh: THREE.Mesh | THREE.Line, volume: THREE.Box3) => {
+    const clone = (material: THREE.Material) => {
+      replacedMaterials.add(material);
+      const result = material.clone();
+      result.clippingPlanes = planes(volume);
+      result.clipIntersection = true;
+      result.clipShadows = true;
+      return result;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
+  };
+  const matrix = new THREE.Matrix4(), worldMatrix = new THREE.Matrix4();
+  const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+  const worldBounds = new THREE.Box3();
+  group.updateMatrixWorld(true);
+  group.traverse(object => {
+    if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+    object.geometry.computeBoundingBox();
+    const localBounds = object.geometry.boundingBox;
+    if (!localBounds) return;
+    if (object instanceof THREE.InstancedMesh) {
+      for (let i = 0; i < object.count; i++) {
+        object.getMatrixAt(i, matrix);
+        worldMatrix.multiplyMatrices(object.matrixWorld, matrix);
+        worldBounds.copy(localBounds).applyMatrix4(worldMatrix);
+        const nativePiece = nativeTunnel.containsBox(worldBounds) || nativeRails.containsBox(worldBounds);
+        if (!nativePiece && !conflicts.some(volume => volume.intersectsBox(worldBounds))) continue;
+        object.setMatrixAt(i, hidden);
+      }
+      object.instanceMatrix.needsUpdate = true;
+      return;
+    }
+    if (object.name === "105 x 68m pitch with regulation markings") {
+      clip(object, apron);
+      return;
+    }
+    // Test individual primitives: a whole-bowl bounding box also spans empty air.
+    const positions = object.geometry.getAttribute("position");
+    const index = object.geometry.index;
+    const count = index ? index.count : positions.count;
+    const stride = object instanceof THREE.Mesh ? 3 : 2;
+    const affected = new Set<THREE.Box3>();
+    const kept: number[] = [];
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < count; i += stride) {
+      worldBounds.makeEmpty();
+      const primitive: number[] = [];
+      for (let j = 0; j < stride; j++) {
+        const id = index ? index.getX(i + j) : i + j;
+        primitive.push(id);
+        vertex.fromBufferAttribute(positions, id).applyMatrix4(object.matrixWorld);
+        worldBounds.expandByPoint(vertex);
+      }
+      const touching = conflicts.filter(volume => volume.intersectsBox(worldBounds));
+      touching.forEach(volume => affected.add(volume));
+      if (!touching.length) kept.push(...primitive);
+    }
+    if (affected.size === 1) {
+      const volume = [...affected][0];
+      clip(object, volume);
+    } else if (affected.size > 1) {
+      // Native clipping cannot express a union of separate box interiors. This
+      // fallback removes intersecting primitives; single-volume meshes keep
+      // their original geometry and get a mesh-specific cloned material.
+      const original = object.geometry;
+      object.geometry = original.clone();
+      object.geometry.setIndex(kept);
+      replacedGeometry.add(original);
+    }
+  });
+  // Dispose replaced resources only if no remaining bowl object shares them.
+  // Clones (and their shared textures) stay reachable for disposeStadium.
+  group.traverse(object => {
+    if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+    replacedGeometry.delete(object.geometry);
+    (Array.isArray(object.material) ? object.material : [object.material])
+      .forEach(material => replacedMaterials.delete(material));
+  });
+  replacedGeometry.forEach(geometry => geometry.dispose());
+  replacedMaterials.forEach(material => material.dispose());
+}
+
+function buildLandingWalkout(stadium: THREE.Group, lowPower: boolean) {
+  // Undo the bowl rotation for these children: all dimensions below use the
+  // unchanged landing world axes. Disposal still belongs to the bowl group.
+  const group = new THREE.Group();
+  group.name = "Landing player entrance and walkout";
+  group.rotation.y = -Math.PI / 2;
+  stadium.add(group);
+  const charcoal = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92 });
+  const tunnelCharcoal = new THREE.MeshStandardMaterial({ color: 0x080e0c, roughness: .84 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x202a27, roughness: .48, metalness: .52 });
+  const runnerMaterial = new THREE.MeshStandardMaterial({ color: 0x111815, roughness: 1 });
+  const addBox = (size: [number, number, number], position: [number, number, number], material: THREE.Material) => {
+    const mesh = box(size, position, material, !lowPower);
+    group.add(mesh);
+    return mesh;
+  };
+
+  // Inner side faces at +/-6.35 clear even the yawed shoulder ends. The
+  // roof underside is 4.45, above the original ceiling/shoulder/rib system.
+  for (const side of [-1, 1]) {
+    addBox([16.69, 4.42, .2], [-52.655, 2.24, side * 6.45], tunnelCharcoal);
+    // These returns sit forward of the shoulder/rib ends. Their inner
+    // edges touch the pillars' outer edges at +/-6.15; their forward ends
+    // align with the pillars/walkout junction at -44.31.
+    addBox([.05, 4.42, .2], [-44.335, 2.24, side * 6.25], tunnelCharcoal);
+    // Roof wings close the corners beside the narrower header without
+    // overlapping its side faces.
+    addBox([.44, .2, .3], [-44.53, 4.55, side * 6.4], tunnelCharcoal);
+  }
+  addBox([16.25, .2, 13.1], [-52.875, 4.55, 0], tunnelCharcoal);
+  // Roof-to-header return seals the space beside the narrower old ceiling.
+  addBox([.05, .22, 12.7], [-44.775, 4.34, 0], tunnelCharcoal);
+  addBox([.4, .72, 12.5], [-44.55, 4.59, 0], metal);
+
+  const brandTexture = canvasTexture(1024, 256, ctx => {
+    ctx.fillStyle = "#080d0b"; ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillStyle = "#00d99a"; ctx.fillRect(0, 0, 1024, 8); ctx.fillRect(0, 248, 1024, 8);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#effff9"; ctx.font = "900 142px Arial,sans-serif";
+    ctx.fillText("GAFFER", 512, 108);
+    ctx.fillStyle = "#00d99a"; ctx.font = "700 32px Arial,sans-serif";
+    ctx.fillText("OWN THE TOUCHLINE", 512, 211);
+  });
+  brandTexture.name = "Landing walkout GAFFER branding";
+  const brandMaterial = new THREE.MeshStandardMaterial({ map: brandTexture, roughness: .9, side: THREE.DoubleSide });
+  const sign = (width: number, height: number, position: [number, number, number], yaw = 0) => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), brandMaterial);
+    mesh.position.set(...position); mesh.rotation.y = yaw;
+    group.add(mesh);
+  };
+  // Pitch-facing header; 1 cm separation from the panel's front face.
+  sign(5.6, .60, [-44.34, 4.59, 0], Math.PI / 2);
+
+  const wallStart = -44.31, wallEnd = -38.5;
+  const cap = (x: number) => x <= -42
+    ? 1.9 + .52 * (-x - 42) / .82
+    : 1.9 - .8 * (x + 42) / 3.5;
+  const sections = [wallStart, -42, wallEnd];
+  const beam = (a: THREE.Vector3, b: THREE.Vector3) => {
+    const direction = new THREE.Vector3().subVectors(b, a);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, direction.length(), 8), metal);
+    mesh.position.copy(a).add(b).multiplyScalar(.5);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    mesh.castShadow = !lowPower; group.add(mesh);
+  };
+  for (const side of [-1, 1]) {
+    // The old pillars end at x=-44.31 and have inner faces at z=+/-5.65.
+    // New walls butt against that front plane, with matching inner faces;
+    // they do not overlap the pillar volumes or duplicate their front faces.
+    const shape = new THREE.Shape();
+    shape.moveTo(wallStart, .05); shape.lineTo(wallEnd, .05);
+    for (const x of [...sections].reverse()) shape.lineTo(x, cap(x));
+    shape.closePath();
+    const wall = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: .6, bevelEnabled: false, steps: 1 }), charcoal);
+    wall.position.z = side > 0 ? 5.65 : -6.25;
+    wall.castShadow = !lowPower; wall.receiveShadow = true; group.add(wall);
+    const railZ = side * 5.95;
+    for (let i = 0; i < sections.length - 1; i++) {
+      beam(new THREE.Vector3(sections[i], cap(sections[i]) + .9, railZ), new THREE.Vector3(sections[i + 1], cap(sections[i + 1]) + .9, railZ));
+    }
+    for (const x of [wallStart, -43.15, -42, -40.25, wallEnd]) {
+      beam(new THREE.Vector3(x, cap(x), railZ), new THREE.Vector3(x, cap(x) + .9, railZ));
+    }
+    // At this height the whole sign fits beneath the sloping cap.
+    sign(4.5, .8, [-41.4, .65, side * 5.64], side > 0 ? Math.PI : 0);
+    addBox([.5, 1.3, .6], [-38.25, .7, side * 5.95], metal);
+    sign(.48, .7, [-37.99, .78, side * 5.95], Math.PI / 2);
+  }
+  // Clear the original threshold's forward edge (-44.33); top is .065,
+  // 1.5 cm above the apron. Stop at the grass edge without extending over it.
+  addBox([5.8, .015, 4], [-41.4, .0575, 0], runnerMaterial);
+
+  // The builder omits central seats in rows 0..11 for its native tunnel.
+  // Rows 8..11 have intact decks above our roof (first deck y=5.46).
+  // Reuse that bowl's shell/material/colors, leaving a central stair aisle.
+  const source = stadium.children.find(object => object instanceof THREE.InstancedMesh && object.name.endsWith("instanced seats"));
+  if (source instanceof THREE.InstancedMesh) {
+    const placements: THREE.Matrix4[] = [];
+    const colors: THREE.Color[] = [];
+    const matrix = new THREE.Matrix4(), world = new THREE.Matrix4();
+    const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
+    for (let row = 8; row < 12; row++) {
+      const x = -42 - row * .82 - .48, y = 1.82 + row * .52;
+      let nearest = Infinity, selected = -1;
+      for (let i = 0; i < source.count; i++) {
+        source.getMatrixAt(i, matrix);
+        world.multiplyMatrices(source.matrixWorld, matrix);
+        position.setFromMatrixPosition(world);
+        if (Math.abs(position.x - x) > .12 || Math.abs(position.y - y) > .02 || Math.abs(position.z) < 3.4) continue;
+        if (Math.abs(position.z) < nearest) { nearest = Math.abs(position.z); selected = i; }
+      }
+      if (selected < 0) continue;
+      source.getMatrixAt(selected, matrix); world.multiplyMatrices(source.matrixWorld, matrix);
+      world.decompose(position, rotation, scale);
+      const color = new THREE.Color(); source.getColorAt(selected, color);
+      for (let i = 0; i < 12; i++) {
+        const z = -3.08 + i * .56;
+        if (Math.abs(z) < .95) continue;
+        placements.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), rotation, scale));
+        colors.push(color.clone());
+      }
+    }
+    if (placements.length) {
+      const seats = new THREE.InstancedMesh(source.geometry, source.material, placements.length);
+      seats.name = "Landing seats above covered entrance";
+      placements.forEach((matrix, i) => { seats.setMatrixAt(i, matrix); seats.setColorAt(i, colors[i]); });
+      seats.instanceMatrix.needsUpdate = true;
+      if (seats.instanceColor) seats.instanceColor.needsUpdate = true;
+      seats.frustumCulled = false; seats.receiveShadow = true; group.add(seats);
+    }
+  }
+}
 
 function buildPitchAndStadium(
   scene: THREE.Scene,
@@ -927,30 +1164,8 @@ function buildPitchAndStadium(
   stadium.group.rotation.y = Math.PI / 2;
   stadium.group.position.set(0, 0, 0);
   stadium.group.scale.set(1, 1, 1);
-  // One enclosing world-space box: local clipping cannot express a union of
-  // two independent box intersections on a material. Include a 0.05m margin.
-  // Outward normals make clipIntersection discard only the box interior.
-  const clearancePlanes = [
-    new THREE.Plane(new THREE.Vector3(-1, 0, 0), -80.05),
-    new THREE.Plane(new THREE.Vector3(1, 0, 0), 33.95),
-    new THREE.Plane(new THREE.Vector3(0, -1, 0), -0.4),
-    new THREE.Plane(new THREE.Vector3(0, 1, 0), -4.75),
-    new THREE.Plane(new THREE.Vector3(0, 0, -1), -9.55),
-    new THREE.Plane(new THREE.Vector3(0, 0, 1), -9.55),
-  ];
-  const bowlMaterials = new Set<THREE.Material>();
-  stadium.group.traverse(object => {
-    if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
-      (Array.isArray(object.material) ? object.material : [object.material])
-        .forEach(material => bowlMaterials.add(material));
-    }
-  });
-  bowlMaterials.forEach(material => {
-    material.clippingPlanes = clearancePlanes;
-    material.clipIntersection = true;
-    material.clipShadows = true;
-    material.needsUpdate = true;
-  });
+  clearLandingStadium(stadium.group);
+  buildLandingWalkout(stadium.group, lowPower);
   scene.add(stadium.group);
   const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(DARK_SKY_TOP)},bottomColor:{value:new THREE.Color(DARK_SKY_BOTTOM)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);float t=smoothstep(0.0,1.0,pow(h,.86));gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(138,lowPower?32:64,lowPower?18:32),skyMat));
   scene.add(new THREE.HemisphereLight(0xaecbc4,0x17201b,.58));const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1024,lowPower?512:1024);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
