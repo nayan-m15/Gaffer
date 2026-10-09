@@ -31,20 +31,15 @@ export const publicMatchesQuerySchema = publicDashboardQuerySchema.extend({
 });
 
 /**
- * A player page costs more than its row count suggests: each athlete is joined
- * to every one of their `athlete_match_stats` rows, and each of those carries
- * correlated `match_events` counts, so the work scales with
- * `limit x matches per athlete`. The former ceiling of 500 therefore allowed a
- * single anonymous request to aggregate tens of thousands of event rows.
- *
- * 200 keeps the heaviest public query within the same order of magnitude as
- * `matches` above (100) while still returning a typical club's whole roster in
- * one or two pages. Over-large values are rejected rather than clamped: the
- * client pages until a short page tells it to stop
- * (`frontend/src/services/public-dashboard.ts`), so silently returning fewer
- * rows than asked for would truncate the list instead of erroring.
+ * Players are paged before their history is aggregated in SQL. The ceiling of
+ * 200 bounds anonymous aggregation work; the dashboard requests 40 at a time.
+ * Reject over-large limits rather than silently returning a short page, which
+ * clients interpret as the end of the list. Name and position filters apply
+ * before pagination, so search covers the complete matching roster.
  */
 export const publicPlayersQuerySchema = publicDashboardQuerySchema.extend({
+  search: z.string().trim().max(100).optional(),
+  position: z.enum(['ALL', 'FWD', 'MID', 'DEF', 'GK']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });

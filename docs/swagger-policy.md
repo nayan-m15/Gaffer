@@ -27,6 +27,11 @@ by decorators and schemas in `backend/src/public-api/`. Runtime validation stays
 in `public-api.schemas.ts`. Swagger generates documentation, not API endpoints.
 The UI uses the same backend origin for "Try it out".
 
+The matches response includes `summary: { total, cleanSheets }` for the complete
+filtered match set, independent of its page. Player queries also document
+`search` (maximum 100 characters) and `position` (`ALL`, `FWD`, `MID`, `DEF`,
+`GK`), applied before pagination. These are additions to the existing six paths.
+
 Protected application routes are excluded from the public schema. Their guards,
 session requirements, team permissions and credentialed CORS policy remain in
 place. The six public API endpoints retain wildcard CORS without credentials.

@@ -380,7 +380,12 @@ select:-webkit-autofill {
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 700ms ease-out;
+  transition: opacity 250ms ease-out;
+}
+
+/* Button transition-all otherwise animates inherited scrollbar-color on theme changes. */
+.landing-v2 .group\/button {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
 }
 
 .landing-scene[data-ready="true"] .landing-scene__canvas {
@@ -1375,6 +1380,13 @@ select:-webkit-autofill {
 .public-player-carousel .depth-carousel__arrow--next { right: 0; }
 .public-player-carousel { touch-action: auto; }
 .public-player-carousel .depth-carousel__stage { touch-action: pan-y; }
+.public-player-carousel .depth-carousel__counter {
+  bottom: 4px;
+  height: 24px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+}
 .public-player-carousel .depth-carousel__dots {
   width: max-content;
   max-width: 100%;

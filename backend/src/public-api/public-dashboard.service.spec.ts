@@ -11,6 +11,8 @@ function queryResult<T>(rows: T[]) {
     orderBy: jest.fn(),
     limit: jest.fn(),
     offset: jest.fn(),
+    groupBy: jest.fn(),
+    as: jest.fn(),
     then: (
       resolve: (value: T[]) => unknown,
       reject?: (reason: unknown) => unknown,
@@ -24,6 +26,8 @@ function queryResult<T>(rows: T[]) {
     chain.orderBy,
     chain.limit,
     chain.offset,
+    chain.groupBy,
+    chain.as,
   ]) {
     method.mockReturnValue(chain);
   }
@@ -82,6 +86,7 @@ describe('PublicDashboardService', () => {
   it('aggregates completed-match player statistics and keeps safe fields only', async () => {
     select
       .mockReturnValueOnce(queryResult([{ id: 'athlete-1' }]))
+      .mockReturnValueOnce(queryResult([]))
       .mockReturnValueOnce(
         queryResult([
           {
@@ -92,33 +97,12 @@ describe('PublicDashboardService', () => {
             squadNumber: 8,
             teamId: 'team-1',
             teamName: 'Gaffer FC',
-            matchId: 'match-1',
-            eventStatus: 'completed',
+            appearances: 1,
+            starts: 1,
             minutesPlayed: 90,
-            appeared: true,
-            started: true,
             goals: 1,
             assists: 2,
             saves: 0,
-            yellowCards: 0,
-            redCards: 0,
-          },
-          {
-            id: 'athlete-1',
-            firstName: 'Ari',
-            lastName: 'Nkosi',
-            position: 'CM',
-            squadNumber: 8,
-            teamId: 'team-1',
-            teamName: 'Gaffer FC',
-            matchId: 'match-2',
-            eventStatus: 'scheduled',
-            minutesPlayed: null,
-            appeared: false,
-            started: false,
-            goals: 0,
-            assists: 0,
-            saves: 3,
             yellowCards: 0,
             redCards: 0,
           },
@@ -165,6 +149,7 @@ describe('PublicDashboardService', () => {
       .mockReturnValueOnce(
         queryResult([{ id: 'keeper-1' }, { id: 'keeper-2' }]),
       )
+      .mockReturnValueOnce(queryResult([]))
       .mockReturnValueOnce(
         queryResult([
           {
@@ -175,33 +160,12 @@ describe('PublicDashboardService', () => {
             squadNumber: 1,
             teamId: 'team-1',
             teamName: 'Gaffer FC',
-            matchId: 'match-1',
-            eventStatus: 'completed',
             minutesPlayed: 90,
-            appeared: true,
-            started: true,
+            appearances: 1,
+            starts: 1,
             goals: 0,
             assists: 0,
             saves: 5,
-            yellowCards: 0,
-            redCards: 0,
-          },
-          {
-            id: 'keeper-1',
-            firstName: 'Sam',
-            lastName: 'Dlamini',
-            position: 'GK',
-            squadNumber: 1,
-            teamId: 'team-1',
-            teamName: 'Gaffer FC',
-            matchId: 'match-2',
-            eventStatus: 'scheduled',
-            minutesPlayed: null,
-            appeared: false,
-            started: false,
-            goals: 0,
-            assists: 0,
-            saves: 2,
             yellowCards: 0,
             redCards: 0,
           },
@@ -213,11 +177,9 @@ describe('PublicDashboardService', () => {
             squadNumber: 12,
             teamId: 'team-1',
             teamName: 'Gaffer FC',
-            matchId: null,
-            eventStatus: null,
-            minutesPlayed: null,
-            appeared: false,
-            started: false,
+            minutesPlayed: 0,
+            appearances: 0,
+            starts: 0,
             goals: 0,
             assists: 0,
             saves: 0,
@@ -379,18 +341,22 @@ describe('PublicDashboardService', () => {
         const where = jest.fn();
         const page = queryResult([{ id: 'athlete-1' }]);
         page.where = where.mockReturnValue(page);
-        select.mockReturnValueOnce(page).mockReturnValueOnce(queryResult([]));
+        select
+          .mockReturnValueOnce(page)
+          .mockReturnValueOnce(queryResult([]))
+          .mockReturnValueOnce(queryResult([]));
 
         await service.getPlayers({ ...filter, limit: 100, offset: 0 });
 
         expect(where).toHaveBeenCalledTimes(1);
-        expect(select).toHaveBeenCalledTimes(2);
+        expect(select).toHaveBeenCalledTimes(3);
       },
     );
 
     it('returns an entry for every athlete on the page, even with no stats', async () => {
       select
         .mockReturnValueOnce(queryResult([{ id: 'athlete-1' }]))
+        .mockReturnValueOnce(queryResult([]))
         .mockReturnValueOnce(
           queryResult([
             {
@@ -401,12 +367,12 @@ describe('PublicDashboardService', () => {
               squadNumber: 1,
               teamId: 'team-1',
               teamName: 'Gaffer FC',
-              matchId: null,
-              eventStatus: null,
-              minutesPlayed: null,
-              appeared: false,
+              appearances: 0,
+              starts: 0,
+              minutesPlayed: 0,
               goals: 0,
               assists: 0,
+              saves: 0,
               yellowCards: 0,
               redCards: 0,
             },

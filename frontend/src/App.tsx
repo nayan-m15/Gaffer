@@ -6,8 +6,6 @@ import { RequirePlayer } from '@/components/RequirePlayer'
 import { RedirectIfAuthenticated } from '@/components/RedirectIfAuthenticated'
 import { LoadingScreen } from '@/components/loading/LoadingScreen'
 import { useAuth } from '@/hooks/useAuth'
-import { AppShell } from '@/layouts/AppShell'
-import { PlayerShell } from '@/layouts/PlayerShell'
 import { CompetitionInviteResumer } from '@/components/CompetitionInviteResumer'
 import { ClaimResumer } from '@/components/ClaimResumer'
 import { TeamInviteResumer } from '@/components/TeamInviteResumer'
@@ -27,6 +25,8 @@ const JoinCompetitionPage = lazy(() => import('@/pages/JoinCompetitionPage'))
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage'))
 const VerifyEmailPendingPage = lazy(() => import('@/pages/VerifyEmailPendingPage'))
 const LandingPage = lazy(() => import('@/pages/LandingPage'))
+const AppShell = lazy(() => import('@/layouts/AppShell').then(module => ({ default: module.AppShell })))
+const PlayerShell = lazy(() => import('@/layouts/PlayerShell').then(module => ({ default: module.PlayerShell })))
 const PublicDashboard = lazy(() => import('@/pages/PublicDashboard'))
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))

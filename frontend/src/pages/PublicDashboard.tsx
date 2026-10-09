@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Award,
@@ -27,7 +27,7 @@ import {
 import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
 import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
-import { getPositionGroup, type PositionGroup } from "@/components/roster/position";
+import { type PositionGroup } from "@/components/roster/position";
 import DepthCarousel from "@/components/ui/DepthCarousel";
 import {
   StandingsDisplay,
@@ -108,22 +108,56 @@ export default function PublicDashboard() {
     seasonId: seasonId || undefined,
     competitionId: competitionId || undefined,
   };
-  const matchesQuery = useQuery({
+  const matchesQuery = useInfiniteQuery({
+    retry: false,
+    refetchInterval: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
     queryKey: ["public-dashboard", "matches", filters, matchStatus],
-    queryFn: () =>
-      getPublicMatches({ ...filters, status: matchStatus || undefined }),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getPublicMatches(
+        { ...filters, status: matchStatus || undefined },
+        pageParam,
+        signal,
+      ),
+    getNextPageParam: (last) =>
+      last.count > 0 && last.offset + last.count < last.summary.total
+        ? last.offset + last.limit
+        : undefined,
   });
-  const playersQuery = useQuery({
-    queryKey: ["public-dashboard", "players", filters],
-    queryFn: () => getPublicPlayers(filters),
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearch(playerSearch.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [playerSearch]);
+  const playerFilters = {
+    ...filters,
+    search: debouncedSearch || undefined,
+    position: ({ all: "ALL", goalkeeper: "GK", defender: "DEF", midfielder: "MID", forward: "FWD" } as const)[positionFilter],
+  };
+  const playersQuery = useInfiniteQuery({
     enabled: playersVisible,
-    staleTime: 60_000,
+    retry: false,
+    refetchInterval: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    queryKey: ["public-dashboard", "players", playerFilters],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getPublicPlayers(playerFilters, pageParam, signal),
+    getNextPageParam: (last) =>
+      last.count === last.limit ? last.offset + last.limit : undefined,
   });
   const fixturesQuery = useQuery({
     queryKey: ["public-dashboard", "competition-fixtures", filters],
     queryFn: () => getPublicCompetitionFixtures(filters),
   });
   const statisticsQuery = useQuery({
+    refetchInterval: 30_000,
     queryKey: ["public-dashboard", "team-statistics", filters],
     queryFn: () => getPublicTeamStatistics(filters),
   });
@@ -175,7 +209,7 @@ export default function PublicDashboard() {
 
   // Separate matches into upcoming and completed
   const { upcomingMatches, completedMatches } = useMemo(() => {
-    const all = matchesQuery.data ?? [];
+    const all = matchesQuery.data?.pages.flatMap((page) => page.data) ?? [];
     const upcoming: PublicMatch[] = [];
     const completed: PublicMatch[] = [];
     for (const match of all) {
@@ -188,23 +222,10 @@ export default function PublicDashboard() {
     return { upcomingMatches: upcoming, completedMatches: completed };
   }, [matchesQuery.data]);
 
-  // Apply the position filter first, then search the already loaded players.
-  const filteredPlayers = useMemo(() => {
-    const players = playersQuery.data ?? [];
-    const positionFiltered =
-      positionFilter === "all"
-        ? players
-        : players.filter((player) => getPositionGroup(player.position) === positionFilter);
-    const normalizedSearch = playerSearch.trim().toLocaleLowerCase();
-
-    if (!normalizedSearch) return positionFiltered;
-
-    return positionFiltered.filter((player) =>
-      `${player.firstName} ${player.lastName}`
-        .toLocaleLowerCase()
-        .includes(normalizedSearch),
-    );
-  }, [playerSearch, playersQuery.data, positionFilter]);
+  const filteredPlayers = useMemo(
+    () => playersQuery.data?.pages.flatMap((page) => page.data) ?? [],
+    [playersQuery.data],
+  );
 
   // Calculate team telemetry metrics from standings data
   const teamMetrics = useMemo(() => {
@@ -224,13 +245,14 @@ export default function PublicDashboard() {
       totalPoints += s.points;
     }
 
-    const winRateVal = totalPlayed > 0 ? Math.round((totalWon / totalPlayed) * 100) : 0;
-    const ppmVal = totalPlayed > 0 ? (totalPoints / totalPlayed).toFixed(2) : "0.00";
+    const winRateVal =
+      totalPlayed > 0 ? Math.round((totalWon / totalPlayed) * 100) : 0;
+    const ppmVal =
+      totalPlayed > 0 ? (totalPoints / totalPlayed).toFixed(2) : "0.00";
 
     // Estimate clean sheets from completed matches where opponent scored 0
-    const cleanSheetsCount = (matchesQuery.data ?? []).filter(
-      (m) => m.status === "completed" && m.opponentScore === 0,
-    ).length;
+    const cleanSheetsCount =
+      matchesQuery.data?.pages[0]?.summary.cleanSheets ?? 0;
 
     return {
       winRate: `${winRateVal}%`,
@@ -249,7 +271,10 @@ export default function PublicDashboard() {
       // The sticky bar starts below the 4rem site navbar. Keep an extra 1rem
       // breathing room between it and a section heading after navigation.
       const offset = Math.ceil(filterBar.getBoundingClientRect().height + 80);
-      main.style.setProperty("--public-dashboard-section-offset", `${offset}px`);
+      main.style.setProperty(
+        "--public-dashboard-section-offset",
+        `${offset}px`,
+      );
     };
     const observer = new ResizeObserver(updateSectionOffset);
 
@@ -286,9 +311,7 @@ export default function PublicDashboard() {
                   Follow live match fixtures, player roster statistics, leagues and cups across all {brand.name} teams.
                 </p>
               </div>
-
             </div>
-
           </div>
         </section>
 
@@ -347,7 +370,7 @@ export default function PublicDashboard() {
 
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
         <div className="public-dashboard-content mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
-          
+
           {/* SECTION 1: Player Showcase */}
           <div ref={playersSectionRef}>
           <DashboardSection
@@ -368,6 +391,7 @@ export default function PublicDashboard() {
                 <input
                   id="player-search"
                   type="search"
+                  maxLength={100}
                   value={playerSearch}
                   onChange={(event) => setPlayerSearch(event.target.value)}
                   placeholder="Search players..."
@@ -395,7 +419,11 @@ export default function PublicDashboard() {
               </div>
 
               <div className="shrink-0 text-xs font-medium text-muted-foreground">
-                Showing <strong className="text-foreground">{filteredPlayers.length}</strong> players
+                Showing{" "}
+                <strong className="text-foreground">
+                  {filteredPlayers.length}
+                </strong>{" "}
+                players
               </div>
             </div>
 
@@ -404,7 +432,7 @@ export default function PublicDashboard() {
             ) : (
               <SectionState
                 loading={false}
-                error={playersQuery.isError}
+                error={playersQuery.isError && !playersQuery.data}
                 empty={filteredPlayers.length === 0}
                 emptyMessage={
                   playerSearch.trim()
@@ -413,6 +441,7 @@ export default function PublicDashboard() {
                 }
               >
                 <PlayerShowcase key={[teamId, seasonId, competitionId, positionFilter, playerSearch].join("|")} players={filteredPlayers} />
+                 <PageMore query={playersQuery} label="players" />
               </SectionState>
             )}
           </DashboardSection>
@@ -427,8 +456,8 @@ export default function PublicDashboard() {
           >
             <SectionState
               loading={matchesQuery.isLoading}
-              error={matchesQuery.isError}
-              empty={(matchesQuery.data?.length ?? 0) === 0}
+              error={matchesQuery.isError && !matchesQuery.data}
+              empty={(matchesQuery.data?.pages[0]?.count ?? 0) === 0}
               emptyMessage="No match events found for these filters."
             >
               <div className="grid gap-8 lg:grid-cols-2">
@@ -485,6 +514,17 @@ export default function PublicDashboard() {
                 </div>
               </div>
             </SectionState>
+            {matchesQuery.data && (
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Showing{" "}
+                {matchesQuery.data.pages.reduce(
+                  (count, page) => count + page.count,
+                  0,
+                )}{" "}
+                of {matchesQuery.data.pages[0].summary.total} matches
+              </p>
+            )}
+            <PageMore query={matchesQuery} label="matches" />
           </DashboardSection>
 
           {/* SECTION 3: League Standings & Performance Analytics */}
@@ -504,7 +544,9 @@ export default function PublicDashboard() {
                     <h3 className="text-base font-bold sm:text-lg">
                       Competition Table
                     </h3>
-                    <span className="text-xs text-muted-foreground">Live Season Rankings</span>
+                    <span className="text-xs text-muted-foreground">
+                      Live Season Rankings
+                    </span>
                   </div>
                   {fixturesQuery.isError && <p className="mb-3 text-sm text-destructive">Competition fixtures could not be loaded.</p>}
                   <PublicCompetitionFixtures
@@ -546,7 +588,10 @@ export default function PublicDashboard() {
                       <MetricCard
                         icon={<ShieldCheck className="size-4 text-brand" />}
                         label="Clean Sheets"
-                        value={teamMetrics.cleanSheets}
+                        value={
+                          matchesQuery.data?.pages[0]?.summary.cleanSheets ??
+                          "—"
+                        }
                         subtext="Zero Conceded"
                       />
                       <MetricCard
@@ -559,14 +604,16 @@ export default function PublicDashboard() {
                   </div>
 
                   <div className="rounded-2xl border border-brand/25 bg-card/65 p-3 text-xs leading-relaxed text-muted-foreground shadow-sm backdrop-blur-md sm:p-4 dark:bg-card/55">
-                    <strong className="block font-bold text-brand">Portal Data Notice:</strong>
-                    Statistics update automatically following completed match report validation by team head coaches.
+                    <strong className="block font-bold text-brand">
+                      Portal Data Notice:
+                    </strong>
+                    Statistics update automatically following completed match
+                    report validation by team head coaches.
                   </div>
                 </div>
               </div>
             )}
           </DashboardSection>
-
         </div>
       </main>
 
@@ -649,7 +696,9 @@ function MetricCard({
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border/60 bg-card/85 p-3 shadow-sm backdrop-blur-sm transition-all hover:border-brand/30 sm:p-3.5 dark:bg-card/75">
       <div className="mb-1.5 flex items-center justify-between sm:mb-2">
-        <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+        <span className="text-xs font-semibold text-muted-foreground">
+          {label}
+        </span>
         {icon}
       </div>
       <div className="text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-2xl">
@@ -660,7 +709,9 @@ function MetricCard({
   );
 }
 
-{/* ─── Component: Dashboard Filters ─────────────────────────────────────── */}
+{
+  /* ─── Component: Dashboard Filters ─────────────────────────────────────── */
+}
 function DashboardFilters({
   teams,
   seasons,
@@ -861,7 +912,9 @@ function PublicDashboardSectionNav({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const left =
-      activeItem.offsetLeft - scroller.clientWidth / 2 + activeItem.clientWidth / 2;
+      activeItem.offsetLeft -
+      scroller.clientWidth / 2 +
+      activeItem.clientWidth / 2;
     scroller.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
   }, [activeSection]);
 
@@ -1195,6 +1248,40 @@ function PublicCompetitionFixtures({ fixtures, competitions, loading }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PageMore({
+  query,
+  label,
+}: {
+  query: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    isFetchNextPageError: boolean;
+    fetchNextPage: () => unknown;
+  };
+  label: string;
+}) {
+  if (!query.hasNextPage) return null;
+  return (
+    <div className="mt-4 text-center">
+      {query.isFetchNextPageError && (
+        <p role="alert" className="mb-2 text-sm text-destructive">
+          More {label} could not be loaded. Try again.
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={query.isFetchingNextPage}
+        onClick={() => {
+          void query.fetchNextPage();
+        }}
+        className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold disabled:opacity-50"
+      >
+        {query.isFetchingNextPage ? "Loading..." : `Load more ${label}`}
+      </button>
     </div>
   );
 }

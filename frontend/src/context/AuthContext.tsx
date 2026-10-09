@@ -95,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error instanceof ApiError && error.status === 401) {
         sessionGeneration.current++;
         await setRemoteSyncAuthenticated(false);
+        await setOfflineUserScope(null);
         setUser(null);
         setTeam(null);
         setClaimedAthletes([]);

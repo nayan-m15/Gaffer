@@ -1,30 +1,28 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarDays, FileText, Lock, MapPin, Radio } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, FileText, Lock, MapPin, Radio, Search, Trophy, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StatusBadge } from "@/features/events/EventDetailDialog";
-import {
-  formatDateLabel,
-  formatEventDateTime,
-  formatLocalDate,
-} from "@/features/events/event-utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMyCompetitions } from "@/features/competitions/hooks";
+import type { CompetitionSummary } from "@/features/competitions/types";
+import { formatDateLabel, formatEventDateTime, formatLocalDate } from "@/features/events/event-utils";
 import { useEvents } from "@/features/events/hooks";
 import type { EventStatus, TeamEvent } from "@/features/events/types";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import "./LiveLoggerPage.css";
 
 type MatchStatusFilter = EventStatus | "all";
-
+type MatchSort = "recommended" | "newest" | "oldest";
+const SORT_OPTIONS: { value: MatchSort; label: string }[] = [
+  { value: "recommended", label: "Recommended" },
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+];
+const PAGE_SIZE_OPTIONS = [10, 20, 50].map(value => ({ value: String(value), label: String(value) }));
 const STATUS_FILTER_OPTIONS: { value: MatchStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All matches" },
   { value: "scheduled", label: "Scheduled" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
@@ -32,235 +30,212 @@ const STATUS_FILTER_OPTIONS: { value: MatchStatusFilter; label: string }[] = [
 
 function isFutureCalendarDate(scheduledAt: string, now = new Date()) {
   const scheduled = new Date(scheduledAt);
-  if (Number.isNaN(scheduled.getTime())) {
-    return false;
-  }
+  if (Number.isNaN(scheduled.getTime())) return false;
   return formatLocalDate(now) < formatLocalDate(scheduled);
 }
 
-/**
- * Match picker for the live logger. Lists Match-type events from GET /events
- * and routes unlocked ones into the existing confirm-squad flow.
- */
+/** Presentation and local filtering only; existing match routes stay authoritative. */
 export default function LiveLoggerPage() {
   const { data: events, isLoading, isError, error, refetch } = useEvents();
+  const { data: competitions } = useMyCompetitions();
+  const { team } = useAuth();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>("scheduled");
-
-  const allMatches = useMemo(
-    () => (events ?? []).filter((event) => event.type === "match"),
-    [events],
-  );
-
-  const matches = useMemo(
-    () =>
-      statusFilter === "all"
-        ? allMatches
-        : allMatches.filter((event) => event.status === statusFilter),
-    [allMatches, statusFilter],
-  );
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<MatchSort>("recommended");
+  const [pageSize, setPageSize] = useState(10);
+  const today = formatLocalDate(new Date());
+  const competitionById = useMemo(() => new Map((competitions ?? []).map((item) => [item.id, item])), [competitions]);
+  const allMatches = useMemo(() => (events ?? []).filter((event) => event.type === "match"), [events]);
+  const matches = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return allMatches.filter((event) => {
+      if (statusFilter !== "all" && event.status !== statusFilter) return false;
+      const competition = event.competitionId ? competitionById.get(event.competitionId) : undefined;
+      return !query || [event.title, event.location, event.venueName, event.fixtureOpponentName,
+        event.friendlyOpponentTeamName, competition?.name, team?.name]
+        .some((value) => value?.toLocaleLowerCase().includes(query));
+    }).sort((a, b) => {
+      const aTime = new Date(a.scheduledAt).getTime();
+      const bTime = new Date(b.scheduledAt).getTime();
+      // Unconfirmed dates follow dated matches in every ordering.
+      if (!Number.isFinite(aTime) || !Number.isFinite(bTime)) {
+        return Number(!Number.isFinite(aTime)) - Number(!Number.isFinite(bTime)) || a.id.localeCompare(b.id);
+      }
+      if (sort !== "recommended") return (sort === "newest" ? bTime - aTime : aTime - bTime) || a.id.localeCompare(b.id);
+      const aDay = formatLocalDate(new Date(aTime));
+      const bDay = formatLocalDate(new Date(bTime));
+      const aGroup = aDay === today ? 0 : aDay < today ? 1 : 2;
+      const bGroup = bDay === today ? 0 : bDay < today ? 1 : 2;
+      return aGroup - bGroup || (aGroup === 1 ? bTime - aTime : aTime - bTime) || a.id.localeCompare(b.id);
+    });
+  }, [allMatches, statusFilter, search, competitionById, team?.name, sort, today]);
+  const pageCount = Math.max(1, Math.ceil(matches.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const offset = (currentPage - 1) * pageSize;
+  const visibleMatches = matches.slice(offset, offset + pageSize);
+  const resetFilters = () => { setSearch(""); setStatusFilter("all"); setPage(1); };
 
   return (
     <div className="live-logger-page relative isolate min-h-full">
       <div className="live-logger-page-backdrop" aria-hidden="true" />
-
-      <div className="relative z-10">
-        <PageHeader
-          title="Live Logger"
-          subtitle="Select a match to confirm the squad and start logging."
-        >
-          <Select
-            items={STATUS_FILTER_OPTIONS}
-            value={statusFilter}
-            onValueChange={(value) =>
-              value && setStatusFilter(value as MatchStatusFilter)
-            }
-          >
-            <SelectTrigger
-              aria-label="Filter matches by status"
-              className="w-44 justify-between"
-            >
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {STATUS_FILTER_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </PageHeader>
-
-      <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 pb-8 sm:px-8 lg:px-10">
-        {isLoading && (
-          <p className="text-sm text-muted-foreground">Loading events…</p>
-        )}
-
-        {isError && (
-          <div className="rounded-xl border border-border bg-card p-6">
-            <p className="text-sm text-destructive">
-              {error instanceof Error
-                ? error.message
-                : "Could not load events."}
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => void refetch()}
-            >
-              Try again
+      <div className="live-logger-content relative z-10">
+        <PageHeader className="live-logger-header" title="Live Logger"
+          subtitle="Select a match to confirm the squad and start logging." />
+        <div className="live-logger-body">
+          <div className="live-logger-toolbar" role="search" aria-label="Find a match">
+            <Select items={STATUS_FILTER_OPTIONS} value={statusFilter} onValueChange={(value) => {
+              if (value) { setStatusFilter(value as MatchStatusFilter); setPage(1); }
+            }}>
+              <SelectTrigger aria-label="Filter matches by status" className="live-logger-filter">
+                <CalendarDays className="size-4" aria-hidden="true" />
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {STATUS_FILTER_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="live-logger-search">
+              <Search className="size-4 shrink-0" aria-hidden="true" />
+              <input type="search" aria-label="Search matches" placeholder="Search for a match, team or competition…"
+                value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+              {search && <button type="button" aria-label="Clear search" onClick={() => { setSearch(""); setPage(1); }}><X className="size-4" aria-hidden="true" /></button>}
+            </div>
+            <Button aria-label="Match calendar" className="live-logger-calendar" onClick={() => navigate("/events")}>
+              <CalendarDays className="size-4" aria-hidden="true" /><span>Match calendar</span>
             </Button>
           </div>
-        )}
-
-        {!isLoading && !isError && matches.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
-            <Radio className="mx-auto size-8 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium text-foreground">
-              {allMatches.length === 0 ? "No matches yet" : "No matches found"}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {allMatches.length === 0
-                ? "Create a match event from the Events page to start logging."
-                : "Try a different status filter."}
-            </p>
+          <div className="live-logger-list-options">
+            <div className="live-logger-option">
+              <span id="live-logger-sort-label">Sort matches</span>
+              <Select items={SORT_OPTIONS} value={sort} onValueChange={value => {
+                if (value) { setSort(value as MatchSort); setPage(1); }
+              }}>
+                <SelectTrigger aria-labelledby="live-logger-sort-label" aria-describedby="live-logger-sort-help"><SelectValue /></SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  {SORT_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="live-logger-option">
+              <span id="live-logger-size-label">Matches per page</span>
+              <Select items={PAGE_SIZE_OPTIONS} value={String(pageSize)} onValueChange={value => {
+                if (value) { setPageSize(Number(value)); setPage(1); }
+              }}>
+                <SelectTrigger aria-labelledby="live-logger-size-label"><SelectValue /></SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  {PAGE_SIZE_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <p id="live-logger-sort-help">Recommended: today first, then recent past matches, then upcoming matches.</p>
           </div>
-        )}
-
-        {!isLoading && !isError && matches.length > 0 && (
-          <ul className="flex flex-col gap-3">
-            {matches.map((event) => (
-              <li key={event.id}>
-                <MatchRow
-                  event={event}
-                  onSelect={() => {
-                    if (event.status === "completed" && event.matchId) {
-                      navigate(`/matches/${event.matchId}/report`);
-                      return;
-                    }
-                    navigate(`/events/${event.id}/confirm-squad`);
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          {!isLoading && !isError && <p className="live-logger-results" role="status" aria-atomic="true">
+            {matches.length === 0 ? "No matches found" : `Showing ${offset + 1}–${Math.min(offset + pageSize, matches.length)} of ${matches.length} ${matches.length === 1 ? "match" : "matches"}`}
+            {matches.length > 0 && <span className="sr-only">. Page {currentPage} of {pageCount}.</span>}
+          </p>}
+          {isLoading && <div className="live-logger-loading" role="status" aria-label="Loading matches">
+            <span className="sr-only">Loading matches…</span>
+            {[0, 1, 2, 3].map((key) => <div key={key} className="live-logger-skeleton" aria-hidden="true"><div /><div><span /><span /></div></div>)}
+          </div>}
+          {isError && <div className="live-logger-state" role="alert">
+            <Radio className="size-8 text-destructive" aria-hidden="true" />
+            <h2>Matches could not be loaded</h2>
+            <p>{error instanceof Error ? error.message : "Could not load events."}</p>
+            <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+          </div>}
+          {!isLoading && !isError && matches.length === 0 && <div className="live-logger-state">
+            <Radio className="size-8 text-primary" aria-hidden="true" />
+            <h2>{allMatches.length === 0 ? "No matches yet" : "No matches found"}</h2>
+            <p>{allMatches.length === 0 ? "Create a match event from the Events page to start logging." : "Try another search or status filter."}</p>
+            <Button variant="outline" onClick={allMatches.length === 0 ? () => navigate("/events") : resetFilters}>
+              {allMatches.length === 0 ? "Go to Events" : "Reset filters"}
+            </Button>
+          </div>}
+          {!isLoading && !isError && matches.length > 0 && <>
+            <ul className="live-logger-matches" aria-label="Matches">
+              {visibleMatches.map((event) => <li key={event.id}>
+                <MatchRow event={event} teamName={team?.name}
+                  competition={event.competitionId ? competitionById.get(event.competitionId) : undefined}
+                  onSelect={() => navigate(event.status === "completed" && event.matchId
+                    ? "/matches/" + event.matchId + "/report" : "/events/" + event.id + "/confirm-squad")} />
+              </li>)}
+            </ul>
+            <div className="live-logger-list-footer">
+              {pageCount > 1 && <nav className="live-logger-pagination" aria-label="Match pages">
+                <button type="button" aria-label="Previous match page" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft className="size-4" aria-hidden="true" />Previous</button>
+                <span>Page {currentPage} of {pageCount}</span>
+                <button type="button" aria-label="Next match page" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next<ChevronRight className="size-4" aria-hidden="true" /></button>
+              </nav>}
+            </div>
+          </>}
+        </div>
       </div>
     </div>
   );
 }
 
-function MatchRow({
-  event,
-  onSelect,
-}: {
-  event: TeamEvent;
-  onSelect: () => void;
+function MatchRow({ event, competition, teamName, onSelect }: {
+  event: TeamEvent; competition?: CompetitionSummary; teamName?: string; onSelect: () => void;
 }) {
   const cancelled = event.status === "cancelled";
   const completed = event.status === "completed";
   const reportable = completed && Boolean(event.matchId);
-  const locked =
-    !cancelled && !completed && isFutureCalendarDate(event.scheduledAt);
-  const startable = !cancelled && !completed && !locked;
-  const clickable = reportable || startable;
-  const scheduledDate = new Date(event.scheduledAt);
-  const unlockLabel = Number.isNaN(scheduledDate.getTime())
-    ? event.scheduledAt
-    : formatDateLabel(scheduledDate);
-
-  const className = cn(
-    "w-full rounded-xl border border-border/70 bg-card/80 p-4 text-left shadow-[0_20px_60px_-45px_rgba(0,0,0,0.75)] backdrop-blur-xl",
-    cancelled && "opacity-55",
-    clickable &&
-      "transition-colors hover:border-primary/40 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-    locked && "cursor-not-allowed",
-  );
-
-  const body = (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2
-            className={cn(
-              "truncate text-base font-semibold text-foreground",
-              cancelled && "line-through",
-            )}
-          >
-            {event.title}
-          </h2>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Match
-          </p>
-        </div>
-        <MatchRowBadge
-          event={event}
-          cancelled={cancelled}
-          reportable={reportable}
-          completed={completed}
-          locked={locked}
-          unlockLabel={unlockLabel}
-        />
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
-        <span className="inline-flex items-center gap-1.5">
-          <CalendarDays className="size-3.5 shrink-0" />
-          {formatEventDateTime(event.scheduledAt)}
-        </span>
-        {event.location && (
-          <span className="inline-flex items-center gap-1.5">
-            <MapPin className="size-3.5 shrink-0" />
-            {event.location}
+  const locked = !cancelled && !completed && isFutureCalendarDate(event.scheduledAt);
+  const clickable = reportable || (!cancelled && !completed && !locked);
+  const date = new Date(event.scheduledAt);
+  const validDate = !Number.isNaN(date.getTime());
+  const unlockLabel = validDate ? formatDateLabel(date) : event.scheduledAt;
+  const titleTeams = event.title.split(/\s+v(?:s\.?)?\s+/i);
+  const opponent = event.fixtureOpponentName || event.friendlyOpponentTeamName;
+  const sides = titleTeams.length === 2 ? titleTeams : opponent && teamName
+    ? event.fixtureIsHome === false ? [opponent, teamName] : [teamName, opponent] : [];
+  const category = competition?.name ?? (event.competitionId ? "Competition" : event.friendlyFixtureId ? "Friendly" : "Match");
+  const body = <>
+    <time className="live-logger-date" dateTime={validDate ? event.scheduledAt : undefined} title={formatEventDateTime(event.scheduledAt)}>
+      <span>{validDate ? date.toLocaleDateString(undefined, { month: "short" }) : "TBC"}</span>
+      <strong>{validDate ? String(date.getDate()).padStart(2, "0") : "—"}</strong>
+      <span>{validDate ? date.toLocaleDateString(undefined, { weekday: "short" }) : "Date"}</span>
+      <small>{validDate ? date.getFullYear() : ""}</small>
+    </time>
+    <div className="live-logger-match-content">
+      <div className="live-logger-match-heading">
+        <div className="live-logger-match-title">
+          <span className={cn("live-logger-competition", competition?.type === "cup" && "live-logger-competition--cup")}>
+            <Trophy className="size-3" aria-hidden="true" />{category}
           </span>
-        )}
+          <h2>{event.title}</h2>
+        </div>
+        <span className={cn("live-logger-status", "live-logger-status--" + event.status)}>{event.status}</span>
       </div>
-    </>
-  );
-
-  if (clickable) {
-    return (
-      <button type="button" onClick={onSelect} className={className}>
-        {body}
-      </button>
-    );
-  }
-
-  return <div className={className}>{body}</div>;
+      <div className="live-logger-match-details">
+        {sides.length === 2 && <div className="live-logger-teams">
+          <TeamLabel name={sides[0]} own={sides[0] === teamName} />
+          <span className="live-logger-vs">vs</span>
+          <TeamLabel name={sides[1]} own={sides[1] === teamName} />
+        </div>}
+        <div className="live-logger-metadata">
+          <span><Clock3 aria-hidden="true" />{validDate ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "Time to be confirmed"}</span>
+          <span><MapPin aria-hidden="true" />{event.venueName || event.location || "Venue to be confirmed"}</span>
+          {!completed && !cancelled && <span><Users aria-hidden="true" />{event.lineupConfirmedAt ? "Squad confirmed" : "Squad to be confirmed"}</span>}
+        </div>
+      </div>
+      <div className="live-logger-match-action">
+        {locked ? <><Lock aria-hidden="true" />Unlocks {unlockLabel}</>
+          : reportable ? <><FileText aria-hidden="true" />View Match Report</>
+          : completed ? <><Check aria-hidden="true" />Match completed</>
+          : cancelled ? "Match cancelled" : <><Radio aria-hidden="true" />Confirm squad & log</>}
+      </div>
+    </div>
+    <span className="live-logger-row-arrow" aria-hidden="true">{clickable ? <ChevronRight /> : locked ? <Lock /> : <ChevronRight />}</span>
+  </>;
+  const className = cn("live-logger-match", clickable && "live-logger-match--interactive", locked && "live-logger-match--locked", cancelled && "live-logger-match--cancelled");
+  return clickable ? <button type="button" onClick={onSelect} className={className}>{body}</button>
+    : <div className={className}>{body}</div>;
 }
 
-function MatchRowBadge({
-  event,
-  cancelled,
-  reportable,
-  completed,
-  locked,
-  unlockLabel,
-}: {
-  event: TeamEvent;
-  cancelled: boolean;
-  reportable: boolean;
-  completed: boolean;
-  locked: boolean;
-  unlockLabel: string;
-}) {
-  if (cancelled) return <StatusBadge status="cancelled" />;
-  if (reportable) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary">
-        <FileText className="size-3" />View Match Report
-      </span>
-    );
-  }
-  if (completed) return <StatusBadge status="completed" />;
-  if (locked) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground">
-        <Lock className="size-3" />Unlocks {unlockLabel}
-      </span>
-    );
-  }
-  return <StatusBadge status={event.status} />;
+function TeamLabel({ name, own }: { name: string; own: boolean }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+  return <span className="live-logger-team"><span className={cn("live-logger-team-mark", own && "live-logger-team-mark--own")} aria-hidden="true">{initials}</span><span>{name}</span></span>;
 }
