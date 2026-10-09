@@ -18,6 +18,7 @@ import {
   MapPin,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   ShieldCheck,
   Target,
   Trophy,
@@ -79,6 +80,7 @@ export default function PublicDashboard() {
   const [matchStatus, setMatchStatus] = useState<PublicMatchStatus | "">("");
   const [positionFilter, setPositionFilter] = useState<PositionCategory>("all");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const filtersQuery = useQuery({
     queryKey: ["public-dashboard", "filters"],
@@ -246,7 +248,7 @@ export default function PublicDashboard() {
         }
       >
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
-        <section className="relative overflow-hidden pb-4 pt-12 sm:pb-6 sm:pt-16 lg:pt-20">
+        <section className="public-dashboard-hero relative overflow-hidden pb-4 pt-12 sm:pb-6 sm:pt-16 lg:pt-20">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--card)_82%,transparent)_0%,color-mix(in_srgb,var(--card)_45%,transparent)_38%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--background)_88%,transparent)_0%,color-mix(in_srgb,var(--background)_52%,transparent)_40%,transparent_74%)]"
             aria-hidden="true"
@@ -275,7 +277,21 @@ export default function PublicDashboard() {
           <div className="public-dashboard-toolbar">
             <PublicDashboardSectionNav sections={dashboardSections} />
 
-            <div className="public-dashboard-filter-panel" role="group" aria-label="Filter portal data">
+            <button
+              type="button"
+              className="public-dashboard-filter-toggle"
+              aria-expanded={mobileFiltersOpen}
+              aria-controls="public-dashboard-filters"
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="public-dashboard-filter-count">{activeFilterCount}</span>
+              )}
+            </button>
+
+            <div id="public-dashboard-filters" className="public-dashboard-filter-panel" data-mobile-open={mobileFiltersOpen} role="group" aria-label="Filter portal data">
               <DashboardFilters
                 teams={filtersQuery.data?.teams ?? []}
                 seasons={availableSeasons}
@@ -307,7 +323,7 @@ export default function PublicDashboard() {
         </div>
 
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
-        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
+        <div className="public-dashboard-content mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
           
           {/* SECTION 1: Player Showcase */}
           <DashboardSection
@@ -850,6 +866,8 @@ function PublicDashboardSectionNav({
               <li key={section.id}>
                 <a
                   href={`#${section.id}`}
+                  aria-label={section.label}
+                  title={section.label}
                   data-section-id={section.id}
                   aria-current={isActive ? "location" : undefined}
                   onClick={(event) => {
@@ -891,7 +909,7 @@ function DashboardSection({
         scrollMarginTop: "var(--public-dashboard-section-offset, 18rem)",
       }}
     >
-      <div className="mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
+      <div className="public-dashboard-section-heading mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand shadow-sm">
           {icon}
         </span>
