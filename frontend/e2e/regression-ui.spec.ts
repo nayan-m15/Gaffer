@@ -659,3 +659,92 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
   await expect(page.getByRole("button", { name: /12' Yellow Card/i })).toBeVisible(pageLoad);
   await expect(page.getByText("Manually adjusted")).toBeVisible();
 });
+
+for (const width of [1280, 390]) {
+  test('public dashboard loads pages on demand and searches the full roster at ' + width + 'px', async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route('**/auth/session', route => json(route, { user: null, team: null, claimedAthletes: [] }));
+    const requests: URL[] = [];
+    await page.route('**/v1/public-dashboard/**', route => {
+      const url = new URL(route.request().url());
+      requests.push(url);
+      const resource = url.pathname.split('/').at(-1);
+      if (resource === 'filters') return json(route, { success: true, data: { teams: [], seasons: [], competitions: [] } });
+      if (resource === 'team-statistics') return json(route, { success: true, data: [] });
+      const offset = Number(url.searchParams.get('offset'));
+      const limit = Number(url.searchParams.get('limit'));
+      if (resource === 'players') {
+        const search = url.searchParams.get('search');
+        const position = url.searchParams.get('position');
+        const count = search || position === 'GK' ? 1 : offset === 0 ? 40 : 1;
+        const data = Array.from({ length: count }, (_, i) => ({
+          id: 'player-' + (offset + i), firstName: search ? 'Beyond' : 'Player',
+          lastName: search ? 'Firstpage' : String(offset + i), position: position === 'GK' ? 'GK' : 'ST', squadNumber: i + 1,
+          team: { id: 'team', name: 'Test FC' },
+          statistics: { appearances: 0, minutesPlayed: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0 },
+        }));
+        return json(route, { success: true, count, offset, limit, data });
+      }
+      const count = offset === 0 ? 100 : 1;
+      const data = Array.from({ length: count }, (_, i) => ({
+        id: 'match-' + (offset + i), eventId: 'event-' + (offset + i), title: 'Fixture', status: 'completed',
+        scheduledAt: '2026-10-09T10:00:00Z', location: 'Field', opponentName: 'Rival ' + (offset + i), isHome: true,
+        teamScore: 2, opponentScore: 1, team: { id: 'team', name: 'Test FC' }, competition: null, season: null,
+      }));
+      return json(route, { success: true, count, offset, limit, data, summary: { total: 101, cleanSheets: 37 } });
+    });
+    await page.goto('/public-dashboard');
+    await expect(page.getByText('Showing 100 of 101 matches')).toBeVisible();
+    await expect(page.locator('#players')).toContainText('Showing 40 players');
+    await expect(page.getByText('Clean Sheets').locator('..').locator('..')).toContainText('37');
+    expect(requests.filter(url => url.pathname.endsWith('/players')).every(url => url.searchParams.get('offset') === '0')).toBe(true);
+    expect(requests.filter(url => url.pathname.endsWith('/matches')).every(url => url.searchParams.get('offset') === '0')).toBe(true);
+    await page.getByRole('button', { name: 'Load more players', exact: true }).click();
+    await expect(page.locator('#players')).toContainText('Showing 41 players');
+    await expect(page.getByRole('button', { name: 'Load more players', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Load more matches', exact: true }).click();
+    await expect(page.getByText('Showing 101 of 101 matches')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Load more matches', exact: true })).toHaveCount(0);
+    await page.getByRole('searchbox', { name: 'Search players by name' }).fill('Beyond');
+    await expect(page.locator('#players')).toContainText('Showing 1 players');
+    expect(requests.some(url => url.searchParams.get('search') === 'Beyond' && url.searchParams.get('offset') === '0')).toBe(true);
+    await page.getByRole('button', { name: 'GK', exact: true }).click();
+    await expect.poll(() => requests.some(url => url.searchParams.get('position') === 'GK' && url.searchParams.get('offset') === '0')).toBe(true);
+    await page.screenshot({ path: 'test-results/public-dashboard-' + width + '.png', fullPage: true });
+  });
+}
+
+test('public dashboard preserves loaded players after a rate-limited page and retries on demand', async ({ page }) => {
+  await page.route('**/auth/session', route => json(route, { user: null, team: null, claimedAthletes: [] }));
+  let failNext = true;
+  let laterRequests = 0;
+  await page.route('**/v1/public-dashboard/**', route => {
+    const url = new URL(route.request().url());
+    const resource = url.pathname.split('/').at(-1);
+    if (resource === 'filters') return json(route, { success: true, data: { teams: [], seasons: [], competitions: [] } });
+    if (resource === 'team-statistics') return json(route, { success: true, data: [] });
+    if (resource === 'matches') return json(route, { success: true, data: [], count: 0, offset: 0, limit: 100, summary: { total: 0, cleanSheets: 0 } });
+    const offset = Number(url.searchParams.get('offset'));
+    if (offset > 0) {
+      laterRequests++;
+      if (failNext) return json(route, { message: 'Too many requests. Please try again later.' }, 429);
+    }
+    const count = offset === 0 ? 40 : 1;
+    const data = Array.from({ length: count }, (_, i) => ({
+      id: 'player-' + (offset + i), firstName: 'Player', lastName: String(offset + i), position: 'ST', squadNumber: i + 1,
+      team: { id: 'team', name: 'Test FC' }, statistics: { appearances: 0, minutesPlayed: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0 },
+    }));
+    return json(route, { success: true, data, count, offset, limit: 40 });
+  });
+  await page.goto('/public-dashboard');
+  await expect(page.locator('#players')).toContainText('Showing 40 players');
+  await page.getByRole('button', { name: 'Load more players', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('More players could not be loaded. Try again.');
+  await expect(page.locator('#players')).toContainText('Showing 40 players');
+  expect(laterRequests).toBe(1);
+  failNext = false;
+  await page.getByRole('button', { name: 'Load more players', exact: true }).click();
+  await expect(page.locator('#players')).toContainText('Showing 41 players');
+  await expect(page.getByRole('button', { name: 'Load more players', exact: true })).toHaveCount(0);
+  expect(laterRequests).toBe(2);
+});

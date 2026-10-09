@@ -59,6 +59,9 @@ describe('Public Swagger contract', () => {
           .fn()
           .mockResolvedValue({ teams: [], competitions: [], seasons: [] }),
         getMatches: jest.fn().mockResolvedValue([]),
+        getMatchSummary: jest
+          .fn()
+          .mockResolvedValue({ total: 0, cleanSheets: 0 }),
         getPlayers: jest.fn().mockResolvedValue([]),
         getTeamStatistics: jest.fn().mockResolvedValue([]),
       })
@@ -175,6 +178,25 @@ describe('Public Swagger contract', () => {
         document.paths['/v1/public-dashboard/matches'].get!.responses,
       ),
     ).toContain('scheduledAt');
+    expect(
+      JSON.stringify(
+        document.paths['/v1/public-dashboard/matches'].get!.responses,
+      ),
+    ).toContain('cleanSheets');
+    expect(
+      document.paths['/v1/public-dashboard/players'].get!.parameters,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'search',
+          schema: { type: 'string', maxLength: 100 },
+        }),
+        expect.objectContaining({
+          name: 'position',
+          schema: { type: 'string', enum: ['ALL', 'FWD', 'MID', 'DEF', 'GK'] },
+        }),
+      ]),
+    );
     await request(server)
       .get('/v1/public-dashboard/matches?status=private')
       .expect(400);

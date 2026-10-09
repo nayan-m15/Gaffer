@@ -19,18 +19,6 @@ import type {
   PublicPlayersQuery,
 } from './public-api.schemas';
 
-function loggedEventCount(
-  eventType: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save',
-) {
-  return sql<number>`coalesce((
-    select count(*)::int from ${matchEvents}
-    where ${matchEvents.matchId} = ${athleteMatchStats.matchId}
-      and ${matchEvents.athleteId} = ${athleteMatchStats.athleteId}
-      and ${matchEvents.team} = 'own'
-      and ${matchEvents.eventType} = ${eventType}
-  ), 0)`;
-}
-
 function matchGoalCount(team: 'own' | 'opponent') {
   return sql<number>`coalesce((
     select count(*)::int from ${matchEvents}
@@ -154,8 +142,45 @@ export class PublicDashboardService {
       .offset(query.offset);
   }
 
+  async getMatchSummary(query: Omit<PublicMatchesQuery, 'limit' | 'offset'>) {
+    const conditions: SQL[] = [eq(events.type, 'match')];
+    this.addCommonConditions(conditions, query);
+    if (query.status) conditions.push(eq(events.status, query.status));
+    const [summary] = await this.databaseService.database
+      .select({
+        total: sql<number>`count(*)::int`,
+        cleanSheets: sql<number>`count(*) filter (where ${events.status} = 'completed' and not exists (
+          select 1 from ${matchEvents} where ${matchEvents.matchId} = ${matches.id}
+            and ${matchEvents.team} = 'opponent' and ${matchEvents.eventType} = 'goal'
+        ))::int`,
+      })
+      .from(matches)
+      .innerJoin(events, eq(matches.eventId, events.id))
+      .innerJoin(teams, eq(events.teamId, teams.id))
+      .leftJoin(competitions, eq(matches.competitionId, competitions.id))
+      .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
+      .where(and(...conditions));
+    return summary;
+  }
+
   async getPlayers(query: PublicPlayersQuery) {
     const conditions: SQL[] = [isNull(athletes.archivedAt)];
+    if (query.search) {
+      conditions.push(
+        sql`strpos(lower(${athletes.firstName} || ' ' || ${athletes.lastName}), lower(${query.search})) > 0`,
+      );
+    }
+    const positionPatterns = {
+      FWD: '(FW|ST|ATT|FORWARD)',
+      MID: '(MID|CAM|CDM|CM)',
+      DEF: '(DEF|CB|LB|RB)',
+      GK: '(GK|KEEP|GOAL)',
+    };
+    if (query.position && query.position !== 'ALL') {
+      conditions.push(
+        sql`upper(coalesce(${athletes.position}, '')) ~ ${positionPatterns[query.position]}`,
+      );
+    }
     if (query.teamId) conditions.push(eq(athletes.teamId, query.teamId));
     if (query.competitionId || query.seasonId) {
       conditions.push(sql`exists (
@@ -195,6 +220,43 @@ export class PublicDashboardService {
     }
     if (query.seasonId) matchConditions.push(eq(seasons.id, query.seasonId));
 
+    const eventTotals = this.databaseService.database
+      .select({
+        matchId: matchEvents.matchId,
+        athleteId: matchEvents.athleteId,
+        goals:
+          sql<number>`count(*) filter (where ${matchEvents.eventType} = 'goal')::int`.as(
+            'goals',
+          ),
+        assists:
+          sql<number>`count(*) filter (where ${matchEvents.eventType} = 'assist')::int`.as(
+            'assists',
+          ),
+        yellowCards:
+          sql<number>`count(*) filter (where ${matchEvents.eventType} = 'yellow_card')::int`.as(
+            'yellow_cards',
+          ),
+        redCards:
+          sql<number>`count(*) filter (where ${matchEvents.eventType} = 'red_card')::int`.as(
+            'red_cards',
+          ),
+      })
+      .from(matchEvents)
+      .where(
+        and(
+          eq(matchEvents.team, 'own'),
+          inArray(
+            matchEvents.athleteId,
+            page.map(({ id }) => id),
+          ),
+        ),
+      )
+      .groupBy(matchEvents.matchId, matchEvents.athleteId)
+      .as('event_totals');
+    const completedSum = (
+      value: SQL | typeof athleteMatchStats.minutesPlayed,
+    ) =>
+      sql<number>`coalesce(sum(case when ${events.status} = 'completed' then coalesce(${value}, 0) else 0 end), 0)::int`;
     const rows = await this.databaseService.database
       .select({
         id: athletes.id,
@@ -204,14 +266,14 @@ export class PublicDashboardService {
         squadNumber: athletes.squadNumber,
         teamId: teams.id,
         teamName: teams.name,
-        matchId: athleteMatchStats.matchId,
-        eventStatus: events.status,
-        minutesPlayed: athleteMatchStats.minutesPlayed,
-        appeared: appearedInMatch(),
-        goals: loggedEventCount('goal'),
-        assists: loggedEventCount('assist'),
-        yellowCards: loggedEventCount('yellow_card'),
-        redCards: loggedEventCount('red_card'),
+        appearances: completedSum(
+          sql`case when ${appearedInMatch()} then 1 else 0 end`,
+        ),
+        minutesPlayed: completedSum(athleteMatchStats.minutesPlayed),
+        goals: completedSum(sql`${eventTotals.goals}`),
+        assists: completedSum(sql`${eventTotals.assists}`),
+        yellowCards: completedSum(sql`${eventTotals.yellowCards}`),
+        redCards: completedSum(sql`${eventTotals.redCards}`),
       })
       .from(athletes)
       .innerJoin(teams, eq(athletes.teamId, teams.id))
@@ -220,68 +282,39 @@ export class PublicDashboardService {
       .leftJoin(events, eq(matches.eventId, events.id))
       .leftJoin(competitions, eq(matches.competitionId, competitions.id))
       .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
+      .leftJoin(
+        eventTotals,
+        and(
+          eq(eventTotals.matchId, athleteMatchStats.matchId),
+          eq(eventTotals.athleteId, athletes.id),
+        ),
+      )
       .where(and(...matchConditions))
+      .groupBy(athletes.id, teams.id)
       .orderBy(
         asc(teams.name),
         asc(athletes.squadNumber),
         asc(athletes.lastName),
         asc(athletes.firstName),
+        asc(athletes.id),
       );
 
-    const byAthlete = new Map<
-      string,
-      {
-        id: string;
-        firstName: string;
-        lastName: string;
-        position: string | null;
-        squadNumber: number | null;
-        team: { id: string; name: string };
-        statistics: {
-          appearances: number;
-          minutesPlayed: number;
-          goals: number;
-          assists: number;
-          yellowCards: number;
-          redCards: number;
-        };
-      }
-    >();
-
-    const addPlayerStatistics = (row: (typeof rows)[number]) => {
-      let player = byAthlete.get(row.id);
-      if (!player) {
-        player = {
-          id: row.id,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          position: row.position,
-          squadNumber: row.squadNumber,
-          team: { id: row.teamId, name: row.teamName },
-          statistics: {
-            appearances: 0,
-            minutesPlayed: 0,
-            goals: 0,
-            assists: 0,
-            yellowCards: 0,
-            redCards: 0,
-          },
-        };
-        byAthlete.set(row.id, player);
-      }
-
-      if (row.matchId && row.eventStatus === 'completed') {
-        if (row.appeared) player.statistics.appearances += 1;
-        player.statistics.minutesPlayed += row.minutesPlayed ?? 0;
-        player.statistics.goals += row.goals;
-        player.statistics.assists += row.assists;
-        player.statistics.yellowCards += row.yellowCards;
-        player.statistics.redCards += row.redCards;
-      }
-    };
-    rows.forEach(addPlayerStatistics);
-
-    return page.map(({ id }) => byAthlete.get(id)!);
+    return rows.map((row) => ({
+      id: row.id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      position: row.position,
+      squadNumber: row.squadNumber,
+      team: { id: row.teamId, name: row.teamName },
+      statistics: {
+        appearances: row.appearances,
+        minutesPlayed: row.minutesPlayed,
+        goals: row.goals,
+        assists: row.assists,
+        yellowCards: row.yellowCards,
+        redCards: row.redCards,
+      },
+    }));
   }
 
   async getTeamStatistics(query: PublicDashboardQuery) {

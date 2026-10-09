@@ -9,7 +9,7 @@ import {
   ApiDashboardQuery,
   filtersSchema,
   listSchema,
-  matchSchema,
+  matchesResponseSchema,
   playerSchema,
   teamStatisticsSchema,
 } from './public-api.openapi';
@@ -56,18 +56,29 @@ export class PublicDashboardController {
   @Get('matches')
   @ApiOperation({ summary: 'List public match events' })
   @ApiDashboardQuery('matches')
-  @ApiOkResponse({ schema: listSchema(matchSchema, true) })
+  @ApiOkResponse({ schema: matchesResponseSchema })
   async matches(@Query() query: unknown) {
     const dto = zodValidate(publicMatchesQuerySchema, query);
     const data = await this.cache.resolve(
       PublicDashboardCacheService.key('matches', dto),
       () => this.publicDashboardService.getMatches(dto),
     );
+    const filters = {
+      teamId: dto.teamId,
+      competitionId: dto.competitionId,
+      seasonId: dto.seasonId,
+      status: dto.status,
+    };
+    const summary = await this.cache.resolve(
+      PublicDashboardCacheService.key('match-summary', filters),
+      () => this.publicDashboardService.getMatchSummary(filters),
+    );
     return {
       success: true,
       count: data.length,
       limit: dto.limit,
       offset: dto.offset,
+      summary,
       data,
     };
   }
