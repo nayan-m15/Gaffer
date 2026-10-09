@@ -57,37 +57,46 @@ async function openPreview(page: Page, mode: "Print" | "Share" = "Print") {
   return dialog;
 }
 
-async function mockPrint(page: Page, behavior: "complete" | "pending" | "fail" = "complete") {
-  await page.addInitScript((behavior) => {
-    const state = window as unknown as { reportPrint: Record<string, unknown>; printWindow: Window };
-    state.reportPrint = { calls: 0, listeners: 0 };
-    new MutationObserver(() => {
-      const frame = document.querySelector<HTMLIFrameElement>("iframe[data-gaffer-report-print]");
-      const target = frame?.contentWindow;
-      if (!target || (target as unknown as { mocked: boolean }).mocked) return;
-      (target as unknown as { mocked: boolean }).mocked = true;
-      state.printWindow = target;
-      const add = target.addEventListener.bind(target);
-      const remove = target.removeEventListener.bind(target);
-      target.addEventListener = ((type: string, listener: EventListener, options?: AddEventListenerOptions) => {
-        if (type === "afterprint") state.reportPrint.listeners = Number(state.reportPrint.listeners) + 1;
-        add(type, listener, options);
-      }) as typeof target.addEventListener;
-      target.removeEventListener = ((type: string, listener: EventListener, options?: EventListenerOptions) => {
-        if (type === "afterprint") state.reportPrint.listeners = Number(state.reportPrint.listeners) - 1;
-        remove(type, listener, options);
-      }) as typeof target.removeEventListener;
-      target.print = () => {
-        const doc = frame!.contentDocument!;
-        state.reportPrint.calls = Number(state.reportPrint.calls) + 1;
-        state.reportPrint.text = doc.body.innerText;
-        state.reportPrint.charts = doc.querySelectorAll(".stats-chart .recharts-wrapper > svg.recharts-surface").length;
-        state.reportPrint.color = target.getComputedStyle(doc.querySelector("h2")!).color;
-        if (behavior === "fail") throw new Error("Print failed");
-        if (behavior === "complete") queueMicrotask(() => target.dispatchEvent(new Event("afterprint")));
+const reportPdfName = /^Gaffer_Team_Performance_Report_Test_FC_\d{4}-\d{2}-\d{2}\.pdf$/;
+type PrintTabs = { opens: number; tabs: Array<{ closed: boolean; url?: string }> };
+
+/** Stand in for the tab Print opens on the confirmation click; blocked mimics a popup blocker. */
+async function mockPrintTab(page: Page, blocked = false) {
+  await page.addInitScript((blocked) => {
+    const state: PrintTabs = { opens: 0, tabs: [] };
+    (window as unknown as { printTabs: PrintTabs }).printTabs = state;
+    window.open = (() => {
+      state.opens++;
+      if (blocked) return null;
+      const tab = {
+        closed: false,
+        url: undefined as string | undefined,
+        close() { tab.closed = true; },
+        location: { replace(url: string) { tab.url = url; } },
       };
-    }).observe(document, { childList: true, subtree: true });
-  }, behavior);
+      state.tabs.push(tab);
+      return tab;
+    }) as unknown as typeof window.open;
+  }, blocked);
+}
+
+const printTabs = (page: Page) => page.evaluate(() => {
+  const { opens, tabs } = (window as unknown as { printTabs: PrintTabs }).printTabs;
+  return { opens, tabs: tabs.map(({ closed, url }) => ({ closed, url })) };
+});
+
+/** Read back the PDF a print tab was sent to (its blob URL outlives the viewer load). */
+const printedPdf = (page: Page, index: number) => page.evaluate(async (index) => {
+  const { url } = (window as unknown as { printTabs: PrintTabs }).printTabs.tabs[index];
+  return new TextDecoder("latin1").decode(await (await fetch(url!)).arrayBuffer());
+}, index);
+
+/** Hold the lazily loaded jsPDF chunk so a print stays mid-generation. */
+async function holdPdfRenderer(page: Page) {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/*jspdf*.js", async route => { await held; await route.continue(); });
+  return release;
 }
 
 test("normal page, refresh and filter changes never mount the report", async ({ page }) => {
@@ -116,87 +125,126 @@ test("preview contains scoped data, closes with Escape and restores focus", asyn
   await expect(page.locator(".team-performance-report")).toHaveCount(0);
 });
 
-test("print targets report data and charts only and cleans up afterprint", async ({ page }) => {
-  await mockPrint(page);
+test("print sends the chart-bearing PDF to the tab opened by the click", async ({ page }) => {
+  await mockPrintTab(page);
   await setup(page);
   for (let repeat = 0; repeat < 2; repeat++) {
     await openPreview(page);
     await page.getByRole("button", { name: "Print report", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator("iframe[data-gaffer-report-print]")).toHaveCount(0);
-    const output = await page.evaluate(() => (window as unknown as { reportPrint: Record<string, unknown> }).reportPrint);
-    expect(output.calls).toBe(repeat + 1);
-    expect(output.charts).toBe(3);
-    expect(output.listeners).toBe(0);
-    expect(output.text).toContain("Alex Keeper");
-    expect(String(output.text).toLowerCase()).toContain("match results");
-    expect(String(output.text).toLowerCase()).toContain("team summary");
-    expect(output.text).not.toContain("AI Assistant");
-    expect(output.text).not.toContain("Share report");
+    const { opens, tabs } = await printTabs(page);
+    expect(opens).toBe(repeat + 1);
+    expect(tabs[repeat]).toMatchObject({ closed: false, url: expect.stringMatching(/^blob:/) });
+    const pdf = await printedPdf(page, repeat);
+    expect(pdf.startsWith("%PDF-")).toBe(true);
+    // jsPDF autoPrint: the viewer opens the print dialog on load.
+    expect(pdf).toContain("/OpenAction");
+    for (const text of ["Alex Keeper", "Match results", "Player performance", "Form trend", "Points progression", "Period comparison"]) {
+      expect(pdf).toContain(text);
+    }
+    expect(pdf).not.toContain("AI Assistant");
+    expect(pdf).not.toContain("Share report");
   }
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-test("print event fallback stays recoverable and removes resources on close", async ({ page }) => {
-  await mockPrint(page, "pending");
+test("closing the preview mid-print closes the print tab and permits retry", async ({ page }) => {
+  await mockPrintTab(page);
   await setup(page);
+  const release = await holdPdfRenderer(page);
   await openPreview(page);
   await page.getByRole("button", { name: "Print report", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { reportPrint: { calls: number } }).reportPrint.calls)).toBe(1);
   await expect(page.getByRole("button", { name: "Print report", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Close preview", exact: true }).click();
-  await expect(page.locator("iframe[data-gaffer-report-print]")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as { reportPrint: { listeners: number } }).reportPrint.listeners)).toBe(0);
+  expect((await printTabs(page)).tabs).toEqual([{ closed: true }]);
+  release();
+  // The aborted generation resumes first and must not navigate its closed tab.
+  await openPreview(page);
+  await page.getByRole("button", { name: "Print report", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const { tabs } = await printTabs(page);
+  expect(tabs[0]).toEqual({ closed: true });
+  expect(tabs[1]).toMatchObject({ closed: false, url: expect.stringMatching(/^blob:/) });
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-test("print failure clears the target and permits retry", async ({ page }) => {
-  await mockPrint(page, "fail");
+test("print failure closes the print tab and permits retry", async ({ page }) => {
+  await mockPrintTab(page);
   await setup(page);
+  await page.route("**/*jspdf*.js", route => route.abort("failed"));
   await openPreview(page);
   await page.getByRole("button", { name: "Print report", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("could not be printed");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator("iframe[data-gaffer-report-print]")).toHaveCount(0);
+  expect((await printTabs(page)).tabs).toEqual([{ closed: true }]);
+  await openPreview(page);
+});
+
+test("a blocked print tab reports an error and permits retry", async ({ page }) => {
+  await mockPrintTab(page, true);
+  await setup(page);
+  await openPreview(page);
+  await page.getByRole("button", { name: "Print report", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("allow popups");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await openPreview(page);
 });
 
 for (const outcome of ["success", "cancel", "failure"] as const) {
-  test("native CSV share " + outcome + " settles and closes preview", async ({ page }) => {
+  test("native PDF share " + outcome + " settles and closes preview", async ({ page }) => {
     await page.addInitScript((outcome) => {
       Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
       Object.defineProperty(navigator, "share", { configurable: true, value: async (payload: ShareData) => {
-        (window as unknown as { shared: unknown }).shared = { title: payload.title, text: payload.text, csv: await payload.files![0].text() };
+        const file = payload.files![0];
+        (window as unknown as { shared: unknown }).shared = {
+          title: payload.title, name: file.name, type: file.type,
+          pdf: new TextDecoder("latin1").decode(await file.arrayBuffer()),
+        };
         if (outcome === "cancel") throw new DOMException("Cancelled", "AbortError");
         if (outcome === "failure") throw new Error("Unavailable");
       } });
     }, outcome);
     await setup(page);
     await openPreview(page, "Share");
+    const download = outcome === "failure" ? page.waitForEvent("download") : null;
     await page.getByRole("button", { name: "Share report", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.locator(".team-performance-report")).toHaveCount(0);
-    const shared = await page.evaluate(() => (window as unknown as { shared: { csv: string; text: string } }).shared);
-    expect(shared.csv).toContain("Test Cup");
-    expect(shared.csv).toContain("Alex Keeper");
-    expect(shared.text).toContain("2026/27");
-    if (outcome === "success") await expect(page.getByRole("status").filter({ hasText: "Report shared." })).toContainText("Report shared.");
-    if (outcome === "failure") await expect(page.getByRole("alert")).toContainText("could not be shared");
-    if (outcome === "cancel") await expect(page.getByRole("alert")).toHaveCount(0);
+    const shared = await page.evaluate(() => (window as unknown as { shared: { title: string; name: string; type: string; pdf: string } }).shared);
+    expect(shared.name).toMatch(reportPdfName);
+    expect(shared.title).toBe(shared.name.replace(/\.pdf$/, ""));
+    expect(shared.type).toBe("application/pdf");
+    expect(shared.pdf.startsWith("%PDF-")).toBe(true);
+    for (const text of ["Test Cup", "2026/27", "Alex Keeper", "Points progression"]) expect(shared.pdf).toContain(text);
+    if (outcome === "success") await expect(page.getByRole("status").filter({ hasText: "Report shared." })).toBeVisible();
+    // Web Share can be exposed yet still reject files; the same PDF is downloaded instead.
+    if (outcome === "failure") {
+      expect((await download!).suggestedFilename()).toBe(shared.name);
+      await expect(page.getByRole("status").filter({ hasText: "PDF downloaded" })).toBeVisible();
+    }
+    await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Share", exact: true })).toBeEnabled();
   });
 }
 
-test("clipboard fallback retains selected scope", async ({ page }) => {
+test("without file sharing the PDF downloads with the selected scope", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "canShare", { value: () => false });
-    Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => { (window as unknown as { copied: string }).copied = text; } } });
   });
   await setup(page);
   await openPreview(page, "Share");
+  const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Share report", exact: true }).click();
+  const download = await downloadPromise;
+  // Check the notice before awaiting the file: it auto-dismisses after 3.5s.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("status").filter({ hasText: "copied" })).toContainText("copied");
-  expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toContain("Test Cup");
+  await expect(page.getByRole("status").filter({ hasText: "PDF downloaded" })).toBeVisible();
+  expect(download.suggestedFilename()).toMatch(reportPdfName);
+  const content = (await readFile((await download.path())!)).toString("latin1");
+  expect(content.startsWith("%PDF-")).toBe(true);
+  expect(content).toContain("Test Cup");
+  expect(content).toContain("Alex Keeper");
 });
 
 test("pending native sharing prevents duplicate actions", async ({ page }) => {
@@ -302,20 +350,25 @@ test("PDF generation failure releases the operation guard", async ({ page }) => 
   await expect(page.locator(".team-performance-report")).toHaveCount(0);
 });
 
-test("route unmount disposes pending print target and listeners", async ({ page }) => {
-  await mockPrint(page, "pending");
+test("route unmount closes a print tab still waiting for its PDF", async ({ page }) => {
+  await mockPrintTab(page);
   await setup(page);
+  const release = await holdPdfRenderer(page);
   await openPreview(page);
   await page.getByRole("button", { name: "Print report", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { reportPrint: { calls: number } }).reportPrint.calls)).toBe(1);
+  await expect(page.getByRole("button", { name: "Print report", exact: true })).toBeDisabled();
   // Exercise React Router unmount without unloading the document.
   await page.evaluate(() => {
     const link = document.querySelector<HTMLAnchorElement>('a[href="/dashboard"]')!;
     link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
   await expect(page).toHaveURL(/dashboard/);
-  await expect(page.locator("iframe[data-gaffer-report-print]")).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as { reportPrint: { listeners: number } }).reportPrint.listeners)).toBe(0);
+  // The URL changes before the lazy dashboard route replaces (unmounts) this page.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect((await printTabs(page)).tabs).toEqual([{ closed: true }]);
+  const loaded = page.waitForResponse(response => response.url().includes("jspdf"));
+  release();
+  await loaded;
 });
 
 test("late share settlement after route unmount does not reopen report UI", async ({ page }) => {
@@ -335,43 +388,4 @@ test("late share settlement after route unmount does not reopen report UI", asyn
   await page.evaluate(() => (window as unknown as { finishShare: () => void }).finishShare());
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("Report shared.", { exact: true })).toHaveCount(0);
-});
-
-test("print-media exit closes a pending print session", async ({ page }) => {
-  await page.addInitScript(() => {
-    const state = window as unknown as { mediaListener: (event: { matches: boolean }) => void; removedMediaListeners: number };
-    state.removedMediaListeners = 0;
-    new MutationObserver(() => {
-      const target = document.querySelector<HTMLIFrameElement>("iframe[data-gaffer-report-print]")?.contentWindow;
-      if (!target || (target as unknown as { mocked: boolean }).mocked) return;
-      (target as unknown as { mocked: boolean }).mocked = true;
-      target.print = () => {
-        state.mediaListener({ matches: true });
-        queueMicrotask(() => state.mediaListener({ matches: false }));
-      };
-      target.matchMedia = (() => ({
-        matches: false,
-        addEventListener: (_type: string, listener: (event: { matches: boolean }) => void) => { state.mediaListener = listener; },
-        removeEventListener: () => { state.removedMediaListeners++; },
-      })) as unknown as typeof target.matchMedia;
-    }).observe(document, { childList: true, subtree: true });
-  });
-  await setup(page);
-  await openPreview(page);
-  await page.getByRole("button", { name: "Print report", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator("iframe[data-gaffer-report-print]")).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as { removedMediaListeners: number }).removedMediaListeners)).toBe(1);
-});
-
-test("printing from dark mode uses a light document palette", async ({ page }) => {
-  await mockPrint(page);
-  await setup(page);
-  await page.evaluate(() => document.documentElement.classList.add("dark"));
-  await openPreview(page);
-  await page.getByRole("button", { name: "Print report", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  const output = await page.evaluate(() => (window as unknown as { reportPrint: { color: string; charts: number } }).reportPrint);
-  expect(output.color).toBe("rgb(23, 23, 23)");
-  expect(output.charts).toBe(3);
 });
