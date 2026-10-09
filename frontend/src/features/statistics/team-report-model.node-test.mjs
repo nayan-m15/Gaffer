@@ -207,3 +207,14 @@ test("report filenames are filesystem-safe and date-stamped", () => {
     "Gaffer_United_FC_2026-09-24",
   );
 });
+
+test("CSV retains aligned columns and includes goalkeeper saves and averages", () => {
+  const data = report();
+  data.context.teamName = "Test FC";
+  data.overview.players[0].saves = 7;
+  const rows = buildTeamReportCsv(data).slice(1).split("\r\n").map(row => row.split(","));
+  assert.equal(rows[0].at(-1), "Saves");
+  assert.ok(rows.every(row => row.length === 16));
+  assert.equal(rows.find(row => row[0] === "Player performance").at(-1), "7");
+  assert.ok(rows.some(row => row[1] === "Average goals for" && row[2] === "1.5"));
+});

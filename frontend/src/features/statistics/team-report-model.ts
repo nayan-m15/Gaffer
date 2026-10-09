@@ -141,6 +141,7 @@ export function buildTeamReportCsv({
     "Assists",
     "Yellow Cards",
     "Red Cards",
+    "Saves",
   ];
   const rows: Array<Array<string | number>> = [headers];
   const summary: Array<[string, number | string]> = [
@@ -157,23 +158,25 @@ export function buildTeamReportCsv({
     ["Win percentage", `${Math.round(overview.winRate * 100)}%`],
     ["Clean sheets", overview.cleanSheets],
     ["Points", overview.points],
+    ["Average goals for", overview.avgGoalsFor],
+    ["Average goals against", overview.avgGoalsAgainst],
   ];
   for (const [metric, value] of summary) {
-    rows.push(["Team summary", metric, value, "", context.competitionName, "", "", "", "", "", "", "", "", "", ""]);
+    rows.push(["Team summary", metric, value, "", context.competitionName, "", "", "", "", "", "", "", "", "", "", ""]);
   }
   for (const match of overview.trends) {
     rows.push([
       "Match result", "", "", match.date, context.competitionName,
       match.opponent, match.isHome ? "Home" : "Away",
       `${match.goalsFor}-${match.goalsAgainst}`, match.result,
-      "", "", "", "", "", "",
+      "", "", "", "", "", "", "",
     ]);
   }
   for (const player of overview.players) {
     rows.push([
       "Player performance", "", "", "", context.competitionName,
       "", "", "", "", player.name, player.appearances, player.goals,
-      player.assists, player.yellowCards, player.redCards,
+      player.assists, player.yellowCards, player.redCards, player.saves ?? 0,
     ]);
   }
   return `\uFEFF${rows.map(csvRow).join("\r\n")}`;
