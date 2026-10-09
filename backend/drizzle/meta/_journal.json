@@ -533,6 +533,13 @@
       "when": 1791417600003,
       "tag": "0066_allow_competition_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1791417600004,
+      "tag": "0067_single_coach_competition_reports",
+      "breakpoints": true
     }
   ]
 }
