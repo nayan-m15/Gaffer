@@ -125,7 +125,10 @@ export class EventsService {
           weatherTimezone: dto.weatherTimezone,
           notes: dto.notes,
           competitionId,
-          friendlyPlayersPerSide: dto.type === 'match' && !competitionId ? (dto.friendlyPlayersPerSide ?? 11) : null,
+          friendlyPlayersPerSide:
+            dto.type === 'match' && !competitionId
+              ? (dto.friendlyPlayersPerSide ?? 11)
+              : null,
           friendlyFixtureId: fixtureId,
         })
         .returning();
@@ -632,12 +635,27 @@ export class EventsService {
           : existingEvent.competitionId
         : null;
     const competitionChanged = competitionId !== existingEvent.competitionId;
-    if (dto.friendlyPlayersPerSide !== undefined && dto.friendlyPlayersPerSide !== (existingEvent.friendlyPlayersPerSide ?? 11) && type === 'match' && !competitionId) {
+    if (
+      dto.friendlyPlayersPerSide !== undefined &&
+      dto.friendlyPlayersPerSide !==
+        (existingEvent.friendlyPlayersPerSide ?? 11) &&
+      type === 'match' &&
+      !competitionId
+    ) {
       if (fixture?.status === 'accepted') {
-        throw new BadRequestException('An accepted friendly fixture cannot change match format.');
+        throw new BadRequestException(
+          'An accepted friendly fixture cannot change match format.',
+        );
       }
-      const [confirmed] = await this.databaseService.database.select({ id: eventLineups.id }).from(eventLineups).where(eq(eventLineups.eventId, eventId)).limit(1);
-      if (confirmed) throw new BadRequestException('Match format cannot change after a squad has been confirmed.');
+      const [confirmed] = await this.databaseService.database
+        .select({ id: eventLineups.id })
+        .from(eventLineups)
+        .where(eq(eventLineups.eventId, eventId))
+        .limit(1);
+      if (confirmed)
+        throw new BadRequestException(
+          'Match format cannot change after a squad has been confirmed.',
+        );
     }
     this.ensureCompetitionUpdateAllowed(
       fixture,
@@ -767,7 +785,11 @@ export class EventsService {
         ? { weatherTimezone: dto.weatherTimezone }
         : {}),
       ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-      ...(type !== 'match' || competitionId ? { friendlyPlayersPerSide: null } : dto.friendlyPlayersPerSide !== undefined ? { friendlyPlayersPerSide: dto.friendlyPlayersPerSide } : {}),
+      ...(type !== 'match' || competitionId
+        ? { friendlyPlayersPerSide: null }
+        : dto.friendlyPlayersPerSide !== undefined
+          ? { friendlyPlayersPerSide: dto.friendlyPlayersPerSide }
+          : {}),
       ...(dto.competitionId !== undefined || type !== 'match'
         ? { competitionId }
         : {}),
