@@ -135,6 +135,23 @@ export default function EventsPage() {
     [canManageEvents, cursor, eventsByDay, isPastCalendarDay, view],
   );
 
+  const handleMobileDayClick = useCallback(
+    (date: Date) => {
+      setSelectedDate(date);
+      if (view === "week") {
+        const currentWeek = startOfWeek(cursor, { weekStartsOn: WEEK_STARTS_ON });
+        const targetWeek = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+        if (currentWeek.getTime() !== targetWeek.getTime()) {
+          setCursor(date);
+        }
+      } else if (!isSameMonth(date, cursor)) {
+        setCursor(date);
+      }
+      setPanel({ kind: "day", date });
+    },
+    [cursor, view],
+  );
+
   const handleOpenEvent = useCallback((event: TeamEvent) => {
     setPanel({ kind: "view", eventId: event.id });
   }, []);
@@ -336,6 +353,7 @@ export default function EventsPage() {
             competitionOptions={competitionOptions}
             onMatchFilterChange={setMatchFilter}
             onSelectDate={handleDayClick}
+            onSelectMobileDay={handleMobileDayClick}
             onNavigate={navigate}
             onToday={goToToday}
             onCreateEvent={(date) =>

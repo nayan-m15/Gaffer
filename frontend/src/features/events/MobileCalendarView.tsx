@@ -44,6 +44,7 @@ interface MobileCalendarViewProps {
   onMatchFilterChange: (value: MatchCompetitionFilter) => void;
   onViewChange?: (view: CalendarView) => void;
   onSelectDate: (date: Date) => void;
+  onSelectMobileDay?: (date: Date) => void;
   onNavigate: (direction: 1 | -1) => void;
   onToday: () => void;
   onCreateEvent: (date?: Date) => void;
@@ -73,6 +74,7 @@ export function MobileCalendarView({
   onMatchFilterChange,
   onViewChange,
   onSelectDate,
+  onSelectMobileDay,
   onNavigate,
   onToday,
   onCreateEvent,
@@ -91,9 +93,16 @@ export function MobileCalendarView({
     view === "week" ? formatWeekRangeLabel(weekDays) : formatMonthYear(cursor);
 
   return (
-    <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col gap-3 sm:hidden">
+    <div
+      className={cn(
+        "flex w-full min-h-0 min-w-0 flex-1 flex-col gap-3 sm:hidden",
+        view === "agenda"
+          ? "overflow-hidden"
+          : "overflow-y-auto overscroll-contain pb-[calc(8rem+env(safe-area-inset-bottom))] [&>*]:shrink-0",
+      )}
+    >
       {/* ── 1. Smartphone Top Navigation & Filter Bar ────────────────────── */}
-      <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
+      <div className="flex w-full min-w-0 shrink-0 flex-col gap-2.5 rounded-2xl border border-border bg-card p-3 shadow-xs">
         {/* Navigation & Period Title */}
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -223,8 +232,8 @@ export function MobileCalendarView({
           selectedDate={selectedDate}
           now={now}
           eventsByDay={eventsByDay}
-          onSelectDate={onSelectDate}
-          onOpenEvent={onSelectDate}
+          onSelectDate={onSelectMobileDay ?? onSelectDate}
+          onOpenEvent={onSelectMobileDay ?? onSelectDate}
         />
       )}
 
@@ -234,7 +243,7 @@ export function MobileCalendarView({
           selectedDate={selectedDate}
           now={now}
           eventsByDay={eventsByDay}
-          onSelectDate={onSelectDate}
+          onSelectDate={onSelectMobileDay ?? onSelectDate}
         />
       )}
 
@@ -285,7 +294,7 @@ function MobileMonthGrid({
   onOpenEvent: (date: Date) => void;
 }) {
   return (
-    <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+    <div className="flex w-full min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
       {/* Weekday Row Header (M T W T F S S) */}
       <div className="grid w-full min-w-0 grid-cols-7 border-b border-border/60 bg-muted/20 text-center py-1.5">
         {weekdayLabels.map((label, idx) => (
@@ -302,7 +311,7 @@ function MobileMonthGrid({
       </div>
 
       {/* Days Grid - Samsung full screen grid style */}
-      <div className="grid min-h-0 w-full min-w-0 flex-1 grid-cols-7 grid-rows-6">
+      <div className="grid w-full min-w-0 grid-cols-7 grid-rows-[repeat(6,minmax(100px,auto))]">
         {grid.map((day, dayIndex) => {
           const isToday = isSameCalendarDay(day, now);
           const isSelected = isSameCalendarDay(day, selectedDate);
@@ -356,7 +365,7 @@ function MobileMonthGrid({
                       }}
                       title={evt.title}
                       className={cn(
-                        "block w-full rounded px-1 py-0.5 text-[9px] font-medium leading-[1.15] text-left break-words whitespace-normal line-clamp-2 transition-transform active:scale-95 shadow-2xs",
+                        "block w-full rounded px-1 py-0.5 text-[9px] font-medium leading-[1.15] text-left truncate transition-transform active:scale-95 shadow-2xs",
                         style.pill,
                         isCancelled && "line-through opacity-60",
                       )}
@@ -625,7 +634,7 @@ function MobileAgendaList({
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
+    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-[calc(8rem+env(safe-area-inset-bottom))]">
       {groups.map(([dayKey, dayEvents]) => {
         const [y, m, d] = dayKey.split("-").map(Number);
         const date = new Date(y, m - 1, d);
