@@ -17,4 +17,3 @@ for (const name of await readdir(path.join(root, 'landing'))) {
   if (name.endsWith('.jpg')) await variants(path.join(root, 'landing', name), [480, 800, 1280, 1920]);
 }
 await variants(path.join(root, 'logo.png'), [112, 224, 634], 100, true);
-await variants(path.join(root, 'hero-stadium-bg.png'), [960, 1920]);

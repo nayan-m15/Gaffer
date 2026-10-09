@@ -52,15 +52,11 @@ export default function LandingPage() {
 
   return (
     <div className="landing-v2 relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground">
-        <div aria-hidden="true" data-scene-status={sceneStatus} className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-          <img
-            src="/hero-stadium-bg-960.webp"
-            srcSet="/hero-stadium-bg-960.webp 960w, /hero-stadium-bg-1792.webp 1792w"
-            sizes="100vw"
-            alt=""
-            className="absolute inset-0 size-full object-cover object-center"
-          />
-        </div>
+      <div
+        aria-hidden="true"
+        data-scene-status={sceneStatus}
+        className="pointer-events-none fixed inset-0 z-0 bg-[#07100d]"
+      />
       <LandingScene onStatusChange={setSceneStatus} />
       <Navbar />
       <ChapterRail />

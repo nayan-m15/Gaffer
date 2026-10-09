@@ -96,11 +96,15 @@ test.describe("landing-page tactical background", () => {
     }
   });
 
-  test('software rendering retains the optimized static background', async ({ page }) => {
+  test('software rendering uses a plain background without downloading the stadium image', async ({ page }) => {
+    const stadiumRequests: string[] = [];
+    page.on('request', request => { if (request.url().includes('hero-stadium-bg')) stadiumRequests.push(request.url()); });
     await openLandingPage(page);
     await expect(page.locator('[data-scene-status]')).toHaveAttribute('data-scene-status', 'fallback', { timeout: SCENE_TIMEOUT });
     await expect(page.locator('.landing-scene canvas')).toHaveCount(0);
-    await expect(page.locator('img[src="/hero-stadium-bg-960.webp"]')).toBeVisible();
+    await expect(page.locator('[data-scene-status]')).toHaveCSS('background-color', 'rgb(7, 16, 13)');
+    await expect(page.locator('img[src*="hero-stadium-bg"]')).toHaveCount(0);
+    expect(stadiumRequests).toEqual([]);
   });
 
   test('a reduced-motion change disposes the scene and can restart it', async ({ page }) => {
