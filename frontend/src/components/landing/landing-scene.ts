@@ -830,12 +830,6 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   shell.name = "Continuous player tunnel walls and chamfered ceiling";
   shell.castShadow = !lowPower; shell.receiveShadow = true; tunnel.add(shell);
 
-  // Two parallel lengthwise strips, clear of the ceiling by .005m. Reuse
-  // the original animated emissive material; no new lights or pulse logic.
-  for (const z of [-2.72, 2.72]) {
-    tunnel.add(box([TUNNEL_LENGTH - .8, .02, .14], [centre, 3.98, z], tunnelLight));
-  }
-
   const detailTextures: THREE.Texture[] = [];
   const wallHalfWidth = (x: number) => entranceHalfWidth + (x - ROOM_EXIT) * .5 / TUNNEL_LENGTH;
   const phrases = [
@@ -886,7 +880,7 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   };
   runwayMaterial.customProgramCacheKey = () => "gaffer-runway-instance-emission";
   const runway = new THREE.InstancedMesh(new THREE.BoxGeometry((segmentLength - .035) * Math.hypot(1, .5 / TUNNEL_LENGTH), .025, .018), runwayMaterial, segments * 2);
-  runway.name = "Scroll reactive tunnel runway";
+  runway.name = "Steady green tunnel wall strips";
   const segmentTransform = new THREE.Object3D(), brightness = new THREE.Color();
   for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
     const side = sideIndex === 0 ? -1 : 1;
@@ -895,23 +889,103 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
       segmentTransform.position.set(x, .14, side * (wallHalfWidth(x) - .012));
       segmentTransform.rotation.y = -side * Math.atan2(.5, TUNNEL_LENGTH);
       segmentTransform.updateMatrix(); runway.setMatrixAt(sideIndex * segments + i, segmentTransform.matrix);
-      runway.setColorAt(sideIndex * segments + i, brightness.setRGB(.04, .04, .04));
+      runway.setColorAt(sideIndex * segments + i, brightness.setRGB(.25, .25, .25));
     }
   }
   runway.instanceMatrix.needsUpdate = true; runway.frustumCulled = false; tunnel.add(runway);
-  let lastPhase = -1;
-  const updateRunway = (progress: number, reducedMotion: boolean) => {
-    const phase = reducedMotion ? 1 : THREE.MathUtils.clamp((progress - .24) / .26, 0, 1);
-    if (phase === lastPhase) return;
-    lastPhase = phase;
+
+  // Replace the two continuous ceiling strips with one instanced runway.
+  // Unlit white is directly multiplied by instanceColor: no emission shader
+  // patch or scene lighting is needed for the segments to remain visible.
+  const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const ceilingLength = TUNNEL_LENGTH - .8, ceilingSegment = ceilingLength / segments;
+  const ceilingRunway = new THREE.InstancedMesh(new THREE.BoxGeometry(ceilingSegment - .035, .02, .14), ceilingMaterial, segments * 2);
+  ceilingRunway.name = "Scroll reactive ceiling runway";
+  const textureWidth = lowPower ? 64 : 128, textureHeight = lowPower ? 32 : 64;
+  const washMap = canvasTexture(textureWidth, textureHeight, ctx => {
+    const gradient = ctx.createLinearGradient(0, 0, 0, textureHeight);
+    gradient.addColorStop(0, "rgba(255,255,255,1)");
+    gradient.addColorStop(.35, "rgba(255,255,255,.28)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, textureWidth, textureHeight);
+  });
+  const reflectionMap = canvasTexture(textureWidth, textureHeight, ctx => {
+    const gradient = ctx.createLinearGradient(0, 0, 0, textureHeight);
+    gradient.addColorStop(0, "rgba(255,255,255,0)");
+    gradient.addColorStop(.25, "rgba(255,255,255,.18)");
+    gradient.addColorStop(.5, "rgba(255,255,255,1)");
+    gradient.addColorStop(.75, "rgba(255,255,255,.18)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, textureWidth, textureHeight);
+    ctx.globalCompositeOperation = "destination-in";
+    const ends = ctx.createLinearGradient(0, 0, textureWidth, 0);
+    ends.addColorStop(0, "rgba(255,255,255,0)"); ends.addColorStop(.2, "white");
+    ends.addColorStop(.8, "white"); ends.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = ends; ctx.fillRect(0, 0, textureWidth, textureHeight);
+  });
+  washMap.name = "Tunnel upper wall wash"; reflectionMap.name = "Tunnel blurred floor streaks";
+  detailTextures.push(washMap, reflectionMap);
+  const washMaterial = new THREE.MeshBasicMaterial({ map: washMap, color: 0xeafff7, transparent: true, opacity: .22, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const reflectionMaterial = new THREE.MeshBasicMaterial({ map: reflectionMap, transparent: true, opacity: .18, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const wallWash = new THREE.InstancedMesh(new THREE.PlaneGeometry(ceilingSegment * Math.hypot(1, .5 / TUNNEL_LENGTH), 1), washMaterial, segments * 2);
+  const floorReflections = new THREE.InstancedMesh(new THREE.PlaneGeometry(ceilingSegment - .035, .45), reflectionMaterial, segments * 4);
+  wallWash.name = "Segmented upper wall glow"; floorReflections.name = "Soft tunnel floor light streaks";
+  const wallAngle = Math.atan2(.5, TUNNEL_LENGTH);
+  for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+    const side = sideIndex === 0 ? -1 : 1;
     for (let i = 0; i < segments; i++) {
-      // Lead by two segments: the next section switches on before arrival.
-      const lit = phase === 0 ? 0 : smooth((i - 2) / segments, (i - 1) / segments, phase);
-      const level = .04 + .96 * lit;
-      brightness.setRGB(level, level, level);
-      runway.setColorAt(i, brightness); runway.setColorAt(segments + i, brightness);
+      const id = sideIndex * segments + i, x = ROOM_EXIT + .4 + (i + .5) * ceilingSegment;
+      segmentTransform.position.set(x, 3.98, side * 2.72);
+      segmentTransform.rotation.set(0, 0, 0); segmentTransform.scale.set(1, 1, 1);
+      segmentTransform.updateMatrix(); ceilingRunway.setMatrixAt(id, segmentTransform.matrix);
+      ceilingRunway.setColorAt(id, brightness.setRGB(.12, .12, .12));
+      // 1m wash stays on the flat wall, 28.5cm above the quote's top edge.
+      segmentTransform.position.set(x, 3.235, side * (wallHalfWidth(x) - .008));
+      segmentTransform.rotation.set(0, side < 0 ? wallAngle : Math.PI - wallAngle, 0);
+      segmentTransform.updateMatrix(); wallWash.setMatrixAt(id, segmentTransform.matrix);
+      wallWash.setColorAt(id, brightness.setRGB(.003, .003, .003));
+      // White streaks are z=+/-2.72, width .45: closest edge is 2.495,
+      // outside the runner's +/-2m. All streaks stop before the threshold.
+      segmentTransform.position.set(x, .033, side * 2.72);
+      segmentTransform.rotation.set(-Math.PI / 2, 0, 0);
+      segmentTransform.updateMatrix(); floorReflections.setMatrixAt(id, segmentTransform.matrix);
+      floorReflections.setColorAt(id, brightness.setRGB(.003, .003, .003));
+      segmentTransform.position.set(x, .033, side * (wallHalfWidth(x) - .14));
+      segmentTransform.scale.set(1, .2 / .45, 1);
+      segmentTransform.updateMatrix(); floorReflections.setMatrixAt(segments * 2 + id, segmentTransform.matrix);
+      floorReflections.setColorAt(segments * 2 + id, brightness.setRGB(0, .003 * .35 * 217 / 255, .003 * .35 * 154 / 255));
     }
-    if (runway.instanceColor) runway.instanceColor.needsUpdate = true;
+  }
+  for (const mesh of [ceilingRunway, wallWash, floorReflections]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.frustumCulled = false; tunnel.add(mesh);
+  }
+  const runwayLead = 7, runwayFade = 2, runwayStart = ROOM_EXIT - 4;
+  let lastCameraX = -Infinity;
+  const updateRunway = (cameraX: number, reducedMotion: boolean) => {
+    // Begin inviting light 4m before the doorway; follow world-space travel.
+    const lightCameraX = reducedMotion ? ROOM_EXIT + TUNNEL_LENGTH : THREE.MathUtils.clamp(cameraX, runwayStart, ROOM_EXIT + TUNNEL_LENGTH);
+    if (lightCameraX === lastCameraX) return;
+    lastCameraX = lightCameraX;
+    const approach = smooth(runwayStart, runwayStart + runwayFade, lightCameraX);
+    for (let i = 0; i < segments; i++) {
+      const x = ROOM_EXIT + .4 + (i + .5) * ceilingSegment;
+      // Fully lit through 7m ahead, then smoothly fade out over the next 2m.
+      const lit = approach * (1 - smooth(lightCameraX + runwayLead, lightCameraX + runwayLead + runwayFade, x));
+      const level = .12 + .88 * lit;
+      brightness.setRGB(level, level, level);
+      ceilingRunway.setColorAt(i, brightness); ceilingRunway.setColorAt(segments + i, brightness);
+      const glow = .003 + .997 * lit;
+      brightness.setRGB(glow, glow, glow);
+      wallWash.setColorAt(i, brightness); wallWash.setColorAt(segments + i, brightness);
+      floorReflections.setColorAt(i, brightness); floorReflections.setColorAt(segments + i, brightness);
+      brightness.setRGB(0, glow * .35 * 217 / 255, glow * .35 * 154 / 255);
+      floorReflections.setColorAt(segments * 2 + i, brightness); floorReflections.setColorAt(segments * 3 + i, brightness);
+    }
+    if (ceilingRunway.instanceColor) ceilingRunway.instanceColor.needsUpdate = true;
+    if (wallWash.instanceColor) wallWash.instanceColor.needsUpdate = true;
+    if (floorReflections.instanceColor) floorReflections.instanceColor.needsUpdate = true;
   };
   const carpet = tunnelRunner([[-61, .034], [-44.70, .034], [-44.67, .0965], [-44.5, .0965]], lowPower);
   detailTextures.push(carpet.map); tunnel.add(carpet.mesh);
@@ -941,7 +1015,7 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   // masks z-fighting while leaving the existing pitch-side connection intact.
   tunnel.add(box([.34, .075, TUNNEL_WIDTH], [TUNNEL_EXIT, .055, 0], structuralMetal));
   scene.add(tunnel);
-  return { floorMap, surfaceDetailMap, entranceSignMap, exitSignMap, tunnelLight, brandLight, detailTextures, runway, updateRunway };
+  return { floorMap, surfaceDetailMap, entranceSignMap, exitSignMap, tunnelLight, brandLight, detailTextures, runwayEffects: [runway, ceilingRunway, wallWash, floorReflections], updateRunway };
 }
 
 function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
@@ -1352,7 +1426,7 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     }
   });
   const updateEnvironmentalMotion=(progress:number)=>{
-    roomAssets.tunnelAssets.updateRunway(progress,reducedMotion);
+    roomAssets.tunnelAssets.updateRunway(camera.position.x,reducedMotion);
     if(reducedMotion){
       if(animatedShirt)animatedShirt.rotation.z=shirtBaseRoll;
       roomAssets.tunnelAssets.tunnelLight.emissiveIntensity=1.42;
@@ -1543,5 +1617,5 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
-  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);scene.remove(stadium.group);disposeStadium(stadium.group);tunnelAssets.runway.dispose();const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();tunnelAssets.detailTextures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);scene.remove(stadium.group);disposeStadium(stadium.group);tunnelAssets.runwayEffects.forEach(mesh=>mesh.dispose());tunnelAssets.tunnelLight.dispose();const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();tunnelAssets.detailTextures.forEach(value=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
 }
