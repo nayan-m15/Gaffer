@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { FileText, Printer } from "lucide-react";
+import { CompetitionMatchEventGraphic, getCompetitionMatchEventAppearance } from "./CompetitionMatchEventGraphic";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchCompetitionMatchCentre, type CompetitionMatchCentreData } from "./api";
-
-const eventNames: Record<string, string> = {
-  goal: "Goal", assist: "Assist", yellow_card: "Yellow card", red_card: "Red card",
-  substitution: "Substitution", goalkeeper_save: "Goalkeeper save", penalty: "Penalty",
-};
 
 export function CompetitionMatchCentre({ competitionId, fixtureId, home, away, homeTeamId, awayTeamId, onClose }: {
   competitionId: string; fixtureId: string; home: string; away: string; homeTeamId: string | null; awayTeamId: string | null; onClose: () => void;
@@ -30,7 +26,7 @@ export function CompetitionMatchCentre({ competitionId, fixtureId, home, away, h
     const popup = window.open("", "_blank");
     if (!popup) return;
     popup.opener = null;
-    const body = data.events.map((event) => `<tr><td>${event.minute}′</td><td>${escapeHtml(eventNames[event.type] ?? event.type)}</td><td>${escapeHtml(event.playerName)}</td><td>${escapeHtml(event.teamId === homeTeamId ? home : event.teamId === awayTeamId ? away : "Unknown team")}</td></tr>`).join("");
+    const body = data.events.map((event) => `<tr><td>${event.minute}′</td><td>${escapeHtml(getCompetitionMatchEventAppearance(event.type).label)}</td><td>${escapeHtml(event.playerName)}</td><td>${escapeHtml(event.teamId === homeTeamId ? home : event.teamId === awayTeamId ? away : "Unknown team")}</td></tr>`).join("");
     popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Match Report</title><style>body{font:14px Arial,sans-serif;margin:36px;color:#111}h1{font-size:24px}table{width:100%;border-collapse:collapse}td,th{padding:10px;text-align:left;border-bottom:1px solid #ddd}p{color:#555}</style></head><body><h1>${escapeHtml(home)} ${data.homeScore ?? "–"} – ${data.awayScore ?? "–"} ${escapeHtml(away)}</h1><p>Finalized competition match · shared event report</p><table><thead><tr><th>Minute</th><th>Event</th><th>Player</th><th>Team</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
     popup.document.close();
     popup.focus();
@@ -55,11 +51,14 @@ export function CompetitionMatchCentre({ competitionId, fixtureId, home, away, h
             <h3 className="mb-3 font-semibold">Match timeline</h3>
             {!data.hasReport && <p className="text-sm text-muted-foreground">No live-logged event report is available for this result.</p>}
             <div className="space-y-2">
-              {data.events.map((event) => <div key={event.id} className="flex items-start gap-3 rounded-lg border border-border/70 p-3 text-sm">
-                <span className="w-9 shrink-0 font-semibold tabular-nums">{event.minute}′</span>
-                <div className="min-w-0 flex-1"><div className="font-medium">{eventNames[event.type] ?? event.type}</div>
-                  <div className="text-muted-foreground">{event.playerName}</div></div>
-                <span className="max-w-24 text-right text-xs text-muted-foreground">{event.teamId === homeTeamId ? home : event.teamId === awayTeamId ? away : "Unknown team"}</span>
+              {data.events.map((event) => <div key={event.id} className="flex items-center gap-3 rounded-lg border border-border/70 bg-card/70 p-3 text-sm transition-colors hover:bg-muted/40">
+                <span className="w-9 shrink-0 text-center font-semibold tabular-nums text-muted-foreground">{event.minute}′</span>
+                <CompetitionMatchEventGraphic type={event.type} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold">{getCompetitionMatchEventAppearance(event.type).label}</div>
+                  <div className="break-words text-muted-foreground">{event.playerName}</div>
+                </div>
+                <span className="max-w-24 shrink-0 text-right text-xs text-muted-foreground sm:max-w-36">{event.teamId === homeTeamId ? home : event.teamId === awayTeamId ? away : "Unknown team"}</span>
               </div>)}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">This view excludes private team tactics, medical details and internal notes.</p>
