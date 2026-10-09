@@ -1,0 +1,1108 @@
+{
+  "baselineRevision": "005299491fe1393a078736e55d2843fd81b100e0",
+  "afterRevision": "91f04fe52d58958d8c716722b43a759f5e3dc2b8",
+  "branch": "fix/performance-dashboard-audit",
+  "trackedDiffSha256": "57904db3ee6754978d7f6def874575454c0096d20ff8b743e93ff5029769f428",
+  "environment": {
+    "os": "Windows 10.0.26300",
+    "logicalProcessors": 12,
+    "memoryGiB": 16,
+    "lighthouse": "13.5.0",
+    "chromium": "151.0.0.0",
+    "gpu": "SwiftShader",
+    "url": "http://127.0.0.1:4187/"
+  },
+  "sourceManifest": [
+    {
+      "path": "frontend/index.html",
+      "sha256": "a7cc30a820fab6390f5acc0d316804392ea929129ac49916d2f29734c535af30"
+    },
+    {
+      "path": "frontend/public/hero-stadium-bg-1792.webp",
+      "sha256": "4a93322fd0dde1a01afeaf19dd278c1638016328e7991cd0a2274e744a86af82"
+    },
+    {
+      "path": "frontend/public/hero-stadium-bg-960.webp",
+      "sha256": "6581c619a0a1605c070fefe20bf8c6529df6eeba892c08a6b2a0f6d2690f235d"
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-1280.webp",
+      "sha256": "c47b2c4190965fe04ff9e7a3e167427fb17acfa5b83af473934704b1714baef6"
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-1418.webp",
+      "sha256": "f5ca44fe9f0a32cb726d50907f5f7c2961aad3e4843d1350a43fe259ffd3b94b"
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-480.webp",
+      "sha256": "91e2c966ae41d90a97bde508fdb79b9d090fd359aea514630e578a5e62615ae2"
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-800.webp",
+      "sha256": "f1840c167b1b9132798afb7bf44bbc7e371a5a11793a7ef747ba6f96572ae6f9"
+    },
+    {
+      "path": "frontend/public/landing/injury-recovery-480.webp",
+      "sha256": "604c4fef8e1f4e9dea3375aae7e1ebec2f0d3308033d3fd821bdbc70af832620"
+    },
+    {
+      "path": "frontend/public/landing/injury-recovery-696.webp",
+      "sha256": "04ee344251941a0bbe246ee46450bf0dc99aa8ea21c191d70ca6013a3ffe43b6"
+    },
+    {
+      "path": "frontend/public/landing/live-match-mobile-480.webp",
+      "sha256": "50bd6643b53ad672b361790e972f4bbe3706c35523acca2ea1e4e15bdbfd0053"
+    },
+    {
+      "path": "frontend/public/landing/live-match-mobile-501.webp",
+      "sha256": "e9bfeb418c825de742b585170b118e3bad65523a435a103d1b63252764fe1675"
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-1280.webp",
+      "sha256": "9399852f5ec80e3da50cbc3e079255f520bd288b3da50624324ae3746a280bf7"
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-1440.webp",
+      "sha256": "3a9731fff681686b8f7992fb402cc6fc7bd9d407ab1154fa431d7c3d13c88377"
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-480.webp",
+      "sha256": "6a4db2d79630925395c16394330f7777b2d0e996513b9d2a9e034e94a1dcd4c3"
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-800.webp",
+      "sha256": "e8041986f34bededd048b91e066a2ac05f8610c26f5459e9cd5221b006ba7c6b"
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-1280.webp",
+      "sha256": "10961056dc57d56ac31d7e7e3b67df000a235bf0c8646e98fb94fc3269aeccde"
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-1417.webp",
+      "sha256": "9513323ea5873bd493ff3ea4007730bb0e4a540b1bb3d4e115a631b769ccf592"
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-480.webp",
+      "sha256": "1211e18e0ed39ff3f01d75689dcd547ce993abed287414f8c1b23d19c4ad8b3d"
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-800.webp",
+      "sha256": "96afe3282067225fb028bbffb3a6dc19c7b26e4deb0e2d2806ff589335c0176b"
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-1280.webp",
+      "sha256": "3af29d1851c4a047783abc6ba0c71256e6be650b2a7e271f1420f3ad1bd13a0f"
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-1383.webp",
+      "sha256": "777bb1d18b61df69db3122461d53eb6f1abc82057b4740b1e854494fb4e790ce"
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-480.webp",
+      "sha256": "63bd9ceb7fc1f458693a507720c976c0fe8393b81a867a352c83ad00feebb7b4"
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-800.webp",
+      "sha256": "b7240eda67f7de0853a486393476d02506028182d6467172f9f3d6378f9177da"
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-1280.webp",
+      "sha256": "b896b5096e99dc0ff54cb062f2662419ea3085aca0cd8d6cc75abdae7a2c395e"
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-1531.webp",
+      "sha256": "ac15e89dd32ccaf3044baea0e501e0488f1246432f3dafbae4b7c1c685e929f6"
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-480.webp",
+      "sha256": "2847d8c939094a82a0f21276160d90f22fbdb7022236035e983d3849509a8b8b"
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-800.webp",
+      "sha256": "0c607245bd6b33959276dbf88d1d3685a9b83eba5c55d2937574ed5177a4230a"
+    },
+    {
+      "path": "frontend/public/logo-112.webp",
+      "sha256": "4d7b68b1592501cd119a0d35e2c4932f502cc356215e8147b657fed8bf4a5b1a"
+    },
+    {
+      "path": "frontend/public/logo-224.webp",
+      "sha256": "eb5f36ae632ef5553c1242110fa98007d685b1b67c94a105a03d9a0c25749a5b"
+    },
+    {
+      "path": "frontend/public/logo-634.webp",
+      "sha256": "2def1c994609009faf29a8cb15d5b5175ab11f445758b306b63a4e9c44381204"
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "sha256": "4e6cd1aad2622081f1bf988da9c34002afe597b5893180b03c804d4fbcfc3961"
+    },
+    {
+      "path": "frontend/src/components/brand/SportLogo.tsx",
+      "sha256": "b9ed43d103e3a1490f4e43effe85c3f5ac63d5b87bb4a6155a47b3191fdaba80"
+    },
+    {
+      "path": "frontend/src/components/landing/LandingScene.tsx",
+      "sha256": "c82eef08784d87c92bbd4867746f437d3fed67b3da75a41247b93b580580cac6"
+    },
+    {
+      "path": "frontend/src/components/landing/gaffer-stadium.ts",
+      "sha256": "67f90877aed4088ced3ab7bc18ef404ddaee94116718bfa9ba9b31204104f237"
+    },
+    {
+      "path": "frontend/src/components/landing/landing-scene.ts",
+      "sha256": "e638f8fc35d6737f9dc6ff7e59e119c7f39113da128d9866cfef460df7d30872"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-capability.node-test.mjs",
+      "sha256": "c451d529f9fbabe1233d3d6809d5ea13560937a8b60e42a3ce7c93df2a035b8d"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-capability.ts",
+      "sha256": "682a3764fad495037ebeb0367b81edbad4a288c4f1555ece170991987af9003f"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-capability.worker.node-test.mjs",
+      "sha256": "63d7fe3b0ddfbc4a33bc1c7aad9c8f11f9eba71f9ed3cb4614e63ac16d5553b3"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-capability.worker.ts",
+      "sha256": "c24273077ce3143b8945cb5504131b1906fb46b8b746c43f1cad0bbd6dc1cd07"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-scheduler.node-test.mjs",
+      "sha256": "354ade60987e45347d2a6d9997ee87c40068985267748cc34f90b3ec1d7f5c58"
+    },
+    {
+      "path": "frontend/src/components/landing/scene-scheduler.ts",
+      "sha256": "07f5b9720358d6a3cb06f45a6eecbe0127e9d533f2c470ca4daf173f6c3d3bca"
+    },
+    {
+      "path": "frontend/src/index.css",
+      "sha256": "23f88c39de064300b648fc027002fd8937b9d99d2c8ff11b8a6d6a8c9afbb03c"
+    },
+    {
+      "path": "frontend/src/pages/LandingPage.tsx",
+      "sha256": "0d43e46a585bb95f2d8e80a7ef7321b0f314ae72c8487b8398a49a0b5b7b41e3"
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "sha256": "fe9403bae085497426d63c3555273aaa15c470e31c63626e2cf4b8109aa0850a"
+    }
+  ],
+  "settings": {
+    "desktop": {
+      "output": [
+        "json"
+      ],
+      "maxWaitForFcp": 30000,
+      "maxWaitForLoad": 45000,
+      "pauseAfterFcpMs": 5250,
+      "pauseAfterLoadMs": 5250,
+      "networkQuietThresholdMs": 5250,
+      "cpuQuietThresholdMs": 5250,
+      "formFactor": "desktop",
+      "throttling": {
+        "rttMs": 40,
+        "throughputKbps": 10240,
+        "requestLatencyMs": 0,
+        "downloadThroughputKbps": 0,
+        "uploadThroughputKbps": 0,
+        "cpuSlowdownMultiplier": 4
+      },
+      "throttlingMethod": "devtools",
+      "screenEmulation": {
+        "mobile": false,
+        "width": 1350,
+        "height": 940,
+        "deviceScaleFactor": 1,
+        "disabled": false
+      },
+      "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+      "auditMode": false,
+      "gatherMode": false,
+      "clearStorageTypes": [
+        "file_systems",
+        "shader_cache",
+        "service_workers",
+        "cache_storage"
+      ],
+      "disableStorageReset": false,
+      "debugNavigation": false,
+      "channel": "cli",
+      "usePassiveGathering": false,
+      "disableFullPageScreenshot": false,
+      "skipAboutBlank": false,
+      "blankPage": "about:blank",
+      "ignoreStatusCode": false,
+      "locale": "en-US",
+      "blockedUrlPatterns": null,
+      "additionalTraceCategories": null,
+      "extraHeaders": null,
+      "precomputedLanternData": null,
+      "onlyAudits": null,
+      "onlyCategories": [
+        "performance"
+      ],
+      "skipAudits": null
+    },
+    "mobile": {
+      "output": [
+        "json"
+      ],
+      "maxWaitForFcp": 30000,
+      "maxWaitForLoad": 45000,
+      "pauseAfterFcpMs": 5250,
+      "pauseAfterLoadMs": 5250,
+      "networkQuietThresholdMs": 5250,
+      "cpuQuietThresholdMs": 5250,
+      "formFactor": "mobile",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "throttlingMethod": "devtools",
+      "screenEmulation": {
+        "mobile": true,
+        "width": 412,
+        "height": 823,
+        "deviceScaleFactor": 1.75,
+        "disabled": false
+      },
+      "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+      "auditMode": false,
+      "gatherMode": false,
+      "clearStorageTypes": [
+        "file_systems",
+        "shader_cache",
+        "service_workers",
+        "cache_storage"
+      ],
+      "disableStorageReset": false,
+      "debugNavigation": false,
+      "channel": "cli",
+      "usePassiveGathering": false,
+      "disableFullPageScreenshot": false,
+      "skipAboutBlank": false,
+      "blankPage": "about:blank",
+      "ignoreStatusCode": false,
+      "locale": "en-US",
+      "blockedUrlPatterns": null,
+      "additionalTraceCategories": null,
+      "extraHeaders": null,
+      "precomputedLanternData": null,
+      "onlyAudits": null,
+      "onlyCategories": [
+        "performance"
+      ],
+      "skipAudits": null
+    }
+  },
+  "results": [
+    {
+      "phase": "before",
+      "device": "desktop",
+      "run": 1,
+      "date": "2026-10-09T19:50:33.201Z",
+      "metrics": {
+        "first-contentful-paint": 1342.583,
+        "largest-contentful-paint": 2975.933,
+        "total-blocking-time": 3936.698,
+        "cumulative-layout-shift": 0.02001555076601255,
+        "speed-index": 8763
+      },
+      "longestTaskMs": 2699.605,
+      "nonCompositedAnimations": 3,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 4129.86700000007
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 2247.301999999986
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1412.1640000000007
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 260.87100000000055
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 56.339999999999996
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 18.725
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 13.244
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "device": "desktop",
+      "run": 2,
+      "date": "2026-10-09T19:51:22.468Z",
+      "metrics": {
+        "first-contentful-paint": 1524.394,
+        "largest-contentful-paint": 4357.749,
+        "total-blocking-time": 9533.377,
+        "cumulative-layout-shift": 0.02001555076601255,
+        "speed-index": 10157
+      },
+      "longestTaskMs": 4116.157,
+      "nonCompositedAnimations": 3,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 9384.632000000118
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1839.5429999999985
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 1802.197999999981
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 232.91600000000096
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 55.431000000000004
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 37.114
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 24.36100000000003
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "device": "desktop",
+      "run": 3,
+      "date": "2026-10-09T19:51:58.090Z",
+      "metrics": {
+        "first-contentful-paint": 1532.233,
+        "largest-contentful-paint": 4382.256,
+        "total-blocking-time": 10229.729,
+        "cumulative-layout-shift": 0.02001555076601255,
+        "speed-index": 10497
+      },
+      "longestTaskMs": 4809.234,
+      "nonCompositedAnimations": 3,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 9690.900000000107
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 2309.533999999995
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1603.7649999999994
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 468.05999999999676
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 67.33599999999998
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 26.578000000000003
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 22.836
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "desktop",
+      "run": 1,
+      "date": "2026-10-09T20:14:53.598Z",
+      "metrics": {
+        "first-contentful-paint": 1660.356,
+        "largest-contentful-paint": 4777.03,
+        "total-blocking-time": 2115.6990000000005,
+        "cumulative-layout-shift": 0.02001555076601255,
+        "speed-index": 4768
+      },
+      "longestTaskMs": 1128.471,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 6123.491000000027
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 2941.739000000005
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 2209.679999999994
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 1057.1519999999998
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 133.75000000000003
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 68.39300000000001
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 24.17699999999999
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "desktop",
+      "run": 2,
+      "date": "2026-10-09T20:16:03.377Z",
+      "metrics": {
+        "first-contentful-paint": 1482.235,
+        "largest-contentful-paint": 4832.248,
+        "total-blocking-time": 2189.902000000001,
+        "cumulative-layout-shift": 0.02001555076601255,
+        "speed-index": 4831
+      },
+      "longestTaskMs": 1198.129,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 5678.849000000018
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 3120.441000000003
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 2434.3719999999867
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 1082.4179999999997
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 106.42300000000003
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 45.66799999999999
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 18.109
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "desktop",
+      "run": 3,
+      "date": "2026-10-09T20:17:05.141Z",
+      "metrics": {
+        "first-contentful-paint": 1836.422,
+        "largest-contentful-paint": 4719.773,
+        "total-blocking-time": 845.6660000000004,
+        "cumulative-layout-shift": 0.02015777774920141,
+        "speed-index": 4714
+      },
+      "longestTaskMs": 616.825,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 5470.028000000046
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 2464.386000000007
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1943.8330000000042
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 865.9139999999995
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 85.16199999999996
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 44.257
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 24.902999999999995
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "device": "mobile",
+      "run": 1,
+      "date": "2026-10-09T19:52:33.738Z",
+      "metrics": {
+        "first-contentful-paint": 3690.719,
+        "largest-contentful-paint": 6774.073,
+        "total-blocking-time": 4669.310000000001,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 7097
+      },
+      "longestTaskMs": 2821.109,
+      "nonCompositedAnimations": 2,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 4631.234000000085
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3991.520000000162
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1476.249
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 304.31900000000024
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 57.715
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 48.374
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 20.970000000000006
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "device": "mobile",
+      "run": 2,
+      "date": "2026-10-09T19:53:17.232Z",
+      "metrics": {
+        "first-contentful-paint": 3654.883,
+        "largest-contentful-paint": 6821.57,
+        "total-blocking-time": 4528.589000000002,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 7085
+      },
+      "longestTaskMs": 2873.89,
+      "nonCompositedAnimations": 2,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 4447.307000000048
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3237.6530000000153
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1382.4840000000006
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 247.89300000000026
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 81.663
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 62.644
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 14.544999999999998
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "device": "mobile",
+      "run": 3,
+      "date": "2026-10-09T19:53:54.427Z",
+      "metrics": {
+        "first-contentful-paint": 3767.512,
+        "largest-contentful-paint": 6884.203,
+        "total-blocking-time": 5085.5199999999995,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 7284
+      },
+      "longestTaskMs": 3184.815,
+      "nonCompositedAnimations": 2,
+      "mainThread": [
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 4863.150000000072
+        },
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3020.274000000057
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1443.9199999999992
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 248.90300000000033
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 55.521999999999984
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 48.876000000000005
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 19.136000000000003
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "mobile",
+      "run": 1,
+      "date": "2026-10-09T20:18:06.967Z",
+      "metrics": {
+        "first-contentful-paint": 2824.34,
+        "largest-contentful-paint": 7824.343,
+        "total-blocking-time": 1842.645999999998,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 5299
+      },
+      "longestTaskMs": 950.156,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3366.1870000000026
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1764.8259999999984
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 1709.2329999999945
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 411.6140000000005
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 68.12599999999999
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 27.504000000000005
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 19.017999999999997
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "mobile",
+      "run": 2,
+      "date": "2026-10-09T20:20:53.530Z",
+      "metrics": {
+        "first-contentful-paint": 2829.742,
+        "largest-contentful-paint": 6829.698,
+        "total-blocking-time": 1303.010999999999,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 5042
+      },
+      "longestTaskMs": 721.794,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3788.8709999999733
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1619.4289999999994
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 1416.7189999999937
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 350.35699999999986
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 69.078
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 21.513999999999992
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 18.283
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "device": "mobile",
+      "run": 3,
+      "date": "2026-10-09T20:21:33.396Z",
+      "metrics": {
+        "first-contentful-paint": 2802.284,
+        "largest-contentful-paint": 6702.277,
+        "total-blocking-time": 1073.7429999923706,
+        "cumulative-layout-shift": 0.0005232754121711685,
+        "speed-index": 4941
+      },
+      "longestTaskMs": 691.619,
+      "nonCompositedAnimations": 0,
+      "mainThread": [
+        {
+          "group": "other",
+          "groupLabel": "Other",
+          "duration": 3190.4289999999914
+        },
+        {
+          "group": "styleLayout",
+          "groupLabel": "Style & Layout",
+          "duration": 1608.961000000001
+        },
+        {
+          "group": "scriptEvaluation",
+          "groupLabel": "Script Evaluation",
+          "duration": 1366.2869999999941
+        },
+        {
+          "group": "paintCompositeRender",
+          "groupLabel": "Rendering",
+          "duration": 392.994
+        },
+        {
+          "group": "parseHTML",
+          "groupLabel": "Parse HTML & CSS",
+          "duration": 68.581
+        },
+        {
+          "group": "garbageCollection",
+          "groupLabel": "Garbage Collection",
+          "duration": 20.391000000000005
+        },
+        {
+          "group": "scriptParseCompile",
+          "groupLabel": "Script Parsing & Compilation",
+          "duration": 18.915000000000006
+        }
+      ]
+    }
+  ],
+  "beforeBundles": [
+    {
+      "name": "index-DtSyaB-8.js",
+      "bytes": 413838,
+      "gzip": 126497
+    },
+    {
+      "name": "landing-scene-DgtPuxOT.js",
+      "bytes": 54741,
+      "gzip": 19501
+    },
+    {
+      "name": "LandingPage-Dpkdtp6y.js",
+      "bytes": 23503,
+      "gzip": 7800
+    },
+    {
+      "name": "three.module-DR8axTBn.js",
+      "bytes": 517764,
+      "gzip": 127599
+    }
+  ],
+  "afterBundles": [
+    {
+      "name": "AppShell-BOzHWa9-.js",
+      "bytes": 2613,
+      "gzip": 1192
+    },
+    {
+      "name": "index-twIrZyO6.js",
+      "bytes": 315156,
+      "gzip": 99425
+    },
+    {
+      "name": "landing-scene-BkvSciTK.js",
+      "bytes": 56015,
+      "gzip": 19876
+    },
+    {
+      "name": "LandingPage-DfDCJWST.js",
+      "bytes": 25304,
+      "gzip": 8532
+    },
+    {
+      "name": "PlayerShell-BBtHFP0b.js",
+      "bytes": 2633,
+      "gzip": 1197
+    },
+    {
+      "name": "scene-capability.worker-B55pdPyw.js",
+      "bytes": 387,
+      "gzip": 264
+    },
+    {
+      "name": "three.module-DR8axTBn.js",
+      "bytes": 517764,
+      "gzip": 127599
+    }
+  ],
+  "images": [
+    {
+      "path": "frontend/public/hero-stadium-bg-1792.webp",
+      "bytes": 114564
+    },
+    {
+      "path": "frontend/public/hero-stadium-bg-960.webp",
+      "bytes": 40546
+    },
+    {
+      "path": "frontend/public/logo-112.webp",
+      "bytes": 12410
+    },
+    {
+      "path": "frontend/public/logo-224.webp",
+      "bytes": 33296
+    },
+    {
+      "path": "frontend/public/logo-634.webp",
+      "bytes": 116156
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-1280.webp",
+      "bytes": 36530
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-1418.webp",
+      "bytes": 43142
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-480.webp",
+      "bytes": 9084
+    },
+    {
+      "path": "frontend/public/landing/events-calendar-800.webp",
+      "bytes": 19358
+    },
+    {
+      "path": "frontend/public/landing/injury-recovery-480.webp",
+      "bytes": 13972
+    },
+    {
+      "path": "frontend/public/landing/injury-recovery-696.webp",
+      "bytes": 24144
+    },
+    {
+      "path": "frontend/public/landing/live-match-mobile-480.webp",
+      "bytes": 18980
+    },
+    {
+      "path": "frontend/public/landing/live-match-mobile-501.webp",
+      "bytes": 20932
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-1280.webp",
+      "bytes": 67990
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-1440.webp",
+      "bytes": 81494
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-480.webp",
+      "bytes": 16186
+    },
+    {
+      "path": "frontend/public/landing/public-dashboard-800.webp",
+      "bytes": 35168
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-1280.webp",
+      "bytes": 47620
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-1417.webp",
+      "bytes": 56920
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-480.webp",
+      "bytes": 12842
+    },
+    {
+      "path": "frontend/public/landing/roster-dashboard-800.webp",
+      "bytes": 24950
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-1280.webp",
+      "bytes": 43932
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-1383.webp",
+      "bytes": 50312
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-480.webp",
+      "bytes": 11784
+    },
+    {
+      "path": "frontend/public/landing/statistics-dashboard-800.webp",
+      "bytes": 23940
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-1280.webp",
+      "bytes": 118332
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-1531.webp",
+      "bytes": 175910
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-480.webp",
+      "bytes": 26606
+    },
+    {
+      "path": "frontend/public/landing/tactics-board-800.webp",
+      "bytes": 58562
+    }
+  ]
+}

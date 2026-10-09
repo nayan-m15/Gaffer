@@ -332,6 +332,7 @@ export default function EventsPage() {
         {/* Coach inbox: inbound friendly-fixture requests awaiting a response */}
         {canManageEvents && <FixtureRequestsBanner />}
 
+
         {/* Mobile View: Samsung & Apple phone inspired calendar */}
         {events && (
           <MobileCalendarView

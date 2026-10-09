@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   Area,
   AreaChart,
@@ -136,13 +137,14 @@ export function CumulativePointsChart({
   cumulative: CumulativePoint[];
 }) {
   const rows = cumulativeChartRows(cumulative);
+  const gradientId = `cumulativePointsFill-${useId().replaceAll(":", "")}`;
 
   return (
     <div className="stats-chart h-56">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 4, left: -22, bottom: 0 }}>
           <defs>
-            <linearGradient id="cumulativePointsFill" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={POINTS} stopOpacity={0.35} />
               <stop offset="100%" stopColor={POINTS} stopOpacity={0.02} />
             </linearGradient>
@@ -157,7 +159,7 @@ export function CumulativePointsChart({
             name="Points"
             stroke={POINTS}
             strokeWidth={2}
-            fill="url(#cumulativePointsFill)"
+            fill={`url(#${gradientId})`}
             isAnimationActive={false}
           />
         </AreaChart>

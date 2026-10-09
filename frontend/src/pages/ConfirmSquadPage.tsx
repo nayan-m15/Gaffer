@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchCompetitionSuspensions } from "@/features/events/api";
 import { Outlet, useNavigate, useOutlet, useParams } from "react-router-dom";
 import {
   Loader2,
@@ -191,9 +193,10 @@ function benchIdsFromRoster(
   athletes: BackendAthlete[],
   startingIds: Set<string>,
   plan: BackendGamePlan | undefined,
+  suspendedIds: ReadonlySet<string>,
 ) {
   const nonStarters = athletes
-    .filter((athlete) => athlete.status !== "injured")
+    .filter((athlete) => athlete.status !== "injured" && !suspendedIds.has(athlete.id))
     .map((athlete) => athlete.id)
     .filter((id) => !startingIds.has(id));
   if (nonStarters.length <= MAX_BENCH_SIZE) {
@@ -836,7 +839,7 @@ function SavedGamePlanSection({
                   selected ? "border-primary bg-primary/5" : "border-border",
                 )}
               >
-                <MiniPitch formationId={plan.formationId} />
+                <MiniPitch formationId={plan.formationId} customPositions={plan.customPositions} />
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{plan.name}</span>
@@ -951,9 +954,11 @@ function StartingSquadSection({
   beforeMatchDay,
   sortedAthletes,
   startingIds,
+  suspendedIds,
   onSuggest,
   onToggle,
   formationId,
+  customPositions,
   assignments,
   athletes,
 }: {
@@ -967,9 +972,11 @@ function StartingSquadSection({
   beforeMatchDay: boolean;
   sortedAthletes: BackendAthlete[];
   startingIds: Set<string>;
+  suspendedIds: Set<string>;
   onSuggest: () => void;
   onToggle: (athleteId: string) => void;
   formationId: string;
+  customPositions?: BackendGamePlan["customPositions"];
   assignments: PitchAssignments;
   athletes: BackendAthlete[];
 }) {
@@ -1014,6 +1021,8 @@ function StartingSquadSection({
           {sortedAthletes.map((athlete) => {
             const selected = startingIds.has(athlete.id);
             const injured = athlete.status === "injured";
+            const suspended = suspendedIds.has(athlete.id);
+            const unavailable = injured || suspended;
             const style = roleStyle(athlete.position);
             const positionLabel = (athlete.position ?? "—").toUpperCase();
             return (
@@ -1021,11 +1030,11 @@ function StartingSquadSection({
                 <button
                   type="button"
                   onClick={() => onToggle(athlete.id)}
-                  disabled={injured}
+                  disabled={unavailable}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                    injured ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70" : selected ? "border-primary/70 bg-primary/5" : "border-border bg-card hover:border-primary/40",
+                    unavailable ? "cursor-not-allowed border-red-500/30 bg-red-500/5 opacity-70" : selected ? "border-primary/70 bg-primary/5" : "border-border bg-card hover:border-primary/40",
                   )}
                 >
                   <span className={cn("flex h-10 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold", style.avatar)}>
@@ -1038,8 +1047,8 @@ function StartingSquadSection({
                     </span>
                     {selected && suggestionReasons?.[athlete.id] && <span className="mt-1 block truncate text-[11px] font-medium text-primary/80">{suggestionReasons[athlete.id]}</span>}
                   </span>
-                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", injured ? "bg-red-500/10 text-red-600 dark:text-red-400" : selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                    {injured ? "Injured" : selected ? "Starting" : "Bench"}
+                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", unavailable ? "bg-red-500/10 text-red-600 dark:text-red-400" : selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                    {injured ? "Injured" : suspended ? "Suspended" : selected ? "Starting" : "Bench"}
                   </span>
                 </button>
               </li>
@@ -1049,6 +1058,7 @@ function StartingSquadSection({
         <SquadFormationPreview
           className="lg:sticky lg:top-4"
           formationId={formationId}
+          customPositions={customPositions}
           assignments={assignments}
           athletes={athletes}
         />
@@ -1273,6 +1283,16 @@ export default function ConfirmSquadPage() {
   );
   const competitionQuery = useCompetition(eventQuery.data?.competitionId);
   const athletesQuery = useAthletes();
+  const suspensionQuery = useQuery({
+    queryKey: ["competition-suspensions", eventId],
+    queryFn: () => fetchCompetitionSuspensions(eventId!),
+    enabled: Boolean(eventId && eventQuery.data?.competitionId),
+    staleTime: 0,
+  });
+  const suspendedIds = useMemo(
+    () => new Set((suspensionQuery.data ?? []).map((item) => item.athleteId)),
+    [suspensionQuery.data],
+  );
   const gamePlansQuery = useGamePlans();
   const startMatch = useStartMatch(eventId ?? "");
   const confirmLineup = useConfirmEventLineup(eventId ?? "");
@@ -1285,6 +1305,9 @@ export default function ConfirmSquadPage() {
   const [startingIds, setStartingIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Unlike the default no-plan state on initial load, an explicit roster pick
+  // must not restore positions or tactics from an earlier confirmed lineup.
+  const [freshRosterSelection, setFreshRosterSelection] = useState(false);
   const [opponentName, setOpponentName] = useState("");
   const [opponentCompetitionTeamId, setOpponentCompetitionTeamId] = useState<string | null>(null);
   const [manualIsHome, setIsHome] = useState(true);
@@ -1328,7 +1351,17 @@ export default function ConfirmSquadPage() {
   );
   const competitionPlayerCount = eventQuery.data?.competitionId
     ? (competitionQuery.data?.playersPerSide ?? null)
-    : null;
+    : (eventQuery.data?.friendlyPlayersPerSide ?? null);
+  const compatibleGamePlans = useMemo(
+    () =>
+      competitionPlayerCount
+        ? gamePlans.filter(
+            (plan) =>
+              getFormationPlayerCount(plan.formationId) === competitionPlayerCount,
+          )
+        : gamePlans,
+    [competitionPlayerCount, gamePlans],
+  );
   const selectedPlanSummary = useMemo(
     () =>
       selectedGamePlanId
@@ -1339,13 +1372,13 @@ export default function ConfirmSquadPage() {
   const startingTarget =
     competitionPlayerCount ??
     getFormationPlayerCount(
-      gamePlanQuery.data?.formationId ??
+      (selectedGamePlanId ? gamePlanQuery.data?.formationId : null) ??
         selectedPlanSummary?.formationId ??
         DEFAULT_FORMATION_ID,
     );
   const selectableAthletes = useMemo(
-    () => athletes.filter((athlete) => athlete.status !== "injured"),
-    [athletes],
+    () => athletes.filter((athlete) => athlete.status !== "injured" && !suspendedIds.has(athlete.id)),
+    [athletes, suspendedIds],
   );
   const selectableRosterIds = useMemo(
     () => new Set(selectableAthletes.map((athlete) => athlete.id)),
@@ -1417,7 +1450,7 @@ export default function ConfirmSquadPage() {
   const appliedLineupRef = useRef<string | null>(null);
   useEffect(() => {
     const lineup = lineupQuery.data;
-    if (!lineup || !eventId || appliedLineupRef.current === eventId) {
+    if (!lineup || !eventId || freshRosterSelection || appliedLineupRef.current === eventId) {
       return;
     }
     if (!athletesQuery.data) {
@@ -1426,7 +1459,7 @@ export default function ConfirmSquadPage() {
     }
     appliedLineupRef.current = eventId;
     setStartingIds(new Set(lineup.startingAthleteIds));
-  }, [athletesQuery.data, eventId, lineupQuery.data]);
+  }, [athletesQuery.data, eventId, lineupQuery.data, freshRosterSelection]);
 
   const competitionParticipants = useMemo(
     () =>
@@ -1523,11 +1556,12 @@ export default function ConfirmSquadPage() {
   const previewFormationId =
     selectedPlan?.formationId ??
     selectedPlanSummary?.formationId ??
-    (!selectedGamePlanId ? confirmedLineup?.formationId : null) ??
+    (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.formationId : null) ??
     getDefaultFormationIdForPlayerCount(startingTarget);
   const previewCustomPositions =
     selectedPlan?.customPositions ??
-    (!selectedGamePlanId ? confirmedLineup?.customPositions : null) ??
+    selectedPlanSummary?.customPositions ??
+    (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.customPositions : null) ??
     null;
   const previewAssignments = useMemo(() => {
     const athleteById = new Map(
@@ -1538,14 +1572,17 @@ export default function ConfirmSquadPage() {
       [...startingIds],
       (id) => athleteById.get(id)?.position ?? null,
       selectedPlan?.assignments ??
-        (!selectedGamePlanId ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
+        selectedPlanSummary?.assignments ??
+        (!selectedGamePlanId && !freshRosterSelection ? confirmedLineup?.pitchAssignments ?? undefined : undefined),
       previewCustomPositions,
     );
   }, [
     athletes,
     selectedPlan?.assignments,
+    selectedPlanSummary?.assignments,
     selectedGamePlanId,
     confirmedLineup?.pitchAssignments,
+    freshRosterSelection,
     previewCustomPositions,
     previewFormationId,
     startingIds,
@@ -1560,7 +1597,7 @@ export default function ConfirmSquadPage() {
       if (!confirmedIds.has(id)) return true;
     }
     // Confirmation is a full tactical snapshot, not just a list of IDs.
-    const currentBench = benchIdsFromRoster(athletes, startingIds, gamePlanQuery.data);
+    const currentBench = benchIdsFromRoster(athletes, startingIds, selectedPlan ?? selectedPlanSummary ?? undefined, suspendedIds);
     if (currentBench.length !== confirmedLineup.benchAthleteIds.length ||
         currentBench.some((id) => !confirmedLineup.benchAthleteIds.includes(id))) return true;
     if (confirmedLineup.formationId && confirmedLineup.formationId !== previewFormationId) return true;
@@ -1569,7 +1606,7 @@ export default function ConfirmSquadPage() {
     if (canonicalSnapshot(confirmedLineup.customPositions ?? null) !==
         canonicalSnapshot(previewCustomPositions)) return true;
     return false;
-  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, gamePlanQuery.data, athletes]);
+  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, selectedPlan, selectedPlanSummary, athletes, suspendedIds]);
   // Lineups can be confirmed before match day for advance sharing.
   const canConfirmLineup =
     startingCount === startingTarget &&
@@ -1718,7 +1755,8 @@ export default function ConfirmSquadPage() {
         benchAthleteIds: benchIdsFromRoster(
           athletes,
           startingIds,
-          gamePlanQuery.data,
+          selectedPlan ?? selectedPlanSummary ?? undefined,
+          suspendedIds,
         ),
         formationId: previewFormationId,
         pitchAssignments: previewAssignments,
@@ -1742,8 +1780,8 @@ export default function ConfirmSquadPage() {
             rsvpQuery.data.map((row) => [row.id, row.rsvpStatus]),
           )
         : undefined,
-      gamePlanAssignments: gamePlanQuery.data?.assignments,
-      gamePlanSubstituteIds: gamePlanQuery.data?.substituteIds,
+      gamePlanAssignments: selectedPlan?.assignments,
+      gamePlanSubstituteIds: selectedPlan?.substituteIds,
     });
     setStartingIds(new Set(suggestion.startingIds));
     setSuggestionReasons(suggestion.reasons);
@@ -1779,7 +1817,8 @@ export default function ConfirmSquadPage() {
         benchAthleteIds: benchIdsFromRoster(
           athletes,
           startingIds,
-          gamePlanQuery.data,
+          selectedPlan ?? selectedPlanSummary ?? undefined,
+          suspendedIds,
         ),
         opponentSquadVisibility: linkedOpponent ? "none" : opponentSquadVisibility,
         teamColor: ownColor,
@@ -1795,6 +1834,9 @@ export default function ConfirmSquadPage() {
                 ...(player.position ? { position: player.position } : {}),
               })),
             }),
+        formationId: previewFormationId,
+        pitchAssignments: previewAssignments,
+        customPositions: previewCustomPositions,
         ...(selectedGamePlanId
           ? { gamePlanId: selectedGamePlanId }
           : {}),
@@ -1811,9 +1853,18 @@ export default function ConfirmSquadPage() {
 
   const handlePlanSelection = (planId: string | null) => {
     if (planId === null) {
+      // Reset even when Pick from roster is already selected. This mirrors
+      // starting a new plan in Team Management, without a page reload.
+      appliedGamePlanIdRef.current = null;
+      if (eventId) appliedLineupRef.current = eventId;
       setSelectedGamePlanId(null);
+      setFreshRosterSelection(true);
+      setStartingIds(new Set());
+      setSuggestionReasons(null);
+      setSubmitError(null);
       return;
     }
+    setFreshRosterSelection(false);
     const reselectingPlan = selectedGamePlanId === planId;
     if (reselectingPlan) appliedGamePlanIdRef.current = null;
     setSelectedGamePlanId(planId);
@@ -1827,7 +1878,8 @@ export default function ConfirmSquadPage() {
     eventQuery.isLoading ||
     athletesQuery.isLoading ||
     gamePlansQuery.isLoading ||
-    Boolean(eventQuery.data?.competitionFixtureId && competitionQuery.isLoading)
+    (Boolean(eventQuery.data?.competitionId) && suspensionQuery.isLoading) ||
+    Boolean(eventQuery.data?.competitionId && competitionQuery.isLoading)
   ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1843,11 +1895,12 @@ export default function ConfirmSquadPage() {
     eventQuery.isError ||
     athletesQuery.isError ||
     gamePlansQuery.isError ||
-    (eventQuery.data?.competitionFixtureId && competitionQuery.isError)
+    (Boolean(eventQuery.data?.competitionId) && suspensionQuery.isError) ||
+    Boolean(eventQuery.data?.competitionId && competitionQuery.isError)
   ) {
     const error =
       eventQuery.error ?? athletesQuery.error ?? gamePlansQuery.error ??
-      competitionQuery.error;
+      competitionQuery.error ?? suspensionQuery.error;
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
@@ -2071,9 +2124,9 @@ export default function ConfirmSquadPage() {
       </div>
 
       <SavedGamePlanSection
-        gamePlans={gamePlans}
+        gamePlans={compatibleGamePlans}
         selectedGamePlanId={selectedGamePlanId}
-        loading={gamePlanQuery.isFetching}
+        loading={gamePlanQuery.isLoading && !gamePlanQuery.data}
         error={gamePlanQuery.isError
           ? gamePlanQuery.error instanceof Error
             ? gamePlanQuery.error.message
@@ -2092,10 +2145,12 @@ export default function ConfirmSquadPage() {
         fixtureDateConfirmed={fixtureDateConfirmed}
         beforeMatchDay={beforeMatchDay}
         sortedAthletes={sortedAthletes}
+        suspendedIds={suspendedIds}
         startingIds={startingIds}
         onSuggest={handleSuggestXI}
         onToggle={toggleStarter}
         formationId={previewFormationId}
+        customPositions={previewCustomPositions}
         assignments={previewAssignments}
         athletes={athletes}
       />

@@ -1,7 +1,7 @@
 /**
  * SportLogo — Brand logo image for the Sport Coaching Tool.
  *
- * Renders the canonical `Logo.png` asset (with transparent background) from the `assets` folder.
+ * Shares responsive transparent WebP assets with the HTML preloader.
  * The component accepts an optional `size` prop (in px) so it can be rendered
  * at navbar, favicon or hero scale, and a `className` prop for additional
  * Tailwind / CSS overrides.
@@ -11,7 +11,6 @@
  *   <SportLogo size={40} />
  */
 
-import logoSrc from "@/assets/Logo.png";
 
 interface SportLogoProps {
   /** Width & height in pixels — defaults to 32 (navbar size). */
@@ -25,7 +24,9 @@ interface SportLogoProps {
 export function SportLogo({ size = 32, className, alt = "GAFFER logo" }: SportLogoProps) {
   return (
     <img
-      src={logoSrc}
+      src="/logo-112.webp"
+      srcSet="/logo-112.webp 112w, /logo-224.webp 224w, /logo-634.webp 634w"
+      sizes={`${size}px`}
       alt={alt}
       width={size}
       height={size}

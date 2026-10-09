@@ -606,6 +606,17 @@ export default function LiveMatchPage() {
     ? "full" : matchQuery.data?.opponentSquadVisibility ?? "none";
   const opponentDisplaySquad = opponentSquad;
   const timeline = useMemo(() => publicOpponentTimeline(eventsQuery.data ?? [], opponentSquad), [eventsQuery.data, opponentSquad]);
+  const maxCompetitionSubs = matchQuery.data?.competitionMaxSubstitutes ?? null;
+  const ownSubstitutions = timeline.filter((e) => e.eventType === "substitution" && e.team === "own").length;
+  const opponentSubstitutions = timeline.filter((e) => e.eventType === "substitution" && e.team === "opponent").length;
+  const substitutionsRemaining = useCallback(
+    (side: "own" | "opponent") =>
+      maxCompetitionSubs === null
+        ? null
+        : Math.max(0, maxCompetitionSubs - (side === "own" ? ownSubstitutions : opponentSubstitutions)),
+    [maxCompetitionSubs, ownSubstitutions, opponentSubstitutions],
+  );
+
 
   /**
    * The plan in force right now: the one the match kicked off with, plus every
@@ -1185,6 +1196,9 @@ export default function LiveMatchPage() {
       const safeOpponentId = publicPlayer ? opponentEventAttribution(publicPlayer).opponentPlayerId : input.opponentPlayerId;
       const safeDetail = publicIncoming ? opponentSubstitutionDetail(publicIncoming) : detail;
       try {
+        if (eventType === "substitution" && !input.reassignId && substitutionsRemaining(input.team) === 0) {
+          throw new Error(`Competition substitution limit reached (${maxCompetitionSubs} per team).`);
+        }
         if (input.reassignId) {
           await updateEvent.mutateAsync({
             eventId: input.reassignId,
@@ -1239,6 +1253,8 @@ export default function LiveMatchPage() {
       updateEvent,
       closeComposer,
       handleLoggedEventFollowUp,
+      maxCompetitionSubs,
+      substitutionsRemaining,
     ],
   );
 
@@ -1393,6 +1409,11 @@ export default function LiveMatchPage() {
     }
     console.log("[live-callout:handleAction]", eventType);
     if (eventType === "substitution") {
+      const side = target.kind === "own" ? "own" : "opponent";
+      if (substitutionsRemaining(side) === 0) {
+        setActionError(`Competition substitution limit reached (${maxCompetitionSubs} per team).`);
+        return;
+      }
       const next = substitutionComposer(target, ownPitchIds, oppPitchIds);
       if (target.kind === "opp-generic") persistFromTarget("substitution");
       else {
@@ -2550,10 +2571,15 @@ export default function LiveMatchPage() {
                 <span className="inline-block h-6 w-4 rounded-[2px] bg-[#e36a6d] shadow-[0_0_0_1px_rgba(255,255,255,0.75)]" />
               }
             />
+            {maxCompetitionSubs !== null && (
+              <div className="col-span-full text-center text-xs text-muted-foreground" role="status">
+                Competition substitutions — Your team: {ownSubstitutions}/{maxCompetitionSubs} · Opposition: {opponentSubstitutions}/{maxCompetitionSubs}
+              </div>
+            )}
             <LogButton
               label="Substitution"
               color="#d7ba55"
-              disabled={!logEnabled}
+              disabled={!logEnabled || (target !== null && substitutionsRemaining(target.kind === "own" ? "own" : "opponent") === 0)}
               onClick={() => handleAction("substitution")}
               icon={<ArrowLeftRight className="size-6" />}
             />

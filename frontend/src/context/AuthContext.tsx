@@ -11,7 +11,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { subscribeToDataChanges } from "@/lib/data-changes";
 import { clearPendingClaimToken } from "@/services/claims";
-import { discardQueuedItems, setOfflineUserScope } from "@/offline/match-store";
+import { discardQueuedItems, setOfflineUserScope, setRemoteSyncAuthenticated } from "@/offline/match-store";
 
 import { resolveLogoutAction, shouldRetryLogout } from "./secure-logout";
 import {
@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [team, setTeam] = useState<SessionTeam | null>(null);
   const [claimedAthletes, setClaimedAthletes] = useState<ClaimedAthleteSummary[]>([]);
   const activeUserIdRef = useRef<string | null>(null);
+  const sessionGeneration = useRef(0);
   // Armed by a sign-out whose server revocation failed; retried when
   // connectivity returns so the still-live HttpOnly session finally ends.
   const [pendingLogout, setPendingLogout] = useState<{
@@ -64,14 +65,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async (background = false): Promise<SessionPayload | null> => {
     const startedForUserId = activeUserIdRef.current;
+    const generation = sessionGeneration.current;
     try {
       const data = await apiFetch<SessionPayload>("/auth/session");
-      if (background && activeUserIdRef.current !== startedForUserId) return null;
+      if (generation !== sessionGeneration.current || (background && activeUserIdRef.current !== startedForUserId)) return null;
       if (activeUserIdRef.current && activeUserIdRef.current !== data.user.id) {
         queryClient.clear();
       }
       activeUserIdRef.current = data.user.id;
       await setOfflineUserScope(data.user.id);
+      if (generation !== sessionGeneration.current) return null;
+      await setRemoteSyncAuthenticated(true);
+      if (generation !== sessionGeneration.current) return null;
       setUser(data.user);
       setTeam(data.team);
       setClaimedAthletes(data.claimedAthletes ?? []);
@@ -86,8 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return data;
     } catch (error) {
-      if (background && activeUserIdRef.current !== startedForUserId) return null;
+      if (generation !== sessionGeneration.current || (background && activeUserIdRef.current !== startedForUserId)) return null;
       if (error instanceof ApiError && error.status === 401) {
+        sessionGeneration.current++;
+        await setRemoteSyncAuthenticated(false);
+        await setOfflineUserScope(null);
         setUser(null);
         setTeam(null);
         setClaimedAthletes([]);
@@ -115,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const cached = JSON.parse(cachedRaw) as SessionPayload;
           activeUserIdRef.current = cached.user.id;
+          await setRemoteSyncAuthenticated(false);
           await setOfflineUserScope(cached.user.id);
           setUser(cached.user);
           setTeam(cached.team);
@@ -138,6 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
+    const expired = () => { void refresh(true); };
+    window.addEventListener("gaffer-session-expired", expired);
+    return () => window.removeEventListener("gaffer-session-expired", expired);
   }, [refresh]);
 
   const sessionUserId = user?.id;
@@ -242,6 +254,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     /** Internal: automatic retries pass false to skip the blocking alert. */
     notifyFailure?: boolean;
   }) => {
+    sessionGeneration.current++;
+    activeUserIdRef.current = null;
+    await setRemoteSyncAuthenticated(false);
     try {
       await apiFetch("/auth/sign-out", { method: "POST" });
     } catch (error) {

@@ -6,6 +6,10 @@ import {
 } from '../../src/database/drizzle';
 import {
   authRateLimits,
+  competitionFixtures,
+  competitions,
+  events,
+  friendlyFixtures,
   injuries,
   injuryTimelineEntries,
   matchSessionParticipants,
@@ -39,8 +43,10 @@ export function uniqueTestIdentity(prefix = 's1-07'): TestIdentity {
  *
  * Shared sessions go first so confirmed-report locks do not block cascades,
  * and their confirmation audit references do not retain deleted test users.
- * Deleting the team then cascades `team_members`, `athletes`,
- * `events`, `team_invites` and `injuries` (which in turn cascades
+ * Fixtures and events go next, while their teams/competitions still exist,
+ * so cascading match deletes cannot race FK SET NULL updates from those
+ * parents. Deleting the team then cascades `team_members`, `athletes`,
+ * `team_invites` and `injuries` (which in turn cascades
  * `injury_timeline_entries`). Those last two matter because
  * `team_invites.created_by_user_id`, `injuries.created_by_user_id` and
  * `injury_timeline_entries.created_by_user_id` all reference `user` with no
@@ -106,6 +112,38 @@ export async function cleanupUser({
         ),
       );
   }
+
+  const testTeamIds = testDb
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.name, teamName));
+
+  // A team deletion can reach the same match via events (CASCADE) and via
+  // competitions/opponent teams/game plans (SET NULL). PostgreSQL may check
+  // the latter update after its event has gone, raising matches_event_id FK.
+  // Delete owned fixtures first, including the other team's generated event,
+  // then the remaining team events, before any of those parent rows disappear.
+  // Keeping fixture deletion first also releases linked_match_id references.
+  await testDb
+    .delete(competitionFixtures)
+    .where(
+      inArray(
+        competitionFixtures.competitionId,
+        testDb
+          .select({ id: competitions.id })
+          .from(competitions)
+          .where(inArray(competitions.teamId, testTeamIds)),
+      ),
+    );
+  await testDb
+    .delete(friendlyFixtures)
+    .where(
+      or(
+        inArray(friendlyFixtures.requesterTeamId, testTeamIds),
+        inArray(friendlyFixtures.opponentTeamId, testTeamIds),
+      ),
+    );
+  await testDb.delete(events).where(inArray(events.teamId, testTeamIds));
 
   await testDb.delete(teams).where(eq(teams.name, teamName));
   await testDb.delete(user).where(eq(user.email, email));

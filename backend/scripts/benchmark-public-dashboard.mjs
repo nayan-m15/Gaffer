@@ -1,20 +1,11 @@
 // Read-only benchmark and query-plan inspection for the anonymous public
 // dashboard endpoints (SEC-008).
 //
-// Reports, for the worst case the data actually contains:
-//   * how many rows the player aggregation fans out to, which is what makes
-//     the endpoint expensive -- it is `page size x matches per athlete`, not
-//     the page size alone;
-//   * wall-clock timings for the two statements `getPlayers` issues, plus the
-//     standings query, each run cold and then warm;
-//   * `EXPLAIN (ANALYZE, BUFFERS)` for the fan-out statement, so the indexes
-//     it relies on (`athlete_match_stats_athlete_id_index` and
-//     `match_events_match_athlete_type_index`) can be confirmed as used
-//     rather than assumed.
-//
-// The SQL below mirrors `src/public-api/public-dashboard.service.ts`; keep the
-// two in step when that service changes. Everything runs inside a READ ONLY
-// transaction, so this is safe to point at any environment.
+// Reports the first display-order player page and its grouped SQL totals,
+// first/repeat wall-clock timings, standings timings and the player query plan.
+// This samples one page; it does not establish the worst case or reset caches.
+// Queries are separate read-only SELECT statements, not a shared transaction.
+// Keep this SQL aligned with src/public-api/public-dashboard.service.ts.
 //
 // Usage: node scripts/benchmark-public-dashboard.mjs [--limit 200] [--json]
 
@@ -36,42 +27,45 @@ const asJson = args.includes('--json');
 const limitArg = Number(args[args.indexOf('--limit') + 1]);
 // 200 is the cap enforced by `publicPlayersQuerySchema`, so it is the largest
 // page an anonymous caller can actually request.
-const LIMIT = Number.isInteger(limitArg) && limitArg > 0 ? limitArg : 200;
+const LIMIT = args.includes('--limit') ? limitArg : 200;
+if (!Number.isInteger(LIMIT) || LIMIT < 1 || LIMIT > 200) {
+  console.error('--limit must be an integer between 1 and 200.');
+  process.exit(1);
+}
 
 const sql = neon(process.env.DATABASE_URL);
 
-/** Mirrors the second, expensive statement in `getPlayers`. */
-const playerFanOut = `
+/** Mirrors the grouped, page-bounded statement in getPlayers. */
+const playerTotals = `
   SELECT a.id, a.first_name, a.last_name, a.position, a.squad_number,
          t.id AS team_id, t.name AS team_name,
-         ams.match_id, e.status AS event_status, ams.minutes_played,
-         ams.started OR EXISTS (
-           SELECT 1 FROM match_events me
-           WHERE me.match_id = ams.match_id AND me.team = 'own'
-             AND me.event_type = 'substitution'
+         coalesce(sum(CASE WHEN e.status = 'completed' AND (ams.started OR EXISTS (
+           SELECT 1 FROM match_events me WHERE me.match_id = ams.match_id
+             AND me.team = 'own' AND me.event_type = 'substitution'
              AND me.detail = ams.athlete_id::text
-         ) AS appeared,
-         coalesce((SELECT count(*)::int FROM match_events me
-           WHERE me.match_id = ams.match_id AND me.athlete_id = ams.athlete_id
-             AND me.team = 'own' AND me.event_type = 'goal'), 0) AS goals,
-         coalesce((SELECT count(*)::int FROM match_events me
-           WHERE me.match_id = ams.match_id AND me.athlete_id = ams.athlete_id
-             AND me.team = 'own' AND me.event_type = 'assist'), 0) AS assists,
-         coalesce((SELECT count(*)::int FROM match_events me
-           WHERE me.match_id = ams.match_id AND me.athlete_id = ams.athlete_id
-             AND me.team = 'own' AND me.event_type = 'yellow_card'), 0) AS yellow_cards,
-         coalesce((SELECT count(*)::int FROM match_events me
-           WHERE me.match_id = ams.match_id AND me.athlete_id = ams.athlete_id
-             AND me.team = 'own' AND me.event_type = 'red_card'), 0) AS red_cards
-  FROM athletes a
-  JOIN teams t ON a.team_id = t.id
+         )) THEN 1 ELSE 0 END), 0)::int AS appearances,
+         coalesce(sum(CASE WHEN e.status = 'completed' THEN coalesce(ams.minutes_played, 0) ELSE 0 END), 0)::int AS minutes_played,
+         coalesce(sum(CASE WHEN e.status = 'completed' THEN coalesce(et.goals, 0) ELSE 0 END), 0)::int AS goals,
+         coalesce(sum(CASE WHEN e.status = 'completed' THEN coalesce(et.assists, 0) ELSE 0 END), 0)::int AS assists,
+         coalesce(sum(CASE WHEN e.status = 'completed' THEN coalesce(et.yellow_cards, 0) ELSE 0 END), 0)::int AS yellow_cards,
+         coalesce(sum(CASE WHEN e.status = 'completed' THEN coalesce(et.red_cards, 0) ELSE 0 END), 0)::int AS red_cards
+  FROM athletes a JOIN teams t ON a.team_id = t.id
   LEFT JOIN athlete_match_stats ams ON ams.athlete_id = a.id
   LEFT JOIN matches m ON ams.match_id = m.id
   LEFT JOIN events e ON m.event_id = e.id
   LEFT JOIN competitions c ON m.competition_id = c.id
   LEFT JOIN seasons s ON c.season_id = s.id
+  LEFT JOIN (
+    SELECT match_id, athlete_id,
+      count(*) FILTER (WHERE event_type = 'goal')::int AS goals,
+      count(*) FILTER (WHERE event_type = 'assist')::int AS assists,
+      count(*) FILTER (WHERE event_type = 'yellow_card')::int AS yellow_cards,
+      count(*) FILTER (WHERE event_type = 'red_card')::int AS red_cards
+    FROM match_events WHERE team = 'own' AND athlete_id = ANY($1::uuid[])
+    GROUP BY match_id, athlete_id
+  ) et ON et.match_id = ams.match_id AND et.athlete_id = a.id
   WHERE a.id = ANY($1::uuid[])
-  ORDER BY t.name, a.squad_number, a.last_name, a.first_name`;
+  GROUP BY a.id, t.id ORDER BY t.name, a.squad_number, a.last_name, a.first_name, a.id`;
 
 /** Mirrors the first statement in `getPlayers`: the bounded page of ids. */
 const playerPage = `
@@ -100,7 +94,7 @@ const scale = await sql.query(`
             GROUP BY athlete_id) counts) AS worst_matches_per_athlete`);
 report.scale = scale[0];
 
-const page = await time('players: page of ids (cold)', () =>
+const page = await time('players: page of ids (first run)', () =>
   sql.query(playerPage, [LIMIT]),
 );
 const ids = page.result.map((row) => row.id);
@@ -111,30 +105,30 @@ if (ids.length === 0) {
   process.exit(1);
 }
 
-const fanOutCold = await time('players: fan-out (cold)', () =>
-  sql.query(playerFanOut, [ids]),
+const totalsFirst = await time('players: grouped totals (first run)', () =>
+  sql.query(playerTotals, [ids]),
 );
-const fanOutWarm = await time('players: fan-out (warm)', () =>
-  sql.query(playerFanOut, [ids]),
+const totalsRepeat = await time('players: grouped totals (repeat)', () =>
+  sql.query(playerTotals, [ids]),
 );
 
-report.fanOutRows = fanOutCold.result.length;
+report.returnedPlayerRows = totalsFirst.result.length;
 report.rowsPerPlayer = Number(
-  (fanOutCold.result.length / Math.max(ids.length, 1)).toFixed(1),
+  (totalsFirst.result.length / Math.max(ids.length, 1)).toFixed(1),
 );
 
 const standings = await time('team-statistics', () =>
   sql.query(
-    `SELECT st.* FROM standings st JOIN teams t ON st.team_id = t.id ORDER BY t.name`,
+    `SELECT st.*, t.id AS owner_team_id, t.name AS owner_team_name, c.name AS competition_name, s.name AS season_name FROM standings st JOIN competitions c ON st.competition_id = c.id JOIN teams t ON c.team_id = t.id LEFT JOIN seasons s ON c.season_id = s.id ORDER BY c.name, st.position`,
   ),
 );
 
-report.timings = [page, fanOutCold, fanOutWarm, standings].map(
+report.timings = [page, totalsFirst, totalsRepeat, standings].map(
   ({ label, ms }) => ({ label, ms }),
 );
 
 const plan = await sql.query(
-  `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${playerFanOut}`,
+  `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${playerTotals}`,
   [ids],
 );
 report.plan = plan[0]['QUERY PLAN'];
@@ -148,8 +142,11 @@ report.indexesUsed = [
 ].filter((name) => planText.includes(name));
 report.sequentialScansOn = [
   ...new Set(
-    (planText.match(/"Node Type":"Seq Scan","[^}]*?"Relation Name":"(\w+)"/g) ??
-      []).map((match) => /"Relation Name":"(\w+)"/.exec(match)[1]),
+    (
+      planText.match(
+        /"Node Type":"Seq Scan","[^}]*?"Relation Name":"(\w+)"/g,
+      ) ?? []
+    ).map((match) => /"Relation Name":"(\w+)"/.exec(match)[1]),
   ),
 ];
 
@@ -159,7 +156,7 @@ if (asJson) {
   console.log(`\nScale`);
   console.table(report.scale);
   console.log(
-    `\nWorst-case page: ${report.pageSize} players -> ${report.fanOutRows} rows ` +
+    `\nFirst display-order page: ${report.pageSize} players -> ${report.returnedPlayerRows} rows ` +
       `(${report.rowsPerPlayer} per player)`,
   );
   console.log(`\nTimings`);

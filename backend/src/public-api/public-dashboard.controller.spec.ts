@@ -11,6 +11,7 @@ describe('PublicDashboardController', () => {
   const service = {
     getFilters: jest.fn(),
     getMatches: jest.fn(),
+    getMatchSummary: jest.fn().mockResolvedValue({ total: 1, cleanSheets: 1 }),
     getPlayers: jest.fn(),
     getTeamStatistics: jest.fn(),
   };
@@ -76,6 +77,45 @@ describe('PublicDashboardController', () => {
       BadRequestException,
     );
     expect(service.getPlayers).not.toHaveBeenCalled();
+  });
+
+  it('reuses complete match summaries across pages of the same filters', async () => {
+    service.getMatches.mockResolvedValue([]);
+    await controller.matches({ limit: 1, offset: 0, status: 'completed' });
+    const second = await controller.matches({
+      limit: 1,
+      offset: 1,
+      status: 'completed',
+    });
+    expect(second.summary).toEqual({ total: 1, cleanSheets: 1 });
+    expect(service.getMatches).toHaveBeenCalledTimes(2);
+    expect(service.getMatchSummary).toHaveBeenCalledTimes(1);
+    expect(service.getMatchSummary).toHaveBeenCalledWith({
+      teamId: undefined,
+      competitionId: undefined,
+      seasonId: undefined,
+      status: 'completed',
+    });
+  });
+
+  it('validates player search and position filters before forwarding them', async () => {
+    service.getPlayers.mockResolvedValue([]);
+    await controller.players({ search: '  Ari  ', position: 'GK', limit: 40 });
+    expect(service.getPlayers).toHaveBeenCalledWith({
+      search: 'Ari',
+      position: 'GK',
+      limit: 40,
+      offset: 0,
+    });
+    await expect(
+      controller.players({ search: 'a'.repeat(101) }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(controller.players({ position: 'unknown' })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(
+      controller.players({ search: ['Ari', 'Sam'] }),
+    ).rejects.toThrow(BadRequestException);
   });
 
   describe('response caching (SEC-008)', () => {
