@@ -251,7 +251,9 @@ export function injurySummary(
   const open = injuries.filter((injury) => injury.isOpen);
 
   return {
-    openCount: open.length,
+    // Distinct players, not records: one athlete can carry several open
+    // injuries and must still read as a single injured player.
+    openCount: new Set(open.map((injury) => injury.athleteId)).size,
     severeOpenCount: open.filter((injury) => injury.severity === "severe")
       .length,
     recurrenceCount: injuries.filter((injury) => injury.isRecurrence).length,

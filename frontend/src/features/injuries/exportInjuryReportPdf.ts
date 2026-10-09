@@ -517,7 +517,7 @@ function drawSummaryStrip(
   const tileHeight = 70;
   const tiles: [string, number, Rgb, (d: jsPDF, x: number, y: number, s: number, c: Rgb) => void][] = [
     ["TOTAL INJURIES", stats.total, TEXT_DARK, drawCrossIcon],
-    ["TOTAL CURRENT INJURIES", stats.open, stats.open > 0 ? RED : EMERALD, drawPulseIcon],
+    ["TOTAL INJURED PLAYERS", stats.open, stats.open > 0 ? RED : EMERALD, drawPulseIcon],
     ["DAYS LOST", stats.daysLost, TEXT_DARK, drawCalendarIcon],
     ["RECURRENCES", stats.recurrences, stats.recurrences > 0 ? AMBER : TEXT_DARK, drawRefreshIcon],
   ];
