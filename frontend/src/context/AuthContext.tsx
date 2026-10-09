@@ -88,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (background && activeUserIdRef.current !== startedForUserId) return null;
       if (error instanceof ApiError && error.status === 401) {
+        await setOfflineUserScope(null);
         setUser(null);
         setTeam(null);
         setClaimedAthletes([]);

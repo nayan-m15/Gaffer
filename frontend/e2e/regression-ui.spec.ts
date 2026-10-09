@@ -663,7 +663,13 @@ test("post-match correction updates the visible timeline", async ({ page }) => {
 for (const width of [1280, 390]) {
   test('public dashboard loads pages on demand and searches the full roster at ' + width + 'px', async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.route('**/auth/session', route => json(route, { user: null, team: null, claimedAthletes: [] }));
+    await page.addInitScript(() => localStorage.setItem('gaffer-offline-user-scope', 'expired-coach'));
+    await page.route('**/auth/session', route => json(route, { message: 'Not signed in' }, 401));
+    let syncTokenRequests = 0;
+    await page.route('**/sync/token', route => {
+      syncTokenRequests++;
+      return json(route, { message: 'Not signed in' }, 401);
+    });
     const requests: URL[] = [];
     await page.route('**/v1/public-dashboard/**', route => {
       const url = new URL(route.request().url());
@@ -696,6 +702,7 @@ for (const width of [1280, 390]) {
     await page.goto('/public-dashboard');
     await expect(page.getByText('Showing 100 of 101 matches')).toBeVisible();
     await expect(page.locator('#players')).toContainText('Showing 40 players');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('gaffer-offline-user-scope'))).toBeNull();
     await expect(page.getByText('Clean Sheets').locator('..').locator('..')).toContainText('37');
     expect(requests.filter(url => url.pathname.endsWith('/players')).every(url => url.searchParams.get('offset') === '0')).toBe(true);
     expect(requests.filter(url => url.pathname.endsWith('/matches')).every(url => url.searchParams.get('offset') === '0')).toBe(true);
@@ -710,6 +717,7 @@ for (const width of [1280, 390]) {
     expect(requests.some(url => url.searchParams.get('search') === 'Beyond' && url.searchParams.get('offset') === '0')).toBe(true);
     await page.getByRole('button', { name: 'GK', exact: true }).click();
     await expect.poll(() => requests.some(url => url.searchParams.get('position') === 'GK' && url.searchParams.get('offset') === '0')).toBe(true);
+    expect(syncTokenRequests).toBe(0);
     await page.screenshot({ path: 'test-results/public-dashboard-' + width + '.png', fullPage: true });
   });
 }

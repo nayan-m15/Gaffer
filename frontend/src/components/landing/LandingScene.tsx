@@ -40,7 +40,7 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
     }
     const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
-    if (reduceMotion || saveData || (deviceMemory !== undefined && deviceMemory <= 4) || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)) {
+    if (reduceMotion || saveData || (deviceMemory !== undefined && deviceMemory <= 2)) {
       setReady(false);
       statusCallbackRef.current("fallback");
       return;

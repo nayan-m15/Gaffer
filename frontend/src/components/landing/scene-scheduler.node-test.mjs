@@ -14,6 +14,26 @@ test('construction yields so pending input can run before the next batch', async
   assert.deepEqual(order, ['input', 'construction']);
 });
 
+test('scene batches yield without using clamped timers', async () => {
+  const original = window.setTimeout;
+  window.setTimeout = () => { throw new Error('Unexpected timer between scene batches'); };
+  try {
+    await yieldSceneTask(new AbortController().signal);
+  } finally {
+    window.setTimeout = original;
+  }
+});
+
+test('browsers without MessageChannel retain timer scheduling', async () => {
+  const original = globalThis.MessageChannel;
+  globalThis.MessageChannel = undefined;
+  try {
+    await yieldSceneTask(new AbortController().signal);
+  } finally {
+    globalThis.MessageChannel = original;
+  }
+});
+
 test('hidden-tab work resumes after visibility returns', async () => {
   document.hidden = true;
   let resumed = false;

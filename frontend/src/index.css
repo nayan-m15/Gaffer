@@ -380,7 +380,7 @@ select:-webkit-autofill {
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 700ms ease-out;
+  transition: opacity 250ms ease-out;
 }
 
 /* Button transition-all otherwise animates inherited scrollbar-color on theme changes. */

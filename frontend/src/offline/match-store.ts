@@ -11,6 +11,8 @@ import { apiUrl } from "@/lib/api-url";
 let databasePromise: Promise<PowerSyncDatabase> | undefined;
 let userScope =
   localStorage.getItem("gaffer-offline-user-scope") ?? "anonymous";
+// A remembered database scope is not proof of an active session.
+let syncUserScope: string | null = null;
 
 const deploymentScope = (
   import.meta.env.VITE_DEPLOYMENT_ENV ||
@@ -44,6 +46,7 @@ export function subscribeToOfflineQueueChanges(onChange: () => void) {
 }
 
 export async function setOfflineUserScope(userId: string | null) {
+  syncUserScope = userId;
   const next = userId ?? "anonymous";
   if (next === userScope) return;
   const previous = databasePromise;
@@ -60,6 +63,7 @@ export async function setOfflineUserScope(userId: string | null) {
 
 async function database() {
   if (!databasePromise) {
+    const databaseUserScope = userScope;
     databasePromise = (async () => {
       const { PowerSyncDatabase, Schema, Table, column } =
         await import("@powersync/web");
@@ -262,11 +266,11 @@ async function database() {
       const db = new PowerSyncDatabase({
         schema,
         database: {
-          dbFilename: `gaffer-${deploymentScope}-${userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
+          dbFilename: `gaffer-${deploymentScope}-${databaseUserScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}.db`,
         },
       });
       await db.init();
-      const safeUserScope = userScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      const safeUserScope = databaseUserScope.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       const migrationKey = `gaffer-offline-migrated-${deploymentScope}-${safeUserScope}`;
       if (safeUserScope && !localStorage.getItem(migrationKey)) {
         const legacy = new PowerSyncDatabase({
@@ -346,17 +350,23 @@ async function database() {
           await legacy.close();
         }
       }
-      if (import.meta.env.VITE_POWERSYNC_URL) {
+      if (import.meta.env.VITE_POWERSYNC_URL && syncUserScope === databaseUserScope) {
         // Local queue access must never wait for the remote sync connection.
         // PowerSync can remain pending while a device is offline; awaiting it
         // here would block enqueueEvent and leave the live logger locked.
         void db
           .connect({
             fetchCredentials: async () => {
+              if (syncUserScope !== databaseUserScope) return null;
               const response = await fetch(apiUrl("/sync/token"), {
                 credentials: "include",
               });
-              if (response.status === 401) return null;
+              if (response.status === 401) {
+                // Returning null alone makes PowerSync retry forever. Stop
+                // this connection until authentication establishes a session.
+                void db.disconnect().catch(() => undefined);
+                return null;
+              }
               if (!response.ok)
                 throw new Error("Could not authenticate PowerSync.");
               const credentials = (await response.json()) as {

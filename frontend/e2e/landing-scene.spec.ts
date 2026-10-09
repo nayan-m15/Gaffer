@@ -6,11 +6,11 @@ const SCENE_TIMEOUT = 30_000;
 
 // Exercise the 3D lifecycle on CI's software GPU. Separate tests below verify
 // the actual software-renderer fallback without this test-only capability shim.
-async function enableScene(page: Page) {
+async function enableScene(page: Page, device = { cores: 8, memory: 8 }) {
   await page.route('**/assets/scene-capability.worker-*.js', route => route.fulfill({ contentType: 'application/javascript', body: 'self.postMessage(true);' }));
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'hardwareConcurrency', { value: 8 });
-    Object.defineProperty(navigator, 'deviceMemory', { value: 8 });
+  await page.addInitScript(({ cores, memory }) => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { value: cores });
+    Object.defineProperty(navigator, 'deviceMemory', { value: memory });
     for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
       const original = prototype.getParameter;
       prototype.getParameter = function (parameter: number) {
@@ -18,7 +18,7 @@ async function enableScene(page: Page) {
         return original.call(this, parameter);
       };
     }
-  });
+  }, device);
 }
 
 async function openLandingPage(page: Page) {
@@ -29,6 +29,28 @@ async function openLandingPage(page: Page) {
 }
 
 test.describe("landing-page tactical background", () => {
+  test('cold startup reaches the first scene frame', async ({ page }) => {
+    await enableScene(page);
+    await page.addInitScript(() => {
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('.landing-scene[data-ready="true"]')) return;
+        performance.mark('landing-first-frame');
+        observer.disconnect();
+      });
+      observer.observe(document, { subtree: true, attributes: true, childList: true });
+    });
+    await openLandingPage(page);
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    const timings = await page.evaluate(() => ({
+      firstFrameMs: performance.getEntriesByName('landing-first-frame')[0]?.startTime,
+      sceneResources: performance.getEntriesByType('resource')
+        .filter(entry => /landing-scene-|three.module-|scene-capability.worker-/.test(entry.name))
+        .map(entry => ({ name: entry.name.split('/').at(-1), startMs: entry.startTime, durationMs: entry.duration })),
+    }));
+    expect(timings.firstFrameMs).toBeGreaterThan(0);
+    console.log('Cold scene startup (test hardware shim on software GPU):', JSON.stringify(timings));
+  });
+
   test("enhances the hero without intercepting its controls", async ({ page }) => {
     await enableScene(page);
     await openLandingPage(page);
@@ -70,6 +92,17 @@ test.describe("landing-page tactical background", () => {
       height: element.height,
     }));
     expect(bufferSize.width * bufferSize.height).toBeLessThanOrEqual(800_000);
+  });
+
+  test('four-core devices with 4 GB memory use the lighter scene', async ({ page }) => {
+    await enableScene(page, { cores: 4, memory: 4 });
+    await openLandingPage(page);
+    const canvas = page.locator('.landing-scene canvas');
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await expect(canvas).toHaveCount(1);
+    const pixels = await canvas.evaluate((element: HTMLCanvasElement) => element.width * element.height);
+    expect(pixels).toBeLessThanOrEqual(800_000);
+    await page.screenshot({ path: 'test-results/landing-four-core.png' });
   });
 
   test("updates the existing scene across repeated theme changes", async ({ page }) => {

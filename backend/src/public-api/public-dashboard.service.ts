@@ -270,10 +270,13 @@ export class PublicDashboardService {
           sql`case when ${appearedInMatch()} then 1 else 0 end`,
         ),
         minutesPlayed: completedSum(athleteMatchStats.minutesPlayed),
-        goals: completedSum(sql`${eventTotals.goals}`),
-        assists: completedSum(sql`${eventTotals.assists}`),
-        yellowCards: completedSum(sql`${eventTotals.yellowCards}`),
-        redCards: completedSum(sql`${eventTotals.redCards}`),
+        // Drizzle renders SQL.Aliased fields without their subquery qualifier
+        // inside select expressions. Legacy athlete_match_stats columns share
+        // these names, so keep the event aggregate references explicit.
+        goals: completedSum(sql`"event_totals"."goals"`),
+        assists: completedSum(sql`"event_totals"."assists"`),
+        yellowCards: completedSum(sql`"event_totals"."yellow_cards"`),
+        redCards: completedSum(sql`"event_totals"."red_cards"`),
       })
       .from(athletes)
       .innerJoin(teams, eq(athletes.teamId, teams.id))
