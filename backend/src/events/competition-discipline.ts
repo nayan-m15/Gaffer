@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { competitionAttributedEvents } from '../competitions/competition-attributed-events';
 
 export type CompetitionSuspension = {
   athleteId: string;
@@ -83,17 +84,15 @@ export async function getCompetitionSuspensions(
   const fixtures = history.rows as unknown as FixtureRow[];
   if (fixtures.length === 0) return [];
   const cards = await db.execute(sql`
-    select e.competition_fixture_id::text as fixture_id,
-           me.athlete_id::text as athlete_id, me.event_type::text as event_type
-    from events e
-    join matches m on m.event_id = e.id
-    join match_events me on me.match_id = m.id
-    where e.competition_id = ${competitionId}::uuid
-      and e.team_id = ${teamId}::uuid
-      and e.competition_fixture_id in (${sql.join(fixtures.map(x => sql`${x.id}::uuid`), sql`, `)})
-      and me.team = 'own' and me.event_type in ('yellow_card','red_card')
-      and me.lifecycle_status not in ('voided', 'needs_review')
-      and me.athlete_id is not null
+    ${competitionAttributedEvents}
+    select d.fixture_id::text as fixture_id,
+           d.athlete_id::text as athlete_id, d.event_type
+    from deduplicated d
+    join athletes a on a.id = d.athlete_id and a.team_id = ${teamId}::uuid
+    join competition_fixtures f on f.id = d.fixture_id
+    where f.competition_id = ${competitionId}::uuid
+      and d.fixture_id in (${sql.join(fixtures.map(x => sql`${x.id}::uuid`), sql`, `)})
+      and d.event_type in ('yellow_card', 'red_card')
   `);
   return replayCompetitionDiscipline(
     fixtures.map(x => x.id), cards.rows as unknown as CardRow[],

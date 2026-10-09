@@ -193,9 +193,10 @@ function benchIdsFromRoster(
   athletes: BackendAthlete[],
   startingIds: Set<string>,
   plan: BackendGamePlan | undefined,
+  suspendedIds: ReadonlySet<string>,
 ) {
   const nonStarters = athletes
-    .filter((athlete) => athlete.status !== "injured")
+    .filter((athlete) => athlete.status !== "injured" && !suspendedIds.has(athlete.id))
     .map((athlete) => athlete.id)
     .filter((id) => !startingIds.has(id));
   if (nonStarters.length <= MAX_BENCH_SIZE) {
@@ -1576,7 +1577,7 @@ export default function ConfirmSquadPage() {
       if (!confirmedIds.has(id)) return true;
     }
     // Confirmation is a full tactical snapshot, not just a list of IDs.
-    const currentBench = benchIdsFromRoster(athletes, startingIds, gamePlanQuery.data);
+    const currentBench = benchIdsFromRoster(athletes, startingIds, gamePlanQuery.data, suspendedIds);
     if (currentBench.length !== confirmedLineup.benchAthleteIds.length ||
         currentBench.some((id) => !confirmedLineup.benchAthleteIds.includes(id))) return true;
     if (confirmedLineup.formationId && confirmedLineup.formationId !== previewFormationId) return true;
@@ -1585,7 +1586,7 @@ export default function ConfirmSquadPage() {
     if (canonicalSnapshot(confirmedLineup.customPositions ?? null) !==
         canonicalSnapshot(previewCustomPositions)) return true;
     return false;
-  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, gamePlanQuery.data, athletes]);
+  }, [confirmedLineup, startingIds, previewFormationId, previewAssignments, previewCustomPositions, gamePlanQuery.data, athletes, suspendedIds]);
   // Lineups can be confirmed before match day for advance sharing.
   const canConfirmLineup =
     startingCount === startingTarget &&
@@ -1735,6 +1736,7 @@ export default function ConfirmSquadPage() {
           athletes,
           startingIds,
           gamePlanQuery.data,
+          suspendedIds,
         ),
         formationId: previewFormationId,
         pitchAssignments: previewAssignments,
@@ -1796,6 +1798,7 @@ export default function ConfirmSquadPage() {
           athletes,
           startingIds,
           gamePlanQuery.data,
+          suspendedIds,
         ),
         opponentSquadVisibility: linkedOpponent ? "none" : opponentSquadVisibility,
         teamColor: ownColor,

@@ -19,6 +19,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
+import { competitionAttributedEvents } from './competition-attributed-events';
 import { finaliseTimedOutCompetitionSessions } from './competition-fixture-results';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -713,71 +714,81 @@ export class CompetitionsService {
   async getPlayerStats(userId: string, competitionId: string) {
     // Detail has the same authenticated visibility rules as other public competition reads.
     await this.findOne(userId, competitionId);
-    const validEvent = (kind: 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'goalkeeper_save') =>
-      sql<number>`(select count(*)::int from ${matchEvents} me
-        where me.match_id = ${athleteMatchStats.matchId}
-          and me.athlete_id = ${athleteMatchStats.athleteId}
-          and me.team = 'own' and me.event_type = ${kind}
-          and me.lifecycle_status not in ('voided', 'needs_review'))`;
-    const appeared = sql<boolean>`${athleteMatchStats.started} or exists (
-      select 1 from ${matchEvents} sub where sub.match_id = ${athleteMatchStats.matchId}
-        and sub.event_type = 'substitution' and sub.team = 'own'
-        and sub.detail = ${athleteMatchStats.athleteId}::text
-        and sub.lifecycle_status not in ('voided', 'needs_review'))`;
-    const rows = await this.databaseService.database.select({
-      athleteId: athletes.id,
-      firstName: athletes.firstName,
-      lastName: athletes.lastName,
-      position: athletes.position,
-      teamId: competitionTeams.teamId,
-      teamName: competitionTeams.displayName,
-      goals: validEvent('goal'),
-      assists: validEvent('assist'),
-      saves: validEvent('goalkeeper_save'),
-      yellowCards: validEvent('yellow_card'),
-      redCards: validEvent('red_card'),
-      appeared,
-    })
-      .from(athleteMatchStats)
-      .innerJoin(athletes, eq(athleteMatchStats.athleteId, athletes.id))
-      .innerJoin(matches, eq(athleteMatchStats.matchId, matches.id))
-      .innerJoin(events, eq(matches.eventId, events.id))
-      .innerJoin(competitionTeams, and(
-        eq(competitionTeams.competitionId, competitionId),
-        eq(competitionTeams.teamId, athletes.teamId),
-        eq(competitionTeams.teamId, events.teamId),
-      ))
-      .where(and(
-        eq(matches.competitionId, competitionId),
-        eq(events.status, 'completed'),
-        sql`exists (select 1 from ${competitionFixtures} f
-          where f.competition_id = ${competitionId}
-            and f.status = 'completed'
-            and (f.linked_match_id = ${matches.id}
-              or (f.shared_session_id is not null and f.shared_session_id = ${matches.sharedMatchId})))`,
-      ));
+    // Count the canonical persisted event ledger directly. In a bilateral
+    // session, either coach's match may own a canonical event, and only one
+    // match is stored in competition_fixtures.linked_match_id. The fixture's
+    // durable event association includes BOTH finalized match sheets.
+    const metricRows = await this.databaseService.database.execute(sql`
+      ${competitionAttributedEvents}
+      select a.id::text as athlete_id, a.first_name, a.last_name, a.position,
+             ct.team_id::text as team_id, ct.display_name as team_name,
+             count(*) filter (where d.event_type = 'goal')::int as goals,
+             count(*) filter (where d.event_type = 'assist')::int as assists,
+             count(*) filter (where d.event_type = 'goalkeeper_save')::int as saves,
+             count(*) filter (where d.event_type = 'yellow_card')::int as yellow_cards,
+             count(*) filter (where d.event_type = 'red_card')::int as red_cards
+      from deduplicated d
+      join competition_fixtures f on f.id = d.fixture_id
+      join athletes a on a.id = d.athlete_id and a.team_id = d.team_id
+      join competition_teams ct on ct.team_id = a.team_id and ct.competition_id = f.competition_id
+      where f.competition_id = ${competitionId}::uuid
+      group by a.id, a.first_name, a.last_name, a.position, ct.team_id, ct.display_name
+    `);
+    const appearances = await this.databaseService.database.execute(sql`
+      select a.id::text as athlete_id, a.first_name, a.last_name, a.position,
+             ct.team_id::text as team_id, ct.display_name as team_name,
+             count(distinct m.id)::int as appearances
+      from athlete_match_stats ams
+      join athletes a on a.id = ams.athlete_id
+      join matches m on m.id = ams.match_id
+      join events e on e.id = m.event_id and e.team_id = a.team_id
+      join competition_teams ct on ct.team_id = a.team_id and ct.competition_id = ${competitionId}::uuid
+      join competition_fixtures f on f.id = e.competition_fixture_id
+      where e.competition_id = ${competitionId}::uuid
+        and f.competition_id = ${competitionId}::uuid
+        and e.status = 'completed' and f.status = 'completed'
+        and (m.shared_match_id is null or f.shared_session_id = m.shared_match_id)
+        and (ams.started or exists (
+          select 1 from match_events sub where sub.match_id = m.id
+            and sub.team = 'own' and sub.event_type = 'substitution'
+            and sub.detail = ams.athlete_id::text
+            and sub.lifecycle_status not in ('voided','needs_review')
+        ))
+      group by a.id, a.first_name, a.last_name, a.position, ct.team_id, ct.display_name
+    `);
     const players = new Map<string, {
       athleteId: string; name: string; position: string | null; teamId: string;
       teamName: string; goals: number; assists: number; goalContributions: number;
       saves: number; appearances: number; yellowCards: number; redCards: number;
     }>();
-    for (const row of rows) {
-      if (!row.teamId) continue;
-      let player = players.get(row.athleteId);
+    type StatRow = Record<string, unknown>;
+    const ensurePlayer = (row: StatRow) => {
+      const athleteId = String(row.athlete_id);
+      let player = players.get(athleteId);
       if (!player) {
-        player = { athleteId: row.athleteId, name: `${row.firstName} ${row.lastName}`.trim(),
-          position: row.position, teamId: row.teamId, teamName: row.teamName,
+        player = {
+          athleteId,
+          name: `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim(),
+          position: (row.position as string | null) ?? null,
+          teamId: String(row.team_id), teamName: String(row.team_name),
           goals: 0, assists: 0, goalContributions: 0, saves: 0,
-          appearances: 0, yellowCards: 0, redCards: 0 };
-        players.set(row.athleteId, player);
+          appearances: 0, yellowCards: 0, redCards: 0,
+        };
+        players.set(athleteId, player);
       }
+      return player;
+    };
+    for (const row of metricRows.rows as StatRow[]) {
+      const player = ensurePlayer(row);
       player.goals += Number(row.goals ?? 0);
       player.assists += Number(row.assists ?? 0);
       player.saves += Number(row.saves ?? 0);
-      player.yellowCards += Number(row.yellowCards ?? 0);
-      player.redCards += Number(row.redCards ?? 0);
-      if (row.appeared) player.appearances++;
+      player.yellowCards += Number(row.yellow_cards ?? 0);
+      player.redCards += Number(row.red_cards ?? 0);
       player.goalContributions = player.goals + player.assists;
+    }
+    for (const row of appearances.rows as StatRow[]) {
+      ensurePlayer(row).appearances += Number(row.appearances ?? 0);
     }
     return Array.from(players.values()).sort((a, b) =>
       b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name));
