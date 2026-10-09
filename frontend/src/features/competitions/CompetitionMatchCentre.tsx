@@ -1,22 +1,16 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FileText, Printer } from "lucide-react";
 import { CompetitionMatchEventGraphic, getCompetitionMatchEventAppearance } from "./CompetitionMatchEventGraphic";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { fetchCompetitionMatchCentre, type CompetitionMatchCentreData } from "./api";
+import { competitionMatchCentreQueryOptions } from "./match-centre-query";
 
 export function CompetitionMatchCentre({ competitionId, fixtureId, home, away, homeTeamId, awayTeamId, onClose }: {
   competitionId: string; fixtureId: string; home: string; away: string; homeTeamId: string | null; awayTeamId: string | null; onClose: () => void;
 }) {
-  const [data, setData] = useState<CompetitionMatchCentreData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    fetchCompetitionMatchCentre(competitionId, fixtureId)
-      .then((result) => { if (active) setData(result); })
-      .catch((err: unknown) => { if (active) setError(err instanceof Error ? err.message : "Could not load this report."); });
-    return () => { active = false; };
-  }, [competitionId, fixtureId]);
+  const { data, error, isPending, refetch } = useQuery(
+    competitionMatchCentreQueryOptions(competitionId, fixtureId),
+  );
 
   const printReport = () => {
     if (!data) return;
@@ -45,8 +39,24 @@ export function CompetitionMatchCentre({ competitionId, fixtureId, home, away, h
             <div className="text-2xl font-bold tabular-nums">{data ? `${data.homeScore ?? "–"} – ${data.awayScore ?? "–"}` : "–"}</div>
             <div className="font-semibold">{away}</div>
           </div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          {!data && !error && <p className="text-sm text-muted-foreground">Loading finalized events…</p>}
+          {error && (
+            <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>{error instanceof Error ? error.message : "Could not load this report."}</p>
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>Try again</Button>
+            </div>
+          )}
+          {isPending && !error && (
+            <div aria-busy="true" aria-label="Loading match events" className="space-y-3" role="status">
+              <span className="sr-only">Loading finalized events…</span>
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="flex animate-pulse items-center gap-3 rounded-lg border p-3">
+                  <div className="h-5 w-9 rounded bg-muted" />
+                  <div className="size-9 rounded bg-muted" />
+                  <div className="flex-1 space-y-2"><div className="h-3 w-28 rounded bg-muted" /><div className="h-3 w-44 max-w-full rounded bg-muted" /></div>
+                </div>
+              ))}
+            </div>
+          )}
           {data && <>
             <h3 className="mb-3 font-semibold">Match timeline</h3>
             {!data.hasReport && <p className="text-sm text-muted-foreground">No live-logged event report is available for this result.</p>}

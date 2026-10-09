@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   FileText,
 } from "lucide-react";
 import { CompetitionMatchCentre } from "./CompetitionMatchCentre";
+import { competitionMatchCentreQueryOptions } from "./match-centre-query";
 import { AppCard } from "@/components/app/AppCard";
 import { AnimatedModalContent } from "@/components/ui/animated-modal";
 import { Button } from "@/components/ui/button";
@@ -660,6 +662,10 @@ function FixtureCard({
   const away = awayParticipant?.displayName ?? "TBD";
   const completed = fixture.status === "completed";
   const [showReport, setShowReport] = useState(false);
+  const queryClient = useQueryClient();
+  const prefetchReport = () => {
+    void queryClient.prefetchQuery(competitionMatchCentreQueryOptions(fixture.competitionId, fixture.id));
+  };
   const ready = Boolean(homeParticipant && awayParticipant);
   const scheduleConfirmed = Boolean(fixture.scheduleConfirmedAt);
   const canRecord =
@@ -723,7 +729,7 @@ function FixtureCard({
       )}
 
       {completed && (fixture.linkedMatchId || ("sharedSessionId" in fixture && fixture.sharedSessionId)) && (
-        <Button className="mt-3 w-full" size="sm" variant="outline" onClick={() => setShowReport(true)}>
+        <Button className="mt-3 w-full" size="sm" variant="outline" onMouseEnter={prefetchReport} onFocus={prefetchReport} onClick={() => setShowReport(true)}>
           <FileText className="size-3.5" />View Match Report
         </Button>
       )}
