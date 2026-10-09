@@ -210,7 +210,10 @@ describe('CompetitionInvitesService (PostgreSQL)', () => {
   });
 
   it('rejects invitations for archived competitions', async () => {
-    await pg.query('update competitions set archived_at = now() where id = $1', [competitionId]);
+    await pg.query(
+      'update competitions set archived_at = now() where id = $1',
+      [competitionId],
+    );
     await expect(invite()).rejects.toBeInstanceOf(ConflictException);
     expect(await invites()).toHaveLength(0);
   });
