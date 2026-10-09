@@ -297,9 +297,12 @@ export class PublicDashboardService {
   /** Public generated fixtures, including knockout cup rounds and unlinked opponents. */
   async getCompetitionFixtures(query: PublicDashboardQuery) {
     const conditions: SQL[] = [];
-    if (query.competitionId) conditions.push(eq(competitions.id, query.competitionId));
-    if (query.seasonId) conditions.push(eq(competitions.seasonId, query.seasonId));
-    if (query.teamId) conditions.push(sql`exists (
+    if (query.competitionId)
+      conditions.push(eq(competitions.id, query.competitionId));
+    if (query.seasonId)
+      conditions.push(eq(competitions.seasonId, query.seasonId));
+    if (query.teamId)
+      conditions.push(sql`exists (
       select 1 from ${competitionTeams} ct
       where ct.competition_id = ${competitions.id} and ct.team_id = ${query.teamId}
     )`);
@@ -323,38 +326,67 @@ export class PublicDashboardService {
         winnerTeamId: competitionFixtures.winnerCompetitionTeamId,
       })
       .from(competitionFixtures)
-      .innerJoin(competitions, eq(competitionFixtures.competitionId, competitions.id))
+      .innerJoin(
+        competitions,
+        eq(competitionFixtures.competitionId, competitions.id),
+      )
       .where(and(...conditions))
-      .orderBy(asc(competitions.name), asc(competitionFixtures.stage), asc(competitionFixtures.round), asc(competitionFixtures.position));
+      .orderBy(
+        asc(competitions.name),
+        asc(competitionFixtures.stage),
+        asc(competitionFixtures.round),
+        asc(competitionFixtures.position),
+      );
     const ids = [...new Set(rows.map((row) => row.competitionId))];
     if (!ids.length) return [];
     const participants = await this.databaseService.database
-      .select({ id: competitionTeams.id, competitionId: competitionTeams.competitionId, name: competitionTeams.displayName })
+      .select({
+        id: competitionTeams.id,
+        competitionId: competitionTeams.competitionId,
+        name: competitionTeams.displayName,
+      })
       .from(competitionTeams)
       .where(inArray(competitionTeams.competitionId, ids));
     const names = new Map(participants.map((row) => [row.id, row.name]));
     return rows.map((row) => ({
       ...row,
-      homeTeamName: row.homeTeamId ? names.get(row.homeTeamId) ?? 'TBD' : 'TBD',
-      awayTeamName: row.awayTeamId ? names.get(row.awayTeamId) ?? 'TBD' : 'TBD',
-      winnerTeamName: row.winnerTeamId ? names.get(row.winnerTeamId) ?? null : null,
+      homeTeamName: row.homeTeamId
+        ? (names.get(row.homeTeamId) ?? 'TBD')
+        : 'TBD',
+      awayTeamName: row.awayTeamId
+        ? (names.get(row.awayTeamId) ?? 'TBD')
+        : 'TBD',
+      winnerTeamName: row.winnerTeamId
+        ? (names.get(row.winnerTeamId) ?? null)
+        : null,
     }));
   }
 
   async getTeamStatistics(query: PublicDashboardQuery) {
     const conditions: SQL[] = [];
-    if (query.competitionId) conditions.push(eq(competitions.id, query.competitionId));
-    if (query.seasonId) conditions.push(eq(competitions.seasonId, query.seasonId));
-    if (query.teamId) conditions.push(sql`exists (
+    if (query.competitionId)
+      conditions.push(eq(competitions.id, query.competitionId));
+    if (query.seasonId)
+      conditions.push(eq(competitions.seasonId, query.seasonId));
+    if (query.teamId)
+      conditions.push(sql`exists (
       select 1 from ${competitionTeams} ct
       where ct.competition_id = ${competitions.id} and ct.team_id = ${query.teamId}
     )`);
     const competitionRows = await this.databaseService.database
-      .select({ id: competitions.id, name: competitions.name, type: competitions.type,
-        format: competitions.format, pointsWin: competitions.pointsWin,
-        pointsDraw: competitions.pointsDraw, pointsLoss: competitions.pointsLoss,
-        teamId: teams.id, teamName: teams.name,
-        seasonId: seasons.id, seasonName: seasons.name })
+      .select({
+        id: competitions.id,
+        name: competitions.name,
+        type: competitions.type,
+        format: competitions.format,
+        pointsWin: competitions.pointsWin,
+        pointsDraw: competitions.pointsDraw,
+        pointsLoss: competitions.pointsLoss,
+        teamId: teams.id,
+        teamName: teams.name,
+        seasonId: seasons.id,
+        seasonName: seasons.name,
+      })
       .from(competitions)
       .innerJoin(teams, eq(competitions.teamId, teams.id))
       .leftJoin(seasons, eq(competitions.seasonId, seasons.id))
@@ -363,48 +395,92 @@ export class PublicDashboardService {
     if (!competitionRows.length) return [];
     const ids = competitionRows.map((row) => row.id);
     const [participants, baseline, fixtures] = await Promise.all([
-      this.databaseService.database.select({ id: competitionTeams.id,
-        competitionId: competitionTeams.competitionId, teamId: competitionTeams.teamId,
-        displayName: competitionTeams.displayName,
-        originalDisplayName: competitionTeams.originalDisplayName })
-        .from(competitionTeams).where(inArray(competitionTeams.competitionId, ids)),
-      this.databaseService.database.select({ id: standings.id,
-        competitionId: standings.competitionId, teamName: standings.teamName,
-        played: standings.played, won: standings.won, drawn: standings.drawn,
-        lost: standings.lost, goalsFor: standings.goalsFor,
-        goalsAgainst: standings.goalsAgainst, points: standings.points })
-        .from(standings).where(inArray(standings.competitionId, ids)),
-      this.databaseService.database.select({ id: competitionFixtures.id,
-        competitionId: competitionFixtures.competitionId, stage: competitionFixtures.stage,
-        status: competitionFixtures.status,
-        homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
-        awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
-        homeScore: competitionFixtures.homeScore, awayScore: competitionFixtures.awayScore })
-        .from(competitionFixtures).where(inArray(competitionFixtures.competitionId, ids)),
+      this.databaseService.database
+        .select({
+          id: competitionTeams.id,
+          competitionId: competitionTeams.competitionId,
+          teamId: competitionTeams.teamId,
+          displayName: competitionTeams.displayName,
+          originalDisplayName: competitionTeams.originalDisplayName,
+        })
+        .from(competitionTeams)
+        .where(inArray(competitionTeams.competitionId, ids)),
+      this.databaseService.database
+        .select({
+          id: standings.id,
+          competitionId: standings.competitionId,
+          teamName: standings.teamName,
+          played: standings.played,
+          won: standings.won,
+          drawn: standings.drawn,
+          lost: standings.lost,
+          goalsFor: standings.goalsFor,
+          goalsAgainst: standings.goalsAgainst,
+          points: standings.points,
+        })
+        .from(standings)
+        .where(inArray(standings.competitionId, ids)),
+      this.databaseService.database
+        .select({
+          id: competitionFixtures.id,
+          competitionId: competitionFixtures.competitionId,
+          stage: competitionFixtures.stage,
+          status: competitionFixtures.status,
+          homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+          awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
+          homeScore: competitionFixtures.homeScore,
+          awayScore: competitionFixtures.awayScore,
+        })
+        .from(competitionFixtures)
+        .where(inArray(competitionFixtures.competitionId, ids)),
     ]);
     return competitionRows.flatMap((competition) => {
       // Pure knockout cups have a bracket rather than a league table.
       if (competition.format === 'knockout') return [];
-      const competitionFixturesRows = fixtures.filter((row) => row.competitionId === competition.id);
+      const competitionFixturesRows = fixtures.filter(
+        (row) => row.competitionId === competition.id,
+      );
       const results = competitionFixturesRows
-        .filter((row) => row.status === 'completed' &&
-          (competition.format !== 'league_knockout' || row.stage === 'league') &&
-          row.homeCompetitionTeamId && row.awayCompetitionTeamId &&
-          row.homeScore !== null && row.awayScore !== null)
-        .map((row) => ({ homeCompetitionTeamId: row.homeCompetitionTeamId!,
+        .filter(
+          (row) =>
+            row.status === 'completed' &&
+            (competition.format !== 'league_knockout' ||
+              row.stage === 'league') &&
+            row.homeCompetitionTeamId &&
+            row.awayCompetitionTeamId &&
+            row.homeScore !== null &&
+            row.awayScore !== null,
+        )
+        .map((row) => ({
+          homeCompetitionTeamId: row.homeCompetitionTeamId!,
           awayCompetitionTeamId: row.awayCompetitionTeamId!,
-          homeScore: row.homeScore!, awayScore: row.awayScore! }));
-      return calculateCompetitionStandings(competition.id,
-        participants.filter((row) => row.competitionId === competition.id),
-        results, query.teamId ?? null,
-        baseline.filter((row) => row.competitionId === competition.id),
-        { pointsWin: competition.pointsWin, pointsDraw: competition.pointsDraw,
-          pointsLoss: competition.pointsLoss }).map((row) => ({
-          ...row, goalDifference: row.goalsFor - row.goalsAgainst,
-          ownerTeam: { id: competition.teamId, name: competition.teamName },
-          competition: { id: competition.id, name: competition.name, type: competition.type },
-          season: competition.seasonId ? { id: competition.seasonId, name: competition.seasonName! } : null,
+          homeScore: row.homeScore!,
+          awayScore: row.awayScore!,
         }));
+      return calculateCompetitionStandings(
+        competition.id,
+        participants.filter((row) => row.competitionId === competition.id),
+        results,
+        query.teamId ?? null,
+        baseline.filter((row) => row.competitionId === competition.id),
+        {
+          pointsWin: competition.pointsWin,
+          pointsDraw: competition.pointsDraw,
+          pointsLoss: competition.pointsLoss,
+        },
+      ).map((row) => ({
+        ...row,
+        goalDifference: row.goalsFor - row.goalsAgainst,
+        ownerTeam: { id: competition.teamId, name: competition.teamName },
+        competition: {
+          id: competition.id,
+          name: competition.name,
+          type: competition.type,
+        },
+        season: competition.seasonId
+          ? { id: competition.seasonId, name: competition.seasonName! }
+          : null,
+      }));
     });
   }
 
