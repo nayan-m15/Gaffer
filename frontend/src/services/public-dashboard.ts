@@ -85,6 +85,25 @@ export interface PublicStanding {
   season: Pick<PublicSeason, "id" | "name"> | null;
 }
 
+export interface PublicCompetitionFixture {
+  id: string;
+  competitionId: string;
+  competitionName: string;
+  competitionType: "league" | "cup" | "friendly";
+  stage: "league" | "knockout";
+  round: number;
+  position: number;
+  scheduledAt: string;
+  status: "scheduled" | "in_progress" | "completed" | "cancelled";
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  homePenaltyScore: number | null;
+  awayPenaltyScore: number | null;
+  winnerTeamName: string | null;
+}
+
 export interface PublicDashboardQuery {
   teamId?: string;
   competitionId?: string;
@@ -163,6 +182,13 @@ async function getAllPages<T>(
 export async function getPublicTeamStatistics(filters: PublicDashboardQuery) {
   const response = await apiFetch<DataResponse<PublicStanding[]>>(
     `${BASE}/team-statistics${queryString(filters)}`,
+  );
+  return response.data;
+}
+
+export async function getPublicCompetitionFixtures(filters: PublicDashboardQuery) {
+  const response = await apiFetch<DataResponse<PublicCompetitionFixture[]>>(
+    `${BASE}/competition-fixtures${queryString(filters)}`,
   );
   return response.data;
 }

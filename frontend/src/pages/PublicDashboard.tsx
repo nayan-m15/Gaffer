@@ -36,10 +36,12 @@ import {
 import { brand } from "@/data/brand";
 import {
   getPublicDashboardFilters,
+  getPublicCompetitionFixtures,
   getPublicMatches,
   getPublicPlayers,
   getPublicTeamStatistics,
   type PublicCompetition,
+  type PublicCompetitionFixture,
   type PublicDashboardQuery,
   type PublicMatch,
   type PublicMatchStatus,
@@ -66,7 +68,7 @@ const dashboardSections = [
   { id: "matches", label: "Match Center", icon: CalendarDays },
   {
     id: "team-statistics",
-    label: "League Standings",
+    label: "Leagues & Cups",
     icon: BarChart3,
   },
 ] as const;
@@ -99,6 +101,10 @@ export default function PublicDashboard() {
   const playersQuery = useQuery({
     queryKey: ["public-dashboard", "players", filters],
     queryFn: () => getPublicPlayers(filters),
+  });
+  const fixturesQuery = useQuery({
+    queryKey: ["public-dashboard", "competition-fixtures", filters],
+    queryFn: () => getPublicCompetitionFixtures(filters),
   });
   const statisticsQuery = useQuery({
     queryKey: ["public-dashboard", "team-statistics", filters],
@@ -260,7 +266,7 @@ export default function PublicDashboard() {
                   Gaffer Match Center
                 </h1>
                 <p className="mt-3 text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
-                  Follow live match fixtures, player roster statistics, and league standings across all {brand.name} teams.
+                  Follow live match fixtures, player roster statistics, leagues and cups across all {brand.name} teams.
                 </p>
               </div>
 
@@ -465,8 +471,8 @@ export default function PublicDashboard() {
           {/* SECTION 3: League Standings & Performance Analytics */}
           <DashboardSection
             id="team-statistics"
-            title="League Standings & Performance Telemetry"
-            description="Official competition rankings alongside high-level season metrics."
+            title="Leagues, Cups & Performance"
+            description="Live league tables and cup fixtures alongside season performance."
             icon={<Trophy className="size-5" />}
           >
             {statisticsQuery.isError ? (
@@ -481,6 +487,12 @@ export default function PublicDashboard() {
                     </h3>
                     <span className="text-xs text-muted-foreground">Live Season Rankings</span>
                   </div>
+                  {fixturesQuery.isError && <p className="mb-3 text-sm text-destructive">Competition fixtures could not be loaded.</p>}
+                  <PublicCompetitionFixtures
+                    fixtures={fixturesQuery.data ?? []}
+                    competitions={availableCompetitions}
+                    loading={fixturesQuery.isLoading}
+                  />
                   <StandingsDisplay
                     competitions={toStandingsCompetitions(
                       statisticsQuery.data ?? [],
@@ -1121,4 +1133,49 @@ function toStandingsCompetitions(
     });
   }
   return Array.from(grouped.values());
+}
+
+function PublicCompetitionFixtures({ fixtures, competitions, loading }: {
+  fixtures: PublicCompetitionFixture[];
+  competitions: PublicCompetition[];
+  loading: boolean;
+}) {
+  const cupCompetitions = competitions.filter((competition) => competition.type === "cup");
+  if (!cupCompetitions.length) return null;
+  if (loading) return <p className="mb-4 text-sm text-muted-foreground">Loading cup fixtures…</p>;
+  return (
+    <div className="mb-5 space-y-4">
+      <h4 className="text-sm font-bold uppercase tracking-wider">Cup competitions</h4>
+      {cupCompetitions.map((competition) => {
+        const rounds = new Map<string, PublicCompetitionFixture[]>();
+        for (const fixture of fixtures.filter((row) => row.competitionId === competition.id)) {
+          const label = `${fixture.stage === "knockout" ? "Knockout" : "Group"} · Round ${fixture.round}`;
+          rounds.set(label, [...(rounds.get(label) ?? []), fixture]);
+        }
+        return (
+          <div key={competition.id} className="rounded-xl border border-border bg-background p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 font-semibold"><Trophy className="size-4 text-brand" />{competition.name}</div>
+            {!rounds.size && <p className="text-sm text-muted-foreground">Fixtures have not been generated yet.</p>}
+            {[...rounds].map(([round, games]) => (
+              <div key={round} className="mb-3 last:mb-0">
+                <h5 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{round}</h5>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {games.map((game) => (
+                    <div key={game.id} className="rounded-lg border border-border/70 p-3 text-sm">
+                      <div className="flex justify-between gap-2"><span>{game.homeTeamName}</span><strong>{game.homeScore ?? "–"}</strong></div>
+                      <div className="flex justify-between gap-2"><span>{game.awayTeamName}</span><strong>{game.awayScore ?? "–"}</strong></div>
+                      {game.homePenaltyScore !== null && game.awayPenaltyScore !== null &&
+                        <div className="mt-1 text-xs text-muted-foreground">Penalties: {game.homePenaltyScore}–{game.awayPenaltyScore}</div>}
+                      <div className="mt-2 text-xs text-muted-foreground">{game.status.replaceAll("_", " ")} · {new Date(game.scheduledAt).toLocaleDateString()}</div>
+                      {game.winnerTeamName && <div className="mt-1 text-xs font-semibold">Winner: {game.winnerTeamName}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
 }

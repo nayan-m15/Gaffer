@@ -250,29 +250,28 @@ describe('PublicDashboardService', () => {
     });
   });
 
-  it('derives goal difference for public standings', async () => {
-    select.mockReturnValue(
-      queryResult([
-        {
-          id: 'standing-1',
-          teamName: 'Gaffer FC',
-          position: 1,
-          played: 2,
-          won: 2,
-          drawn: 0,
-          lost: 0,
-          goalsFor: 5,
-          goalsAgainst: 1,
-          points: 6,
-          isOwnTeam: true,
-          ownerTeam: { id: 'team-1', name: 'Gaffer FC' },
-          competition: { id: 'competition-1', name: 'League', type: 'league' },
-          season: { id: 'season-1', name: '2026/27' },
-        },
-      ]),
-    );
+  it('calculates public league standings from completed generated fixtures', async () => {
+    select
+      .mockReturnValueOnce(queryResult([{ id: 'league-1', name: 'League', type: 'league', format: 'league', pointsWin: 3, pointsDraw: 1, pointsLoss: 0, teamId: 'owner', teamName: 'Owner', seasonId: null, seasonName: null }]))
+      .mockReturnValueOnce(queryResult([
+        { id: 'slot-1', competitionId: 'league-1', teamId: 'team-1', displayName: 'Team A', originalDisplayName: null },
+        { id: 'slot-2', competitionId: 'league-1', teamId: 'team-2', displayName: 'Team B', originalDisplayName: null },
+      ]))
+      .mockReturnValueOnce(queryResult([]))
+      .mockReturnValueOnce(queryResult([
+        { id: 'fixture-1', competitionId: 'league-1', stage: 'league', status: 'completed', homeCompetitionTeamId: 'slot-1', awayCompetitionTeamId: 'slot-2', homeScore: 3, awayScore: 1 },
+        { id: 'fixture-2', competitionId: 'league-1', stage: 'league', status: 'scheduled', homeCompetitionTeamId: 'slot-2', awayCompetitionTeamId: 'slot-1', homeScore: null, awayScore: null },
+      ]));
+    const rows = await service.getTeamStatistics({ teamId: 'team-1' });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ teamName: 'Team A', points: 3, played: 1, goalDifference: 2, isOwnTeam: true });
+    expect(rows[1]).toMatchObject({ teamName: 'Team B', points: 0, played: 1, goalDifference: -2 });
+  });
 
-    const [standing] = await service.getTeamStatistics({});
-    expect(standing.goalDifference).toBe(4);
+  it('does not expose a misleading league table for a pure knockout cup', async () => {
+    select.mockReturnValueOnce(queryResult([
+      { id: 'cup-1', name: 'Cup', type: 'cup', format: 'knockout', pointsWin: 3, pointsDraw: 1, pointsLoss: 0, teamId: 'owner', teamName: 'Owner', seasonId: null, seasonName: null },
+    ])).mockReturnValue(queryResult([]));
+    await expect(service.getTeamStatistics({})).resolves.toEqual([]);
   });
 });
