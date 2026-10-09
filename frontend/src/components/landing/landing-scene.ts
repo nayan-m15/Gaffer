@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createGafferStadium } from "./gaffer-stadium";
+import { yieldSceneTask } from "./scene-scheduler";
 
 export interface LandingSceneController {
   resize: () => void;
@@ -9,7 +10,7 @@ export interface LandingSceneController {
   updateTheme: () => void;
   dispose: () => void;
 }
-interface SceneOptions { container: HTMLElement; onReadyChange: (ready: boolean) => void }
+interface SceneOptions { container: HTMLElement; onReadyChange: (ready: boolean) => void; signal: AbortSignal }
 
 const ROOM_EXIT = -61;
 const TUNNEL_LENGTH = 16.5; // 25% shorter than the former 22-unit tunnel.
@@ -968,7 +969,7 @@ function buildPremiumTunnel(scene: THREE.Scene, lowPower: boolean) {
   return { floorMap, surfaceDetailMap, entranceSignMap, exitSignMap, tunnelLight, brandLight };
 }
 
-function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
+async function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean, yieldTask: () => Promise<void>, pendingTextures: Set<THREE.Texture>) {
   const roomSurfaceDetail = surfaceDetailTexture(lowPower, "Gaffer dressing-room micro surface", 5, 5);
   const concrete = new THREE.MeshStandardMaterial({ color: 0x262c29, roughness: .94, bumpMap: roomSurfaceDetail, bumpScale: .018 }), dark = new THREE.MeshStandardMaterial({ color: 0x080d0b, roughness: .92, bumpMap: roomSurfaceDetail, bumpScale: .012 });
   const floorTexture = dressingFloorTexture(lowPower), floor = new THREE.MeshPhysicalMaterial({ color: 0x777872, map: floorTexture, roughness: .62, metalness: .025, clearcoat: .14, clearcoatRoughness: .78, bumpMap: roomSurfaceDetail, bumpScale: .035, roughnessMap: roomSurfaceDetail });
@@ -982,6 +983,7 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   const towel = new THREE.MeshStandardMaterial({ color: 0xbfc5c1, roughness: .96 });
   const bottleMat = new THREE.MeshStandardMaterial({color:0x4fb9a8,roughness:.35,transparent:true,opacity:.82});
   const shirtFabricMap = shirtFabricTexture(lowPower);
+  [roomSurfaceDetail, floorTexture, shirtFabricMap].forEach(texture => pendingTextures.add(texture));
   const shirt = new THREE.MeshPhysicalMaterial({ map: shirtFabricMap, color: 0xffffff, roughness: .92, metalness: .02, clearcoat: .02, clearcoatRoughness: .9, side: THREE.DoubleSide });
   const dressingKit: DressingRoomKit = { metal, wood, woodDark, cushion, warmLight: light, greenLight, green, white, boot, towel, bottle: bottleMat, shirt, shirtGeometry: shirtGeometry(lowPower), shirtCollarGeometry: shirtCollarGeometry(lowPower) };
   const dummy = new THREE.Object3D();
@@ -1013,11 +1015,13 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
 
   if (new Set(DRESSING_ROOM_SHIRT_NUMBERS).size !== DRESSING_ROOM_SHIRT_NUMBERS.length) throw new Error("Dressing-room shirt numbers must be unique");
   const numberMaps = DRESSING_ROOM_SHIRT_NUMBERS.map(number => numberTexture(number, shirtFabricMap, lowPower));
+  numberMaps.forEach(texture => pendingTextures.add(texture));
   scene.add(
     createLockerRow(-1, lowPower, dressingKit, numberMaps.slice(0, LOCKER_CONFIG.count)),
     createLockerRow(1, lowPower, dressingKit, numberMaps.slice(LOCKER_CONFIG.count)),
     createCentralIsland(dressingKit),
   );
+  await yieldTask();
   const bottles = new THREE.InstancedMesh(new THREE.CylinderGeometry(.075,.085,.32,8),bottleMat,lowPower?6:10);
   for(let i=0;i<bottles.count;i+=1){const side=i%2?-1:1;dummy.position.set(-76+Math.floor(i/2)*2.6,.39,side*7.72);dummy.rotation.set(0,0,0);dummy.updateMatrix();bottles.setMatrixAt(i,dummy.matrix);} scene.add(bottles);
 
@@ -1045,6 +1049,7 @@ function buildDressingRoomAndTunnel(scene: THREE.Scene, lowPower: boolean) {
   crest.rotation.x = -Math.PI / 2; crest.position.set(-63.25, .012, 0); scene.add(crest);
   const ballTexture=footballTexture(), footballMat = new THREE.MeshStandardMaterial({map:ballTexture,roughness:.72});
   scene.add(createEquipmentArea(lowPower, dressingKit));
+  await yieldTask();
   const tunnelAssets = buildPremiumTunnel(scene, lowPower);
   scene.add(box([10.5,.18,TUNNEL_WIDTH],[-39.25,-.04,0],dark));
 
@@ -1142,11 +1147,12 @@ function tuneStadiumVisuals(stadiumGroup: THREE.Group) {
   });
 }
 
-function buildPitchAndStadium(
+async function buildPitchAndStadium(
   scene: THREE.Scene,
   renderer: THREE.WebGLRenderer,
   lowPower: boolean,
-  roomAssets: ReturnType<typeof buildDressingRoomAndTunnel>,
+  roomAssets: Awaited<ReturnType<typeof buildDressingRoomAndTunnel>>,
+  yieldTask: () => Promise<void>,
 ) {
   const { dark, metal, cushion } = roomAssets;
   const grassTexture=pitchTexture(lowPower);grassTexture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower?2:8);const grassDetail=surfaceDetailTexture(lowPower,"Landing grass micro surface",18,28);const grassMat=new THREE.MeshPhongMaterial({map:grassTexture,bumpMap:grassDetail,bumpScale:lowPower ? .006 : .01,shininess:0});applyGrassShader(grassMat,lowPower);const pitch=new THREE.Mesh(new THREE.PlaneGeometry(68,105),grassMat);pitch.rotation.x=-Math.PI/2;pitch.receiveShadow=true;scene.add(pitch);
@@ -1155,7 +1161,8 @@ function buildPitchAndStadium(
   const glass=new THREE.MeshPhysicalMaterial({color:0xb9d8d0,roughness:.24,transparent:true,opacity:.25,side:THREE.DoubleSide}),dugout=new THREE.Group();dugout.position.set(-39.2,0,13.5);dugout.add(box([2.8,.3,13],[0,.15,0],dark),box([.3,3.2,13],[-1.25,1.75,0],glass),box([2.8,.32,13],[0,3.25,0],metal));
   for(let i=0;i<6;i+=1){const z=-5.2+i*2.05;dugout.add(box([.65,.48,.72],[.35,.58,z],cushion),box([.12,.8,.72],[-.05,.88,z],cushion));}
   for(const z of [-6.3,6.3])dugout.add(box([2.8,3,.08],[0,1.65,z],glass));scene.add(dugout);
-  const stadium=createGafferStadium(lowPower);tuneStadiumVisuals(stadium.group);scene.add(stadium.group);
+  await yieldTask();
+  const stadium=await createGafferStadium(lowPower, scene, yieldTask);tuneStadiumVisuals(stadium.group);
   const goalMat=new THREE.MeshStandardMaterial({color:0xe8efeb,roughness:.62,metalness:.18});
   const netMat=new THREE.LineBasicMaterial({color:0xdce8e2,transparent:true,opacity:.48});
   scene.add(footballGoal(-1,goalMat,netMat),footballGoal(1,goalMat,netMat));
@@ -1182,7 +1189,9 @@ function buildPitchAndStadium(
 
   return { grassTexture, grassDetail, stadium, skyMat, daylightSun, cornerFlag, lighting: { roomLight, lockerLightLeft, lockerLightRight, roomAccentLeft, roomAccentRight, portalLight, tunnelFill, tunnelAccentLeft, tunnelAccentRight, exitLight, pitchFillLeft, pitchFillRight, pitchRimLeft, pitchRimRight } };
 }
-export function createLandingScene({ container, onReadyChange }: SceneOptions): LandingSceneController {
+export async function createLandingScene({ container, onReadyChange, signal }: SceneOptions): Promise<LandingSceneController> {
+  const yieldTask = () => yieldSceneTask(signal);
+  await yieldTask();
   const initialWidth = Math.max(container.clientWidth, 1), initialHeight = Math.max(container.clientHeight, 1);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
@@ -1203,10 +1212,17 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     ),
   );
   const softwareRenderer = /swiftshader|llvmpipe|software/i.test(rendererName);
+  if (softwareRenderer) {
+    renderer.dispose();
+    renderer.forceContextLoss();
+    throw new Error("Use the static landing background on software renderers");
+  }
   lowPower ||= softwareRenderer;
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.setClearColor(DARK_BACKGROUND); renderer.shadowMap.enabled = !lowPower; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.02; renderer.domElement.className = "landing-scene__canvas"; renderer.domElement.setAttribute("aria-hidden", "true"); renderer.domElement.tabIndex = -1; container.appendChild(renderer.domElement);
   const scene = new THREE.Scene(),sceneBackground=new THREE.Color(DARK_BACKGROUND);scene.background=sceneBackground;scene.fog = new THREE.Fog(0x0b1512, 24, lowPower ? 145 : 190);
+  const pendingTextures = new Set<THREE.Texture>();
+  try {
   const camera = new THREE.PerspectiveCamera(lowPower ? 67 : 58, initialWidth / initialHeight, .08, 300);
   const cameraPath = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-73, 1.74, .1), new THREE.Vector3(-67, 1.72, -.08), new THREE.Vector3(-61, 1.69, 0),
@@ -1214,9 +1230,10 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     new THREE.Vector3(-38, 1.76, -.08), new THREE.Vector3(-29, 1.82, .08), new THREE.Vector3(-15, 1.84, 0), new THREE.Vector3(0, 1.82, 0),
   ], false, "centripetal");
 
-  const roomAssets = buildDressingRoomAndTunnel(scene, lowPower);
+  const roomAssets = await buildDressingRoomAndTunnel(scene, lowPower, yieldTask, pendingTextures);
   const { floorTexture, roomSurfaceDetail, crestMap, numberMaps, ballTexture, shirtFabricMap, tunnelAssets } = roomAssets;
-  const { grassTexture, grassDetail, stadium, skyMat, daylightSun, cornerFlag, lighting } = buildPitchAndStadium(scene, renderer, lowPower, roomAssets);
+  await yieldTask();
+  const { grassTexture, grassDetail, stadium, skyMat, daylightSun, cornerFlag, lighting } = await buildPitchAndStadium(scene, renderer, lowPower, roomAssets, yieldTask);
   const applyEnvironmentTheme=()=>{const lightMode=!document.documentElement.classList.contains("dark");const background=lightMode?LIGHT_BACKGROUND:DARK_BACKGROUND;sceneBackground.setHex(background);renderer.setClearColor(background);skyMat.uniforms.topColor.value.setHex(lightMode?LIGHT_SKY_TOP:DARK_SKY_TOP);skyMat.uniforms.bottomColor.value.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);if(scene.fog instanceof THREE.Fog)scene.fog.color.setHex(lightMode?0x9eb8b0:0x0b1512);daylightSun.visible=lightMode;stadium.updateTheme(lightMode);};
   const updateLighting=(progress:number)=>{
     const tunnelArrival=smooth(.24,.5,progress),stadiumReveal=smooth(.43,.62,progress);
@@ -1247,6 +1264,30 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
       object.matrixAutoUpdate = false;
     }
   });
+  // Compile one material/geometry variant per task. A single compile(scene)
+  // would still synchronously compile every program in the same long task.
+  const compileScene = new THREE.Scene();
+  const compiled = new Set<string>();
+  scene.traverse(object => {
+    if (object instanceof THREE.Light) compileScene.add(object.clone());
+  });
+  compileScene.fog = scene.fog;
+  const meshes: THREE.Mesh[] = [];
+  scene.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
+  for (const mesh of meshes) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const key = `${materials.map(material => material.id).join(',')}/${mesh instanceof THREE.InstancedMesh}/${!!mesh.geometry.attributes.normal}/${!!mesh.geometry.attributes.uv}`;
+    if (compiled.has(key)) continue;
+    compiled.add(key);
+    await yieldTask();
+    const sample = mesh.clone();
+    compileScene.add(sample);
+    renderer.compile(compileScene, camera);
+    compileScene.remove(sample);
+  }
+  await yieldTask();
+  // Theme changes made while constructing/compiling must reach the first frame.
+  applyEnvironmentTheme();
   const updateEnvironmentalMotion=(progress:number)=>{
     if(reducedMotion){
       if(animatedShirt)animatedShirt.rotation.z=shirtBaseRoll;
@@ -1270,7 +1311,7 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     cornerFlag.pivot.rotation.y=flagBaseYaw+Math.sin(progress*Math.PI*16+.45)*.085*motionScale*pitchGate;
     cornerFlag.pivot.rotation.z=Math.sin(progress*Math.PI*11+1.7)*.012*motionScale*pitchGate;
   };
-  const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=true,paused=false,disposed=false,readySent=false,frame=0;
+  const position=new THREE.Vector3(),target=new THREE.Vector3(),direction=new THREE.Vector3();let targetProgress=0,currentProgress=0,active=!document.hidden,paused=false,disposed=false,readySent=false,frame=0;
   const updateTarget=()=>{targetProgress=THREE.MathUtils.clamp(window.scrollY/Math.max(document.documentElement.scrollHeight-window.innerHeight,1),0,1);if(active&&!paused)start();};
   const updateCamera=(progress:number)=>{cameraPath.getPointAt(progress,position);if(!reducedMotion)position.y+=Math.sin(progress*Math.PI*30)*.009;camera.position.copy(position);
     // Keep the original straight run from the dressing room into the tunnel.
@@ -1438,9 +1479,32 @@ export function createLandingScene({ container, onReadyChange }: SceneOptions): 
     if (disposed || shirtLoadFailed) return;
     kitImage = image; swapShirts();
   }, undefined, failShirtLoad);
+  let lastWidth=0,lastHeight=0,lastPixelRatio=0;
   const resize=()=>{if(disposed)return;const width=Math.max(container.clientWidth,1),height=Math.max(container.clientHeight,1);lowPower=width<768||constrainedDevice||softwareRenderer;const cap=lowPower?1.05:width<1280?1.28:1.45,budget=lowPower?760000:width<1280?1250000:1750000;
     const pixelRatio=Math.max(lowPower?.55:.5,Math.min(window.devicePixelRatio||1,cap,Math.sqrt(budget/(width*height))));
+    if(width===lastWidth&&height===lastHeight&&pixelRatio===lastPixelRatio&&readySent)return;
+    lastWidth=width;lastHeight=height;lastPixelRatio=pixelRatio;
     renderer.setPixelRatio(pixelRatio);renderer.setSize(width,height,false);camera.aspect=width/height;camera.fov=lowPower?67:width<1100?62:58;camera.updateProjectionMatrix();updateCamera(currentProgress);render();};
   const lost=(event:Event)=>{event.preventDefault();stop();onReadyChange(false);},restored=()=>{readySent=false;resize();};renderer.domElement.addEventListener("webglcontextlost",lost);renderer.domElement.addEventListener("webglcontextrestored",restored);window.addEventListener("scroll",updateTarget,{passive:true});updateTarget();currentProgress=targetProgress;resize();
   return {resize,setActive(value){active=value;if(active)start();else stop();},setPaused(value){paused=value;if(paused)stop();else start();},updateTheme(){applyEnvironmentTheme();updateLighting(currentProgress);render();},dispose(){if(disposed)return;disposed=true;stop();releaseLoadedShirt();kitImage=null;modelTextures.forEach(value=>value.dispose());modelTextures.clear();modelMaterials.clear();window.removeEventListener("scroll",updateTarget);renderer.domElement.removeEventListener("webglcontextlost",lost);renderer.domElement.removeEventListener("webglcontextrestored",restored);const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();scene.traverse(object=>{if(!(object instanceof THREE.Mesh||object instanceof THREE.InstancedMesh||object instanceof THREE.Line))return;geometries.add(object.geometry);(Array.isArray(object.material)?object.material:[object.material]).forEach(material=>materials.add(material));});geometries.forEach(value=>value.dispose());materials.forEach(value=>value.dispose());grassTexture.dispose();grassDetail.dispose();floorTexture.dispose();roomSurfaceDetail.dispose();crestMap.dispose();numberMaps.forEach(value=>value.dispose());ballTexture.dispose();if(!shirtsSwapped)shirtFabricMap.dispose();tunnelAssets.floorMap.dispose();tunnelAssets.surfaceDetailMap.dispose();tunnelAssets.entranceSignMap.dispose();tunnelAssets.exitSignMap.dispose();stadium.textures.forEach((value: THREE.Texture)=>value.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();onReadyChange(false);}};
+  } catch (error) {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+      geometries.add(object.geometry);
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => materials.add(material));
+    });
+    materials.forEach(material => {
+      Object.values(material).forEach(value => { if (value instanceof THREE.Texture) pendingTextures.add(value); });
+      material.dispose();
+    });
+    geometries.forEach(geometry => geometry.dispose());
+    pendingTextures.forEach(texture => texture.dispose());
+    renderer.dispose();
+    renderer.forceContextLoss();
+    renderer.domElement.remove();
+    throw error;
+  }
+
 }

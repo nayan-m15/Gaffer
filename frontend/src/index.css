@@ -383,6 +383,11 @@ select:-webkit-autofill {
   transition: opacity 700ms ease-out;
 }
 
+/* Button transition-all otherwise animates inherited scrollbar-color on theme changes. */
+.landing-v2 .group\/button {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+}
+
 .landing-scene[data-ready="true"] .landing-scene__canvas {
   opacity: 1;
 }
