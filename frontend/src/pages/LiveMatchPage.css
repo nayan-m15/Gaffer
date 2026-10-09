@@ -465,12 +465,6 @@
     --live-marker-inset: 0.75rem;
   }
 
-  .live-match .live-pitch-panel-portrait {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 68 / 105;
-  }
-
   .live-pitch-panel-landscape .live-squad-token {
     width: clamp(1rem, 5.5vw, 1.35rem);
     height: clamp(1rem, 5.5vw, 1.35rem);
@@ -525,6 +519,129 @@
     max-height: none;
     overflow: visible;
   }
+}
+
+@media (max-width: 640px) {
+  .live-match {
+    box-sizing: border-box;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .live-match:not(.live-match-phone-logs) { display: grid; grid-template-rows: auto minmax(0, 1fr); padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .live-match:not(.live-match-phone-logs) > .live-match-layout { grid-row: 2; flex: 1 1 0; height: 100%; min-height: 0; max-height: 100%; }
+  .live-match[data-phone-pitch-minimum]:not(.live-match-phone-logs) { overflow-y: auto; }
+  .live-match[data-phone-pitch-minimum]:not(.live-match-phone-logs) > .live-match-layout { min-height: var(--phone-minimum-layout-height); max-height: none; }
+  .live-match > header { grid-template-columns: minmax(0, 1fr) auto; gap: .25rem; padding: .25rem .5rem; }
+  .live-match > header > div:first-child { grid-column: 1 / -1; }
+  .live-match > header > .live-match-score { grid-column: 1; grid-row: 2; }
+  .live-match > header > .live-match-clock { grid-column: 2; grid-row: 2; min-width: 0; }
+  .live-match-score > div:first-child { display: flex; justify-content: center; align-items: center; gap: .35rem; }
+  .live-match-score > div:first-child > div > span { display: none; }
+  .live-match-scoreline { font-size: 1.125rem; }
+  .live-match-scoreline > .text-2xl { font-size: 1rem; margin-inline: .2rem; }
+  .live-match-team-code { font-size: .75rem; letter-spacing: .05em; }
+  .live-match-clock > span { gap: .3rem; padding: .2rem .35rem; }
+  .live-match-clock .font-oswald { font-size: .75rem; }
+  .live-match-clock > span > span:not(.font-oswald) { font-size: .625rem; letter-spacing: .05em; }
+  .live-match > header > div:first-child > :not(button) { display: none; }
+  .live-match > header > div:first-child > button { padding: .2rem .5rem; }
+  .live-match > header > .live-match-controls { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; gap: .375rem; }
+  .live-match-controls > :first-child { flex-basis: auto; margin-bottom: 0; font-size: inherit; }
+  .live-match-controls > button, .live-match-controls > div > button { min-height: 2.25rem; }
+  .live-match-phone-sync { grid-column: 1 / -1; grid-row: 4; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .2rem .5rem; font-size: .625rem; line-height: 1.2; }
+  .live-match-phone-sync * { font-size: .625rem; }
+  .live-match-phone-projection { color: #9ca39f; text-align: center; }
+  .live-match-layout,
+  .live-match-layout:has(.live-match-opponent-action) {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "summary" "opponentAction" "callout" "pitch";
+    align-content: stretch;
+    overflow: hidden;
+    gap: .25rem;
+    padding: 0;
+  }
+  .live-match-summary { grid-area: summary; }
+  .live-match-pitch-area { align-self: stretch; height: 100%; min-height: 0; max-height: 100%; overflow: hidden; }
+  .live-match-pitch-area > h2 { display: none; }
+  .live-match-phone-stage { display: grid; grid-template-columns: 24px minmax(0, 1fr) 24px; grid-template-rows: minmax(0, 1fr); flex: none; height: 100%; min-height: 0; max-height: 100%; overflow: hidden; }
+  .live-match-phone-pitch-centre { position: relative; grid-column: 2; grid-row: 1; height: 100%; min-width: 0; min-height: 0; max-height: 100%; overflow: hidden; }
+  .live-match .live-match-phone-pitch-centre > .live-pitch-panel-portrait {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    box-sizing: border-box;
+    flex: none;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+    width: var(--phone-pitch-width, 0px);
+    height: var(--phone-pitch-height, 0px);
+    aspect-ratio: auto;
+  }
+  .live-match .live-match-phone-pitch-centre .live-pitch-panel-portrait > .live-pitch > svg + div.absolute.inset-0 {
+    top: calc(1rem * var(--phone-pitch-scale, 1));
+    bottom: calc(2.25rem * var(--phone-pitch-scale, 1));
+  }
+  .live-match .live-match-phone-pitch-centre .live-squad-token {
+    width: calc(clamp(1rem, 5.5vw, 1.35rem) * var(--phone-pitch-scale, 1));
+    height: calc(clamp(1rem, 5.5vw, 1.35rem) * var(--phone-pitch-scale, 1));
+    font-size: calc(.56rem * var(--phone-pitch-scale, 1));
+  }
+  .live-match .live-match-phone-pitch-centre .live-player-name {
+    width: calc(4.25rem * var(--phone-pitch-scale, 1));
+    max-width: calc(4.25rem * var(--phone-pitch-scale, 1));
+    font-size: calc(.5rem * var(--phone-pitch-scale, 1));
+  }
+  .live-match .live-match-phone-pitch-centre [data-marker-badge] { scale: calc(.6 * var(--phone-pitch-scale, 1)); }
+  .live-match-bench-tab { grid-row: 1; align-self: center; display: flex; align-items: center; justify-content: center; width: 24px; height: 7rem; border-radius: .3rem; color: #fff; text-shadow: 0 1px 2px #000; font-size: .65rem; font-weight: 800; }
+  .live-match-bench-tab-own { grid-column: 1; }
+  .live-match-bench-tab-opponent { grid-column: 3; }
+  .live-match-bench-tab > span { display: inline-block; white-space: nowrap; }
+  .live-match-bench-tab-own > span { transform: rotate(-90deg); }
+  .live-match-bench-tab-opponent > span { transform: rotate(90deg); }
+  .live-match-bench-tab:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+  .live-match-bench-area, .live-match-activity { display: none; }
+  .live-match-callout { padding: .35rem .5rem; gap: .4rem; margin: 0 .5rem; }
+  .live-match-callout > span { display: none; }
+  .live-match-callout p { font-size: .65rem; line-height: 1.2; }
+  .live-match-callout p:first-child { letter-spacing: .08em; }
+  .live-match-callout button { min-height: 2rem; }
+  .live-match-opponent-action > button { padding: .35rem .5rem; font-size: .65rem; min-width: 0; }
+  .live-match-phone-logs > header { display: none; }
+  .live-match-phone-logs .live-match-layout { display: flex; flex-direction: column; padding: .5rem; }
+  .live-match-phone-logs .live-match-layout > :not(.live-match-activity) { display: none; }
+  .live-match-phone-logs .live-match-activity { display: flex; flex: 1; min-height: 0; }
+  .live-match-log-back { align-self: flex-start; flex-shrink: 0; min-height: 2.75rem; }
+  .live-match-pause-overlay { overflow-y: auto; overscroll-behavior: contain; }
+  .live-match-summary:has(> section), .live-match-summary:has(> div) { max-height: 35dvh; overflow-y: auto; }
+  .live-match-undo-toast { bottom: calc(.5rem + env(safe-area-inset-bottom)); max-height: 25dvh; overflow-y: auto; }
+  .live-match-event-overlay { max-height: calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
+  .live-match-phone-bench-panel[data-slot="dialog-content"] {
+    top: 0; bottom: 0; left: auto; right: auto;
+    translate: none; transform: none;
+    width: min(12rem, 75vw); max-width: none; height: 100dvh;
+    display: flex; flex-direction: column; gap: .5rem;
+    padding: calc(3rem + env(safe-area-inset-top)) .5rem calc(.5rem + env(safe-area-inset-bottom));
+    border-radius: 0; background: #111315; color: #ecefed;
+    animation: none; transition: translate .2s ease;
+  }
+  .live-match-phone-bench-panel.live-match-phone-bench-left { left: 0; }
+  .live-match-phone-bench-panel.live-match-phone-bench-right { right: 0; }
+  .live-match-phone-bench-left[data-starting-style], .live-match-phone-bench-left[data-ending-style] { translate: -100% 0; }
+  .live-match-phone-bench-right[data-starting-style], .live-match-phone-bench-right[data-ending-style] { translate: 100% 0; }
+  .live-match-phone-bench-body { flex: 1; min-height: 0; }
+  .live-match-phone-bench-body .live-bench-row { height: 100%; min-height: 0; flex-direction: column; align-items: stretch; }
+  .live-match-phone-bench-body .live-bench-list { min-height: 0; flex: 1; flex-direction: column; flex-wrap: nowrap; overflow-y: auto; overflow-x: hidden; align-items: stretch; overscroll-behavior: contain; }
+  .live-match-phone-bench-body .live-bench-player { min-height: 44px; flex-shrink: 0; }
+}
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  .live-match-phone-bench-panel[data-slot="dialog-content"] { transition: none; }
 }
 
 @keyframes live-timeline-in {
