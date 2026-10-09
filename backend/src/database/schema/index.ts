@@ -796,10 +796,18 @@ export const competitions = pgTable(
 );
 
 // Personal feed preferences; this does not affect other participants.
-export const hiddenCompetitions = pgTable('hidden_competitions', {
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
-}, (table) => [primaryKey({ columns: [table.userId, table.competitionId] })]);
+export const hiddenCompetitions = pgTable(
+  'hidden_competitions',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competitions.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.competitionId] })],
+);
 
 // One participating team slot in a shared competition. A linked participant
 // carries the real application team in `teamId`; a slot the admin added ahead

@@ -28,8 +28,6 @@ import {
 } from '../matches/match-sessions';
 import {
   athletes,
-  athleteMatchStats,
-  matchEvents,
   competitionMatches,
   competitionFixtures,
   competitions,
@@ -306,29 +304,66 @@ export class CompetitionsService {
 
   /** Hide is per user; archive is global and administrator-only. */
   async setHidden(userId: string, competitionId: string, hidden: boolean) {
-    const [exists] = await this.databaseService.database.select({ id: competitions.id })
-      .from(competitions).where(eq(competitions.id, competitionId)).limit(1);
+    const [exists] = await this.databaseService.database
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.id, competitionId))
+      .limit(1);
     if (!exists) throw new NotFoundException('Competition not found.');
     const teamId = await this.findViewerTeamId(userId);
-    const [member] = teamId ? await this.databaseService.database.select({ id: competitionTeams.id })
-      .from(competitionTeams).where(and(eq(competitionTeams.competitionId, competitionId), eq(competitionTeams.teamId, teamId))).limit(1) : [];
-    if (!member) throw new ForbiddenException('Only competition participants can hide this competition.');
-    if (hidden) await this.databaseService.database.insert(hiddenCompetitions)
-      .values({ userId, competitionId }).onConflictDoNothing();
-    else await this.databaseService.database.delete(hiddenCompetitions)
-      .where(and(eq(hiddenCompetitions.userId, userId), eq(hiddenCompetitions.competitionId, competitionId)));
+    const [member] = teamId
+      ? await this.databaseService.database
+          .select({ id: competitionTeams.id })
+          .from(competitionTeams)
+          .where(
+            and(
+              eq(competitionTeams.competitionId, competitionId),
+              eq(competitionTeams.teamId, teamId),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (!member)
+      throw new ForbiddenException(
+        'Only competition participants can hide this competition.',
+      );
+    if (hidden)
+      await this.databaseService.database
+        .insert(hiddenCompetitions)
+        .values({ userId, competitionId })
+        .onConflictDoNothing();
+    else
+      await this.databaseService.database
+        .delete(hiddenCompetitions)
+        .where(
+          and(
+            eq(hiddenCompetitions.userId, userId),
+            eq(hiddenCompetitions.competitionId, competitionId),
+          ),
+        );
     return { hidden };
   }
 
   async setArchived(userId: string, competitionId: string, archived: boolean) {
     const current = await this.requireAdmin(userId, competitionId, true);
     if (archived && !current.archivedAt) {
-      const [active] = await this.databaseService.database.select({ id: competitionFixtures.id })
-        .from(competitionFixtures).where(and(eq(competitionFixtures.competitionId, competitionId),
-          eq(competitionFixtures.status, 'in_progress'))).limit(1);
-      if (active) throw new ConflictException('Finish or cancel live fixtures before archiving this competition.');
+      const [active] = await this.databaseService.database
+        .select({ id: competitionFixtures.id })
+        .from(competitionFixtures)
+        .where(
+          and(
+            eq(competitionFixtures.competitionId, competitionId),
+            eq(competitionFixtures.status, 'in_progress'),
+          ),
+        )
+        .limit(1);
+      if (active)
+        throw new ConflictException(
+          'Finish or cancel live fixtures before archiving this competition.',
+        );
     }
-    await this.databaseService.database.update(competitions)
+    await this.databaseService.database
+      .update(competitions)
       .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
       .where(eq(competitions.id, competitionId));
     return { archived };
@@ -756,11 +791,23 @@ export class CompetitionsService {
         ))
       group by a.id, a.first_name, a.last_name, a.position, ct.team_id, ct.display_name
     `);
-    const players = new Map<string, {
-      athleteId: string; name: string; position: string | null; teamId: string;
-      teamName: string; goals: number; assists: number; goalContributions: number;
-      saves: number; appearances: number; yellowCards: number; redCards: number;
-    }>();
+    const players = new Map<
+      string,
+      {
+        athleteId: string;
+        name: string;
+        position: string | null;
+        teamId: string;
+        teamName: string;
+        goals: number;
+        assists: number;
+        goalContributions: number;
+        saves: number;
+        appearances: number;
+        yellowCards: number;
+        redCards: number;
+      }
+    >();
     type StatRow = Record<string, unknown>;
     const ensurePlayer = (row: StatRow) => {
       const athleteId = String(row.athlete_id);
@@ -768,17 +815,28 @@ export class CompetitionsService {
       if (!player) {
         player = {
           athleteId,
-          name: `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim(),
+          name: [
+            typeof row.first_name === 'string' ? row.first_name : '',
+            typeof row.last_name === 'string' ? row.last_name : '',
+          ]
+            .join(' ')
+            .trim(),
           position: (row.position as string | null) ?? null,
-          teamId: String(row.team_id), teamName: String(row.team_name),
-          goals: 0, assists: 0, goalContributions: 0, saves: 0,
-          appearances: 0, yellowCards: 0, redCards: 0,
+          teamId: String(row.team_id),
+          teamName: String(row.team_name),
+          goals: 0,
+          assists: 0,
+          goalContributions: 0,
+          saves: 0,
+          appearances: 0,
+          yellowCards: 0,
+          redCards: 0,
         };
         players.set(athleteId, player);
       }
       return player;
     };
-    for (const row of metricRows.rows as StatRow[]) {
+    for (const row of metricRows.rows) {
       const player = ensurePlayer(row);
       player.goals += Number(row.goals ?? 0);
       player.assists += Number(row.assists ?? 0);
@@ -787,11 +845,15 @@ export class CompetitionsService {
       player.redCards += Number(row.red_cards ?? 0);
       player.goalContributions = player.goals + player.assists;
     }
-    for (const row of appearances.rows as StatRow[]) {
+    for (const row of appearances.rows) {
       ensurePlayer(row).appearances += Number(row.appearances ?? 0);
     }
-    return Array.from(players.values()).sort((a, b) =>
-      b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name));
+    return Array.from(players.values()).sort(
+      (a, b) =>
+        b.goals - a.goals ||
+        b.assists - a.assists ||
+        a.name.localeCompare(b.name),
+    );
   }
 
   /* ── Internals ──────────────────────────────────────────────────────────── */
@@ -1097,12 +1159,25 @@ export class CompetitionsService {
   }
 
   /** Sanitized, read-only match centre: never expose private team tactics or notes. */
-  async getFixtureMatchCentre(userId: string, competitionId: string, fixtureId: string) {
+  async getFixtureMatchCentre(
+    userId: string,
+    competitionId: string,
+    fixtureId: string,
+  ) {
     await this.findOne(userId, competitionId);
-    const [fixture] = await this.databaseService.database.select()
-      .from(competitionFixtures).where(and(eq(competitionFixtures.id, fixtureId), eq(competitionFixtures.competitionId, competitionId))).limit(1);
+    const [fixture] = await this.databaseService.database
+      .select()
+      .from(competitionFixtures)
+      .where(
+        and(
+          eq(competitionFixtures.id, fixtureId),
+          eq(competitionFixtures.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
     if (!fixture) throw new NotFoundException('Fixture not found.');
-    if (fixture.status !== 'completed') throw new BadRequestException('The match has not finished.');
+    if (fixture.status !== 'completed')
+      throw new BadRequestException('The match has not finished.');
     const rows = await this.databaseService.database.execute(sql`
       with raw as (
         select me.id, me.match_id, me.event_type::text as type, me.minute,
@@ -1149,15 +1224,27 @@ export class CompetitionsService {
       order by credited_team_id,type,minute,coalesce(player_id::text,opponent_label,id::text),occurrence,
         case when recorded_team='own' then 0 else 1 end,id
     `);
-    const events = (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
-      id: String(row.id), type: String(row.type), minute: Number(row.minute),
-      teamId: row.team_id ? String(row.team_id) : null,
-      playerName: row.player_name ? String(row.player_name) : 'Unknown player',
-      // Do not expose raw detail, which can include internal identifiers or private notes.
-      playerId: row.player_id ? String(row.player_id) : null,
-    })).sort((a,b) => a.minute-b.minute || a.id.localeCompare(b.id));
-    return { fixtureId, homeScore: fixture.homeScore, awayScore: fixture.awayScore,
-      hasReport: events.length > 0, events };
+    const events = rows.rows
+      .map((row) => ({
+        id: String(row.id),
+        type: String(row.type),
+        minute: Number(row.minute),
+        teamId: typeof row.team_id === 'string' ? row.team_id : null,
+        playerName:
+          typeof row.player_name === 'string' && row.player_name
+            ? row.player_name
+            : 'Unknown player',
+        // Do not expose raw detail, which can include internal identifiers or private notes.
+        playerId: typeof row.player_id === 'string' ? row.player_id : null,
+      }))
+      .sort((a, b) => a.minute - b.minute || a.id.localeCompare(b.id));
+    return {
+      fixtureId,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+      hasReport: events.length > 0,
+      events,
+    };
   }
 
   async listFixtures(userId: string, competitionId: string) {
@@ -1377,9 +1464,13 @@ export class CompetitionsService {
     competitionId: string,
     fixtureId: string,
   ) {
-    const [competition] = await this.databaseService.database.select({ archivedAt: competitions.archivedAt })
-      .from(competitions).where(eq(competitions.id, competitionId)).limit(1);
-    if (competition?.archivedAt) throw new ConflictException('This competition is archived.');
+    const [competition] = await this.databaseService.database
+      .select({ archivedAt: competitions.archivedAt })
+      .from(competitions)
+      .where(eq(competitions.id, competitionId))
+      .limit(1);
+    if (competition?.archivedAt)
+      throw new ConflictException('This competition is archived.');
     const [fixture] = await this.databaseService.database
       .select()
       .from(competitionFixtures)
@@ -1492,7 +1583,11 @@ export class CompetitionsService {
     return target;
   }
 
-  private async requireAdmin(userId: string, competitionId: string, allowArchived = false) {
+  private async requireAdmin(
+    userId: string,
+    competitionId: string,
+    allowArchived = false,
+  ) {
     const [competition] = await this.databaseService.database
       .select()
       .from(competitions)
@@ -1504,7 +1599,9 @@ export class CompetitionsService {
     }
 
     if (competition.archivedAt && !allowArchived) {
-      throw new ConflictException('This competition is archived. Restore it before making changes.');
+      throw new ConflictException(
+        'This competition is archived. Restore it before making changes.',
+      );
     }
     return competition;
   }

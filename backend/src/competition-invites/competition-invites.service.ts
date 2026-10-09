@@ -64,7 +64,8 @@ export class CompetitionInvitesService {
       slot.competitionType === 'friendly'
     )
       throw new NotFoundException('Participant not found.');
-    if (slot.archivedAt) throw new ConflictException('This competition is archived.');
+    if (slot.archivedAt)
+      throw new ConflictException('This competition is archived.');
     if (slot.teamId)
       throw new ConflictException(
         'This participant is already linked to a team.',

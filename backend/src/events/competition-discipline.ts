@@ -9,30 +9,53 @@ export type CompetitionSuspension = {
   reason: 'red_card' | 'yellow_accumulation';
 };
 
-type CardRow = { fixture_id: string; athlete_id: string | null; event_type: string | null };
+type CardRow = {
+  fixture_id: string;
+  athlete_id: string | null;
+  event_type: string | null;
+};
 type FixtureRow = { id: string };
 
 /** Pure replay: sanctions are incurred after a completed fixture and served in
  * subsequent completed fixtures, whether or not the suspended athlete plays.
  * A current/unplayed fixture never consumes a suspension. */
 export function replayCompetitionDiscipline(
-  fixtureIds: string[], cards: CardRow[], threshold: number,
-  yellowBan: number, redBan: number,
+  fixtureIds: string[],
+  cards: CardRow[],
+  threshold: number,
+  yellowBan: number,
+  redBan: number,
 ): CompetitionSuspension[] {
   const perFixture = new Map<string, CardRow[]>();
   for (const card of cards) {
-    if (!card.athlete_id || !['yellow_card', 'red_card'].includes(card.event_type ?? '')) continue;
+    if (
+      !card.athlete_id ||
+      !['yellow_card', 'red_card'].includes(card.event_type ?? '')
+    )
+      continue;
     const events = perFixture.get(card.fixture_id) ?? [];
     events.push(card);
     perFixture.set(card.fixture_id, events);
   }
-  const state = new Map<string, { remaining: number; yellow: number; reason: CompetitionSuspension['reason'] }>();
+  const state = new Map<
+    string,
+    {
+      remaining: number;
+      yellow: number;
+      reason: CompetitionSuspension['reason'];
+    }
+  >();
   for (const fixtureId of fixtureIds) {
     // Serve existing suspensions before processing the cards from this fixture.
-    for (const item of state.values()) item.remaining = Math.max(0, item.remaining - 1);
+    for (const item of state.values())
+      item.remaining = Math.max(0, item.remaining - 1);
     for (const card of perFixture.get(fixtureId) ?? []) {
       const id = card.athlete_id!;
-      const current = state.get(id) ?? { remaining: 0, yellow: 0, reason: 'yellow_accumulation' as const };
+      const current = state.get(id) ?? {
+        remaining: 0,
+        yellow: 0,
+        reason: 'yellow_accumulation' as const,
+      };
       if (card.event_type === 'red_card') {
         current.remaining += redBan;
         current.reason = 'red_card';
@@ -47,15 +70,23 @@ export function replayCompetitionDiscipline(
       state.set(id, current);
     }
   }
-  return [...state.entries()].filter(([, state]) => state.remaining > 0)
-    .map(([athleteId, state]) => ({ athleteId, remainingMatches: state.remaining, reason: state.reason }));
+  return [...state.entries()]
+    .filter(([, state]) => state.remaining > 0)
+    .map(([athleteId, state]) => ({
+      athleteId,
+      remainingMatches: state.remaining,
+      reason: state.reason,
+    }));
 }
 
 /** Resolves sanctions for the signed-in team's fixture only. Manual-score-only
  * fixtures can serve a suspension, but cannot create an attributed card. */
 export async function getCompetitionSuspensions(
-  databaseService: DatabaseService, teamId: string,
-  competitionId: string | null, scheduledAt: Date, currentFixtureId?: string | null,
+  databaseService: DatabaseService,
+  teamId: string,
+  competitionId: string | null,
+  scheduledAt: Date,
+  currentFixtureId?: string | null,
 ): Promise<CompetitionSuspension[]> {
   if (!competitionId) return [];
   const db = databaseService.database;
@@ -91,20 +122,30 @@ export async function getCompetitionSuspensions(
     join athletes a on a.id = d.athlete_id and a.team_id = ${teamId}::uuid
     join competition_fixtures f on f.id = d.fixture_id
     where f.competition_id = ${competitionId}::uuid
-      and d.fixture_id in (${sql.join(fixtures.map(x => sql`${x.id}::uuid`), sql`, `)})
+      and d.fixture_id in (${sql.join(
+        fixtures.map((x) => sql`${x.id}::uuid`),
+        sql`, `,
+      )})
       and d.event_type in ('yellow_card', 'red_card')
   `);
   return replayCompetitionDiscipline(
-    fixtures.map(x => x.id), cards.rows as unknown as CardRow[],
-    Number(rule.threshold), Number(rule.yellow_ban), Number(rule.red_ban),
+    fixtures.map((x) => x.id),
+    cards.rows as unknown as CardRow[],
+    Number(rule.threshold),
+    Number(rule.yellow_ban),
+    Number(rule.red_ban),
   );
 }
 
 export function assertSuspensionEligibility(
-  selectedAthleteIds: string[], suspensions: CompetitionSuspension[],
+  selectedAthleteIds: string[],
+  suspensions: CompetitionSuspension[],
 ): void {
-  const blocked = suspensions.find(s => selectedAthleteIds.includes(s.athleteId));
-  if (blocked) throw new BadRequestException(
-    `A suspended player cannot be selected (${blocked.remainingMatches} competition match(es) remaining).`,
+  const blocked = suspensions.find((s) =>
+    selectedAthleteIds.includes(s.athleteId),
   );
+  if (blocked)
+    throw new BadRequestException(
+      `A suspended player cannot be selected (${blocked.remainingMatches} competition match(es) remaining).`,
+    );
 }

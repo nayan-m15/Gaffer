@@ -56,14 +56,24 @@ export class CompetitionsController {
   }
 
   @Patch(':id/hidden')
-  async setHidden(@CurrentUser() user: SessionUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: { hidden?: boolean }) {
-    if (typeof body?.hidden !== 'boolean') throw new BadRequestException('hidden must be a boolean');
+  async setHidden(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { hidden?: boolean },
+  ) {
+    if (typeof body?.hidden !== 'boolean')
+      throw new BadRequestException('hidden must be a boolean');
     return this.competitionsService.setHidden(user.id, id, body.hidden);
   }
 
   @Patch(':id/archive')
-  async setArchived(@CurrentUser() user: SessionUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: { archived?: boolean }) {
-    if (typeof body?.archived !== 'boolean') throw new BadRequestException('archived must be a boolean');
+  async setArchived(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { archived?: boolean },
+  ) {
+    if (typeof body?.archived !== 'boolean')
+      throw new BadRequestException('archived must be a boolean');
     return this.competitionsService.setArchived(user.id, id, body.archived);
   }
 
@@ -118,10 +128,16 @@ export class CompetitionsController {
   }
 
   @Get(':id/fixtures/:fixtureId/match-centre')
-  async fixtureMatchCentre(@CurrentUser() user: SessionUser,
+  async fixtureMatchCentre(
+    @CurrentUser() user: SessionUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('fixtureId', ParseUUIDPipe) fixtureId: string) {
-    return this.competitionsService.getFixtureMatchCentre(user.id, id, fixtureId);
+    @Param('fixtureId', ParseUUIDPipe) fixtureId: string,
+  ) {
+    return this.competitionsService.getFixtureMatchCentre(
+      user.id,
+      id,
+      fixtureId,
+    );
   }
 
   @Post(':id/fixtures/generate')

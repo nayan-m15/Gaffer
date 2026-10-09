@@ -2713,13 +2713,17 @@ export class MatchesService {
         const [row] = await this.databaseService.database
           .select({ count: sql<number>`count(*)::int` })
           .from(matchEvents)
-          .where(and(
-            eq(matchEvents.matchId, matchId),
-            eq(matchEvents.team, team),
-            eq(matchEvents.eventType, 'substitution'),
-            sql`${matchEvents.lifecycleStatus} <> 'voided'`,
-            ...(excludeEventId ? [sql`${matchEvents.id} <> ${excludeEventId}::uuid`] : []),
-          ));
+          .where(
+            and(
+              eq(matchEvents.matchId, matchId),
+              eq(matchEvents.team, team),
+              eq(matchEvents.eventType, 'substitution'),
+              sql`${matchEvents.lifecycleStatus} <> 'voided'`,
+              ...(excludeEventId
+                ? [sql`${matchEvents.id} <> ${excludeEventId}::uuid`]
+                : []),
+            ),
+          );
         if ((row?.count ?? 0) >= competition.maxSubstitutes) {
           throw new BadRequestException(
             `Competition substitution limit reached (${competition.maxSubstitutes} per team).`,

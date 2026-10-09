@@ -45,7 +45,10 @@ import {
   unavailableFriendlyOpponentLineup,
 } from '../friendly-fixtures/friendly-fixtures.service';
 import { TeamsService } from '../teams/teams.service';
-import { getCompetitionSuspensions, assertSuspensionEligibility } from './competition-discipline';
+import {
+  getCompetitionSuspensions,
+  assertSuspensionEligibility,
+} from './competition-discipline';
 import {
   DEFAULT_FORMATION_ID,
   getFormationPlayerCount,
@@ -496,8 +499,13 @@ export class EventsService {
     const team = await this.requireTeam(userId);
     const event = await this.requireEvent(team.id, eventId);
     if (event.type !== 'match') throw new NotFoundException('Match not found.');
-    return getCompetitionSuspensions(this.databaseService, team.id,
-      event.competitionId, event.scheduledAt, event.competitionFixtureId);
+    return getCompetitionSuspensions(
+      this.databaseService,
+      team.id,
+      event.competitionId,
+      event.scheduledAt,
+      event.competitionFixtureId,
+    );
   }
 
   async confirmLineup(userId: string, eventId: string, dto: ConfirmLineupDto) {
@@ -528,8 +536,13 @@ export class EventsService {
 
     assertSuspensionEligibility(
       [...dto.startingAthleteIds, ...(dto.benchAthleteIds ?? [])],
-      await getCompetitionSuspensions(this.databaseService, team.id,
-        event.competitionId, event.scheduledAt, event.competitionFixtureId),
+      await getCompetitionSuspensions(
+        this.databaseService,
+        team.id,
+        event.competitionId,
+        event.scheduledAt,
+        event.competitionFixtureId,
+      ),
     );
 
     await this.loadSelectableTeamAthletes(
@@ -1043,8 +1056,13 @@ export class EventsService {
 
     assertSuspensionEligibility(
       [...dto.startingAthleteIds, ...(dto.benchAthleteIds ?? [])],
-      await getCompetitionSuspensions(this.databaseService, team.id,
-        event.competitionId, event.scheduledAt, event.competitionFixtureId),
+      await getCompetitionSuspensions(
+        this.databaseService,
+        team.id,
+        event.competitionId,
+        event.scheduledAt,
+        event.competitionFixtureId,
+      ),
     );
 
     const { teamAthletes, requestedIds } =
