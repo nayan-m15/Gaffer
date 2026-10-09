@@ -33,13 +33,15 @@ for (const directory of ['frontend/public', 'frontend/public/landing']) {
     if (name.endsWith('.webp')) images.push({ path: `${directory}/${name}`, bytes: (await stat(`${directory}/${name}`)).size });
   }
 }
-const changedFrontendFiles = execFileSync('git', ['ls-files', '--modified', '--others', '--exclude-standard', '--', 'frontend/src', 'frontend/public', 'frontend/index.html', 'frontend/vite.config.ts'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+const baselineRevision = execFileSync('git', ['rev-parse', '00529949'], { encoding: 'utf8' }).trim();
+const afterRevision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const changedFrontendFiles = execFileSync('git', ['diff', '--name-only', baselineRevision, '--', 'frontend/src', 'frontend/public', 'frontend/index.html', 'frontend/vite.config.ts'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
 const sourceManifest = [];
 for (const path of changedFrontendFiles) sourceManifest.push({ path, sha256: createHash('sha256').update(await readFile(path)).digest('hex') });
 const evidence = {
-  baselineRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-  after: 'uncommitted landing changes on fix/performance-dashboard-audit',
-  trackedDiffSha256: createHash('sha256').update(execFileSync('git', ['diff'])).digest('hex'),
+  baselineRevision, afterRevision,
+  branch: execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(),
+  trackedDiffSha256: createHash('sha256').update(execFileSync('git', ['diff', baselineRevision])).digest('hex'),
   environment: { os: 'Windows 10.0.26300', logicalProcessors: 12, memoryGiB: 16, lighthouse: '13.5.0', chromium: '151.0.0.0', gpu: 'SwiftShader', url: 'http://127.0.0.1:4187/' },
   sourceManifest, settings, results, beforeBundles: bundles, afterBundles, images,
 };
