@@ -34,6 +34,7 @@ export interface PlayerEvent {
   friendlyFixtureId?: string | null;
   friendlyFixtureStatus?: FriendlyFixtureStatus | null;
   friendlyOpponentTeamId?: string | null;
+  friendlyPlayersPerSide?: 5 | 7 | 11 | null;
   friendlyOpponentTeamName?: string | null;
   /**
    * The team that created the friendly-fixture request — compare with

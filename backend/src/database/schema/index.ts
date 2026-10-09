@@ -533,6 +533,8 @@ export const events = pgTable(
     weatherLongitude: doublePrecision('longitude'),
     weatherTimezone: text('timezone'),
     notes: text('notes'),
+    // Null for competition events; defaults to 11 for existing friendly matches.
+    friendlyPlayersPerSide: integer('friendly_players_per_side'),
     competitionId: uuid('competition_id').references(() => competitions.id, {
       onDelete: 'set null',
     }),

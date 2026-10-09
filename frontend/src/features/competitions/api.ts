@@ -3,6 +3,7 @@ import type {
   Competition,
   CompetitionDetail,
   CompetitionFixture,
+  CompetitionFixtureScheduleAlert,
   CompetitionInput,
   CompetitionInvite,
   CompetitionResult,
@@ -23,6 +24,9 @@ export async function fetchMyCompetitions() {
     await apiFetch<CompetitionSummary[]>("/competitions/mine"),
   );
 }
+
+export const fetchCompetitionFixtureScheduleAlerts = () =>
+  apiFetch<CompetitionFixtureScheduleAlert[]>("/competitions/schedule-alerts");
 
 export async function searchCompetitions(term: string) {
   return sharedOnly(await apiFetch<CompetitionSummary[]>(`/competitions/search?q=${encodeURIComponent(term)}`));

@@ -10,10 +10,12 @@ import {
   and,
   asc,
   count,
+  desc,
   eq,
   gte,
   ilike,
   inArray,
+  isNotNull,
   ne,
   or,
   sql,
@@ -202,6 +204,119 @@ export class CompetitionsService {
    * metadata. Competitions the caller created but whose team is not a
    * participant cannot exist: creation always inserts the creator's team.
    */
+  async listFixtureScheduleAlerts(userId: string) {
+    const teamId = await this.findViewerTeamId(userId);
+    if (!teamId) return [];
+
+    const rows = await this.databaseService.database
+      .select({
+        fixtureId: competitionFixtures.id,
+        competitionId: competitions.id,
+        competitionName: competitions.name,
+        ownCompetitionTeamId: competitionTeams.id,
+        homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+        awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
+        scheduledAt: competitionFixtures.scheduledAt,
+        scheduleRevision: competitionFixtures.scheduleRevision,
+        homeScheduleResponse: competitionFixtures.homeScheduleResponse,
+        awayScheduleResponse: competitionFixtures.awayScheduleResponse,
+        scheduleProposedByCompetitionTeamId:
+          competitionFixtures.scheduleProposedByCompetitionTeamId,
+        scheduleProposalNote: competitionFixtures.scheduleProposalNote,
+        scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
+        updatedAt: competitionFixtures.updatedAt,
+      })
+      .from(competitionTeams)
+      .innerJoin(
+        competitionFixtures,
+        and(
+          eq(competitionFixtures.competitionId, competitionTeams.competitionId),
+          or(
+            eq(competitionFixtures.homeCompetitionTeamId, competitionTeams.id),
+            eq(competitionFixtures.awayCompetitionTeamId, competitionTeams.id),
+          ),
+        ),
+      )
+      .innerJoin(
+        competitions,
+        eq(competitions.id, competitionFixtures.competitionId),
+      )
+      .where(
+        and(
+          eq(competitionTeams.teamId, teamId),
+          eq(competitionFixtures.status, 'scheduled'),
+          isNotNull(competitionFixtures.scheduleProposedByCompetitionTeamId),
+        ),
+      )
+      .orderBy(desc(competitionFixtures.updatedAt));
+
+    if (!rows.length) return [];
+
+    const participantIds = Array.from(
+      new Set(
+        rows.flatMap((row) =>
+          [row.homeCompetitionTeamId, row.awayCompetitionTeamId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    );
+    const participantRows = participantIds.length
+      ? await this.databaseService.database
+          .select({
+            id: competitionTeams.id,
+            displayName: sql<string>`coalesce(${teams.name}, ${competitionTeams.displayName})`,
+          })
+          .from(competitionTeams)
+          .leftJoin(teams, eq(teams.id, competitionTeams.teamId))
+          .where(inArray(competitionTeams.id, participantIds))
+      : [];
+    const participantNames = new Map(
+      participantRows.map((row) => [row.id, row.displayName]),
+    );
+    const confirmedCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    return rows
+      .map((row) => {
+        const ownIsHome =
+          row.homeCompetitionTeamId === row.ownCompetitionTeamId;
+        const ownResponse = ownIsHome
+          ? row.homeScheduleResponse
+          : row.awayScheduleResponse;
+        const opponentId = ownIsHome
+          ? row.awayCompetitionTeamId
+          : row.homeCompetitionTeamId;
+        const proposedByOwnTeam =
+          row.scheduleProposedByCompetitionTeamId === row.ownCompetitionTeamId;
+        const state = row.scheduleConfirmedAt
+          ? ('confirmed' as const)
+          : ownResponse === 'pending'
+            ? ('action_required' as const)
+            : ('awaiting_response' as const);
+
+        return {
+          id: `${row.fixtureId}:${row.scheduleRevision}:${state}`,
+          fixtureId: row.fixtureId,
+          competitionId: row.competitionId,
+          competitionName: row.competitionName,
+          opponentName:
+            (opponentId && participantNames.get(opponentId)) ?? 'Opponent',
+          scheduledAt: row.scheduledAt,
+          scheduleRevision: row.scheduleRevision,
+          proposalNote: row.scheduleProposalNote,
+          proposedByOwnTeam,
+          state,
+          confirmedAt: row.scheduleConfirmedAt,
+          updatedAt: row.updatedAt,
+        };
+      })
+      .filter(
+        (alert) =>
+          alert.state !== 'confirmed' ||
+          (alert.confirmedAt?.getTime() ?? 0) >= confirmedCutoff,
+      );
+  }
+
   async listMine(userId: string): Promise<CompetitionSummaryView[]> {
     const teamId = await this.findViewerTeamId(userId);
     if (!teamId) {

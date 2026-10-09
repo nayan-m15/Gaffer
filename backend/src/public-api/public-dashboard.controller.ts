@@ -91,6 +91,14 @@ export class PublicDashboardController {
     };
   }
 
+  @Get('competition-fixtures')
+  @ApiOperation({ summary: 'List public league and cup fixtures' })
+  async competitionFixtures(@Query() query: unknown) {
+    const dto = zodValidate(publicDashboardQuerySchema, query);
+    const data = await this.publicDashboardService.getCompetitionFixtures(dto);
+    return { success: true, count: data.length, data };
+  }
+
   @Get('team-statistics')
   @ApiOperation({ summary: 'List public team standings' })
   @ApiDashboardQuery('standings')
