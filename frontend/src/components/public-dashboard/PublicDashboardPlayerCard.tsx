@@ -28,16 +28,16 @@ export function PublicDashboardPlayerCard({ player, photoUrl }: PublicDashboardP
   return (
     <article className="public-player-card flex h-full min-w-0 flex-col rounded-[inherit] border border-brand/65 bg-card p-4 text-card-foreground shadow-sm sm:p-5">
       <div className="flex shrink-0 items-center justify-between gap-3">
-        <span className="flex h-9 min-w-12 items-center justify-center rounded-lg border border-border bg-muted/40 px-2 text-[clamp(1rem,1.5vw,1.25rem)] font-extrabold leading-none tabular-nums">
+        <span className="public-player-card-badge flex h-9 min-w-12 items-center justify-center rounded-lg border border-border bg-muted/40 px-2 text-[clamp(1rem,1.5vw,1.25rem)] font-extrabold leading-none tabular-nums">
           {player.squadNumber == null ? "—" : `#${player.squadNumber}`}
         </span>
-        <span title={position} className="flex h-9 min-w-12 max-w-[60%] items-center justify-center rounded-lg border border-brand/50 bg-brand/10 px-2 text-[clamp(0.875rem,1.4vw,1.125rem)] font-extrabold leading-none">
+        <span title={position} className="public-player-card-badge flex h-9 min-w-12 max-w-[60%] items-center justify-center rounded-lg border border-brand/50 bg-brand/10 px-2 text-[clamp(0.875rem,1.4vw,1.125rem)] font-extrabold leading-none">
           <span className="truncate">{position}</span>
         </span>
       </div>
 
-      <div className="my-4 flex min-w-0 shrink-0 items-center gap-2.5">
-        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-brand/40 bg-background/40 text-brand sm:size-12">
+      <div className="public-player-card-identity my-4 flex min-w-0 shrink-0 items-center gap-2.5">
+        <div className="public-player-card-avatar flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-brand/40 bg-background/40 text-brand sm:size-12">
           {photoUrl && failedPhoto !== photoUrl ? (
             <img
               src={photoUrl}
@@ -53,7 +53,7 @@ export function PublicDashboardPlayerCard({ player, photoUrl }: PublicDashboardP
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p title={player.lastName || player.firstName} className="truncate text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+          <p title={player.lastName || player.firstName} className="public-player-card-surname truncate text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
             {player.lastName || player.firstName}
           </p>
           <h3 title={name} className="mt-1 truncate text-[clamp(1.125rem,1.8vw,1.5rem)] font-extrabold leading-tight tracking-tight">

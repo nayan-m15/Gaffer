@@ -1410,9 +1410,23 @@ select:-webkit-autofill {
 .public-player-carousel .depth-carousel__dot.is-active::before { background: var(--brand); }
 .public-player-carousel :is(button, [tabindex]):focus-visible,
 .public-player-carousel:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-@media (width < 640px) {
-  .public-player-showcase { height: 460px; }
-  .public-player-carousel .depth-carousel__card { height: 380px !important; }
+@media (width < 768px) {
+  .public-player-showcase { height: 344px; }
+  .public-player-carousel .depth-carousel__card {
+    width: min(220px, calc(100% - 88px)) !important;
+    height: 280px !important;
+    border-radius: 16px !important;
+  }
+  .public-player-card { padding: 12px; }
+  .public-player-card-badge { height: 28px; min-width: 38px; font-size: 14px; }
+  .public-player-card-identity { margin-block: 8px; gap: 8px; }
+  .public-player-card-avatar { width: 32px; height: 32px; }
+  .public-player-card-avatar > svg { width: 20px; height: 20px; }
+  .public-player-card-surname { font-size: 10px; line-height: 12px; }
+  .public-player-card h3 { margin-top: 2px; font-size: 16px; line-height: 20px; }
+  .public-player-card dl { margin-top: 10px; column-gap: 8px; row-gap: 6px; }
+  .public-player-card dt { font-size: 11px; line-height: 14px; }
+  .public-player-card dd { margin-top: 2px; font-size: 20px; }
 }
 
 .public-player-carousel .depth-carousel__dot.is-active { width: 20px; background: transparent; }
