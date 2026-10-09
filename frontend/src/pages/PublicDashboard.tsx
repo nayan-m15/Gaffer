@@ -270,7 +270,7 @@ export default function PublicDashboard() {
         {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
         <div
           ref={filterBarRef}
-          className="sticky top-16 z-40 w-full"
+          className="sticky top-16 z-40 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
         >
           <div className="public-dashboard-toolbar">
             <PublicDashboardSectionNav sections={dashboardSections} />

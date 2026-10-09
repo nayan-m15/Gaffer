@@ -777,13 +777,10 @@ select:-webkit-autofill {
   display: flex;
   align-items: center;
   gap: 20px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
   border: 1px solid var(--border);
-  border-radius: 0;
-  border-inline: 0;
+  border-radius: 16px;
   background: var(--card);
-  padding: 0 20px;
+  padding: 0 16px;
   box-shadow: 0 12px 36px rgb(15 23 42 / 12%);
   scrollbar-color: var(--brand) transparent;
   scrollbar-width: thin;
@@ -841,10 +838,10 @@ select:-webkit-autofill {
 
 .public-dashboard-filter-panel {
   display: flex;
-  flex: 1 0 620px;
+  flex: 1 1 620px;
   align-items: center;
   gap: 10px;
-  min-width: 620px;
+  min-width: 0;
   margin-left: auto;
   border-left: 1px solid var(--border);
   padding: 0 0 0 20px;
@@ -867,8 +864,9 @@ select:-webkit-autofill {
 .public-dashboard-filter-grid {
   display: grid;
   flex: 1;
-  grid-template-columns: repeat(3, minmax(120px, 1fr)) minmax(146px, 1.1fr);
-  gap: 10px;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr);
+  gap: 8px;
 }
 
 .public-dashboard-filter-field {
@@ -877,8 +875,9 @@ select:-webkit-autofill {
   min-width: 0;
   align-items: center;
   gap: 8px;
-  border-bottom: 2px solid var(--border);
-  padding: 6px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
   color: var(--muted-foreground);
   transition: color 160ms ease, border-color 160ms ease;
 }
@@ -914,7 +913,21 @@ select:-webkit-autofill {
 
 .public-dashboard-filter-select:disabled { opacity: 0.5; cursor: wait; }
 .public-dashboard-filter-select option { background: var(--card); color: var(--foreground); }
-.public-dashboard-filter-chevron { position: absolute; right: 0; bottom: 15px; width: 12px; height: 12px; pointer-events: none; }
+.public-dashboard-filter-chevron { position: absolute; right: 10px; bottom: 15px; width: 12px; height: 12px; pointer-events: none; }
+
+/* Stack before navigation and four filters become cramped on smaller screens. */
+@media (max-width: 1279px) {
+  .public-dashboard-toolbar { flex-direction: column; align-items: stretch; gap: 0; }
+  .public-dashboard-section-list { margin-inline: auto; }
+  .public-dashboard-section-link { min-height: 60px; }
+  .public-dashboard-filter-panel {
+    flex: 0 1 auto;
+    margin: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 12px 0;
+  }
+}
 
 @media (max-width: 639px) {
   .public-dashboard-toolbar { gap: 12px; padding: 0 12px; }
