@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Download, FileText, Loader2, Printer, Share2, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { exportTeamReportCsv, exportTeamReportPdf } from "./report-export";
+import { exportTeamReportCsv, exportTeamReportPdf, printTeamReportPdf } from "./report-export";
 import { shareTeamReport } from "./report-share";
-import { printTeamReport } from "./report-print";
+
 import { TeamPerformanceReport } from "./TeamPerformanceReport";
 import type { TeamReportData } from "./team-report-model";
 import "./report.css";
@@ -23,7 +23,6 @@ export function ReportActions({ data }: { data: TeamReportData }) {
   const [notice, setNotice] = useState<Notice>(null);
   const current = useRef<Operation | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -103,12 +102,15 @@ export function ReportActions({ data }: { data: TeamReportData }) {
   const proceed = async () => {
     const active = current.current;
     if (!active || active.pending || (active.mode !== "print" && active.mode !== "share")) return;
+    // Open immediately on the click event, before asynchronous PDF generation:
+    // browsers otherwise block a delayed window.open as a popup.
+    const printTab = active.mode === "print" ? window.open("", "_blank") : null;
     active.pending = true;
     setOperation({ ...active });
     try {
       if (active.mode === "print") {
-        if (!reportRef.current) throw new Error("Report preview is unavailable.");
-        await printTeamReport(reportRef.current, active.controller.signal);
+        if (!printTab) throw new Error("Allow popups to print the report.");
+        await printTeamReportPdf(active.data, printTab, active.controller.signal);
         finish(active);
       } else {
         const result = await shareTeamReport(active.data);
@@ -121,7 +123,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
       if (active.controller.signal.aborted) return;
       console.error("Report action failed", error);
       finish(active, { tone: "error", message: active.mode === "print"
-        ? "The report could not be printed. Please try again."
+        ? "The report could not be printed. Please allow popups and try again."
         : "The report could not be shared or copied. Please try again." });
     }
   };
@@ -159,7 +161,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
               <DialogDescription>Review {preview.data.context.teamName} · {preview.data.context.seasonName} · {preview.data.context.competitionName}.</DialogDescription>
             </DialogHeader>
             <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
-              <div ref={reportRef}><TeamPerformanceReport data={preview.data} /></div>
+              <div><TeamPerformanceReport data={preview.data} /></div>
             </div>
             <DialogFooter className="shrink-0">
               {preview.pending && <p role="status" className="mr-auto self-center text-xs text-muted-foreground">

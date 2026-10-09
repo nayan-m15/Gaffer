@@ -162,7 +162,7 @@ function drawTable(
   return y + 9;
 }
 
-export async function exportTeamReportPdf(data: TeamReportData, signal?: AbortSignal): Promise<void> {
+async function buildTeamReportPdf(data: TeamReportData, signal?: AbortSignal): Promise<Pdf> {
   signal?.throwIfAborted();
   const { jsPDF } = await import("jspdf");
   signal?.throwIfAborted();
@@ -272,7 +272,39 @@ export async function exportTeamReportPdf(data: TeamReportData, signal?: AbortSi
     pdf.text(`Page ${page} of ${pageCount}`, 196, 291, { align: "right" });
   }
 
-  const suffix = safeReportFilename(context.teamName, context.generatedAt);
   signal?.throwIfAborted();
+  return pdf;
+}
+
+export async function exportTeamReportPdf(data: TeamReportData, signal?: AbortSignal): Promise<void> {
+  const pdf = await buildTeamReportPdf(data, signal);
+  signal?.throwIfAborted();
+  const suffix = safeReportFilename(data.context.teamName, data.context.generatedAt);
   pdf.save(`Gaffer_Team_Performance_Report_${suffix}.pdf`);
+}
+
+/** Use the exact same chart-bearing PDF for printing as for downloading. */
+export async function printTeamReportPdf(data: TeamReportData, printTab: Window, signal?: AbortSignal): Promise<void> {
+  const closeOnAbort = () => { if (!printTab.closed) printTab.close(); };
+  signal?.addEventListener("abort", closeOnAbort, { once: true });
+  try {
+    const pdf = await buildTeamReportPdf(data, signal);
+    signal?.throwIfAborted();
+    // PDF viewer print action: unlike cloning Recharts SVG into an iframe,
+    // the generated PDF has all graphs already drawn on its pages.
+    pdf.autoPrint();
+    const url = URL.createObjectURL(pdf.output("blob"));
+    if (printTab.closed) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+    printTab.location.replace(url);
+    // Allow the browser's PDF viewer to finish loading before revoking.
+    window.setTimeout(() => URL.revokeObjectURL(url), 300_000);
+  } catch (error) {
+    if (!printTab.closed) printTab.close();
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", closeOnAbort);
+  }
 }
