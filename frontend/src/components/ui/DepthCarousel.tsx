@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent, type KeyboardEvent } from 'react';
 import gsap from 'gsap';
 import './DepthCarousel.css';
 
@@ -13,6 +13,7 @@ export interface DepthCarouselItem {
 }
 interface DepthCarouselProps {
   items?: Array<string | DepthCarouselItem>;
+  renderContent?: (item: DepthCarouselItem, index: number) => ReactNode;
   cardWidth?: number;
   cardHeight?: number;
   scaleToFit?: boolean;
@@ -52,6 +53,7 @@ const normalizeItem = (it: string | DepthCarouselItem): DepthCarouselItem => (ty
 
 const DepthCarousel = ({
   items = DEFAULT_ITEMS,
+  renderContent,
   cardWidth = 300,
   cardHeight = 380,
   scaleToFit = true,
@@ -99,6 +101,21 @@ const DepthCarousel = ({
   const suppressClickRef = useRef(false);
 
   const [active, setActive] = useState(0);
+  // Mount just the cards around the viewport, not every player in the roster.
+  const [windowAnchor, setWindowAnchor] = useState(0);
+  const anchorRef = useRef(0);
+  const visibleIndices = useMemo(() => {
+    if (count <= visibleCards + 4) return data.map((_, i) => i);
+    const result: number[] = [];
+    const seen = new Set<number>();
+    for (let offset = -2; offset <= visibleCards + 1; offset++) {
+      const raw = windowAnchor + offset;
+      if (!loop && (raw < 0 || raw >= count)) continue;
+      const index = ((raw % count) + count) % count;
+      if (!seen.has(index)) { seen.add(index); result.push(index); }
+    }
+    return result;
+  }, [count, data, loop, visibleCards, windowAnchor]);
 
   onChangeRef.current = onChange;
   cfgRef.current = {
@@ -124,14 +141,19 @@ const DepthCarousel = ({
     const dir = cfg.tiltDirection === 'left' ? -1 : 1;
     const sc = scaleRef.current;
 
-    for (let i = 0; i < n; i++) {
+    const anchor = Math.floor(pos);
+    if (anchor !== anchorRef.current) {
+      anchorRef.current = anchor;
+      setWindowAnchor(anchor);
+    }
+    for (const i of cardRefs.current.keys()) {
       const el = cardRefs.current[i];
       if (!el) continue;
 
       let d = i - pos;
       if (cfg.loop && n > 1) {
         d = ((d % n) + n) % n;
-        if (d > n - 1) d -= n;
+        if (d > n / 2) d -= n;
       }
 
       const back = Math.max(0, d);
@@ -151,7 +173,7 @@ const DepthCarousel = ({
 
       el.style.transform = `translate(-50%, -50%) scale(${sc}) translateX(${tx.toFixed(2)}px) translateZ(${tz.toFixed(2)}px) rotateY(${ry.toFixed(3)}deg)`;
       el.style.opacity = opacity.toFixed(3);
-      el.style.filter = `brightness(${brightness.toFixed(3)}) blur(${blurPx.toFixed(2)}px)`;
+      el.style.filter = `brightness(${brightness.toFixed(3)})${blurPx > 0 ? ` blur(${blurPx.toFixed(2)}px)` : ''}`;
       el.style.zIndex = String(zi);
       el.style.pointerEvents = shown && opacity > 0.05 ? 'auto' : 'none';
 
@@ -382,10 +404,16 @@ const DepthCarousel = ({
   useEffect(() => {
     focusRef.current = 0;
     posRef.current = 0;
+    anchorRef.current = 0;
+    setWindowAnchor(0);
     tweenRef.current?.kill();
     setActive(0);
     layout(0);
   }, [data, layout]);
+
+  useLayoutEffect(() => {
+    layout(posRef.current);
+  }, [visibleIndices, layout]);
 
   useEffect(() => {
     layout(posRef.current);
@@ -416,25 +444,25 @@ const DepthCarousel = ({
       onKeyDown={onKeyDown}
     >
       <div className="depth-carousel__stage" ref={stageRef}>
-        {data.map((item, i) => (
+        {visibleIndices.map(i => { const item = data[i]; return (
           <div
             key={item.id ?? i}
             className="depth-carousel__card"
-            ref={el => { cardRefs.current[i] = el; }}
+            ref={el => { if (el) cardRefs.current[i] = el; else delete cardRefs.current[i]; }}
             style={{ width: cardWidth, height: cardHeight, borderRadius: radius }}
             aria-roledescription="slide"
             aria-label={`${i + 1} of ${count}`}
             aria-hidden={active !== i}
             onClick={() => onCardClick(i)}
           >
-            {item.content ?? <img className="depth-carousel__img" src={item.image} alt={item.alt || ''} draggable={false} />}
+            {(renderContent ? renderContent(item, i) : item.content) ?? <img className="depth-carousel__img" src={item.image} alt={item.alt || ''} loading="lazy" decoding="async" draggable={false} />}
             <span
               className="depth-carousel__tint"
-              ref={el => { overlayRefs.current[i] = el; }}
+              ref={el => { if (el) overlayRefs.current[i] = el; else delete overlayRefs.current[i]; }}
               style={{ background: tint }}
             />
           </div>
-        ))}
+        ); })}
       </div>
 
       {showControls && count > 1 && (
@@ -476,7 +504,10 @@ const DepthCarousel = ({
         </>
       )}
 
-      {showIndicators && count > 1 && (
+      {showIndicators && count > 12 && (
+        <div className="depth-carousel__counter" aria-live="off">Player {active + 1} of {count}</div>
+      )}
+      {showIndicators && count > 1 && count <= 12 && (
         <div className="depth-carousel__dots" role="group" aria-label="Slides" onPointerDown={event => event.stopPropagation()} onWheelCapture={event => event.stopPropagation()}>
           {data.map((_, i) => (
             <button

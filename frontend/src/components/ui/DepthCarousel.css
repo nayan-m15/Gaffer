@@ -41,7 +41,7 @@
   box-shadow:
     0 30px 60px -20px rgba(0, 0, 0, 0.65),
     0 8px 20px -10px rgba(0, 0, 0, 0.5);
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
   cursor: pointer;
   transform: translate(-50%, -50%);
 }
@@ -145,3 +145,5 @@
 
 
 .depth-carousel__card > article { border-radius: inherit; }
+
+.depth-carousel__counter { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 3000; padding: 7px 13px; border-radius: 999px; background: rgba(14, 16, 22, .78); color: #fff; font-size: 12px; font-weight: 600; pointer-events: none; }

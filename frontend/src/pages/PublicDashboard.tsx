@@ -76,6 +76,21 @@ const dashboardSections = [
 export default function PublicDashboard() {
   const mainRef = useRef<HTMLElement>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
+  const playersSectionRef = useRef<HTMLDivElement>(null);
+  const [playersVisible, setPlayersVisible] = useState(false);
+  useEffect(() => {
+    const element = playersSectionRef.current;
+    if (!element || playersVisible) return;
+    if (typeof IntersectionObserver === "undefined") { setPlayersVisible(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setPlayersVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "500px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [playersVisible]);
   const [teamId, setTeamId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
@@ -101,6 +116,8 @@ export default function PublicDashboard() {
   const playersQuery = useQuery({
     queryKey: ["public-dashboard", "players", filters],
     queryFn: () => getPublicPlayers(filters),
+    enabled: playersVisible,
+    staleTime: 60_000,
   });
   const fixturesQuery = useQuery({
     queryKey: ["public-dashboard", "competition-fixtures", filters],
@@ -332,6 +349,7 @@ export default function PublicDashboard() {
         <div className="public-dashboard-content mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
           
           {/* SECTION 1: Player Showcase */}
+          <div ref={playersSectionRef}>
           <DashboardSection
             id="players"
             title="Squad Showcase"
@@ -381,7 +399,7 @@ export default function PublicDashboard() {
               </div>
             </div>
 
-            {playersQuery.isLoading ? (
+            {(!playersVisible || playersQuery.isLoading) ? (
               <PlayerShowcaseSkeleton />
             ) : (
               <SectionState
@@ -399,6 +417,7 @@ export default function PublicDashboard() {
             )}
           </DashboardSection>
 
+          </div>
           {/* SECTION 2: Match Center (Split Status Grid) */}
           <DashboardSection
             id="matches"
@@ -561,13 +580,13 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
   const items = useMemo(() => players.map((player) => ({
     id: player.id,
     alt: player.firstName + ' ' + player.lastName,
-    content: <PublicDashboardPlayerCard player={player} />,
   })), [players]);
 
   return (
     <div className="public-player-showcase relative mt-4 min-w-0">
       <DepthCarousel
         items={items}
+        renderContent={(_item, index) => <PublicDashboardPlayerCard player={players[index]} />}
         className="public-player-carousel"
         cardWidth={300}
         cardHeight={400}
@@ -579,7 +598,7 @@ function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
         perspective={1650}
         visibleCards={5}
         falloff={0.14}
-        blur={4}
+        blur={0}
         autoplay
         loop
         radius={22}
