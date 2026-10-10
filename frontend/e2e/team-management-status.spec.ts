@@ -115,6 +115,40 @@ test('team management reflects athlete status badges and roster edits', async ({
       await expect(page.getByText('Suspended: 1')).toBeVisible();
     });
 
+    await test.step('squad controls align on desktop and retain tablet stacking', async () => {
+      const selector = page.getByRole('combobox', { name: 'Select game plan' })
+        .locator('xpath=ancestor::div[contains(@class,"bg-card")][1]');
+      const status = page.getByText(/^On Pitch:/).locator('..');
+      const warning = page.getByText(/Need at least 11 players/).locator('..');
+      const pitch = page.getByRole('group', { name: 'Pitch positions' });
+
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const [desktopSelector, desktopStatus, desktopWarning, desktopPitch] =
+        await Promise.all([
+          selector.boundingBox(), status.boundingBox(),
+          warning.boundingBox(), pitch.boundingBox(),
+        ]);
+      expect(desktopSelector && desktopStatus && desktopWarning && desktopPitch).toBeTruthy();
+      expect(desktopStatus!.x).toBeGreaterThanOrEqual(desktopSelector!.x + desktopSelector!.width - 1);
+      expect(Math.abs(desktopStatus!.y - desktopSelector!.y)).toBeLessThan(2);
+      expect(desktopWarning!.y).toBeGreaterThan(desktopStatus!.y + desktopStatus!.height);
+      expect(desktopPitch!.y).toBeGreaterThan(desktopWarning!.y + desktopWarning!.height);
+
+      await page.locator('html').evaluate((element) => element.classList.remove('dark'));
+      const lightCard = await status.evaluate((element) => getComputedStyle(element).backgroundColor);
+      await page.locator('html').evaluate((element) => element.classList.add('dark'));
+      const darkCard = await status.evaluate((element) => getComputedStyle(element).backgroundColor);
+      expect(darkCard).not.toBe(lightCard);
+
+      await page.setViewportSize({ width: 1024, height: 900 });
+      const [tabletSelector, tabletStatus] = await Promise.all([
+        selector.boundingBox(), status.boundingBox(),
+      ]);
+      expect(tabletSelector && tabletStatus).toBeTruthy();
+      expect(tabletStatus!.y).toBeGreaterThan(tabletSelector!.y + tabletSelector!.height);
+      await page.setViewportSize({ width: 1280, height: 900 });
+    });
+
     await test.step('auto-fill keeps unavailable players off the pitch', async () => {
       await page.getByRole('switch', { name: /auto-fill/i }).click();
 
