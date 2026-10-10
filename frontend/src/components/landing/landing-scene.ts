@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { yieldSceneTask } from "./scene-scheduler";
+import { advanceSceneProgress } from "./scene-motion";
 import { buildStadium, disposeStadium } from "../dashboard/stadium-architecture";
 
 export interface LandingSceneController {
@@ -1344,7 +1345,7 @@ function buildPitchAndStadium(
   scene.add(stadium.group);
   const skyMat=new THREE.ShaderMaterial({uniforms:{topColor:{value:new THREE.Color(DARK_SKY_TOP)},bottomColor:{value:new THREE.Color(DARK_SKY_BOTTOM)}},vertexShader:`varying vec3 v;void main(){vec4 p=modelMatrix*vec4(position,1.);v=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,fragmentShader:`uniform vec3 topColor;uniform vec3 bottomColor;varying vec3 v;void main(){float h=clamp(normalize(v+vec3(0.,28.,0.)).y,0.,1.);float t=smoothstep(0.0,1.0,pow(h,.86));gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}`,side:THREE.BackSide,fog:false,depthWrite:false});scene.add(new THREE.Mesh(new THREE.SphereGeometry(138,lowPower?32:64,lowPower?18:32),skyMat));
   const stadiumFill=new THREE.HemisphereLight(0xaecbc4,0x17201b,.58);scene.add(stadiumFill);const sun=new THREE.DirectionalLight(0xd8e8df,1.08);sun.position.set(-18,56,24);sun.castShadow=!lowPower;sun.shadow.mapSize.set(lowPower?512:1024,lowPower?512:1024);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.far=150;scene.add(sun,sun.target);
-  const daylightSun=new THREE.DirectionalLight(0xfff1d6,.85);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=false;daylightSun.shadow.mapSize.set(512,512);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;daylightSun.visible=false;scene.add(daylightSun,daylightSun.target);
+  const daylightSun=new THREE.DirectionalLight(0xfff1d6,0);daylightSun.name="Landing daylight sun";daylightSun.position.set(38,68,-42);daylightSun.castShadow=false;daylightSun.shadow.mapSize.set(512,512);daylightSun.shadow.camera.left=-70;daylightSun.shadow.camera.right=70;daylightSun.shadow.camera.top=75;daylightSun.shadow.camera.bottom=-75;daylightSun.shadow.camera.far=180;scene.add(daylightSun,daylightSun.target);
   const roomLight=new THREE.PointLight(0xffdfaa,.34,22,2);roomLight.position.set(-70,3.45,0);
   const lockerLightLeft=new THREE.PointLight(0xffc978,.38,10,2);lockerLightLeft.position.set(-70.8,2.7,-5.7);
   const lockerLightRight=new THREE.PointLight(0xffc978,.38,10,2);lockerLightRight.position.set(-70.8,2.7,5.7);
@@ -1366,7 +1367,7 @@ function buildPitchAndStadium(
   const stadiumFloodlights=roofCorners.map(([x,z])=>{
     const light=new THREE.SpotLight(0xe3edff,0,190,.85,.7,1);
     light.position.set(z,45.35,-x);light.target.position.set(z*.2,0,-x*.3);
-    light.castShadow=false;light.visible=false;scene.add(light,light.target);return light;
+    light.castShadow=false;scene.add(light,light.target);return light;
   });
   scene.add(roomLight,lockerLightLeft,lockerLightRight,roomAccentLeft,roomAccentRight,portalLight,exitLight,tunnelFill,tunnelAccentLeft,tunnelAccentRight,pitchFillLeft,pitchFillLeft.target,pitchFillRight,pitchFillRight.target,pitchRimLeft,pitchRimRight);
 
@@ -1388,6 +1389,9 @@ export async function createLandingScene({ container, onReadyChange, signal }: S
     powerPreference: lowPower ? "low-power" : "high-performance",
   });
   const gl = renderer.getContext();
+  // Production diagnostics synchronously query shader/link logs on the driver.
+  // Keep those checks in development without adding them to deployed startup.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV;
   renderer.localClippingEnabled = true;
   const rendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
   const rendererName = String(
@@ -1418,7 +1422,7 @@ export async function createLandingScene({ container, onReadyChange, signal }: S
   const { floorTexture, roomSurfaceDetail, crestMap, numberMaps, ballTexture, shirtFabricMap, tunnelAssets } = roomAssets;
   await yieldTask();
   const { stadium, skyMat, daylightSun, lighting } = buildPitchAndStadium(scene, renderer, lowPower);
-  const applyEnvironmentTheme=()=>{const lightMode=!document.documentElement.classList.contains("dark");const background=lightMode?LIGHT_BACKGROUND:DARK_BACKGROUND;sceneBackground.setHex(background);renderer.setClearColor(background);skyMat.uniforms.topColor.value.setHex(lightMode?LIGHT_SKY_TOP:DARK_SKY_TOP);skyMat.uniforms.bottomColor.value.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);if(scene.fog instanceof THREE.Fog)scene.fog.color.setHex(lightMode?0x9eb8b0:0x0b1512);daylightSun.visible=lightMode;stadium.setNight(lightMode ? 0 : 1);};
+  const applyEnvironmentTheme=()=>{const lightMode=!document.documentElement.classList.contains("dark");const background=lightMode?LIGHT_BACKGROUND:DARK_BACKGROUND;sceneBackground.setHex(background);renderer.setClearColor(background);skyMat.uniforms.topColor.value.setHex(lightMode?LIGHT_SKY_TOP:DARK_SKY_TOP);skyMat.uniforms.bottomColor.value.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);if(scene.fog instanceof THREE.Fog)scene.fog.color.setHex(lightMode?0x9eb8b0:0x0b1512);daylightSun.intensity=lightMode?.85:0;stadium.setNight(lightMode ? 0 : 1);};
   const updateLighting=(progress:number)=>{
     const tunnelArrival=smooth(.24,.5,progress),stadiumReveal=smooth(.43,.62,progress);
     const lightMode=!document.documentElement.classList.contains("dark");
@@ -1433,8 +1437,8 @@ export async function createLandingScene({ container, onReadyChange, signal }: S
     lighting.pitchRimLeft.intensity=(lowPower?.05:.11)*(1-stadiumReveal)*themeBoost; lighting.pitchRimRight.intensity=(lowPower?.05:.11)*(1-stadiumReveal)*themeBoost;
     lighting.stadiumFill.intensity=THREE.MathUtils.lerp(.58,lightMode?1.05:lowPower?.78:.65,stadiumReveal);
     lighting.sun.intensity=THREE.MathUtils.lerp(1.08,lightMode?0:.3,stadiumReveal);
-    daylightSun.intensity=THREE.MathUtils.lerp(.85,1.8,stadiumReveal);
-    for(const light of lighting.stadiumFloodlights){light.intensity=(lightMode?.08:1.03)*stadiumReveal;light.visible=stadiumReveal>0;}
+    daylightSun.intensity=lightMode?THREE.MathUtils.lerp(.85,1.8,stadiumReveal):0;
+    for(const light of lighting.stadiumFloodlights){light.intensity=(lightMode?.08:1.03)*stadiumReveal;}
     // Keep exposure controlled so white UI/lines stay crisp and the pitch does not wash out.
     renderer.toneMappingExposure=(lightMode?.99:.91)+stadiumReveal*(lightMode?.09:.07);
     if(scene.fog instanceof THREE.Fog){scene.fog.color.setHex(lightMode?LIGHT_SKY_BOTTOM:DARK_SKY_BOTTOM);scene.fog.near=lightMode?120:100;scene.fog.far=300;}
@@ -1451,6 +1455,8 @@ export async function createLandingScene({ container, onReadyChange, signal }: S
       object.matrixAutoUpdate = false;
     }
   });
+  // Keep light visibility constant: zero intensity preserves shader light counts
+  // across scroll/theme changes, avoiding compilation during the reveal.
   // Compile one material/geometry variant per task. A single compile(scene)
   // would still synchronously compile every program in the same long task.
   const compileScene = new THREE.Scene();
@@ -1504,8 +1510,18 @@ export async function createLandingScene({ container, onReadyChange, signal }: S
     const yaw=reducedMotion?0:rightSweep*1.12-leftSweep*2.18;
     direction.set(Math.cos(yaw),smooth(.58,.78,progress)*.06,Math.sin(yaw));target.copy(position).addScaledVector(direction,18);camera.lookAt(target);updateLighting(progress);updateEnvironmentalMotion(progress);};
   const render=()=>{if(disposed)return;renderer.render(scene,camera);if(!readySent){readySent=true;onReadyChange(true);}};
-  const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;};
-  const animate=()=>{frame=0;if(disposed||paused||!active)return;const difference=targetProgress-currentProgress;if(Math.abs(difference)<.00008){currentProgress=targetProgress;updateCamera(currentProgress);render();return;}currentProgress+=difference*(reducedMotion?1:lowPower?.12:.095);if(Math.abs(targetProgress-currentProgress)<.00008)currentProgress=targetProgress;updateCamera(currentProgress);render();if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);};
+  let lastFrameTime: number | null = null;
+  const stop=()=>{if(frame)cancelAnimationFrame(frame);frame=0;lastFrameTime=null;};
+  const animate=(timestamp:number)=>{
+    frame=0;
+    if(disposed||paused||!active)return;
+    const elapsed=lastFrameTime===null?1000/60:timestamp-lastFrameTime;
+    lastFrameTime=timestamp;
+    currentProgress=reducedMotion?targetProgress:advanceSceneProgress(currentProgress,targetProgress,elapsed,lowPower);
+    updateCamera(currentProgress);render();
+    if(currentProgress!==targetProgress)frame=requestAnimationFrame(animate);
+    else lastFrameTime=null;
+  };
   function start(){if(!frame&&!disposed&&active&&!paused)frame=requestAnimationFrame(animate);}
   // Keep the synchronous shirts until both assets and every replacement are ready.
   let loadedShirt: THREE.Object3D | null = null;
