@@ -259,7 +259,16 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  async forgotPassword(@Body() body: unknown) {
+  async forgotPassword(@Body() body: unknown, @Req() req: Request) {
+    // A forgotten-password request spends a reset email per attempt, so it
+    // draws from the email policy alongside sign-up and the verification
+    // resend. Enforcing before validation or any account lookup keeps a 429
+    // from hinting whether the address exists.
+    await this.rateLimiter.enforce(
+      'email',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(requestPasswordResetSchema, body);
 
     try {
@@ -291,7 +300,15 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  async resetPassword(@Body() body: unknown) {
+  async resetPassword(@Body() body: unknown, @Req() req: Request) {
+    // Consuming a reset token is a credential operation — a guessed token is
+    // account takeover — so it draws from the password policy like sign-in.
+    // The limiter runs before Better Auth sees the attempt at all.
+    await this.rateLimiter.enforce(
+      'password',
+      resolveRateLimitIdentity(req.headers, req.socket.remoteAddress),
+    );
+
     const dto = zodValidate(resetPasswordSchema, body);
 
     try {
