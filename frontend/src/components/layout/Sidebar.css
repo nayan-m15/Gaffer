@@ -95,6 +95,20 @@
       inset 0 1px 0 rgb(255 255 255 / 6%);
   }
 
+  /* The bright dark-theme brand is not exposed in light mode; reuse chart-2. */
+  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
+    --nav-light-glow: var(--chart-2);
+    border-color: color-mix(in srgb, var(--primary) 65%, transparent);
+    background: linear-gradient(to right,
+      color-mix(in srgb, var(--nav-light-glow) 18%, transparent),
+      color-mix(in srgb, var(--nav-light-glow) 6%, transparent));
+    box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--nav-light-glow) 45%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--nav-light-glow) 35%, transparent),
+      0 0 22px color-mix(in srgb, var(--nav-light-glow) 22%, transparent),
+      inset 0 0 12px color-mix(in srgb, var(--nav-light-glow) 18%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 70%);
+  }
+
   .gaffer-desktop-sidebar .desktop-sidebar-link--active {
     font-weight: 600;
   }
@@ -105,6 +119,14 @@
 
   .gaffer-desktop-sidebar .desktop-sidebar-profile-footer {
     border-top-color: var(--sidebar-border);
+  }
+
+  /* The nav ends at the profile separator, so artwork cannot enter the footer. */
+  .gaffer-desktop-sidebar .desktop-sidebar-pitch-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: -1;
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-pitch {

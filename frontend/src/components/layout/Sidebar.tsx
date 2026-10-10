@@ -121,6 +121,15 @@ function DesktopNavigation({ items, hasTeam, expanded, pathname, onNavigate }: S
 
   return (
       <nav ref={navRef} className={cn("desktop-sidebar-nav relative isolate z-10 flex-1 py-5", !expanded && "desktop-sidebar-nav--collapsed")} aria-label="Main navigation">
+        {expanded && <div className="desktop-sidebar-pitch-layer pointer-events-none" aria-hidden="true">
+          <svg className="desktop-sidebar-pitch absolute"
+            viewBox="0 0 360 260" fill="none" stroke="currentColor" strokeWidth="1"
+            aria-hidden="true" focusable="false">
+            <path d="M-55 265L88 48L260 48L415 265M88 48L260 48M20 150L337 150M111 48L77 95L290 95L253 48M137 48L123 68L269 68L255 48" />
+            <ellipse cx="178" cy="150" rx="52" ry="25" />
+            <circle cx="178" cy="150" r="1.5" fill="currentColor" stroke="none" />
+          </svg>
+        </div>}
         {/* One persistent element: routing never transfers it between links. */}
         <motion.div initial={false}
           animate={{ y: pill?.y ?? 0, height: pill?.height ?? 44, opacity: activeIndex >= 0 && pill ? 1 : 0 }}
@@ -421,13 +430,6 @@ export function Sidebar({ className, variant }: SidebarProps) {
             <path d="M-50 180L322 105M-50 390L322 315M-50 600L322 525"
               fill="none" stroke="currentColor" strokeWidth="1" />
           </svg>
-          {expanded && <svg className="desktop-sidebar-pitch absolute"
-            viewBox="0 0 360 260" fill="none" stroke="currentColor" strokeWidth="1"
-            aria-hidden="true" focusable="false">
-            <path d="M-55 265L88 48L260 48L415 265M88 48L260 48M20 150L337 150M111 48L77 95L290 95L253 48M137 48L123 68L269 68L255 48" />
-            <ellipse cx="178" cy="150" rx="52" ry="25" />
-            <circle cx="178" cy="150" r="1.5" fill="currentColor" stroke="none" />
-          </svg>}
         </div>
         <button
           type="button"
