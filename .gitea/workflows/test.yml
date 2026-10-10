@@ -43,7 +43,10 @@ jobs:
   api-tests:
     name: API tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A green run takes 22-26 minutes, nearly all of it integration tests
+    # waiting on Neon round trips. While the UI shards share the runners it
+    # can pass 30, so leave headroom rather than fail a passing suite.
+    timeout-minutes: 45
     env:
       # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
       # each only 250ms to connect; from the runners that abandons every IPv4
