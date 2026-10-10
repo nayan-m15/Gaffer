@@ -1,7 +1,7 @@
 # Dependency Security Policy (SEC-011)
 
 How this repository decides which dependency advisories to fix, which to accept,
-and what evidence to record. Audited 8 October 2026.
+and what evidence to record. Audited 10 October 2026.
 
 ## Projects audited
 
@@ -22,8 +22,8 @@ which runs only on developer machines and CI.
 | Project     | Production before | Production after | Full tree after |
 | ----------- | ----------------- | ---------------- | --------------- |
 | root        | 0                 | 0                | 0               |
-| backend     | 10 (5 high)       | 4 moderate       | 24 moderate     |
-| frontend    | 18 (12 high)      | **0**            | 7 high          |
+| backend     | 10 (5 high)       | **0**            | **0**           |
+| frontend    | 18 (12 high)      | **0**            | **0**           |
 
 No production high-severity advisories remain in any project.
 
@@ -79,58 +79,38 @@ carries a scoped override:
 API `@nestjs/swagger` relies on is unchanged. This matches the existing
 `shell-quote` and `proxy-addr` overrides already in the repo.
 
-## Accepted advisories
+## Follow-up remediation (10 October 2026)
 
-### `esbuild` ≤0.24.2 via `drizzle-kit` — 4 moderate, backend
+The install reports contained 7 high frontend findings and 25 backend findings
+(24 moderate, 1 critical). All four root causes are now resolved:
 
-```
-drizzle-kit@0.31.10 → @esbuild-kit/esm-loader → @esbuild-kit/core-utils → esbuild
-```
+- Removed the shadcn scaffolding CLI from frontend devDependencies. Its glob
+  dependency chain has no patched braces release. The frontend imports
+  shadcn/tailwind.css, so the exact stylesheet from shadcn 4.17.0 and its MIT
+  license are preserved in frontend/src/styles/vendor/ and imported locally.
+  Existing components and components.json remain available. To scaffold a
+  component, run npx shadcn@4.17.0 add <component> in frontend. This temporary
+  CLI still carries the upstream advisory; it is outside normal installs.
+- Required handlebars >=4.7.10 through a backend override to resolve the
+  template JavaScript injection advisories, including critical findings.
+- Scoped esbuild ^0.25.0 to @esbuild-kit/core-utils, removing vulnerable 0.18
+  while retaining the current Drizzle Kit. The loader uses the transform API.
+- Scoped js-yaml ^4.3.2 to @istanbuljs/load-nyc-config. The loader calls load,
+  which remains supported in v4. This removes argparse v1 and sprintf-js from
+  the Jest coverage chain. Other js-yaml consumers retain their own versions.
 
-**Not fixed, deliberately.** Three reasons:
+Lockfiles record these resolutions without the downgrades suggested by
+npm audit fix --force. Retain overrides until upstream packages resolve the
+advisories, and verify coverage and config loading when changing them.
 
-1. **Not reachable.** [GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99)
-   affects esbuild's **development server** (`esbuild serve`), which lets any
-   website send requests to it and read the response. `drizzle-kit` never
-   starts that server; it uses esbuild to transpile `drizzle.config.ts` for
-   the `db:generate` / `db:migrate:kit` CLI commands.
-2. **It is a devDependency.** It appears in `--omit=dev` output only because
-   `better-auth` declares `drizzle-kit` as an *optional peer dependency*,
-   which makes npm walk the edge from a production package. It is not
-   installed or executed by a deployed runtime.
-3. **The "fix" is worse.** `npm audit fix --force` installs `drizzle-kit@0.18.1`
-   — a 13-minor downgrade that would break the migration tooling this project
-   depends on. `@esbuild-kit/*` is deprecated and pins `esbuild ~0.18.20`, so
-   no in-range patch exists.
-
-Revisit when `drizzle-kit` drops `@esbuild-kit/*` in favour of `tsx`.
-
-### `braces` / `micromatch` / `fast-glob` via `shadcn` — 7 high, frontend dev tree
-
-These moved out of production and into the dev tree with `shadcn` itself. The
-only offered fix is `shadcn@1.0.0`, a breaking downgrade of a tool the project
-uses at version 4. The advisory is a stack-exhaustion DoS triggered by deeply
-nested glob patterns, which here means a developer's own
-`components.json` globs on their own machine. No untrusted input reaches it.
-
-If the team would rather carry zero dev advisories, `shadcn` can be dropped
-from `devDependencies` entirely and invoked as `npx shadcn@latest add <component>`,
-which is what the upstream shadcn/ui docs recommend. That is a workflow
-change, so it is left as a team decision rather than made here.
-
-### `sprintf-js` via `ts-jest` — moderate, backend dev tree
-
-```
-ts-jest → @jest/transform → babel-plugin-istanbul → @istanbuljs/load-nyc-config → js-yaml@3 → argparse → sprintf-js
-```
-
-Jest coverage tooling only; never runs outside CI and local test runs. No fix
-exists that does not require the upstream Jest chain to update.
+Offline npm audit can misleadingly report zero findings. Run the registry audit
+with --offline=false; an endpoint failure is not a passing audit.
 
 ## Re-running the audit
 
 ```bash
-npm audit --omit=dev     # run in /, /backend and /frontend separately
+npm audit --offline=false
+npm audit --omit=dev --offline=false  # run in each npm project
 npm ls <package>         # trace which dependency pulls an advisory in
 ```
 
