@@ -4,9 +4,17 @@ import { expect, test, type Page } from "@playwright/test";
 // slower on shared CI runners using SwiftShader than on a developer machine.
 const SCENE_TIMEOUT = process.env.CI ? 90_000 : 30_000;
 
+// SwiftShader keeps compiling and rasterising for several seconds after the
+// scene reports its first frame, and that GPU backlog stalls whatever touches
+// the GPU next: disposal (forceContextLoss waits for it) or the following test
+// in the same browser. Lifecycle tests therefore use the lighter scene;
+// FULL_QUALITY_DEVICE keeps one smoke test on the high-end path.
+const LIGHT_DEVICE = { cores: 4, memory: 4 };
+const FULL_QUALITY_DEVICE = { cores: 8, memory: 8 };
+
 // Exercise the 3D lifecycle on CI's software GPU. Separate tests below verify
 // the actual software-renderer fallback without this test-only capability shim.
-async function enableScene(page: Page, device = { cores: 8, memory: 8 }) {
+async function enableScene(page: Page, device = LIGHT_DEVICE) {
   await page.route('**/assets/scene-capability.worker-*.js', route => route.fulfill({ contentType: 'application/javascript', body: 'self.postMessage(true);' }));
   await page.addInitScript(({ cores, memory }) => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { value: cores });
@@ -30,7 +38,7 @@ async function openLandingPage(page: Page) {
 
 test.describe("landing-page tactical background", () => {
   test('cold startup reaches the first scene frame', async ({ page }) => {
-    await enableScene(page);
+    await enableScene(page, FULL_QUALITY_DEVICE);
     await page.addInitScript(() => {
       const observer = new MutationObserver(() => {
         if (!document.querySelector('.landing-scene[data-ready="true"]')) return;
@@ -95,7 +103,7 @@ test.describe("landing-page tactical background", () => {
   });
 
   test('four-core devices with 4 GB memory use the lighter scene', async ({ page }) => {
-    await enableScene(page, { cores: 4, memory: 4 });
+    await enableScene(page, LIGHT_DEVICE);
     await openLandingPage(page);
     const canvas = page.locator('.landing-scene canvas');
     await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
@@ -141,7 +149,12 @@ test.describe("landing-page tactical background", () => {
   });
 
   test('a reduced-motion change disposes the scene and can restart it', async ({ page }) => {
+    // Startup, a disposal that drains the GPU backlog, then a second startup:
+    // each phase gets its own scene budget. The small viewport keeps that
+    // backlog to the minimum the 3D scene can produce.
+    test.setTimeout(3 * SCENE_TIMEOUT + 30_000);
     await enableScene(page);
+    await page.setViewportSize({ width: 390, height: 844 });
     await openLandingPage(page);
     await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
     await page.emulateMedia({ reducedMotion: 'reduce' });

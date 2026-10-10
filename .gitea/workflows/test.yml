@@ -145,8 +145,11 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
+      # Diagnostics only: the scan step above already fails the job on a red
+      # quality gate, so an artifact-service hiccup must not fail a green one.
       - name: Upload quality gate diagnostics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v3
         with:
           name: sonar-quality-gate
