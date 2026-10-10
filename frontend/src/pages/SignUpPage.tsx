@@ -32,6 +32,7 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const { signUp, signInWithGoogle } = useAuth();
@@ -95,6 +96,7 @@ export default function SignUpPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    setShowPasswordRequirements(true);
     if (!validate()) return;
 
     setIsSubmitting(true);
@@ -268,7 +270,9 @@ export default function SignUpPage() {
                   </button>
                 }
               />
-              <PasswordRequirements password={password} className="pt-1" />
+              {showPasswordRequirements && (
+                <PasswordRequirements password={password} className="pt-1" />
+              )}
               {errors.password && (
                 <p id={passwordErrorId} className="text-xs text-destructive">
                   {errors.password}
