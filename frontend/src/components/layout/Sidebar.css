@@ -1,15 +1,17 @@
 /* These selectors only affect the explicit desktop sidebar at lg and above. */
 @media (min-width: 64rem) {
   .gaffer-desktop-sidebar {
-    --nav-pill-fill: 10%;
+    --nav-pill-fill: 12%;
     --nav-pill-border: 50%;
     --nav-hover-colour: var(--primary);
   }
 
   .dark .gaffer-desktop-sidebar {
-    --nav-pill-fill: 12%;
+    --nav-pill-fill: 16%;
     --nav-pill-border: 40%;
     --nav-hover-colour: var(--foreground);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent),
+      var(--tw-shadow, 0 0 transparent);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-nav {
@@ -54,6 +56,21 @@
   .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
     border: 1px solid color-mix(in srgb, var(--primary) var(--nav-pill-border), transparent);
     background: color-mix(in srgb, var(--primary) var(--nav-pill-fill), transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-active-pill::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 20%;
+    width: 3px;
+    height: 60%;
+    border-radius: 999px;
+    background: var(--primary);
+  }
+
+  .dark .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-link--active {
