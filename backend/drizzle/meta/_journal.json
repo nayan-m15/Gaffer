@@ -492,7 +492,7 @@
       "tag": "0060_match_play_state",
       "breakpoints": true
     },
-    {
+        {
       "idx": 70,
       "version": "7",
       "when": 1791331204001,
@@ -511,6 +511,34 @@
       "version": "7",
       "when": 1791417600000,
       "tag": "0063_competition_schedule_timezone",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791417600001,
+      "tag": "0064_friendly_match_formats",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1791417600002,
+      "tag": "0065_competition_archiving",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791417600003,
+      "tag": "0066_allow_competition_archiving",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1791417600004,
+      "tag": "0067_single_coach_competition_reports",
       "breakpoints": true
     }
   ]

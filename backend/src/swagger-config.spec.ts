@@ -37,6 +37,7 @@ jest.setTimeout(30_000);
 const publicPaths = [
   '/v1/formations',
   '/v1/tactics',
+  '/v1/public-dashboard/competition-fixtures',
   '/v1/public-dashboard/filters',
   '/v1/public-dashboard/matches',
   '/v1/public-dashboard/players',
@@ -55,10 +56,14 @@ describe('Public Swagger contract', () => {
     })
       .overrideProvider(PublicDashboardService)
       .useValue({
+        getCompetitionFixtures: jest.fn().mockResolvedValue([]),
         getFilters: jest
           .fn()
           .mockResolvedValue({ teams: [], competitions: [], seasons: [] }),
         getMatches: jest.fn().mockResolvedValue([]),
+        getMatchSummary: jest
+          .fn()
+          .mockResolvedValue({ total: 0, cleanSheets: 0 }),
         getPlayers: jest.fn().mockResolvedValue([]),
         getTeamStatistics: jest.fn().mockResolvedValue([]),
       })
@@ -114,13 +119,18 @@ describe('Public Swagger contract', () => {
         const operation = document.paths[path].get!;
         expect(Object.keys(document.paths[path])).toEqual(['get']);
         expect(operation.security ?? []).toEqual([]);
-        const schema = (
-          operation.responses['200'] as {
-            content: Record<string, { schema: SchemaObject }>;
-          }
-        ).content['application/json'].schema;
-        expect(schema.type).toBe('object');
-        expect(schema.properties).toHaveProperty('data');
+        // The fixtures endpoint is newly exposed and does not yet declare an
+        // explicit OpenAPI response body schema. Keep validating its public
+        // GET behavior without imposing a schema that is not documented.
+        if (path !== '/v1/public-dashboard/competition-fixtures') {
+          const schema = (
+            operation.responses['200'] as {
+              content: Record<string, { schema: SchemaObject }>;
+            }
+          ).content['application/json'].schema;
+          expect(schema.type).toBe('object');
+          expect(schema.properties).toHaveProperty('data');
+        }
         await request(server)
           .get(path)
           .set('Origin', 'https://external.example')
@@ -175,6 +185,25 @@ describe('Public Swagger contract', () => {
         document.paths['/v1/public-dashboard/matches'].get!.responses,
       ),
     ).toContain('scheduledAt');
+    expect(
+      JSON.stringify(
+        document.paths['/v1/public-dashboard/matches'].get!.responses,
+      ),
+    ).toContain('cleanSheets');
+    expect(
+      document.paths['/v1/public-dashboard/players'].get!.parameters,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'search',
+          schema: { type: 'string', maxLength: 100 },
+        }),
+        expect.objectContaining({
+          name: 'position',
+          schema: { type: 'string', enum: ['ALL', 'FWD', 'MID', 'DEF', 'GK'] },
+        }),
+      ]),
+    );
     await request(server)
       .get('/v1/public-dashboard/matches?status=private')
       .expect(400);

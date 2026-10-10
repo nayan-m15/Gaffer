@@ -10,15 +10,18 @@ import {
   and,
   asc,
   count,
+  desc,
   eq,
   gte,
   ilike,
   inArray,
+  isNotNull,
   ne,
   or,
   sql,
 } from 'drizzle-orm';
 import { calculateCompetitionStandings } from '../common/competition-standings';
+import { competitionAttributedEvents } from './competition-attributed-events';
 import { finaliseTimedOutCompetitionSessions } from './competition-fixture-results';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -31,6 +34,7 @@ import {
   competitionFixtures,
   competitions,
   competitionTeams,
+  hiddenCompetitions,
   events,
   matches,
   standings,
@@ -91,6 +95,8 @@ export interface CompetitionView extends Partial<
   seasonId: string | null;
   isAdmin: boolean;
   createdAt: Date;
+  archivedAt: Date | null;
+  hiddenByMe: boolean;
 }
 
 export interface CompetitionSummaryView extends CompetitionView {
@@ -170,6 +176,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
         participantCount: count(competitionTeams.id),
       })
       .from(competitions)
@@ -196,6 +204,119 @@ export class CompetitionsService {
    * metadata. Competitions the caller created but whose team is not a
    * participant cannot exist: creation always inserts the creator's team.
    */
+  async listFixtureScheduleAlerts(userId: string) {
+    const teamId = await this.findViewerTeamId(userId);
+    if (!teamId) return [];
+
+    const rows = await this.databaseService.database
+      .select({
+        fixtureId: competitionFixtures.id,
+        competitionId: competitions.id,
+        competitionName: competitions.name,
+        ownCompetitionTeamId: competitionTeams.id,
+        homeCompetitionTeamId: competitionFixtures.homeCompetitionTeamId,
+        awayCompetitionTeamId: competitionFixtures.awayCompetitionTeamId,
+        scheduledAt: competitionFixtures.scheduledAt,
+        scheduleRevision: competitionFixtures.scheduleRevision,
+        homeScheduleResponse: competitionFixtures.homeScheduleResponse,
+        awayScheduleResponse: competitionFixtures.awayScheduleResponse,
+        scheduleProposedByCompetitionTeamId:
+          competitionFixtures.scheduleProposedByCompetitionTeamId,
+        scheduleProposalNote: competitionFixtures.scheduleProposalNote,
+        scheduleConfirmedAt: competitionFixtures.scheduleConfirmedAt,
+        updatedAt: competitionFixtures.updatedAt,
+      })
+      .from(competitionTeams)
+      .innerJoin(
+        competitionFixtures,
+        and(
+          eq(competitionFixtures.competitionId, competitionTeams.competitionId),
+          or(
+            eq(competitionFixtures.homeCompetitionTeamId, competitionTeams.id),
+            eq(competitionFixtures.awayCompetitionTeamId, competitionTeams.id),
+          ),
+        ),
+      )
+      .innerJoin(
+        competitions,
+        eq(competitions.id, competitionFixtures.competitionId),
+      )
+      .where(
+        and(
+          eq(competitionTeams.teamId, teamId),
+          eq(competitionFixtures.status, 'scheduled'),
+          isNotNull(competitionFixtures.scheduleProposedByCompetitionTeamId),
+        ),
+      )
+      .orderBy(desc(competitionFixtures.updatedAt));
+
+    if (!rows.length) return [];
+
+    const participantIds = Array.from(
+      new Set(
+        rows.flatMap((row) =>
+          [row.homeCompetitionTeamId, row.awayCompetitionTeamId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    );
+    const participantRows = participantIds.length
+      ? await this.databaseService.database
+          .select({
+            id: competitionTeams.id,
+            displayName: sql<string>`coalesce(${teams.name}, ${competitionTeams.displayName})`,
+          })
+          .from(competitionTeams)
+          .leftJoin(teams, eq(teams.id, competitionTeams.teamId))
+          .where(inArray(competitionTeams.id, participantIds))
+      : [];
+    const participantNames = new Map(
+      participantRows.map((row) => [row.id, row.displayName]),
+    );
+    const confirmedCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    return rows
+      .map((row) => {
+        const ownIsHome =
+          row.homeCompetitionTeamId === row.ownCompetitionTeamId;
+        const ownResponse = ownIsHome
+          ? row.homeScheduleResponse
+          : row.awayScheduleResponse;
+        const opponentId = ownIsHome
+          ? row.awayCompetitionTeamId
+          : row.homeCompetitionTeamId;
+        const proposedByOwnTeam =
+          row.scheduleProposedByCompetitionTeamId === row.ownCompetitionTeamId;
+        const state = row.scheduleConfirmedAt
+          ? ('confirmed' as const)
+          : ownResponse === 'pending'
+            ? ('action_required' as const)
+            : ('awaiting_response' as const);
+
+        return {
+          id: `${row.fixtureId}:${row.scheduleRevision}:${state}`,
+          fixtureId: row.fixtureId,
+          competitionId: row.competitionId,
+          competitionName: row.competitionName,
+          opponentName:
+            (opponentId && participantNames.get(opponentId)) ?? 'Opponent',
+          scheduledAt: row.scheduledAt,
+          scheduleRevision: row.scheduleRevision,
+          proposalNote: row.scheduleProposalNote,
+          proposedByOwnTeam,
+          state,
+          confirmedAt: row.scheduleConfirmedAt,
+          updatedAt: row.updatedAt,
+        };
+      })
+      .filter(
+        (alert) =>
+          alert.state !== 'confirmed' ||
+          (alert.confirmedAt?.getTime() ?? 0) >= confirmedCutoff,
+      );
+  }
+
   async listMine(userId: string): Promise<CompetitionSummaryView[]> {
     const teamId = await this.findViewerTeamId(userId);
     if (!teamId) {
@@ -212,6 +333,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
         participantCount: sql<number>`(
           select count(*)::int
           from competition_teams all_participants
@@ -261,6 +384,8 @@ export class CompetitionsService {
         seasonId: competitions.seasonId,
         isAdmin: sql<boolean>`coalesce(${competitions.adminUserId} = ${userId}, false)`,
         createdAt: competitions.createdAt,
+        archivedAt: competitions.archivedAt,
+        hiddenByMe: sql<boolean>`exists (select 1 from hidden_competitions hidden where hidden.competition_id = ${competitions.id} and hidden.user_id = ${userId})`,
       })
       .from(competitions)
       .where(eq(competitions.id, competitionId))
@@ -290,6 +415,73 @@ export class CompetitionsService {
       standings: competitionStandings,
       results,
     };
+  }
+
+  /** Hide is per user; archive is global and administrator-only. */
+  async setHidden(userId: string, competitionId: string, hidden: boolean) {
+    const [exists] = await this.databaseService.database
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.id, competitionId))
+      .limit(1);
+    if (!exists) throw new NotFoundException('Competition not found.');
+    const teamId = await this.findViewerTeamId(userId);
+    const [member] = teamId
+      ? await this.databaseService.database
+          .select({ id: competitionTeams.id })
+          .from(competitionTeams)
+          .where(
+            and(
+              eq(competitionTeams.competitionId, competitionId),
+              eq(competitionTeams.teamId, teamId),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (!member)
+      throw new ForbiddenException(
+        'Only competition participants can hide this competition.',
+      );
+    if (hidden)
+      await this.databaseService.database
+        .insert(hiddenCompetitions)
+        .values({ userId, competitionId })
+        .onConflictDoNothing();
+    else
+      await this.databaseService.database
+        .delete(hiddenCompetitions)
+        .where(
+          and(
+            eq(hiddenCompetitions.userId, userId),
+            eq(hiddenCompetitions.competitionId, competitionId),
+          ),
+        );
+    return { hidden };
+  }
+
+  async setArchived(userId: string, competitionId: string, archived: boolean) {
+    const current = await this.requireAdmin(userId, competitionId, true);
+    if (archived && !current.archivedAt) {
+      const [active] = await this.databaseService.database
+        .select({ id: competitionFixtures.id })
+        .from(competitionFixtures)
+        .where(
+          and(
+            eq(competitionFixtures.competitionId, competitionId),
+            eq(competitionFixtures.status, 'in_progress'),
+          ),
+        )
+        .limit(1);
+      if (active)
+        throw new ConflictException(
+          'Finish or cancel live fixtures before archiving this competition.',
+        );
+    }
+    await this.databaseService.database
+      .update(competitions)
+      .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
+      .where(eq(competitions.id, competitionId));
+    return { archived };
   }
 
   /* ── Competition CRUD ───────────────────────────────────────────────────── */
@@ -358,6 +550,8 @@ export class CompetitionsService {
       seasonId: competition.seasonId,
       isAdmin: true,
       createdAt: competition.createdAt,
+      archivedAt: null,
+      hiddenByMe: false,
       participants: await this.listParticipants(competition.id),
     };
   }
@@ -420,6 +614,8 @@ export class CompetitionsService {
       seasonId: updated.seasonId,
       isAdmin: true,
       createdAt: updated.createdAt,
+      archivedAt: updated.archivedAt,
+      hiddenByMe: false,
     };
   }
 
@@ -660,6 +856,119 @@ export class CompetitionsService {
     await this.databaseService.database
       .delete(competitionMatches)
       .where(eq(competitionMatches.id, resultId));
+  }
+
+  /** Competition-wide leaderboard, sourced exclusively from finalized fixture logs.
+   * Manual score-only results are intentionally excluded: they have no player attribution.
+   */
+  async getPlayerStats(userId: string, competitionId: string) {
+    // Detail has the same authenticated visibility rules as other public competition reads.
+    await this.findOne(userId, competitionId);
+    // Count the canonical persisted event ledger directly. In a bilateral
+    // session, either coach's match may own a canonical event, and only one
+    // match is stored in competition_fixtures.linked_match_id. The fixture's
+    // durable event association includes BOTH finalized match sheets.
+    const metricRows = await this.databaseService.database.execute(sql`
+      ${competitionAttributedEvents}
+      select a.id::text as athlete_id, a.first_name, a.last_name, a.position,
+             ct.team_id::text as team_id, ct.display_name as team_name,
+             count(*) filter (where d.event_type = 'goal')::int as goals,
+             count(*) filter (where d.event_type = 'assist')::int as assists,
+             count(*) filter (where d.event_type = 'goalkeeper_save')::int as saves,
+             count(*) filter (where d.event_type = 'yellow_card')::int as yellow_cards,
+             count(*) filter (where d.event_type = 'red_card')::int as red_cards
+      from deduplicated d
+      join competition_fixtures f on f.id = d.fixture_id
+      join athletes a on a.id = d.athlete_id and a.team_id = d.team_id
+      join competition_teams ct on ct.team_id = a.team_id and ct.competition_id = f.competition_id
+      where f.competition_id = ${competitionId}::uuid
+      group by a.id, a.first_name, a.last_name, a.position, ct.team_id, ct.display_name
+    `);
+    const appearances = await this.databaseService.database.execute(sql`
+      select a.id::text as athlete_id, a.first_name, a.last_name, a.position,
+             ct.team_id::text as team_id, ct.display_name as team_name,
+             count(distinct m.id)::int as appearances
+      from athlete_match_stats ams
+      join athletes a on a.id = ams.athlete_id
+      join matches m on m.id = ams.match_id
+      join events e on e.id = m.event_id and e.team_id = a.team_id
+      join competition_teams ct on ct.team_id = a.team_id and ct.competition_id = ${competitionId}::uuid
+      join competition_fixtures f on f.id = e.competition_fixture_id
+      where e.competition_id = ${competitionId}::uuid
+        and f.competition_id = ${competitionId}::uuid
+        and e.status = 'completed' and f.status = 'completed'
+        and (m.shared_match_id is null or f.shared_session_id = m.shared_match_id)
+        and (ams.started or exists (
+          select 1 from match_events sub where sub.match_id = m.id
+            and sub.team = 'own' and sub.event_type = 'substitution'
+            and sub.detail = ams.athlete_id::text
+            and sub.lifecycle_status not in ('voided','needs_review')
+        ))
+      group by a.id, a.first_name, a.last_name, a.position, ct.team_id, ct.display_name
+    `);
+    const players = new Map<
+      string,
+      {
+        athleteId: string;
+        name: string;
+        position: string | null;
+        teamId: string;
+        teamName: string;
+        goals: number;
+        assists: number;
+        goalContributions: number;
+        saves: number;
+        appearances: number;
+        yellowCards: number;
+        redCards: number;
+      }
+    >();
+    type StatRow = Record<string, unknown>;
+    const ensurePlayer = (row: StatRow) => {
+      const athleteId = String(row.athlete_id);
+      let player = players.get(athleteId);
+      if (!player) {
+        player = {
+          athleteId,
+          name: [
+            typeof row.first_name === 'string' ? row.first_name : '',
+            typeof row.last_name === 'string' ? row.last_name : '',
+          ]
+            .join(' ')
+            .trim(),
+          position: (row.position as string | null) ?? null,
+          teamId: String(row.team_id),
+          teamName: String(row.team_name),
+          goals: 0,
+          assists: 0,
+          goalContributions: 0,
+          saves: 0,
+          appearances: 0,
+          yellowCards: 0,
+          redCards: 0,
+        };
+        players.set(athleteId, player);
+      }
+      return player;
+    };
+    for (const row of metricRows.rows) {
+      const player = ensurePlayer(row);
+      player.goals += Number(row.goals ?? 0);
+      player.assists += Number(row.assists ?? 0);
+      player.saves += Number(row.saves ?? 0);
+      player.yellowCards += Number(row.yellow_cards ?? 0);
+      player.redCards += Number(row.red_cards ?? 0);
+      player.goalContributions = player.goals + player.assists;
+    }
+    for (const row of appearances.rows) {
+      ensurePlayer(row).appearances += Number(row.appearances ?? 0);
+    }
+    return Array.from(players.values()).sort(
+      (a, b) =>
+        b.goals - a.goals ||
+        b.assists - a.assists ||
+        a.name.localeCompare(b.name),
+    );
   }
 
   /* ── Internals ──────────────────────────────────────────────────────────── */
@@ -964,6 +1273,95 @@ export class CompetitionsService {
     if (detail?.code === 'P0001') throw new ConflictException(detail.message);
   }
 
+  /** Sanitized, read-only match centre: never expose private team tactics or notes. */
+  async getFixtureMatchCentre(
+    userId: string,
+    competitionId: string,
+    fixtureId: string,
+  ) {
+    await this.findOne(userId, competitionId);
+    const [fixture] = await this.databaseService.database
+      .select()
+      .from(competitionFixtures)
+      .where(
+        and(
+          eq(competitionFixtures.id, fixtureId),
+          eq(competitionFixtures.competitionId, competitionId),
+        ),
+      )
+      .limit(1);
+    if (!fixture) throw new NotFoundException('Fixture not found.');
+    if (fixture.status !== 'completed')
+      throw new BadRequestException('The match has not finished.');
+    const rows = await this.databaseService.database.execute(sql`
+      with raw as (
+        select me.id, me.match_id, me.event_type::text as type, me.minute,
+          me.team::text as recorded_team, me.detail, me.athlete_id,
+          me.opponent_label, e.team_id as logger_team_id,
+          case when me.team = 'own' then e.team_id
+            when own_ct.id = f.home_competition_team_id then away_ct.team_id
+            when own_ct.id = f.away_competition_team_id then home_ct.team_id
+            else null end as credited_team_id
+        from match_events me
+        join matches m on m.id = me.match_id
+        join events e on e.id = m.event_id
+        join competition_fixtures f on f.id = e.competition_fixture_id
+        join competition_teams own_ct on own_ct.team_id = e.team_id and own_ct.competition_id = f.competition_id
+        join competition_teams home_ct on home_ct.id = f.home_competition_team_id
+        join competition_teams away_ct on away_ct.id = f.away_competition_team_id
+        where f.id = ${fixtureId}::uuid and f.competition_id = ${competitionId}::uuid
+          and f.status = 'completed' and e.status = 'completed'
+          and (m.shared_match_id is null or m.shared_match_id = f.shared_session_id)
+          and me.lifecycle_status not in ('voided','needs_review')
+          and me.event_type in ('goal','assist','yellow_card','red_card','substitution','goalkeeper_save','penalty')
+      ), resolved as (
+        select r.*, coalesce(own_a.id, opponent_a.id) as player_id,
+          case when own_a.id is not null then concat_ws(' ',own_a.first_name,own_a.last_name) when opponent_a.id is not null then concat_ws(' ',opponent_a.first_name,opponent_a.last_name) else r.opponent_label end as player_name
+        from raw r
+        left join athletes own_a on r.recorded_team = 'own' and own_a.id = r.athlete_id and own_a.team_id = r.credited_team_id
+        left join lateral (
+          select a.id,a.first_name,a.last_name from athletes a
+          where r.recorded_team = 'opponent' and a.team_id = r.credited_team_id
+            and r.opponent_label ~ '^#[0-9]+[[:space:]]+'
+            and a.squad_number::text = substring(r.opponent_label from '^#([0-9]+)')
+            and lower(trim(a.first_name || ' ' || a.last_name)) = lower(trim(regexp_replace(r.opponent_label,'^#[0-9]+[[:space:]]+','')))
+          limit 1
+        ) opponent_a on true
+      ), numbered as (
+        select *, row_number() over (
+          partition by credited_team_id, type, minute, coalesce(player_id::text,opponent_label, id::text), recorded_team
+          order by id) as occurrence from resolved
+      )
+      select distinct on (credited_team_id,type,minute,coalesce(player_id::text,opponent_label,id::text),occurrence)
+        id::text as id, type, minute, credited_team_id::text as team_id,
+        player_name, detail, player_id::text as player_id
+      from numbered
+      order by credited_team_id,type,minute,coalesce(player_id::text,opponent_label,id::text),occurrence,
+        case when recorded_team='own' then 0 else 1 end,id
+    `);
+    const events = rows.rows
+      .map((row) => ({
+        id: String(row.id),
+        type: String(row.type),
+        minute: Number(row.minute),
+        teamId: typeof row.team_id === 'string' ? row.team_id : null,
+        playerName:
+          typeof row.player_name === 'string' && row.player_name
+            ? row.player_name
+            : 'Unknown player',
+        // Do not expose raw detail, which can include internal identifiers or private notes.
+        playerId: typeof row.player_id === 'string' ? row.player_id : null,
+      }))
+      .sort((a, b) => a.minute - b.minute || a.id.localeCompare(b.id));
+    return {
+      fixtureId,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+      hasReport: events.length > 0,
+      events,
+    };
+  }
+
   async listFixtures(userId: string, competitionId: string) {
     const [competition] = await this.databaseService.database
       .select({ id: competitions.id })
@@ -1181,6 +1579,13 @@ export class CompetitionsService {
     competitionId: string,
     fixtureId: string,
   ) {
+    const [competition] = await this.databaseService.database
+      .select({ archivedAt: competitions.archivedAt })
+      .from(competitions)
+      .where(eq(competitions.id, competitionId))
+      .limit(1);
+    if (competition?.archivedAt)
+      throw new ConflictException('This competition is archived.');
     const [fixture] = await this.databaseService.database
       .select()
       .from(competitionFixtures)
@@ -1293,7 +1698,11 @@ export class CompetitionsService {
     return target;
   }
 
-  private async requireAdmin(userId: string, competitionId: string) {
+  private async requireAdmin(
+    userId: string,
+    competitionId: string,
+    allowArchived = false,
+  ) {
     const [competition] = await this.databaseService.database
       .select()
       .from(competitions)
@@ -1304,6 +1713,11 @@ export class CompetitionsService {
       throw new NotFoundException('Competition not found.');
     }
 
+    if (competition.archivedAt && !allowArchived) {
+      throw new ConflictException(
+        'This competition is archived. Restore it before making changes.',
+      );
+    }
     return competition;
   }
 

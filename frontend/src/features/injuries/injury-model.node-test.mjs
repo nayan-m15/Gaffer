@@ -158,12 +158,65 @@ const summary = injurySummary(
   "2026-10-20",
 );
 
-assert.equal(summary.openCount, 2);
+// a and b are open records for the SAME athlete, so the summary must count
+// one injured player; the closed record is excluded from the open counts.
+assert.equal(summary.openCount, 1);
 assert.equal(summary.severeOpenCount, 1);
 assert.equal(summary.recurrenceCount, 1);
 assert.equal(summary.daysLostThisSeason, 43);
 // Both open injuries project a return on 2026-10-24, four days out.
 assert.equal(summary.dueBackWithinAWeek, 2);
+
+/* openCount counts distinct injured players, not injury records. */
+
+// One athlete carrying two open injuries counts once.
+assert.equal(
+  injurySummary(
+    [
+      injury({ id: "multi-1", athleteId: "athlete-1" }),
+      injury({ id: "multi-2", athleteId: "athlete-1", bodyRegion: "ankle_left" }),
+    ],
+    "2026-10-20",
+  ).openCount,
+  1,
+);
+
+// Open injuries spread across athletes count once per athlete.
+assert.equal(
+  injurySummary(
+    [
+      injury({ id: "spread-1", athleteId: "athlete-1" }),
+      injury({ id: "spread-2", athleteId: "athlete-2" }),
+      injury({ id: "spread-3", athleteId: "athlete-2", bodyRegion: "knee_left" }),
+    ],
+    "2026-10-20",
+  ).openCount,
+  2,
+);
+
+// An athlete with both open and closed records still counts once, and a
+// closed record on another athlete adds nothing.
+assert.equal(
+  injurySummary(
+    [
+      injury({ id: "mixed-1", athleteId: "athlete-1" }),
+      injury({
+        id: "mixed-2",
+        athleteId: "athlete-1",
+        isOpen: false,
+        actualReturnOn: "2026-09-20",
+      }),
+      injury({
+        id: "mixed-3",
+        athleteId: "athlete-2",
+        isOpen: false,
+        actualReturnOn: "2026-10-01",
+      }),
+    ],
+    "2026-10-20",
+  ).openCount,
+  1,
+);
 
 assert.deepEqual(injurySummary([], "2026-10-20"), {
   openCount: 0,

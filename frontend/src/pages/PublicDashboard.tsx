@@ -7,17 +7,18 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   Award,
   BarChart3,
   CalendarDays,
+  ChevronDown,
   Clock3,
-  Filter as FilterIcon,
   MapPin,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   ShieldCheck,
   Target,
   Trophy,
@@ -25,19 +26,22 @@ import {
 } from "lucide-react";
 import { Footer } from "@/components/landing/Footer";
 import { Navbar } from "@/components/landing/Navbar";
-import { DepthCarousel } from "@/components/ui/DepthCarousel";
+import { PublicDashboardPlayerCard } from "@/components/public-dashboard/PublicDashboardPlayerCard";
+import { type PositionGroup } from "@/components/roster/position";
+import DepthCarousel from "@/components/ui/DepthCarousel";
 import {
   StandingsDisplay,
   type ReadOnlyCompetition,
 } from "@/components/standings/StandingsDisplay";
 import { brand } from "@/data/brand";
-import { PlayerCard } from "@/features/team-management/PlayerCard";
 import {
   getPublicDashboardFilters,
+  getPublicCompetitionFixtures,
   getPublicMatches,
   getPublicPlayers,
   getPublicTeamStatistics,
   type PublicCompetition,
+  type PublicCompetitionFixture,
   type PublicDashboardQuery,
   type PublicMatch,
   type PublicMatchStatus,
@@ -47,29 +51,53 @@ import {
   type PublicTeam,
 } from "@/services/public-dashboard";
 
-const selectClassName =
-  "h-10 w-full min-w-0 rounded-xl border border-input bg-background/85 px-3 text-sm text-foreground shadow-sm outline-none backdrop-blur-sm transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50 dark:bg-background/75";
+const selectClassName = "public-dashboard-filter-select";
 
-type PositionCategory = "ALL" | "FWD" | "MID" | "DEF" | "GK";
+type PositionCategory = "all" | PositionGroup;
+
+const positionFilters: { id: PositionCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "goalkeeper", label: "Goalkeepers" },
+  { id: "defender", label: "Defenders" },
+  { id: "midfielder", label: "Midfielders" },
+  { id: "forward", label: "Forwards" },
+];
 
 const dashboardSections = [
-  { id: "players", label: "Squad Showcase" },
-  { id: "matches", label: "Match Center" },
+  { id: "players", label: "Squad Showcase", icon: Users },
+  { id: "matches", label: "Match Center", icon: CalendarDays },
   {
     id: "team-statistics",
-    label: "League Standings",
+    label: "Leagues & Cups",
+    icon: BarChart3,
   },
 ] as const;
 
 export default function PublicDashboard() {
   const mainRef = useRef<HTMLElement>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
+  const playersSectionRef = useRef<HTMLDivElement>(null);
+  const [playersVisible, setPlayersVisible] = useState(false);
+  useEffect(() => {
+    const element = playersSectionRef.current;
+    if (!element || playersVisible) return;
+    if (typeof IntersectionObserver === "undefined") { setPlayersVisible(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setPlayersVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "500px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [playersVisible]);
   const [teamId, setTeamId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
   const [matchStatus, setMatchStatus] = useState<PublicMatchStatus | "">("");
-  const [positionFilter, setPositionFilter] = useState<PositionCategory>("ALL");
+  const [positionFilter, setPositionFilter] = useState<PositionCategory>("all");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const filtersQuery = useQuery({
     queryKey: ["public-dashboard", "filters"],
@@ -80,16 +108,56 @@ export default function PublicDashboard() {
     seasonId: seasonId || undefined,
     competitionId: competitionId || undefined,
   };
-  const matchesQuery = useQuery({
+  const matchesQuery = useInfiniteQuery({
+    retry: false,
+    refetchInterval: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
     queryKey: ["public-dashboard", "matches", filters, matchStatus],
-    queryFn: () =>
-      getPublicMatches({ ...filters, status: matchStatus || undefined }),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getPublicMatches(
+        { ...filters, status: matchStatus || undefined },
+        pageParam,
+        signal,
+      ),
+    getNextPageParam: (last) =>
+      last.count > 0 && last.offset + last.count < last.summary.total
+        ? last.offset + last.limit
+        : undefined,
   });
-  const playersQuery = useQuery({
-    queryKey: ["public-dashboard", "players", filters],
-    queryFn: () => getPublicPlayers(filters),
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedSearch(playerSearch.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [playerSearch]);
+  const playerFilters = {
+    ...filters,
+    search: debouncedSearch || undefined,
+    position: ({ all: "ALL", goalkeeper: "GK", defender: "DEF", midfielder: "MID", forward: "FWD" } as const)[positionFilter],
+  };
+  const playersQuery = useInfiniteQuery({
+    enabled: playersVisible,
+    retry: false,
+    refetchInterval: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    queryKey: ["public-dashboard", "players", playerFilters],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getPublicPlayers(playerFilters, pageParam, signal),
+    getNextPageParam: (last) =>
+      last.count === last.limit ? last.offset + last.limit : undefined,
+  });
+  const fixturesQuery = useQuery({
+    queryKey: ["public-dashboard", "competition-fixtures", filters],
+    queryFn: () => getPublicCompetitionFixtures(filters),
   });
   const statisticsQuery = useQuery({
+    refetchInterval: 30_000,
     queryKey: ["public-dashboard", "team-statistics", filters],
     queryFn: () => getPublicTeamStatistics(filters),
   });
@@ -124,7 +192,7 @@ export default function PublicDashboard() {
     setSeasonId("");
     setCompetitionId("");
     setMatchStatus("");
-    setPositionFilter("ALL");
+    setPositionFilter("all");
     setPlayerSearch("");
   }
 
@@ -141,7 +209,7 @@ export default function PublicDashboard() {
 
   // Separate matches into upcoming and completed
   const { upcomingMatches, completedMatches } = useMemo(() => {
-    const all = matchesQuery.data ?? [];
+    const all = matchesQuery.data?.pages.flatMap((page) => page.data) ?? [];
     const upcoming: PublicMatch[] = [];
     const completed: PublicMatch[] = [];
     for (const match of all) {
@@ -154,53 +222,10 @@ export default function PublicDashboard() {
     return { upcomingMatches: upcoming, completedMatches: completed };
   }, [matchesQuery.data]);
 
-  // Apply the position filter first, then search the already loaded players.
-  const filteredPlayers = useMemo(() => {
-    const players = playersQuery.data ?? [];
-    const positionFiltered =
-      positionFilter === "ALL"
-        ? players
-        : players.filter((player) => {
-            const pos = (player.position ?? "").toUpperCase();
-            if (positionFilter === "FWD")
-              return (
-                pos.includes("FW") ||
-                pos.includes("ST") ||
-                pos.includes("ATT") ||
-                pos.includes("FORWARD")
-              );
-            if (positionFilter === "MID")
-              return (
-                pos.includes("MID") ||
-                pos.includes("CAM") ||
-                pos.includes("CDM") ||
-                pos.includes("CM")
-              );
-            if (positionFilter === "DEF")
-              return (
-                pos.includes("DEF") ||
-                pos.includes("CB") ||
-                pos.includes("LB") ||
-                pos.includes("RB")
-              );
-            if (positionFilter === "GK")
-              return (
-                pos.includes("GK") ||
-                pos.includes("KEEP") ||
-                pos.includes("GOAL")
-              );
-            return true;
-          });
-    const normalizedSearch = playerSearch.trim().toLocaleLowerCase();
-
-    if (!normalizedSearch) return positionFiltered;
-
-    return positionFiltered.filter((player) =>
-      `${player.firstName} ${player.lastName}`
-        .toLocaleLowerCase()
-        .includes(normalizedSearch),
-    );
-  }, [playerSearch, playersQuery.data, positionFilter]);
+  const filteredPlayers = useMemo(
+    () => playersQuery.data?.pages.flatMap((page) => page.data) ?? [],
+    [playersQuery.data],
+  );
 
   // Calculate team telemetry metrics from standings data
   const teamMetrics = useMemo(() => {
@@ -220,13 +245,14 @@ export default function PublicDashboard() {
       totalPoints += s.points;
     }
 
-    const winRateVal = totalPlayed > 0 ? Math.round((totalWon / totalPlayed) * 100) : 0;
-    const ppmVal = totalPlayed > 0 ? (totalPoints / totalPlayed).toFixed(2) : "0.00";
+    const winRateVal =
+      totalPlayed > 0 ? Math.round((totalWon / totalPlayed) * 100) : 0;
+    const ppmVal =
+      totalPlayed > 0 ? (totalPoints / totalPlayed).toFixed(2) : "0.00";
 
     // Estimate clean sheets from completed matches where opponent scored 0
-    const cleanSheetsCount = (matchesQuery.data ?? []).filter(
-      (m) => m.status === "completed" && m.opponentScore === 0,
-    ).length;
+    const cleanSheetsCount =
+      matchesQuery.data?.pages[0]?.summary.cleanSheets ?? 0;
 
     return {
       winRate: `${winRateVal}%`,
@@ -245,7 +271,10 @@ export default function PublicDashboard() {
       // The sticky bar starts below the 4rem site navbar. Keep an extra 1rem
       // breathing room between it and a section heading after navigation.
       const offset = Math.ceil(filterBar.getBoundingClientRect().height + 80);
-      main.style.setProperty("--public-dashboard-section-offset", `${offset}px`);
+      main.style.setProperty(
+        "--public-dashboard-section-offset",
+        `${offset}px`,
+      );
     };
     const observer = new ResizeObserver(updateSectionOffset);
 
@@ -267,7 +296,7 @@ export default function PublicDashboard() {
         }
       >
         {/* ─── Modern Hero Header ─────────────────────────────────────────── */}
-        <section className="relative overflow-hidden py-12 sm:py-16 lg:py-20">
+        <section className="public-dashboard-hero relative overflow-hidden pb-4 pt-12 sm:pb-6 sm:pt-16 lg:pt-20">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--card)_82%,transparent)_0%,color-mix(in_srgb,var(--card)_45%,transparent)_38%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_top_left,color-mix(in_srgb,var(--background)_88%,transparent)_0%,color-mix(in_srgb,var(--background)_52%,transparent)_40%,transparent_74%)]"
             aria-hidden="true"
@@ -279,44 +308,36 @@ export default function PublicDashboard() {
                   Gaffer Match Center
                 </h1>
                 <p className="mt-3 text-base font-medium leading-relaxed text-foreground/75 drop-shadow-sm sm:text-lg dark:text-foreground/80">
-                  Follow live match fixtures, player roster statistics, and league standings across all {brand.name} teams.
+                  Follow live match fixtures, player roster statistics, leagues and cups across all {brand.name} teams.
                 </p>
               </div>
-
             </div>
-
           </div>
         </section>
 
         {/* ─── Floating Sticky Filter Bar ───────────────────────────────── */}
         <div
           ref={filterBarRef}
-          className="sticky top-16 z-40 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
+          className="sticky top-16 z-40 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
         >
-          <div className="rounded-2xl border border-border/80 bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:p-4 dark:bg-card/70">
-              <div className="mb-3 flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  <FilterIcon className="size-4 text-brand" />
-                  <span>Filter Portal Data</span>
-                  {activeFilterCount > 0 && (
-                    <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-extrabold text-brand-foreground">
-                      {activeFilterCount} Active
-                    </span>
-                  )}
-                </div>
+          <div className="public-dashboard-toolbar">
+            <PublicDashboardSectionNav sections={dashboardSections} />
 
-                {activeFilterCount > 0 && (
-                  <button
-                    onClick={resetFilters}
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-xs font-semibold text-brand transition-colors hover:text-brand-dark"
-                    aria-label="Reset filters"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    <span className="hidden sm:inline">Reset Filters</span>
-                  </button>
-                )}
-              </div>
+            <button
+              type="button"
+              className="public-dashboard-filter-toggle"
+              aria-expanded={mobileFiltersOpen}
+              aria-controls="public-dashboard-filters"
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="public-dashboard-filter-count">{activeFilterCount}</span>
+              )}
+            </button>
 
+            <div id="public-dashboard-filters" className="public-dashboard-filter-panel" data-mobile-open={mobileFiltersOpen} role="group" aria-label="Filter portal data">
               <DashboardFilters
                 teams={filtersQuery.data?.teams ?? []}
                 seasons={availableSeasons}
@@ -331,19 +352,31 @@ export default function PublicDashboard() {
                 onCompetitionChange={setCompetitionId}
                 onStatusChange={setMatchStatus}
               />
-
-              <PublicDashboardSectionNav sections={dashboardSections} />
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="public-dashboard-filter-reset"
+                  aria-label="Reset filters"
+                  title="Reset filters"
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  <span className="sr-only" role="status">{activeFilterCount} active filters</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* ─── Main Content Layout ────────────────────────────────────────── */}
-        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
-          
-          {/* SECTION 1: Player Showcase Carousel */}
+        <div className="public-dashboard-content mx-auto flex max-w-7xl flex-col gap-12 px-4 pt-10 sm:gap-14 sm:px-6 sm:pt-12 lg:gap-16 lg:px-8">
+
+          {/* SECTION 1: Player Showcase */}
+          <div ref={playersSectionRef}>
           <DashboardSection
             id="players"
             title="Squad Showcase"
-            description="Active players across teams, featuring career telemetry and match statistics."
+            description="Player performance from completed matches across the selected teams and competitions."
             icon={<Users className="size-5" />}
           >
             <div className="mt-4 flex flex-col gap-4 border-b border-border/60 pb-4 lg:flex-row lg:items-end lg:justify-between">
@@ -358,6 +391,7 @@ export default function PublicDashboard() {
                 <input
                   id="player-search"
                   type="search"
+                  maxLength={100}
                   value={playerSearch}
                   onChange={(event) => setPlayerSearch(event.target.value)}
                   placeholder="Search players..."
@@ -366,42 +400,53 @@ export default function PublicDashboard() {
               </div>
 
               {/* Position Filter Chips */}
-              <div className="flex flex-wrap items-center gap-1.5 lg:justify-center">
-                <span className="mr-2 text-xs font-semibold text-muted-foreground">Position:</span>
-                {(["ALL", "FWD", "MID", "DEF", "GK"] as const).map((cat) => (
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 lg:justify-center" role="group" aria-label="Filter players by position">
+                {positionFilters.map(({ id, label }) => (
                   <button
-                    key={cat}
-                    onClick={() => setPositionFilter(cat)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                      positionFilter === cat
+                    key={id}
+                    type="button"
+                    onClick={() => setPositionFilter(id)}
+                    aria-pressed={positionFilter === id}
+                    className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      positionFilter === id
                         ? "bg-brand text-brand-foreground shadow-sm"
                         : "bg-muted/70 text-muted-foreground hover:bg-accent hover:text-foreground"
                     }`}
                   >
-                    {cat === "ALL" ? "All Positions" : cat}
+                    {label}
                   </button>
                 ))}
               </div>
 
               <div className="shrink-0 text-xs font-medium text-muted-foreground">
-                Showing <strong className="text-foreground">{filteredPlayers.length}</strong> players
+                Showing{" "}
+                <strong className="text-foreground">
+                  {filteredPlayers.length}
+                </strong>{" "}
+                players
               </div>
             </div>
 
-            <SectionState
-              loading={playersQuery.isLoading}
-              error={playersQuery.isError}
-              empty={filteredPlayers.length === 0}
-              emptyMessage={
-                playerSearch.trim()
-                  ? `No players found matching “${playerSearch.trim()}”.`
-                  : "No players found matching the selected filters."
-              }
-            >
-              <PlayerCarousel players={filteredPlayers} />
-            </SectionState>
+            {(!playersVisible || playersQuery.isLoading) ? (
+              <PlayerShowcaseSkeleton />
+            ) : (
+              <SectionState
+                loading={false}
+                error={playersQuery.isError && !playersQuery.data}
+                empty={filteredPlayers.length === 0}
+                emptyMessage={
+                  playerSearch.trim()
+                    ? `No players found matching “${playerSearch.trim()}”.`
+                    : "No players found matching the selected filters."
+                }
+              >
+                <PlayerShowcase key={[teamId, seasonId, competitionId, positionFilter, playerSearch].join("|")} players={filteredPlayers} />
+                 <PageMore query={playersQuery} label="players" />
+              </SectionState>
+            )}
           </DashboardSection>
 
+          </div>
           {/* SECTION 2: Match Center (Split Status Grid) */}
           <DashboardSection
             id="matches"
@@ -411,8 +456,8 @@ export default function PublicDashboard() {
           >
             <SectionState
               loading={matchesQuery.isLoading}
-              error={matchesQuery.isError}
-              empty={(matchesQuery.data?.length ?? 0) === 0}
+              error={matchesQuery.isError && !matchesQuery.data}
+              empty={(matchesQuery.data?.pages[0]?.count ?? 0) === 0}
               emptyMessage="No match events found for these filters."
             >
               <div className="grid gap-8 lg:grid-cols-2">
@@ -469,13 +514,24 @@ export default function PublicDashboard() {
                 </div>
               </div>
             </SectionState>
+            {matchesQuery.data && (
+              <p className="mt-4 text-center text-sm text-muted-foreground">
+                Showing{" "}
+                {matchesQuery.data.pages.reduce(
+                  (count, page) => count + page.count,
+                  0,
+                )}{" "}
+                of {matchesQuery.data.pages[0].summary.total} matches
+              </p>
+            )}
+            <PageMore query={matchesQuery} label="matches" />
           </DashboardSection>
 
           {/* SECTION 3: League Standings & Performance Analytics */}
           <DashboardSection
             id="team-statistics"
-            title="League Standings & Performance Telemetry"
-            description="Official competition rankings alongside high-level season metrics."
+            title="Leagues, Cups & Performance"
+            description="Live league tables and cup fixtures alongside season performance."
             icon={<Trophy className="size-5" />}
           >
             {statisticsQuery.isError ? (
@@ -488,8 +544,16 @@ export default function PublicDashboard() {
                     <h3 className="text-base font-bold sm:text-lg">
                       Competition Table
                     </h3>
-                    <span className="text-xs text-muted-foreground">Live Season Rankings</span>
+                    <span className="text-xs text-muted-foreground">
+                      Live Season Rankings
+                    </span>
                   </div>
+                  {fixturesQuery.isError && <p className="mb-3 text-sm text-destructive">Competition fixtures could not be loaded.</p>}
+                  <PublicCompetitionFixtures
+                    fixtures={fixturesQuery.data ?? []}
+                    competitions={availableCompetitions}
+                    loading={fixturesQuery.isLoading}
+                  />
                   <StandingsDisplay
                     competitions={toStandingsCompetitions(
                       statisticsQuery.data ?? [],
@@ -524,7 +588,10 @@ export default function PublicDashboard() {
                       <MetricCard
                         icon={<ShieldCheck className="size-4 text-brand" />}
                         label="Clean Sheets"
-                        value={teamMetrics.cleanSheets}
+                        value={
+                          matchesQuery.data?.pages[0]?.summary.cleanSheets ??
+                          "—"
+                        }
                         subtext="Zero Conceded"
                       />
                       <MetricCard
@@ -537,14 +604,16 @@ export default function PublicDashboard() {
                   </div>
 
                   <div className="rounded-2xl border border-brand/25 bg-card/65 p-3 text-xs leading-relaxed text-muted-foreground shadow-sm backdrop-blur-md sm:p-4 dark:bg-card/55">
-                    <strong className="block font-bold text-brand">Portal Data Notice:</strong>
-                    Statistics update automatically following completed match report validation by team head coaches.
+                    <strong className="block font-bold text-brand">
+                      Portal Data Notice:
+                    </strong>
+                    Statistics update automatically following completed match
+                    report validation by team head coaches.
                   </div>
                 </div>
               </div>
             )}
           </DashboardSection>
-
         </div>
       </main>
 
@@ -553,41 +622,61 @@ export default function PublicDashboard() {
   );
 }
 
-{/* ─── Component: Interactive Player Carousel ───────────────────────────── */}
-function PlayerCarousel({ players }: { players: PublicPlayer[] }) {
+{/* ─── Component: Public player showcase ────────────────────────────────── */}
+function PlayerShowcase({ players }: { players: PublicPlayer[] }) {
+  const items = useMemo(() => players.map((player) => ({
+    id: player.id,
+    alt: player.firstName + ' ' + player.lastName,
+  })), [players]);
+
   return (
-    <div className="mt-4">
+    <div className="public-player-showcase relative mt-4 min-w-0">
       <DepthCarousel
-        items={players.map((player) => ({
-          id: player.id,
-          label: `${player.firstName} ${player.lastName}`,
-          content: (
-            <PlayerCard
-              initials={`${player.firstName[0] ?? ""}${player.lastName[0] ?? ""}`}
-              name={`${player.firstName} ${player.lastName}`}
-              position={player.position ?? "UN"}
-              squadNumber={player.squadNumber}
-              appearances={player.statistics.appearances}
-              minutesPlayed={player.statistics.minutesPlayed}
-              goals={player.statistics.goals}
-              assists={player.statistics.assists}
-              yellowCards={player.statistics.yellowCards}
-              redCards={player.statistics.redCards}
-              variant="sub"
-              readOnly
-              publicView
-            />
-          ),
-        }))}
-        depth={110}
-        spread={115}
-        tilt={22}
-        perspective={1600}
+        items={items}
+        renderContent={(_item, index) => <PublicDashboardPlayerCard player={players[index]} />}
+        className="public-player-carousel"
+        cardWidth={300}
+        cardHeight={400}
+        scaleToFit={false}
+        depth={230}
+        spread={110}
+        tilt={12}
+        tiltDirection="right"
+        perspective={1650}
         visibleCards={5}
-        falloff={0.2}
-        blur={1}
+        falloff={0.14}
+        blur={0}
         autoplay
+        loop
+        radius={22}
+        ariaLabel="Squad showcase player cards"
       />
+    </div>
+  );
+}
+
+function PlayerShowcaseSkeleton() {
+  return (
+    <div
+      className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      role="status"
+      aria-label="Loading players"
+    >
+      {Array.from({ length: 4 }, (_, index) => (
+        <div
+          key={index}
+          aria-hidden="true"
+          className="h-[350px] animate-pulse overflow-hidden rounded-3xl border border-border/80 bg-card"
+        >
+          <div className="h-32 bg-muted/70" />
+          <div className="space-y-4 p-5">
+            <div className="h-3 w-1/3 rounded bg-muted" />
+            <div className="h-6 w-2/3 rounded bg-muted" />
+            <div className="h-28 rounded bg-muted/70" />
+          </div>
+        </div>
+      ))}
+      <span className="sr-only">Loading squad showcase…</span>
     </div>
   );
 }
@@ -607,7 +696,9 @@ function MetricCard({
   return (
     <div className="flex min-w-0 flex-col rounded-xl border border-border/60 bg-card/85 p-3 shadow-sm backdrop-blur-sm transition-all hover:border-brand/30 sm:p-3.5 dark:bg-card/75">
       <div className="mb-1.5 flex items-center justify-between sm:mb-2">
-        <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+        <span className="text-xs font-semibold text-muted-foreground">
+          {label}
+        </span>
         {icon}
       </div>
       <div className="text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-2xl">
@@ -618,7 +709,9 @@ function MetricCard({
   );
 }
 
-{/* ─── Component: Dashboard Filters ─────────────────────────────────────── */}
+{
+  /* ─── Component: Dashboard Filters ─────────────────────────────────────── */
+}
 function DashboardFilters({
   teams,
   seasons,
@@ -647,10 +740,11 @@ function DashboardFilters({
   onStatusChange: (value: PublicMatchStatus | "") => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <FilterField label="Select Team">
+    <div className="public-dashboard-filter-grid">
+      <FilterField label="Select Team" icon={<Users />} active={Boolean(teamId)}>
         <select
           className={selectClassName}
+          aria-label="Select Team"
           value={teamId}
           disabled={loading}
           onChange={(event) => onTeamChange(event.target.value)}
@@ -663,9 +757,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Select Season">
+      <FilterField label="Select Season" icon={<CalendarDays />} active={Boolean(seasonId)}>
         <select
           className={selectClassName}
+          aria-label="Select Season"
           value={seasonId}
           disabled={loading}
           onChange={(event) => onSeasonChange(event.target.value)}
@@ -679,9 +774,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Select Competition">
+      <FilterField label="Select Competition" icon={<Trophy />} active={Boolean(competitionId)}>
         <select
           className={selectClassName}
+          aria-label="Select Competition"
           value={competitionId}
           disabled={loading}
           onChange={(event) => onCompetitionChange(event.target.value)}
@@ -694,9 +790,10 @@ function DashboardFilters({
           ))}
         </select>
       </FilterField>
-      <FilterField label="Match Status">
+      <FilterField label="Match Status" icon={<Clock3 />} active={Boolean(status)}>
         <select
           className={selectClassName}
+          aria-label="Match Status"
           value={status}
           onChange={(event) =>
             onStatusChange(event.target.value as PublicMatchStatus | "")
@@ -712,11 +809,25 @@ function DashboardFilters({
   );
 }
 
-function FilterField({ label, children }: { label: string; children: ReactNode }) {
+function FilterField({
+  label,
+  icon,
+  active,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  active: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-muted-foreground">
-      {label}
-      {children}
+    <label className="public-dashboard-filter-field" data-active={active}>
+      <span className="public-dashboard-filter-icon" aria-hidden="true">{icon}</span>
+      <span className="public-dashboard-filter-content">
+        <span className="public-dashboard-filter-label">{label}</span>
+        {children}
+      </span>
+      <ChevronDown className="public-dashboard-filter-chevron" aria-hidden="true" />
     </label>
   );
 }
@@ -724,7 +835,7 @@ function FilterField({ label, children }: { label: string; children: ReactNode }
 function PublicDashboardSectionNav({
   sections,
 }: {
-  sections: ReadonlyArray<{ id: string; label: string }>;
+  sections: ReadonlyArray<{ id: string; label: string; icon: typeof Users }>;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
@@ -754,10 +865,17 @@ function PublicDashboardSectionNav({
           }
         }
 
+        const mobileLayout = window.matchMedia("(max-width: 767px)").matches;
+        // Mobile's taller filter bar can leave adjacent sections in the observer
+        // band. Use current positions instead of cached entries after a jump.
+        const sectionTop = (entry: IntersectionObserverEntry) =>
+          mobileLayout
+            ? entry.target.getBoundingClientRect().top
+            : entry.boundingClientRect.top;
         const nextSection = [...visibleSections.values()].sort(
           (a, b) =>
-            Math.abs(a.boundingClientRect.top - window.innerHeight * 0.35) -
-            Math.abs(b.boundingClientRect.top - window.innerHeight * 0.35),
+            Math.abs(sectionTop(a) - window.innerHeight * 0.35) -
+            Math.abs(sectionTop(b) - window.innerHeight * 0.35),
         )[0]?.target.id;
 
         if (nextSection) {
@@ -794,7 +912,9 @@ function PublicDashboardSectionNav({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const left =
-      activeItem.offsetLeft - scroller.clientWidth / 2 + activeItem.clientWidth / 2;
+      activeItem.offsetLeft -
+      scroller.clientWidth / 2 +
+      activeItem.clientWidth / 2;
     scroller.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
   }, [activeSection]);
 
@@ -819,52 +939,29 @@ function PublicDashboardSectionNav({
   }
 
   return (
-    <nav
-      className="mt-3 border-t border-border/60 pt-3"
-      aria-label="Public dashboard sections"
-    >
-      <div
-        ref={scrollerRef}
-        className="touch-pan-x overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <ul className="mx-auto flex w-max min-w-full justify-center gap-2">
+    <nav className="public-dashboard-section-nav" aria-label="Public dashboard sections">
+      <div ref={scrollerRef} className="public-dashboard-section-scroller">
+        <ul className="public-dashboard-section-list">
           {sections.map((section) => {
             const isActive = activeSection === section.id;
+            const Icon = section.icon;
 
             return (
-              <li key={section.id} className="shrink-0">
+              <li key={section.id}>
                 <a
                   href={`#${section.id}`}
+                  aria-label={section.label}
+                  title={section.label}
                   data-section-id={section.id}
                   aria-current={isActive ? "location" : undefined}
                   onClick={(event) => {
                     event.preventDefault();
                     navigateToSection(section.id);
                   }}
-                  className={`group relative isolate flex min-h-10 items-center overflow-hidden rounded-full border px-4 text-xs font-bold outline-none transition-[color,background-color,border-color,box-shadow] duration-300 focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none sm:text-sm ${
-                    isActive
-                      ? "border-brand bg-brand text-brand-foreground shadow-md shadow-brand/20"
-                      : "border-border/80 bg-background/65 text-muted-foreground hover:border-brand/60 hover:text-brand-foreground dark:bg-background/50"
-                  }`}
+                  className="public-dashboard-section-link"
                 >
-                  {!isActive && (
-                    <span
-                      className="absolute left-1/2 top-full -z-10 size-3 -translate-x-1/2 rounded-full bg-brand transition-transform duration-500 ease-out group-hover:scale-[24] group-focus-visible:scale-[24] motion-reduce:transition-none"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="relative h-4 overflow-hidden leading-4">
-                    <span className="flex flex-col transition-transform duration-300 ease-out group-hover:-translate-y-1/2 group-focus-visible:-translate-y-1/2 motion-reduce:transform-none motion-reduce:transition-none">
-                      <span>{section.label}</span>
-                      <span aria-hidden="true">{section.label}</span>
-                    </span>
-                  </span>
-                  {isActive && (
-                    <span
-                      className="ml-2 size-1.5 rounded-full bg-brand-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--brand-foreground)_20%,transparent)]"
-                      aria-hidden="true"
-                    />
-                  )}
+                  <Icon aria-hidden="true" />
+                  <span>{section.label}</span>
                 </a>
               </li>
             );
@@ -896,7 +993,7 @@ function DashboardSection({
         scrollMarginTop: "var(--public-dashboard-section-offset, 18rem)",
       }}
     >
-      <div className="mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
+      <div className="public-dashboard-section-heading mx-auto mb-6 flex max-w-3xl flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-card/70 px-4 py-4 text-center shadow-sm backdrop-blur-md dark:bg-card/60">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand shadow-sm">
           {icon}
         </span>
@@ -1108,4 +1205,83 @@ function toStandingsCompetitions(
     });
   }
   return Array.from(grouped.values());
+}
+
+function PublicCompetitionFixtures({ fixtures, competitions, loading }: {
+  fixtures: PublicCompetitionFixture[];
+  competitions: PublicCompetition[];
+  loading: boolean;
+}) {
+  const cupCompetitions = competitions.filter((competition) => competition.type === "cup");
+  if (!cupCompetitions.length) return null;
+  if (loading) return <p className="mb-4 text-sm text-muted-foreground">Loading cup fixtures…</p>;
+  return (
+    <div className="mb-5 space-y-4">
+      <h4 className="text-sm font-bold uppercase tracking-wider">Cup competitions</h4>
+      {cupCompetitions.map((competition) => {
+        const rounds = new Map<string, PublicCompetitionFixture[]>();
+        for (const fixture of fixtures.filter((row) => row.competitionId === competition.id)) {
+          const label = `${fixture.stage === "knockout" ? "Knockout" : "Group"} · Round ${fixture.round}`;
+          rounds.set(label, [...(rounds.get(label) ?? []), fixture]);
+        }
+        return (
+          <div key={competition.id} className="rounded-xl border border-border bg-background p-3 sm:p-4">
+            <div className="mb-3 flex items-center gap-2 font-semibold"><Trophy className="size-4 text-brand" />{competition.name}</div>
+            {!rounds.size && <p className="text-sm text-muted-foreground">Fixtures have not been generated yet.</p>}
+            {[...rounds].map(([round, games]) => (
+              <div key={round} className="mb-3 last:mb-0">
+                <h5 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{round}</h5>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {games.map((game) => (
+                    <div key={game.id} className="rounded-lg border border-border/70 p-3 text-sm">
+                      <div className="flex justify-between gap-2"><span>{game.homeTeamName}</span><strong>{game.homeScore ?? "–"}</strong></div>
+                      <div className="flex justify-between gap-2"><span>{game.awayTeamName}</span><strong>{game.awayScore ?? "–"}</strong></div>
+                      {game.homePenaltyScore !== null && game.awayPenaltyScore !== null &&
+                        <div className="mt-1 text-xs text-muted-foreground">Penalties: {game.homePenaltyScore}–{game.awayPenaltyScore}</div>}
+                      <div className="mt-2 text-xs text-muted-foreground">{game.status.replaceAll("_", " ")} · {new Date(game.scheduledAt).toLocaleDateString()}</div>
+                      {game.winnerTeamName && <div className="mt-1 text-xs font-semibold">Winner: {game.winnerTeamName}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PageMore({
+  query,
+  label,
+}: {
+  query: {
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    isFetchNextPageError: boolean;
+    fetchNextPage: () => unknown;
+  };
+  label: string;
+}) {
+  if (!query.hasNextPage) return null;
+  return (
+    <div className="mt-4 text-center">
+      {query.isFetchNextPageError && (
+        <p role="alert" className="mb-2 text-sm text-destructive">
+          More {label} could not be loaded. Try again.
+        </p>
+      )}
+      <button
+        type="button"
+        disabled={query.isFetchingNextPage}
+        onClick={() => {
+          void query.fetchNextPage();
+        }}
+        className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold disabled:opacity-50"
+      >
+        {query.isFetchingNextPage ? "Loading..." : `Load more ${label}`}
+      </button>
+    </div>
+  );
 }

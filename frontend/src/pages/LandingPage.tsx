@@ -52,15 +52,11 @@ export default function LandingPage() {
 
   return (
     <div className="landing-v2 relative flex min-h-screen flex-col bg-background text-foreground selection:bg-brand selection:text-brand-foreground">
-      {sceneStatus === "fallback" && (
-        <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-          <img
-            src="/hero-stadium-bg.png"
-            alt=""
-            className="absolute inset-0 size-full object-cover object-center"
-          />
-        </div>
-      )}
+      <div
+        aria-hidden="true"
+        data-scene-status={sceneStatus}
+        className="pointer-events-none fixed inset-0 z-0 bg-[#07100d]"
+      />
       <LandingScene onStatusChange={setSceneStatus} />
       <Navbar />
       <ChapterRail />
@@ -307,7 +303,9 @@ function FeatureSection({
               <span /><span /><span /><b>{brand.name} / {eyebrow}</b>
             </div>
             <img
-              src={screenshot.src}
+              src={screenshot.src.replace('.jpg', `-${Math.min(800, screenshot.width)}.webp`)}
+              srcSet={[...new Set([480, 800, 1280, 1920].map(width => Math.min(width, screenshot.width)))].map(width => `${screenshot.src.replace('.jpg', `-${width}.webp`)} ${width}w`).join(', ')}
+              sizes={screenshot.mobile ? '(min-width: 1024px) 320px, 80vw' : '(min-width: 1280px) 640px, (min-width: 1024px) 50vw, calc(100vw - 48px)'}
               alt={screenshot.alt}
               width={screenshot.width}
               height={screenshot.height}

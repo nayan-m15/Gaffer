@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
+import { FixtureScheduleAlertsBanner } from "@/features/competitions/FixtureScheduleAlertsBanner";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { useEvent, useNow } from "@/features/events/hooks";
@@ -883,6 +884,8 @@ export default function DashboardPage() {
             />
           </section>
         )}
+
+        {team?.role === "coach" && <FixtureScheduleAlertsBanner compact />}
 
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
         <div

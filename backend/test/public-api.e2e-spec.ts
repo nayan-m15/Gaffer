@@ -38,6 +38,7 @@ describe('Public API (e2e)', () => {
       seasons: [],
     }),
     getMatches: jest.fn().mockResolvedValue([]),
+    getMatchSummary: jest.fn().mockResolvedValue({ total: 0, cleanSheets: 0 }),
     getPlayers: jest.fn().mockResolvedValue([]),
     getTeamStatistics: jest.fn().mockResolvedValue([]),
   };

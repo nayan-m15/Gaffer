@@ -41,7 +41,7 @@ GET /v1/tactics                -> { success, count, data: PublicTactic[] }
 GET /v1/tactics?id={id}        -> { success, count: 1, data: [PublicTactic] }
 GET /v1/public-dashboard/filters
 GET /v1/public-dashboard/matches?teamId=&competitionId=&seasonId=&status=
-GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=&limit=&offset=
+GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=&search=&position=&limit=&offset=
 GET /v1/public-dashboard/team-statistics?teamId=&competitionId=&seasonId=
 ```
 
@@ -74,8 +74,36 @@ database, so it is throttled and cached (SEC-008). `/v1/formations` and
   returns the same payload; the data is not live to the second.
 
 `backend/scripts/benchmark-public-dashboard.mjs` (`npm run
-benchmark:public-dashboard` in `backend/`) measures the worst-case player
-aggregation against a real database and prints its query plan.
+benchmark:public-dashboard` in `backend/`) measures the first player page in
+display order against a real database and prints the grouped query plan.
+It reports first/repeat timings without resetting caches; it does not establish
+the worst case. Each query is a separate read-only SELECT.
+
+## Dashboard pagination and summaries
+
+Matches include an additive `summary: { total, cleanSheets }` field alongside
+`{success,count,limit,offset,data}`. `count` remains the number of rows in the
+page. Summary values cover every match matching the team, competition, season
+and status filters, independent of pagination, and share the 30-second cache
+across pages. Clean sheets count completed matches with no logged opponent goal.
+No new public endpoint is introduced.
+
+Players accept `search` (trimmed, at most 100 characters, a literal
+case-insensitive full-name substring) and `position` (`ALL`, `FWD`, `MID`, `DEF`
+or `GK`). Categories use the dashboard's existing position-code matching rules.
+These filters apply before athlete pagination. Invalid types, lengths or
+categories return 400. Player statistics are grouped in SQL for the selected
+athlete IDs; only completed matches contribute, and players without history
+retain zero statistics.
+
+The public dashboard initially requests 40 players and 100 matches. Additional
+pages load only when the visitor selects "Load more". Search is debounced by
+300 ms, and obsolete page requests can be cancelled. Failed additional pages
+retain the already loaded data and offer a manual retry; page requests do not
+automatically retry a 429. Player and match lists disable the shared five-second
+polling and refresh on focus when their 30-second stale period has elapsed.
+Standings refresh every 30 seconds. The frontend requires the updated backend
+match response, so deploy the backend before the frontend. No migration is needed.
 
 ## CORS
 

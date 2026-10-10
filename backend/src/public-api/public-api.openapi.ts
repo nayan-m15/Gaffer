@@ -138,6 +138,15 @@ export function listSchema(
 }
 
 /** Metadata only: runtime query validation remains in public-api.schemas.ts. */
+export const matchesResponseSchema = {
+  ...listSchema(matchSchema, true),
+  required: ['success', 'count', 'limit', 'offset', 'data', 'summary'],
+  properties: {
+    ...listSchema(matchSchema, true).properties,
+    summary: object({ total: integer, cleanSheets: integer }),
+  },
+};
+
 export function ApiDashboardQuery(
   resource: 'matches' | 'players' | 'standings',
 ) {
@@ -150,6 +159,21 @@ export function ApiDashboardQuery(
         name: 'status',
         required: false,
         enum: ['scheduled', 'cancelled', 'completed'],
+      }),
+    );
+  }
+  if (resource === 'players') {
+    decorators.push(
+      ApiQuery({
+        name: 'search',
+        required: false,
+        schema: { type: 'string', maxLength: 100 },
+        description: 'Literal case-insensitive full-name substring.',
+      }),
+      ApiQuery({
+        name: 'position',
+        required: false,
+        enum: ['ALL', 'FWD', 'MID', 'DEF', 'GK'],
       }),
     );
   }

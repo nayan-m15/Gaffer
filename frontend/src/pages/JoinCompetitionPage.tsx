@@ -496,7 +496,7 @@ export default function JoinCompetitionPage() {
               {isSubmitting ? "Submitting…" : accepted ? "Refresh membership" : "Confirm this is my team"}
             </Button>
           </form>}
-          {!declined && eligible?.playerTeams.length && eligible.teams.length === 0 && (
+          {!declined && (eligible?.playerTeams.length ?? 0) > 0 && eligible?.teams.length === 0 && (
             <Button type="button" variant="secondary" disabled={isSubmitting || !user?.emailVerified}
               onClick={() => void handleRepresentativeRequest()}>
               Ask admin to invite a coach or assistant

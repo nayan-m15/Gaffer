@@ -19,7 +19,6 @@ import { StandingsSection } from "@/features/statistics/StandingsSection";
 import { StatCardsGrid } from "@/features/statistics/StatCardsGrid";
 import { StatisticsFilters } from "@/features/statistics/StatisticsFilters";
 import { ReportActions } from "@/features/statistics/ReportActions";
-import { TeamPerformanceReport } from "@/features/statistics/TeamPerformanceReport";
 import { useStatisticsFilters } from "@/features/statistics/useStatisticsFilters";
 import { formatSeasonRange } from "@/features/statistics/season-trends-model";
 import {
@@ -233,7 +232,7 @@ export default function StatisticsPage() {
         <div className="statistics-page-backdrop" aria-hidden="true" />
 
         <PageHeader
-        className="relative z-10"
+        className="relative z-20"
         title="Statistics"
         subtitle={subtitle}
         actions={<div className="flex flex-wrap items-center gap-2">
@@ -288,18 +287,6 @@ export default function StatisticsPage() {
               Match statistics will appear here once results are logged.
             </p>
           </div>
-        )}
-
-        {reportData && (
-          <section aria-label="Team performance report preview">
-            <div className="no-print mb-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-widest text-foreground">Report preview</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Updates automatically when season or competition filters change.</p>
-              </div>
-            </div>
-            <TeamPerformanceReport data={reportData} />
-          </section>
         )}
 
         {overview && overview.matchesPlayed > 0 && (

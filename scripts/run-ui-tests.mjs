@@ -53,6 +53,10 @@ const result = spawnSync(
       ...process.env,
       DATABASE_URL: testDatabaseUrl,
       BREVO_API_KEY: '',
+      // Every full-stack spec signs up from loopback. Give synthetic accounts
+      // the same budgets as API integration tests, including retry attempts.
+      AUTH_SIGN_IN_RATE_LIMIT: process.env.AUTH_SIGN_IN_RATE_LIMIT ?? '10000:60',
+      AUTH_EMAIL_RATE_LIMIT: process.env.AUTH_EMAIL_RATE_LIMIT ?? '10000:60',
       PORT: String(backendPort),
       BETTER_AUTH_URL: backendURL,
       FRONTEND_URL: frontendURL,

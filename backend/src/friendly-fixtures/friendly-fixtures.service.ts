@@ -220,6 +220,7 @@ export class FriendlyFixturesService {
           weatherTimezone: requesterEvent.weatherTimezone,
           notes: null,
           friendlyFixtureId: fixture.id,
+          friendlyPlayersPerSide: requesterEvent.friendlyPlayersPerSide ?? 11,
         })
         .returning();
 

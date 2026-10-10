@@ -1,6 +1,8 @@
 import { Pause, Play } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LandingSceneController } from "./landing-scene";
+import { yieldSceneTask } from "./scene-scheduler";
+import { supportsLandingScene } from "./scene-capability";
 
 interface LandingSceneProps {
   onStatusChange: (status: LandingSceneStatus) => void;
@@ -14,9 +16,16 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
   const statusCallbackRef = useRef(onStatusChange);
   const [ready, setReady] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [reduceMotion] = useState(() =>
+  const [reduceMotion, setReduceMotion] = useState(() =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
+
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(preference.matches);
+    preference.addEventListener("change", update);
+    return () => preference.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     statusCallbackRef.current = onStatusChange;
@@ -29,13 +38,19 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
       statusCallbackRef.current("fallback");
       return;
     }
-    if (reduceMotion) {
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+    if (reduceMotion || saveData || (deviceMemory !== undefined && deviceMemory <= 2)) {
       setReady(false);
       statusCallbackRef.current("fallback");
       return;
     }
 
     let cancelled = false;
+    setReady(false);
+    setPaused(false);
+    statusCallbackRef.current("loading");
+    const abortController = new AbortController();
     let documentVisible = !document.hidden;
 
     const updateActivity = () => {
@@ -44,18 +59,27 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
 
     const initialise = async () => {
       try {
+        await yieldSceneTask(abortController.signal);
+        if (!await supportsLandingScene(abortController.signal)) {
+          if (!cancelled) statusCallbackRef.current("fallback");
+          return;
+        }
         const { createLandingScene } = await import("./landing-scene");
         if (cancelled) return;
-        controllerRef.current = createLandingScene({
+        const controller = await createLandingScene({
           container: host,
+          signal: abortController.signal,
           onReadyChange: (nextReady) => {
             if (cancelled) return;
             setReady(nextReady);
             statusCallbackRef.current(nextReady ? "ready" : "fallback");
           },
         });
+        if (cancelled) { controller.dispose(); return; }
+        controllerRef.current = controller;
         updateActivity();
       } catch {
+        if (cancelled) return;
         setReady(false);
         statusCallbackRef.current("fallback");
       }
@@ -77,6 +101,7 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
 
     return () => {
       cancelled = true;
+      abortController.abort();
       resizeObserver.disconnect();
       themeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibility);
