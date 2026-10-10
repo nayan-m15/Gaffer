@@ -195,7 +195,7 @@ export function ReportActions({ data }: { data: TeamReportData }) {
         </Dialog>
       )}
       {notice && (
-        <div role={notice.tone === "error" ? "alert" : "status"} className={"no-print fixed bottom-5 right-4 left-4 z-50 rounded-xl border bg-card px-4 py-3 text-sm shadow-xl sm:left-auto sm:max-w-sm " + (notice.tone === "error" ? "border-destructive/50 text-destructive" : "border-primary/40 text-foreground")}>
+        <div role={notice.tone === "error" ? "alert" : "status"} className={"no-print fixed bottom-5 right-4 left-4 z-50 rounded-xl border bg-card px-4 py-3 text-sm shadow-xl sm:left-auto sm:max-w-sm max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+12px)] " + (notice.tone === "error" ? "border-destructive/50 text-destructive" : "border-primary/40 text-foreground")}>
           {notice.message}
         </div>
       )}
