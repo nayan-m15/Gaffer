@@ -1,0 +1,125 @@
+/* These selectors only affect the explicit desktop sidebar at lg and above. */
+@media (min-width: 64rem) {
+  .gaffer-desktop-sidebar {
+    --nav-pill-start: 14%;
+    --nav-pill-end: 4%;
+    --nav-pill-border: 55%;
+    --nav-pill-glow: 20%;
+    --nav-hover-colour: var(--primary);
+    --nav-hover-fill: 6%;
+    --nav-avatar-ring: 45%;
+    --nav-background-tint: 3%;
+    --nav-pitch-opacity: 0.12;
+  }
+
+  .dark .gaffer-desktop-sidebar {
+    --nav-pill-start: 22%;
+    --nav-pill-end: 6%;
+    --nav-pill-border: 70%;
+    --nav-pill-glow: 35%;
+    --nav-hover-colour: var(--sidebar-foreground);
+    --nav-hover-fill: 5%;
+    --nav-avatar-ring: 60%;
+    --nav-background-tint: 5%;
+    --nav-pitch-opacity: 0.10;
+  }
+
+  .gaffer-desktop-sidebar > div:not(.desktop-sidebar-background) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-background {
+    position: absolute;
+    z-index: 0;
+    overflow: hidden;
+    background: linear-gradient(to bottom, var(--sidebar),
+      color-mix(in srgb, var(--primary) var(--nav-background-tint), var(--sidebar)));
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-light-lines {
+    color: color-mix(in srgb, var(--primary) 10%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 25%, black 60%, transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-nav {
+    padding-inline: 8px;
+    /* Links and tooltip/hover wrappers remain unclipped for shared layout. */
+    overflow: visible;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-item + .desktop-sidebar-item {
+    margin-top: 6px;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-link {
+    min-height: 44px;
+    padding: 10px;
+    gap: 6px;
+    font-size: 15px;
+    line-height: 22px;
+    overflow: visible;
+    transition: background-color 180ms, border-color 180ms, color 180ms;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-link-content {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-nav--collapsed .desktop-sidebar-link {
+    padding-inline: 0;
+    justify-content: center;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-nav--collapsed .desktop-sidebar-link-content {
+    justify-content: center;
+    gap: 0;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-link:not(.desktop-sidebar-link--active):not(.desktop-sidebar-link--disabled):hover {
+    background: color-mix(in srgb, var(--nav-hover-colour) var(--nav-hover-fill), transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
+    border: 1px solid color-mix(in srgb, var(--primary) var(--nav-pill-border), transparent);
+    background: linear-gradient(to right,
+      color-mix(in srgb, var(--primary) var(--nav-pill-start), transparent),
+      color-mix(in srgb, var(--primary) var(--nav-pill-end), transparent));
+    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) var(--nav-pill-glow), transparent);
+  }
+
+  .dark .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent),
+      0 0 18px color-mix(in srgb, var(--primary) var(--nav-pill-glow), transparent),
+      inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-link--active {
+    font-weight: 600;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-avatar {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) var(--nav-avatar-ring), transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-profile-footer {
+    border-top-color: var(--sidebar-border);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-pitch {
+    left: -44px;
+    bottom: -38px;
+    width: calc(100% + 88px);
+    color: var(--primary);
+    opacity: var(--nav-pitch-opacity);
+    mask-image: linear-gradient(to bottom, transparent 5%, black 65%);
+    z-index: 0;
+  }
+}
+
+@media (min-width: 64rem) and (prefers-reduced-motion: reduce) {
+  .gaffer-desktop-sidebar .desktop-sidebar-link {
+    transition: none;
+  }
+}
