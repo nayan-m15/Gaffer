@@ -334,6 +334,8 @@ export default function TeamManagementPage() {
         <PageHeader
           title="Team Management"
           subtitle="Configure your starting lineup, match format, tactical formation, and matchday squad."
+          headingClassName="min-w-0 rounded-xl bg-background/70 px-4 py-3 "
+          subtitleClassName="text-gray-700 dark:text-muted-foreground"
           actions={
             <TeamToolbarActions
               editor={gamePlanEditor}
