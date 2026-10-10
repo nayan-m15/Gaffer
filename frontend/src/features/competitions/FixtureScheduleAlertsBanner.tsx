@@ -105,7 +105,7 @@ export function FixtureScheduleAlertsBanner({
               className={cn(
                 "flex flex-col gap-3 rounded-lg border bg-background px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
                 copy.tone === "amber" && "border-amber-500/25",
-                copy.tone === "green" && "border-emerald-500/25 bg-emerald-500/[0.035]",
+                copy.tone === "green" && "border-emerald-500/35",
               )}
             >
               <div className="flex min-w-0 items-start gap-2.5">
