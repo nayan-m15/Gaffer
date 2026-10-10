@@ -420,6 +420,7 @@ export default function LiveMatchPage() {
   const [phoneView, setPhoneView] = useState<"pitch" | "logs">("pitch");
   const [benchPanel, setBenchPanel] = useState<"own" | "opponent" | null>(null);
   const phonePitchCentreRef = useRef<HTMLDivElement>(null);
+  const [phonePitchGeometry, setPhonePitchGeometry] = useState({ width: 0, height: 0, scale: 1, rem: 16 });
   const ownBenchTabRef = useRef<HTMLButtonElement>(null);
   const oppBenchTabRef = useRef<HTMLButtonElement>(null);
   const lastBenchSideRef = useRef<"own" | "opponent">("own");
@@ -781,6 +782,68 @@ export default function LiveMatchPage() {
       ),
     [matchPlayerCount, oppState.onPitch, oppHalf, timeline],
   );
+  const phonePlaced = useMemo(() => {
+    if (!isPhone || phonePitchGeometry.width <= 0) return { own: ownPlaced, opponent: oppPlaced };
+    const { width, height, scale, rem } = phonePitchGeometry;
+    const chip = 2.125 * rem * scale;
+    // Reserve two name lines, their margin and a small gap. The wider name
+    // footprint also protects adjacent labels, not just the visible chips.
+    const label = (2 * .5 * 1.15 * rem + 2 + 2) * scale;
+    const layerHeight = Math.max(1, height - 3.25 * rem * scale);
+    const boxWidth = (4.25 * rem * scale + 2 * scale) / width * 100;
+    const boxHeight = (chip + label + 2 * scale) / layerHeight * 100;
+    const minU = boxWidth / 2, maxU = 100 - minU;
+    const minV = Math.max(0, chip / 2 + scale - rem * scale) / layerHeight * 100;
+    const maxV = 100 - Math.max(0, chip / 2 + label + scale - 2.25 * rem * scale) / layerHeight * 100;
+    const own = ownPlaced.map(placed => ({ ...placed }));
+    const opponent = oppPlaced.map(placed => ({ ...placed }));
+    const nodes = [
+      ...own.map(placed => ({ placed, team: "own", keeper: isGoalkeeperPosition(placed.athlete.position), half: ownHalf })),
+      ...(visibility === "none" ? [] : opponent.map(placed => ({ placed, team: "opponent", keeper: isGoalkeeperPosition(placed.player.position), half: oppHalf }))),
+    ].map(node => ({ ...node, u: Math.max(minU, Math.min(maxU, node.placed.y)), v: Math.max(minV, Math.min(maxV, 100 - node.placed.x)), lowU: minU, highU: maxU }));
+    const originalU = nodes.map(node => node.u);
+    nodes.forEach((node, index) => {
+      nodes.forEach((other, otherIndex) => {
+        if (node.team !== other.team) return;
+        const midpoint = (originalU[index] + originalU[otherIndex]) / 2;
+        if (originalU[otherIndex] < originalU[index]) node.lowU = Math.max(node.lowU, midpoint);
+        if (originalU[otherIndex] > originalU[index]) node.highU = Math.min(node.highU, midpoint);
+      });
+    });
+    nodes.forEach(node => {
+      if (node.keeper) node.v = node.half === "left" ? Math.min(maxV, 98) : Math.max(minV, 2);
+    });
+    // Stable pair order, at most eight passes. Keep keepers anchored and prefer
+    // depth separation within a team; horizontal moves retain left/right order.
+    for (let iteration = 0; iteration < 8; iteration++) {
+      let moved = false;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const overlapU = boxWidth - Math.abs(a.u - b.u);
+          const overlapV = boxHeight - Math.abs(a.v - b.v);
+          if (overlapU <= .001 || overlapV <= .001) continue;
+          const separate = (axis: "u" | "v", amount: number) => {
+            const sign = a[axis] < b[axis] ? -1 : a[axis] > b[axis] ? 1 : a.keeper ? (a.half === "left" ? 1 : -1) : -1;
+            const roomA = a.keeper ? 0 : sign < 0 ? a[axis] - (axis === "u" ? a.lowU : minV) : (axis === "u" ? a.highU : maxV) - a[axis];
+            const roomB = b.keeper ? 0 : sign < 0 ? (axis === "u" ? b.highU : maxV) - b[axis] : b[axis] - (axis === "u" ? b.lowU : minV);
+            if (roomA + roomB < amount) return false;
+            const moveA = Math.min(roomA, Math.max(amount / 2, amount - roomB));
+            a[axis] += sign * moveA;
+            b[axis] -= sign * (amount - moveA);
+            return true;
+          };
+          const verticalFirst = a.team === b.team || overlapV <= overlapU;
+          moved = (verticalFirst
+            ? separate("v", overlapV) || separate("u", overlapU)
+            : separate("u", overlapU) || separate("v", overlapV)) || moved;
+        }
+      }
+      if (!moved) break;
+    }
+    nodes.forEach(node => { node.placed.x = 100 - node.v; node.placed.y = node.u; });
+    return { own, opponent };
+  }, [isPhone, ownPlaced, oppPlaced, ownHalf, oppHalf, visibility, phonePitchGeometry]);
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
     [ownPlaced],
@@ -809,6 +872,30 @@ export default function LiveMatchPage() {
   }, [oppState.bench, oppState.onPitch, oppPitchIds, oppPlaced]);
 
   const phoneLayoutReady = Boolean(matchQuery.data) && !squadQuery.isLoading && !eventsQuery.isLoading;
+  useEffect(() => {
+    if (!isPhone || !phoneLayoutReady) return;
+    const status = document.querySelector<HTMLElement>(".live-match .live-match-phone-sync");
+    if (!status) return;
+    let frame = 0, lastWidth = 0;
+    const fitStatus = () => {
+      frame = 0;
+      const base = .6 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+      status.style.setProperty("--phone-status-font", `${base}px`);
+      const natural = Array.from(status.children).reduce((total, child) => total + child.getBoundingClientRect().width, 0);
+      if (natural > status.clientWidth && status.clientWidth > 0) {
+        status.style.setProperty("--phone-status-font", `${base * Math.max(0, status.clientWidth - 12) / natural}px`);
+      }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(fitStatus); };
+    const resize = new ResizeObserver(() => {
+      if (lastWidth !== status.clientWidth) { lastWidth = status.clientWidth; schedule(); }
+    });
+    resize.observe(status);
+    const text = new MutationObserver(schedule);
+    text.observe(status, { childList: true, subtree: true, characterData: true });
+    schedule();
+    return () => { resize.disconnect(); text.disconnect(); cancelAnimationFrame(frame); };
+  }, [isPhone, phoneLayoutReady]);
   useEffect(() => {
     if (!isPhone || phoneView !== "pitch" || !phoneLayoutReady) return;
     const centre = phonePitchCentreRef.current;
@@ -844,6 +931,9 @@ export default function LiveMatchPage() {
       centre.style.setProperty("--phone-pitch-width", `${width}px`);
       centre.style.setProperty("--phone-pitch-height", `${height}px`);
       centre.style.setProperty("--phone-pitch-scale", `${Math.max(.7, Math.min(width / 352, 1.15))}`);
+      const scale = Math.max(.7, Math.min(width / 352, 1.15));
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      setPhonePitchGeometry(previous => previous.width === width && previous.height === height && previous.scale === scale && previous.rem === rem ? previous : { width, height, scale, rem });
     };
     fit();
     const observer = new ResizeObserver(fit);
@@ -2132,7 +2222,7 @@ export default function LiveMatchPage() {
           </button>
           {isPhone && <button type="button" className="live-match-view-logs rounded-md border border-[#3e4448] text-xs font-semibold" onClick={() => { setBenchPanel(null); setPhoneView("logs"); }}>View logs{phoneLogCount > 0 ? ` · ${phoneLogCount}` : ""}</button>}
         </div>
-        {isPhone && matchId ? <div className="live-match-phone-sync"><OfflineSyncStatus matchId={matchId} />{projection && <span className={cn("live-match-phone-projection", projection.finalisationState === "finalised" ? "text-[#16d99a]" : !projectionConsistent || projection.unresolvedReviewCount > 0 || projection.finalisationState === "amendment_required" ? "text-[#d6a447]" : "text-[#9ca39f]")}> · {projectionStatus}</span>}</div> : null}
+        {isPhone && matchId ? <div className="live-match-phone-sync"><OfflineSyncStatus matchId={matchId} />{projection && <span className={cn("live-match-phone-projection", projection.finalisationState === "finalised" ? "text-[#16d99a]" : !projectionConsistent || projection.unresolvedReviewCount > 0 || projection.finalisationState === "amendment_required" ? "text-[#d6a447]" : "text-[#9ca39f]")}> · {projectionConsistent && projection.finalisationState === "open" && projection.unresolvedReviewCount === 0 ? `rev ${projection.revision}` : projectionStatus}</span>}</div> : null}
       </header>
 
       {reviewOpen && matchId ? (
@@ -2224,8 +2314,8 @@ export default function LiveMatchPage() {
             >
               <LivePitchPlayers
                 orientation={orientation}
-                ownPlaced={ownPlaced}
-                oppPlaced={oppPlaced}
+                ownPlaced={isPhone ? phonePlaced.own : ownPlaced}
+                oppPlaced={isPhone ? phonePlaced.opponent : oppPlaced}
                 ownColor={ownColor}
                 oppColor={oppColor}
                 visibility={visibility}

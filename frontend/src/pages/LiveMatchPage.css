@@ -550,8 +550,8 @@
   .live-match > header > .live-match-controls { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; justify-content: center; gap: .375rem; }
   .live-match-controls > :first-child { flex-basis: auto; margin-bottom: 0; font-size: inherit; }
   .live-match-controls > button, .live-match-controls > div > button { min-height: 2.25rem; }
-  .live-match-phone-sync { grid-column: 1 / -1; grid-row: 4; display: flex; flex-wrap: nowrap; align-items: center; justify-content: safe center; overflow-x: auto; gap: 0; font-size: .6rem; line-height: 1.2; white-space: nowrap; scrollbar-width: none; }
-  .live-match-phone-sync * { font-size: .6rem; }
+  .live-match-phone-sync { grid-column: 1 / -1; grid-row: 4; display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 0; min-width: 0; font-size: var(--phone-status-font, .6rem); line-height: 1.2; white-space: nowrap; }
+  .live-match-phone-sync * { font-size: inherit; }
   .live-match-phone-sync > [role="status"] { flex-shrink: 0; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; letter-spacing: 0; }
   .live-match-phone-projection { flex-shrink: 0; text-align: center; }
   .live-match-layout,
