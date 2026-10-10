@@ -75,9 +75,16 @@ describe('Auth password-reset rate limiting (e2e)', () => {
     return identity;
   }
 
+  // Sign-up draws from the email policy too. Left on the loopback socket, it
+  // shares that bucket (a database row) with sign-ups from the suite running
+  // in the other Jest worker, which can exhaust this suite's budget of three.
+  // Each sign-up gets its own identity, outside the ones the tests measure.
+  let nextSignUpIp = 100;
+
   async function signUpVerified(identity: TestIdentity): Promise<string> {
     const signUp = await request(app.getHttpServer())
       .post('/auth/sign-up')
+      .set('x-forwarded-for', identityIp(nextSignUpIp++))
       .send({
         name: 'Reset Coach',
         email: identity.email,
