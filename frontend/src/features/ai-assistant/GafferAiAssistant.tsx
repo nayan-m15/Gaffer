@@ -253,7 +253,7 @@ export function GafferAiAssistant({
     <>
       {isOpen && (
         <div
-          className="fixed inset-x-4 bottom-4 z-50 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-[var(--gaffer-panel-bottom)] sm:right-6 sm:h-[640px] sm:max-h-[calc(100vh-var(--gaffer-panel-bottom)-2rem)] sm:w-[420px] sm:max-w-[calc(100vw-2rem)]"
+          className="fixed inset-x-4 bottom-4 z-50 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-[var(--gaffer-panel-bottom)] sm:right-6 sm:h-[640px] sm:max-h-[calc(100vh-var(--gaffer-panel-bottom)-2rem)] sm:w-[420px] sm:max-w-[calc(100vw-2rem)] max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+64px)] max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] max-lg:h-auto max-lg:max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] max-lg:right-4 sm:max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] sm:max-lg:right-4 sm:max-lg:h-auto sm:max-lg:max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))]"
           style={{ "--gaffer-panel-bottom": `${footerClearance + 72}px` } as CSSProperties}
         >
           {/* Header */}
@@ -297,7 +297,7 @@ export function GafferAiAssistant({
           </div>
 
           {/* Body */}
-          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 max-lg:min-h-0">
             {messages.length === 0 && (
               <div>
                 <p className="text-sm font-semibold text-foreground">Hi! I&apos;m Gaffer AI</p>
@@ -475,10 +475,10 @@ export function GafferAiAssistant({
         title="Ask Gaffer AI"
         onClick={() => setIsOpen((current) => !current)}
         data-tour="ai-assistant"
-        className="fixed bottom-[var(--gaffer-launcher-bottom)] right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-[var(--gaffer-launcher-bottom)] right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
         style={{ "--gaffer-launcher-bottom": `${footerClearance}px` } as CSSProperties}
       >
-        <Sparkles className="size-6" />
+        <Sparkles className="size-6 max-lg:size-5" />
       </button>
     </>
   );
