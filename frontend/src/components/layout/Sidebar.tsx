@@ -425,6 +425,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
           className,
         )}
       >
+        <div className="desktop-sidebar-clip flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <div className="desktop-sidebar-background pointer-events-none absolute inset-0" aria-hidden="true">
           <svg className="desktop-sidebar-light-lines absolute inset-0 size-full"
             viewBox="0 0 272 800" preserveAspectRatio="none" focusable="false">
@@ -442,6 +443,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
           {expanded ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
         </button>
         {renderSidebarContent(true)}
+        </div>
       </motion.aside>
 
       {resolvedVariant === "coach" && (
