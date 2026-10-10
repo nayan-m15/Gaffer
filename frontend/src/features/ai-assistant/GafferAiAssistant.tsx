@@ -222,7 +222,7 @@ export function GafferAiAssistant({
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-x-4 bottom-4 z-50 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:h-[640px] sm:max-h-[calc(100vh-8rem)] sm:w-[420px] sm:max-w-[calc(100vw-2rem)]">
+        <div className="fixed inset-x-4 top-[calc(4rem+env(safe-area-inset-top,0px)+64px)] bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] z-50 flex h-auto max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[420px] sm:max-w-[calc(100vw-2rem)] lg:top-auto lg:bottom-24 lg:right-6 lg:h-[640px] lg:max-h-[calc(100vh-8rem)]">
           {/* Header */}
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="flex items-start gap-2.5">
@@ -264,7 +264,7 @@ export function GafferAiAssistant({
           </div>
 
           {/* Body */}
-          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 max-lg:min-h-0">
             {messages.length === 0 && (
               <div>
                 <p className="text-sm font-semibold text-foreground">Hi! I&apos;m Gaffer AI</p>
@@ -440,9 +440,9 @@ export function GafferAiAssistant({
         aria-label={isOpen ? "Close Gaffer AI" : "Ask Gaffer AI"}
         title="Ask Gaffer AI"
         onClick={() => setIsOpen((current) => !current)}
-        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
       >
-        <Sparkles className="size-6" />
+        <Sparkles className="size-6 max-lg:size-5" />
       </button>
     </>
   );
