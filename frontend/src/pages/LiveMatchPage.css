@@ -626,7 +626,10 @@
   .live-match-event-overlay { max-height: calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
   .live-match-phone-bench-panel[data-slot="dialog-content"] {
     top: 0; bottom: 0; left: auto; right: auto;
-    translate: none; transform: none;
+    /* Cancels the dialog's centring translate. No `transform` alongside it:
+       Lightning CSS drops or folds `translate` into it in production builds,
+       leaving the panel centred on the top-left corner, off screen. */
+    translate: none;
     width: min(12rem, 75vw); max-width: none; height: 100dvh;
     display: flex; flex-direction: column; gap: .5rem;
     padding: calc(3rem + env(safe-area-inset-top)) .5rem calc(.5rem + env(safe-area-inset-bottom));
