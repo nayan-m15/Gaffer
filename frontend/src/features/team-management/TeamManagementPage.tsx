@@ -345,13 +345,15 @@ export default function TeamManagementPage() {
           }
         >
           <div className="space-y-3">
-            <AnimatedTabs
-              items={tabItems}
-              value={activeSection}
-              onValueChange={setActiveSection}
-              ariaLabel="Team sections"
-              variant="primary"
-            />
+            <div data-tour="team-tabs">
+              <AnimatedTabs
+                items={tabItems}
+                value={activeSection}
+                onValueChange={setActiveSection}
+                ariaLabel="Team sections"
+                variant="primary"
+              />
+            </div>
             <div className={showWideSquadControls ? "grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-4" : undefined}>
               <TeamToolbarFields
                 editor={gamePlanEditor}
@@ -391,7 +393,7 @@ export default function TeamManagementPage() {
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
       <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-6 2xl:grid-cols-[minmax(0,860px)_456px]">
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4" data-tour="team-pitch">
         {lineup.isCustomFormation && lineup.customEditMode && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
             Drag the outfield position handles to build your shape. Positions snap

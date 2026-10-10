@@ -190,7 +190,7 @@ export function TeamToolbarActions({
     <>
       {loader}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" data-tour="team-gameplan">
       {showSquadActions && lineup.isCustomFormation && (
         <Button
           variant={lineup.customEditMode ? "default" : "outline"}
@@ -305,7 +305,7 @@ export function TeamToolbarFields({
 
           <ToolbarDivider />
 
-          <div className="flex h-8 items-center gap-2">
+          <div className="flex h-8 items-center gap-2" data-tour="team-formation">
             <label
               htmlFor="auto-fill-switch"
               className="text-sm font-medium text-foreground"
@@ -406,7 +406,10 @@ export function TeamToolbarMobile({
           `flex-wrap` catches anything narrower. Save drops the wide button's
           min-width here and so changes size between "Save" and "Saving...",
           which is the right trade for not clipping the labels beside it. */}
-      <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <div
+        className={cn("flex flex-wrap items-center gap-1.5", className)}
+        data-tour="team-gameplan"
+      >
         <Select
           items={sectionItems}
           value={section}
@@ -417,6 +420,7 @@ export function TeamToolbarMobile({
           <SelectTrigger
             aria-label="Team section"
             className="h-10 min-w-[6rem] flex-1 gap-1.5 font-semibold"
+            data-tour="team-tabs"
           >
             <ActiveIcon className="size-4 shrink-0 text-primary" aria-hidden />
             <SelectValue />
@@ -447,6 +451,7 @@ export function TeamToolbarMobile({
                 variant="outline"
                 size="icon-lg"
                 aria-label="Game plan options"
+                data-tour={showSquadControls ? "team-formation" : undefined}
               >
                 <SlidersHorizontal />
               </Button>

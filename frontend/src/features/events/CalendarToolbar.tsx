@@ -155,6 +155,7 @@ export function CalendarToolbar({
           role="group"
           aria-label="Calendar view"
           className="flex items-center rounded-md border border-border bg-background p-0.5"
+          data-tour="events-views"
         >
           {VIEW_OPTIONS.map((option) => {
             const active = option.value === view;
@@ -179,7 +180,7 @@ export function CalendarToolbar({
         </div>
 
         {!readOnly && ( 
-          <Button size="sm" className="gap-1.5" onClick={onNewEvent}>
+          <Button size="sm" className="gap-1.5" onClick={onNewEvent} data-tour="events-new">
             <Plus className="size-4" />
             <span className="hidden sm:inline">New Event</span>
             <span className="sm:hidden">Add</span>

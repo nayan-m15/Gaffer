@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { CalendarIcon, Check, ClockIcon, Search, LocateFixed } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CalendarIcon, Check, ClockIcon, Lock, Search, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatefulButton } from "@/components/ui/stateful-button";
 import { Calendar } from "@/components/ui/calendar";
@@ -52,6 +53,9 @@ import type {
 import { searchGafferTeams } from "@/services/teams";
 import type { GafferTeamSearchResult } from "@/services/teams";
 import { getEventTypeStyle } from "./event-style";
+import { useAuth } from "@/hooks/useAuth";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import { useUnlockRequirements } from "@/features/onboarding/unlocks";
 
 const inputClassName =
   "h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30";
@@ -65,6 +69,19 @@ const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) =>
 
 /** Match first so the type segments follow the calendar's visual grouping. */
 const FORM_EVENT_TYPE_ORDER: EventType[] = ["match", "training", "meeting"];
+
+function OnboardingMatchLock({
+  onLocked,
+}: {
+  onLocked: (locked: boolean) => void;
+}) {
+  const { hasGamePlan, isLoading } = useUnlockRequirements();
+  useEffect(() => {
+    onLocked(!isLoading && !hasGamePlan);
+    return () => onLocked(false);
+  }, [hasGamePlan, isLoading, onLocked]);
+  return null;
+}
 
 function competitionOptionLabel(competition: CompetitionWithStandings) {
   const name = competition.name.trim() || "Unnamed competition";
@@ -194,6 +211,14 @@ export function EventFormDialog({
   onOpenChange,
 }: EventFormDialogProps) {
   const isEditing = Boolean(event);
+  const { user, team } = useAuth();
+  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const [matchUnlockLocked, setMatchUnlockLocked] = useState(false);
+  const applyOnboardingLock = Boolean(onboardingActive && team);
+  const matchTypeLocked =
+    applyOnboardingLock &&
+    matchUnlockLocked &&
+    !(isEditing && event?.type === "match");
   const baseId = useId();
   const createEvent = useCreateEvent();
   const updateEvent = useUpdateEvent();
@@ -317,6 +342,12 @@ export function EventFormDialog({
   }, [open, event, initialDate, initialType]);
 
   useEffect(() => {
+    if (matchTypeLocked && type === "match") {
+      setType("training");
+    }
+  }, [matchTypeLocked, type]);
+
+  useEffect(() => {
     const query = location.trim();
     if (!open || !venueSearchEnabled || selectedVenueLocation || query.length < 3) {
       setVenueResults([]);
@@ -424,6 +455,11 @@ export function EventFormDialog({
     e.preventDefault();
     setError(null);
 
+    if (matchTypeLocked && type === "match") {
+      setError("Save your first game plan to schedule matches.");
+      return;
+    }
+
     if (!title.trim() || !date || !time) {
       setError("Title, type, date, and time are required.");
       return;
@@ -504,6 +540,9 @@ export function EventFormDialog({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-5">
           <Field label="Event Type">
+            {applyOnboardingLock && (
+              <OnboardingMatchLock onLocked={setMatchUnlockLocked} />
+            )}
             <div
               role="radiogroup"
               aria-label="Event type"
@@ -517,16 +556,28 @@ export function EventFormDialog({
                   return null;
                 }
                 const selected = type === eventType;
+                const matchDisabled =
+                  matchTypeLocked && eventType === "match";
                 return (
                   <button
                     key={eventType}
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => setType(eventType)}
+                    disabled={matchDisabled}
+                    title={
+                      matchDisabled
+                        ? "Save your first game plan to schedule matches"
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (matchDisabled) return;
+                      setType(eventType);
+                    }}
                     className={cn(
                       "h-11 rounded-full border px-2 text-sm font-semibold transition-colors",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      "disabled:cursor-not-allowed disabled:opacity-60",
                       selected
                         ? cn(
                             "border-transparent",
@@ -535,11 +586,28 @@ export function EventFormDialog({
                         : "border-border bg-transparent text-muted-foreground hover:bg-muted/50",
                     )}
                   >
-                    {option.label}
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      {option.label}
+                      {matchDisabled && (
+                        <Lock className="size-3.5" aria-hidden="true" />
+                      )}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            {matchTypeLocked && (
+              <p className="mt-3 text-base font-medium text-foreground">
+                Matches unlock after you save your first game plan.{" "}
+                <Link
+                  to="/team"
+                  className="text-primary underline underline-offset-2 hover:text-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Go to Team
+                </Link>
+              </p>
+            )}
           </Field>
 
           {type === "match" ? (

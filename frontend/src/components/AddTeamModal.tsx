@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { useAuth } from "@/hooks/useAuth";
+import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
 import { apiFetch, ApiError } from "@/lib/api";
 
 interface AddTeamModalProps {
@@ -55,6 +56,7 @@ export function AddTeamModal({ open, onOpenChange }: AddTeamModalProps) {
         body: JSON.stringify({ name: trimmed }),
       });
       await refreshSession();
+      sessionStorage.setItem(START_TOUR_STORAGE_KEY, "1");
       resetAndClose();
     } catch (err) {
       const message =

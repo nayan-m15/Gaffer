@@ -474,6 +474,7 @@ export function GafferAiAssistant({
         aria-label={isOpen ? "Close Gaffer AI" : "Ask Gaffer AI"}
         title="Ask Gaffer AI"
         onClick={() => setIsOpen((current) => !current)}
+        data-tour="ai-assistant"
         className="fixed bottom-[var(--gaffer-launcher-bottom)] right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
         style={{ "--gaffer-launcher-bottom": `${footerClearance}px` } as CSSProperties}
       >

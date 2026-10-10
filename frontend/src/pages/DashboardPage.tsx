@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,21 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getPendingTeamInviteToken } from "@/services/team-invites";
 import { AddTeamModal } from "@/components/AddTeamModal";
+import { UnlockGateCard, UnlockRoad } from "@/features/onboarding/UnlockGateCard";
+import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import {
+  cancelGoalUnlockCelebration,
+  clearUnlockPageReveal,
+} from "@/features/onboarding/goalUnlockCelebration";
+import { useDashboardShell } from "@/features/onboarding/dashboardShellContext";
+import {
+  usePageCelebrated,
+  useUnlockRequirements,
+  pageRequirementsMet,
+} from "@/features/onboarding/unlocks";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
+import { MatchSquadReminder } from "@/features/reminders/MatchSquadReminder";
 import { FixtureScheduleAlertsBanner } from "@/features/competitions/FixtureScheduleAlertsBanner";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
@@ -22,7 +36,9 @@ import {
   Activity,
   AlertCircle,
   Calendar,
+  Loader2,
   Mail,
+  ArrowRight,
   Plus,
   RefreshCw,
   TrendingUp,
@@ -148,8 +164,24 @@ function formatEventWhen(iso: string, timeZone: string | null): string {
  *  SHARED UI PRIMITIVES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function DashboardFrame({ children }: { children: ReactNode }) {
-  return <div className="relative min-h-full">{children}</div>;
+function DashboardFrame({
+  children,
+  fillVisible,
+}: {
+  children: ReactNode;
+  fillVisible?: boolean;
+}) {
+  return (
+    <div
+      data-gate-fill={fillVisible ? "" : undefined}
+      className={cn(
+        "relative",
+        fillVisible ? "flex h-full min-h-0 flex-1 flex-col" : "min-h-full",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 function SectionTitle({
@@ -204,6 +236,8 @@ function DashboardHeader({
   teamName,
   hasTeam,
   pendingInvite,
+  firstTime,
+  hideAddTeam,
   onAddTeam,
 }: {
   userName: string | null;
@@ -212,14 +246,21 @@ function DashboardHeader({
   /** A team invitation is still awaiting acceptance — hide Add Team so the
    * user doesn't accidentally bootstrap their own coach team mid-invite. */
   pendingInvite: boolean;
+  firstTime: boolean;
+  hideAddTeam?: boolean;
   onAddTeam: () => void;
 }) {
+  const firstName = userName?.trim().split(/\s+/)[0];
   return (
     <PageHeader
       title="Dashboard"
       subtitle={
         <>
-          {userName ? `Welcome back, ${userName}` : "Welcome back"}
+          {firstTime && firstName
+            ? `Welcome, ${firstName}`
+            : userName
+              ? `Welcome back, ${userName}`
+              : "Welcome back"}
           {teamName ? ` \u00b7 ${teamName}` : ""}
         </>
       }
@@ -227,7 +268,7 @@ function DashboardHeader({
       subtitleClassName="text-black dark:text-muted-foreground"
       actions={
         <>
-          {!hasTeam && !pendingInvite && (
+          {!firstTime && !hasTeam && !pendingInvite && !hideAddTeam && (
             <Button variant="outline" size="sm" onClick={onAddTeam}>
               <Plus className="size-4" aria-hidden="true" />
               Add Team
@@ -287,6 +328,7 @@ function LiveMatchPanel({
         )}
         aria-label="Live match status"
         aria-live="polite"
+        data-tour="dashboard-live"
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
@@ -382,7 +424,7 @@ function SummaryStat({
 
 function SeasonSummaryCard({ summary }: { summary: SeasonSummaryData | null }) {
   return (
-    <Card aria-label="Season summary">
+    <Card aria-label="Season summary" data-tour="dashboard-season">
       <SectionTitle icon={<Trophy className="size-4 text-muted-foreground" />}>
         Season Summary
       </SectionTitle>
@@ -471,7 +513,7 @@ function RecentFormCard({
     recentResults[0];
 
   return (
-    <Card aria-label="Recent form" className="min-w-0">
+    <Card aria-label="Recent form" className="min-w-0" data-tour="dashboard-season">
       <SectionTitle
         icon={<TrendingUp className="size-4 text-muted-foreground" />}
       >
@@ -584,7 +626,7 @@ function UpcomingEventsCard({
   onOpenEvent: (eventId: string) => void;
 }) {
   return (
-    <Card aria-label="Upcoming events" className="min-w-0">
+    <Card aria-label="Upcoming events" className="min-w-0" data-tour="dashboard-upcoming">
       <SectionTitle
         icon={<Calendar className="size-4 text-muted-foreground" />}
       >
@@ -659,15 +701,181 @@ function RecentStatsCard({ stats }: { stats: MatchStat[] }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ *  FIRST-TIME EXPERIENCE  (no team, no pending invite)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const HERO_ENTER =
+  "animate-fade-in-up [animation-duration:280ms] motion-reduce:animate-none";
+
+function CreateTeamHero({
+  userName,
+  onCreateTeam,
+}: {
+  userName: string | null;
+  onCreateTeam: () => void;
+}) {
+  const firstName = userName?.trim().split(/\s+/)[0];
+  return (
+    <div
+      className={cn(
+        "unlock-gate-shell relative mx-auto w-full max-w-[600px] overflow-visible",
+        "animate-fade-in-scale motion-reduce:animate-none",
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2 z-0 size-[140%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25 blur-3xl"
+      />
+      <Card
+        aria-labelledby="create-team-heading"
+        className="unlock-gate-card relative z-10 max-h-[min(40rem,calc(100dvh-5rem))] overflow-y-auto rounded-[20px] border-primary/40 bg-background/70 px-8 py-10 text-center sm:px-10 sm:py-12"
+      >
+        <p
+          className={cn(
+            "unlock-gate-eyebrow text-lg font-medium uppercase tracking-[0.2em] text-primary",
+            HERO_ENTER,
+            "animation-delay-150",
+          )}
+        >
+          {firstName
+            ? `Welcome to the dugout, ${firstName}`
+            : "Welcome to the dugout"}
+        </p>
+        <h2
+          id="create-team-heading"
+          className={cn(
+            "unlock-gate-heading mt-4 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.025em] text-foreground sm:text-[2.75rem]",
+            HERO_ENTER,
+            "[animation-delay:280ms]",
+          )}
+        >
+          Your pitch is waiting
+        </h2>
+        <p
+          className={cn(
+            "unlock-gate-body mx-auto mt-4 max-w-[420px] text-[15px] leading-relaxed text-muted-foreground sm:text-base",
+            HERO_ENTER,
+            "[animation-delay:410ms]",
+          )}
+        >
+          The stands are full. Create your team and let&apos;s get your season
+          started.
+        </p>
+        <UnlockRoad
+          hasPlayers={false}
+          hasGamePlan={false}
+          needsGamePlan
+          teamCreated={false}
+        />
+        <Button
+          size="lg"
+          className={cn(
+            "unlock-gate-action mt-8 h-12 w-full px-6 text-base sm:w-auto",
+            HERO_ENTER,
+            "[animation-delay:670ms]",
+          )}
+          onClick={onCreateTeam}
+        >
+          Create team
+          <ArrowRight
+            className="size-4 transition-transform group-hover/button:translate-x-1 motion-reduce:transition-none motion-reduce:group-hover/button:translate-x-0"
+            aria-hidden="true"
+          />
+        </Button>
+        <p
+          className={cn(
+            "mt-3 text-xs text-muted-foreground",
+            HERO_ENTER,
+            "[animation-delay:800ms]",
+          )}
+        >
+          Takes about 10 seconds
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function DashboardUnlockLayer({
+  userId,
+  firstName,
+  fading,
+  onUnlocked,
+  onRevealed,
+  onCelebrationComplete,
+  onRequirements,
+}: {
+  userId: string;
+  firstName: string | undefined;
+  fading: boolean;
+  onUnlocked: () => void;
+  onRevealed: () => void;
+  onCelebrationComplete: () => void;
+  onRequirements: (unlocked: boolean) => void;
+}) {
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+  const unlocked = pageRequirementsMet("dashboard", hasPlayers, hasGamePlan);
+
+  useEffect(() => {
+    onRequirements(!isLoading && unlocked);
+  }, [isLoading, unlocked, onRequirements]);
+
+  return (
+    <div
+      className={cn(
+        "unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10",
+        fading && "pointer-events-none",
+      )}
+    >
+      {isLoading ? (
+        <Loader2
+          className="size-6 animate-spin text-primary motion-reduce:animate-none"
+          role="status"
+          aria-label="Loading"
+        />
+      ) : (
+        <UnlockGateCard
+          pageKey="dashboard"
+          userId={userId}
+          eyebrow={
+            firstName
+              ? `Welcome to the dugout, ${firstName}`
+              : "Welcome to the dugout"
+          }
+          hasPlayers={hasPlayers}
+          hasGamePlan={hasGamePlan}
+          exiting={fading}
+          onUnlocked={onUnlocked}
+          onRevealed={onRevealed}
+          onCelebrationComplete={onCelebrationComplete}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
-  const { user, team, accountKind } = useAuth();
+  const { user, team, accountKind, status } = useAuth();
   const navigate = useNavigate();
+  const dashboardShell = useDashboardShell();
+  const roadActive = useOnboardingRoadActive(user?.id);
+  // Team creation sets the tour flag before the onboarding key is written.
+  // Treat that as active on this render so the gate does not wait for an effect.
+  const tourArming =
+    Boolean(user?.id && team) &&
+    sessionStorage.getItem(START_TOUR_STORAGE_KEY) === "1";
+  const onboardingActive = roadActive || tourArming;
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string>();
+  const [unlockCelebrating, setUnlockCelebrating] = useState(false);
+  const [dashPageRevealed, setDashPageRevealed] = useState(false);
+  const [dashUnlocked, setDashUnlocked] = useState(false);
   const selectedEventQuery = useEvent(selectedEventId);
   const now = useNow();
 
@@ -679,6 +887,11 @@ export default function DashboardPage() {
     ? null
     : getPendingTeamInviteToken();
   const hasPendingInvite = !team && pendingInviteToken !== null;
+  // Session sets user and team together before this page can mount. Treat a
+  // missing team as "no team" only once that session has settled, so a loading
+  // team never paints the first-time card.
+  const teamKnown = status === "authenticated" || status === "offline";
+  const isFirstTime = teamKnown && !team && !hasPendingInvite;
   const pendingInviteUrl = pendingInviteToken
     ? `/join-team/${pendingInviteToken}`
     : null;
@@ -697,13 +910,72 @@ export default function DashboardPage() {
     refetchIntervalInBackground: false,
   });
 
+  const unlockGateApplies = Boolean(
+    team &&
+      team.role === "coach" &&
+      onboardingActive &&
+      user?.id &&
+      !dashboardCelebrated,
+  );
+  const hideMainForUnlock = (unlockGateApplies || unlockCelebrating) && !dashUnlocked;
+  const dashGateLayout = Boolean(
+    isFirstTime ||
+      ((unlockGateApplies || unlockCelebrating) && !dashPageRevealed),
+  );
+  const concealDashboardMain =
+    (unlockGateApplies || unlockCelebrating) &&
+    dashUnlocked &&
+    !dashPageRevealed;
+  const firstName = user?.name?.trim().split(/\s+/)[0];
+
+  const mountedRef = useRef(true);
+
+  const handleDashboardUnlocked = () => {
+    if (!mountedRef.current) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) {
+      setDashPageRevealed(true);
+      dashboardShell.reveal();
+      return;
+    }
+    setUnlockCelebrating(true);
+    dashboardShell.hold();
+  };
+
+  const handleDashboardRevealed = () => {
+    if (!mountedRef.current) return;
+    setDashPageRevealed(true);
+    dashboardShell.reveal();
+  };
+
+  const handleDashboardCelebrationComplete = () => {
+    if (!mountedRef.current) return;
+    setUnlockCelebrating(false);
+    setDashPageRevealed(false);
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelGoalUnlockCelebration();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!dashGateLayout && !concealDashboardMain) return;
+    clearUnlockPageReveal();
+  }, [dashGateLayout, concealDashboardMain]);
+
   // Route player accounts to their own dashboard.
   if (accountKind === "player") {
     return <Navigate to="/player/dashboard" replace />;
   }
 
   /* ── Error state ──────────────────────────────────────────────────────── */
-  if (isError) {
+  if (isError && !dashGateLayout) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -711,6 +983,7 @@ export default function DashboardPage() {
           teamName={team?.name ?? null}
           hasTeam={!!team}
           pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="flex flex-col items-center justify-center gap-4 p-16">
@@ -738,7 +1011,7 @@ export default function DashboardPage() {
   }
 
   /* ── Loading state ────────────────────────────────────────────────────── */
-  if (isLoading) {
+  if (isLoading && !dashGateLayout) {
     return (
       <DashboardFrame>
         <DashboardHeader
@@ -746,6 +1019,7 @@ export default function DashboardPage() {
           teamName={team?.name ?? null}
           hasTeam={!!team}
           pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
           onAddTeam={() => setAddTeamOpen(true)}
         />
         <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
@@ -793,16 +1067,59 @@ export default function DashboardPage() {
   const compactSchedule = upcomingEvents.length <= 2;
 
   return (
-    <DashboardFrame>
-      <DashboardHeader
-        userName={user?.name ?? null}
-        teamName={team?.name ?? null}
-        hasTeam={!!team}
-        pendingInvite={hasPendingInvite}
-        onAddTeam={() => setAddTeamOpen(true)}
-      />
+    <DashboardFrame fillVisible={dashGateLayout}>
+      <div
+        className={cn(
+          dashGateLayout &&
+            "pointer-events-none opacity-0 isolate [transform:translate(0)]",
+        )}
+        aria-hidden={dashGateLayout || undefined}
+        inert={dashGateLayout || undefined}
+      >
+        <DashboardHeader
+          userName={user?.name ?? null}
+          teamName={team?.name ?? null}
+          hasTeam={!!team}
+          pendingInvite={hasPendingInvite}
+          firstTime={isFirstTime}
+          hideAddTeam={unlockGateApplies || unlockCelebrating}
+          onAddTeam={() => setAddTeamOpen(true)}
+        />
+      </div>
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10">
+      {isFirstTime && (
+        <div className="unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8 sm:px-8 lg:px-10">
+          <CreateTeamHero
+            userName={user?.name ?? null}
+            onCreateTeam={() => setAddTeamOpen(true)}
+          />
+        </div>
+      )}
+
+      {(unlockGateApplies || unlockCelebrating) && user?.id && (
+        <DashboardUnlockLayer
+          userId={user.id}
+          firstName={firstName}
+          fading={unlockCelebrating}
+          onUnlocked={handleDashboardUnlocked}
+          onRevealed={handleDashboardRevealed}
+          onCelebrationComplete={handleDashboardCelebrationComplete}
+          onRequirements={setDashUnlocked}
+        />
+      )}
+
+      {!isFirstTime && !hideMainForUnlock && (
+      <div className={concealDashboardMain ? "min-h-0 flex-1 overflow-hidden" : undefined}>
+      <div
+        data-unlock-page=""
+        className={cn(
+          "mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 sm:px-8 lg:px-10",
+          concealDashboardMain &&
+            "pointer-events-none opacity-0 isolate [transform:translate(0)]",
+        )}
+        aria-hidden={concealDashboardMain || undefined}
+        inert={concealDashboardMain || undefined}
+      >
         {/* ── Pending team invitation ─────────────────────────────────── */}
         {hasPendingInvite && pendingInviteUrl && (
           <Card
@@ -844,8 +1161,10 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {team && <MatchSquadReminder />}
+
         {team && (
-          <section aria-labelledby="quick-actions-heading">
+          <section aria-labelledby="quick-actions-heading" data-tour="dashboard-quick">
             <SectionTitle
               icon={<Activity className="size-4 text-muted-foreground" />}
             >
@@ -933,6 +1252,8 @@ export default function DashboardPage() {
           <RecentStatsCard stats={recentStats ?? []} />
         </BentoGrid>
       </div>
+      </div>
+      )}
       <EventDetailDialog
         open={Boolean(selectedEventId)}
         event={selectedEventQuery.data ?? null}

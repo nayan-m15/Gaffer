@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { matchPath, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatedTooltip } from "@/components/ui/animated-tooltip";
 import { ProfileEditorDialog, type AccountView } from "@/components/profile/ProfileEditorDialog";
@@ -6,11 +6,21 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { SportLogo } from "@/components/brand/SportLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { startCoachTour } from "@/features/onboarding/startTour";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import {
+  PAGE_UNLOCKS,
+  pageRequirementsMet,
+  usePageCelebrated,
+  useUnlockRequirements,
+  type UnlockPageKey,
+} from "@/features/onboarding/unlocks";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/hooks/useSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { listQueuedEvents } from "@/offline/match-store";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
 import type { LucideIcon } from "lucide-react";
 import "./Sidebar.css";
 import {
@@ -33,6 +43,8 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
+  Compass,
+  Lock,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +81,108 @@ const PLAYER_NAV_ITEMS: NavItem[] = [
   { label: "Leagues & Competitions", path: "/player/competitions", icon: Trophy },
 ];
 
+const TOUR_ID_BY_PATH: Record<string, string> = {
+  "/dashboard": "nav-dashboard",
+  "/athletes": "nav-roster",
+  "/events": "nav-events",
+  "/live-logger": "nav-live-logger",
+  "/injuries": "nav-injuries",
+  "/statistics": "nav-stats",
+  "/competitions": "nav-competitions",
+  "/team": "nav-team",
+};
+
+const PATH_TO_UNLOCK_KEY: Partial<Record<string, UnlockPageKey>> = {
+  "/dashboard": "dashboard",
+  "/events": "events",
+  "/injuries": "injuries",
+  "/live-logger": "live-logger",
+  "/statistics": "statistics",
+  "/team": "team",
+};
+
+type NavUnlockStatus =
+  | { kind: "none" }
+  | { kind: "locked"; title: string }
+  | { kind: "claim"; title: string };
+
+function UnlockNavController({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: (getStatus: (key: UnlockPageKey) => NavUnlockStatus) => ReactNode;
+}) {
+  if (!enabled) {
+    return <>{children(() => ({ kind: "none" }))}</>;
+  }
+  return (
+    <UnlockNavControllerActive>{children}</UnlockNavControllerActive>
+  );
+}
+
+function UnlockNavControllerActive({
+  children,
+}: {
+  children: (getStatus: (key: UnlockPageKey) => NavUnlockStatus) => ReactNode;
+}) {
+  const { user } = useAuth();
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
+  const eventsCelebrated = usePageCelebrated(user?.id, "events");
+  const injuriesCelebrated = usePageCelebrated(user?.id, "injuries");
+  const liveLoggerCelebrated = usePageCelebrated(user?.id, "live-logger");
+  const statisticsCelebrated = usePageCelebrated(user?.id, "statistics");
+  const teamCelebrated = usePageCelebrated(user?.id, "team");
+  const celebratedByKey: Record<UnlockPageKey, boolean> = {
+    dashboard: dashboardCelebrated,
+    events: eventsCelebrated,
+    injuries: injuriesCelebrated,
+    "live-logger": liveLoggerCelebrated,
+    statistics: statisticsCelebrated,
+    team: teamCelebrated,
+  };
+
+  const getStatus = (key: UnlockPageKey): NavUnlockStatus => {
+    if (isLoading || celebratedByKey[key]) {
+      return { kind: "none" };
+    }
+    if (!pageRequirementsMet(key, hasPlayers, hasGamePlan)) {
+      const page = PAGE_UNLOCKS[key];
+      if (page.needsPlayers && !hasPlayers) {
+        return { kind: "locked", title: "Locked: add at least one player" };
+      }
+      return { kind: "locked", title: "Locked: save your first game plan" };
+    }
+    return { kind: "claim", title: "Unlocked, open to claim" };
+  };
+
+  return <>{children(getStatus)}</>;
+}
+
+function UnlockNavMark({ status, collapsed = false }: {
+  status: NavUnlockStatus;
+  collapsed?: boolean;
+}) {
+  if (status.kind === "none") return null;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        collapsed
+          ? "absolute -right-1.5 -top-1.5 flex size-3.5 items-center justify-center rounded-full border border-sidebar-border bg-surface-card"
+          : "ml-auto inline-flex shrink-0 items-center",
+      )}
+    >
+      {status.kind === "locked" ? (
+        <Lock className={cn("text-muted-foreground", collapsed ? "size-2.5" : "size-3.5")} />
+      ) : (
+        <span className="size-1.5 rounded-full bg-primary animate-pulse motion-reduce:animate-none" />
+      )}
+    </span>
+  );
+}
+
 interface SidebarNavigationProps {
   items: NavItem[];
   hasTeam: boolean;
@@ -76,12 +190,15 @@ interface SidebarNavigationProps {
   pathname: string;
   onNavigate: () => void;
   desktop?: boolean;
+  isFirstTime: boolean;
+  showTourIds: boolean;
+  getUnlockStatus: (key: UnlockPageKey) => NavUnlockStatus;
 }
 
 const NAV_SPRING = { type: "spring", stiffness: 700, damping: 45 } as const;
 const PILL_SPRING = { type: "spring", stiffness: 600, damping: 42 } as const;
 
-function DesktopNavigation({ items, hasTeam, expanded, pathname, onNavigate }: SidebarNavigationProps) {
+function DesktopNavigation({ items, hasTeam, expanded, pathname, onNavigate, isFirstTime, showTourIds, getUnlockStatus }: SidebarNavigationProps) {
   const reduceMotion = useReducedMotion();
   const navRef = useRef<HTMLElement>(null);
   const [pill, setPill] = useState<{
@@ -130,21 +247,37 @@ function DesktopNavigation({ items, hasTeam, expanded, pathname, onNavigate }: S
           aria-hidden="true" />
         {items.map((item, index) => {
           const Icon = item.icon;
+          const tourId = showTourIds ? TOUR_ID_BY_PATH[item.path] : undefined;
+          const unlockKey = PATH_TO_UNLOCK_KEY[item.path];
+          const unlockStatus = unlockKey ? getUnlockStatus(unlockKey) : { kind: "none" as const };
+          const tooltipLabel = unlockStatus.kind === "locked"
+            ? `${item.label} (locked)`
+            : unlockStatus.kind === "claim" ? `${item.label} (unlocked, open to claim)` : item.label;
           const isRelatedMatchReport = item.path === "/live-logger" && /^\/matches\/[^/]+\/report\/?$/.test(pathname);
           if (item.requiresTeam && !hasTeam) return (
-            <span key={item.label}
-              className="desktop-sidebar-item desktop-sidebar-link desktop-sidebar-link--disabled relative z-10 flex w-full cursor-not-allowed items-center rounded-xl font-medium text-sidebar-foreground/40"
-              title="Add a team first">
+            <AnimatedTooltip key={item.label} label="Create your team first" side="right" portal dismissOnEscape
+              enabled={!expanded} screenReaderDescription="Create your team first">
+            <span
+              data-tour={tourId}
+              className={cn(
+                "desktop-sidebar-item desktop-sidebar-link desktop-sidebar-link--disabled relative z-10 flex w-full cursor-not-allowed items-center rounded-xl font-medium text-sidebar-foreground/40",
+                isFirstTime && "opacity-50 blur-[2px] transition-[filter,opacity] duration-700 motion-reduce:transition-none",
+              )}
+              title={expanded ? "Create your team first" : undefined}
+              aria-disabled="true">
               <Icon className="size-5 shrink-0" aria-hidden="true" />
               <span className={cn(!expanded && "lg:hidden")}>{item.label}</span>
             </span>
+            </AnimatedTooltip>
           );
           return (
             <motion.div key={item.path} className="desktop-sidebar-item relative z-10" initial="rest" animate="rest"
               whileHover={reduceMotion ? undefined : "hover"}>
-              <AnimatedTooltip label={item.label} side="right" portal dismissOnEscape
+              <AnimatedTooltip label={tooltipLabel} side="right" portal dismissOnEscape
                 enabled={!expanded} screenReaderDescription={`Navigate to ${item.label}`}>
                 <NavLink to={item.path} aria-label={item.label} data-sidebar-index={index}
+                  data-tour={tourId}
+                  title={expanded && unlockStatus.kind !== "none" ? unlockStatus.title : undefined}
                   aria-current={isRelatedMatchReport ? "page" : undefined} onClick={onNavigate}
                   className={({ isActive }) => cn(
                     "desktop-sidebar-link group relative flex w-full items-center rounded-xl border border-transparent font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -155,8 +288,12 @@ function DesktopNavigation({ items, hasTeam, expanded, pathname, onNavigate }: S
                   <motion.span className="desktop-sidebar-link-content relative z-10 flex min-w-0 items-center"
                     variants={{ rest: { x: 0 }, hover: { x: reduceMotion ? 0 : 2.5 } }}
                     transition={reduceMotion ? { duration: 0 } : NAV_SPRING}>
+                    <span className="relative inline-flex shrink-0">
                     <Icon className="size-5 shrink-0 text-sidebar-foreground/55 transition-colors duration-150 motion-reduce:transition-none group-hover:text-primary group-aria-[current=page]:text-primary" aria-hidden="true" />
+                      {!expanded && <UnlockNavMark status={unlockStatus} collapsed />}
+                    </span>
                     <span className={cn("whitespace-nowrap", !expanded && "lg:hidden")}>{item.label}</span>
+                    {expanded && <UnlockNavMark status={unlockStatus} />}
                   </motion.span>
                 </NavLink>
               </AnimatedTooltip>
@@ -249,6 +386,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
 
   const resolvedVariant = variant ?? (accountKind === "player" ? "player" : "coach");
   const navItems = resolvedVariant === "player" ? PLAYER_NAV_ITEMS : COACH_NAV_ITEMS;
+  const isFirstTime = resolvedVariant === "coach" && !team && getPendingTeamInviteToken() === null;
+  const onboardingActive = useOnboardingRoadActive(user?.id);
+  const applyUnlocks = resolvedVariant === "coach" && Boolean(team?.role === "coach" && onboardingActive && user?.id);
 
   const handleSignOut = async () => {
     try {
@@ -302,6 +442,8 @@ export function Sidebar({ className, variant }: SidebarProps) {
       </div>
 
       {/* Navigation */}
+      <UnlockNavController enabled={applyUnlocks}>
+        {(getUnlockStatus) => (
       <SidebarNavigation
         desktop={desktop}
         items={navItems}
@@ -309,11 +451,16 @@ export function Sidebar({ className, variant }: SidebarProps) {
         expanded={expanded}
         pathname={pathname}
         onNavigate={() => setIsMobileOpen(false)}
+        isFirstTime={isFirstTime}
+        showTourIds={resolvedVariant === "coach"}
+        getUnlockStatus={getUnlockStatus}
       />
+        )}
+      </UnlockNavController>
 
 
       {/* Footer */}
-      <div className={cn("border-t border-sidebar-border/70 px-4 py-4", desktop && "desktop-sidebar-profile-footer")}>
+      <div className={cn("border-t border-sidebar-border/70 px-4 py-4", desktop && "desktop-sidebar-profile-footer")} data-tour="account-section">
         {/* Profile — available to coaches, assistants, and players. */}
         <DropdownMenu>
           <DropdownMenuTrigger className={cn("mb-3 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", desktop && "lg:duration-[180ms] motion-reduce:transition-none")} aria-label="Open account menu" title="Profile and account settings">
@@ -336,6 +483,9 @@ export function Sidebar({ className, variant }: SidebarProps) {
             <p className="truncate text-xs text-muted-foreground">
               Profile & settings
             </p>
+            {resolvedVariant === "coach" && !team && (
+              <p className="truncate text-xs text-muted-foreground">No team yet</p>
+            )}
           </div>
           {desktop ? <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground", !expanded && "lg:hidden")} aria-hidden="true" />
             : <ChevronsUpDown className={cn("size-4 shrink-0 text-muted-foreground", !expanded && "lg:hidden")} aria-hidden="true" />}
@@ -386,6 +536,30 @@ export function Sidebar({ className, variant }: SidebarProps) {
             {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </span>
         </button>
+
+        {resolvedVariant === "coach" && team?.role === "coach" && (
+          <AnimatedTooltip label="Show tour again" side="right" portal dismissOnEscape
+            enabled={desktop && !expanded} screenReaderDescription="Show tour again">
+          <button
+            type="button"
+            data-tour="show-tour"
+            onClick={() => {
+              setIsMobileOpen(false);
+              startCoachTour({
+                teamName: team.name,
+                firstName: user?.name?.trim().split(/\s+/)[0] || "Coach",
+                replay: true,
+                onGoToRoster: () => navigate("/athletes"),
+              });
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Show tour again"
+          >
+            <Compass className="size-5 shrink-0" aria-hidden="true" />
+            <span className={cn(!expanded && "lg:hidden")}>Show tour again</span>
+          </button>
+          </AnimatedTooltip>
+        )}
 
         {/* Sign out */}
         <button
