@@ -154,23 +154,12 @@ jobs:
           if-no-files-found: ignore
 
   ui-tests-shard-1:
-    name: UI tests (shard 1/2)
+    name: UI tests (shard 1/4)
     runs-on: ubuntu-latest
-    # Two workers on one runner was tried to cut wall-clock time, but several
-    # specs render a real WebGL scene with software rendering (swiftshader)
-    # and drive a real backend/DB — two Chromium instances sharing one
-    # runner's CPU starved both, turning normally-fast assertions into
-    # timeouts. Splitting the suite across two independent runners gets the
-    # same wall-clock win without that contention, since each shard gets its
-    # own CPU. This is two explicit jobs rather than a `strategy: matrix` —
-    # this Gitea instance's Actions runner silently drops the whole workflow
-    # (no run is even queued) for any push while a job uses `matrix`.
-    #
-    # Includes installs/builds, the bounded 30-minute Playwright shard, PWA
-    # verification (shard 1 only), and artifact upload. Keep this
-    # comfortably above the suite's own globalTimeout (playwright.config.ts)
-    # so Playwright always gets to exit on its own terms and upload
-    # diagnostics rather than being hard-killed by the job deadline.
+    # Keep one browser per job: software WebGL is CPU intensive. Four explicit
+    # shards keep the full suite within each job's 30-minute browser budget.
+    # Gitea on this instance does not queue workflows using strategy.matrix.
+    # Leave time for builds, PWA checks and failure artifact uploads.
     timeout-minutes: 50
     env:
       CI: "true"
@@ -222,7 +211,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui -- --shard=1/2
+        run: npm run test:e2e:ui -- --shard=1/4
 
       - name: Run production PWA tests
         if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
@@ -246,7 +235,7 @@ jobs:
           if-no-files-found: ignore
 
   ui-tests-shard-2:
-    name: UI tests (shard 2/2)
+    name: UI tests (shard 2/4)
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -298,7 +287,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e:ui -- --shard=2/2
+        run: npm run test:e2e:ui -- --shard=2/4
 
       - name: Drop isolated test database
         if: always() && steps.provision.outcome == 'success'
@@ -311,6 +300,148 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: playwright-failure-artifacts-2
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  ui-tests-shard-3:
+    name: UI tests (shard 3/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      CI: "true"
+      TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
+      PORT: "3100"
+      BETTER_AUTH_URL: http://localhost:3100
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+          npm --prefix backend ci
+
+      # A private database per shard; see the api-tests job.
+      - name: Provision isolated test database
+        id: provision
+        run: node backend/scripts/ci-test-database.mjs create ui_3
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Migrate the test database
+        run: npm --prefix backend run db:migrate:test
+
+      - name: Build application for browser tests
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e:ui -- --shard=3/4
+
+      - name: Drop isolated test database
+        if: always() && steps.provision.outcome == 'success'
+        run: node backend/scripts/ci-test-database.mjs drop
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-failure-artifacts-3
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  ui-tests-shard-4:
+    name: UI tests (shard 4/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      CI: "true"
+      TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
+      # Neon hosts resolve to several IPv4 and IPv6 addresses and Node gives
+      # each only 250ms to connect; from the runners that abandons every IPv4
+      # attempt and fails on unreachable IPv6 ("fetch failed"). Covers
+      # migrations, Jest, the backend and Playwright in this job.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=2500
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-outside-tests
+      PORT: "3100"
+      BETTER_AUTH_URL: http://localhost:3100
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+          npm --prefix backend ci
+
+      # A private database per shard; see the api-tests job.
+      - name: Provision isolated test database
+        id: provision
+        run: node backend/scripts/ci-test-database.mjs create ui_4
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Migrate the test database
+        run: npm --prefix backend run db:migrate:test
+
+      - name: Build application for browser tests
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e:ui -- --shard=4/4
+
+      - name: Drop isolated test database
+        if: always() && steps.provision.outcome == 'success'
+        run: node backend/scripts/ci-test-database.mjs drop
+        env:
+          CI_TEST_DATABASE_BASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-failure-artifacts-4
           path: |
             playwright-report/
             test-results/

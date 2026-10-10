@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Loading Three.js and compiling its first WebGL scene can be noticeably
 // slower on shared CI runners using SwiftShader than on a developer machine.
-const SCENE_TIMEOUT = 30_000;
+const SCENE_TIMEOUT = process.env.CI ? 90_000 : 30_000;
 
 // Exercise the 3D lifecycle on CI's software GPU. Separate tests below verify
 // the actual software-renderer fallback without this test-only capability shim.

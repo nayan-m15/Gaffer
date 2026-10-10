@@ -1,5 +1,7 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
+const SCENE_TIMEOUT = process.env.CI ? 90_000 : 30_000;
+
 async function dashboard(page: Page) {
   await page.route('**/auth/session', route => route.fulfill({ json: {
     user: { id: 'stadium-coach', name: 'Stadium Coach', email: 'stadium@example.com', image: null, emailVerified: true },
@@ -12,7 +14,7 @@ async function dashboard(page: Page) {
       : [],
   }));
   await page.goto('/dashboard');
-  await expect(page.locator('.dashboard-stadium-scene canvas')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await expect(page.locator('.dashboard-stadium-scene canvas')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
   await expect(page.locator('#preloader')).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
 }
@@ -38,6 +40,6 @@ test('leaving the dashboard releases geometry and instance GPU buffers', async (
   await expect(canvas).toHaveCount(0, { timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => (window as unknown as { __stadiumLiveBuffers: number }).__stadiumLiveBuffers)).toBe(0);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).first().click();
-  await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
   await expect.poll(() => page.evaluate(() => (window as unknown as { __stadiumLiveBuffers: number }).__stadiumLiveBuffers)).toBe(initialCount);
 });
