@@ -641,6 +641,8 @@ export default function InjuryRecoveryPage() {
       <PageHeader
         title="Injury & Recovery"
         subtitle="Track injuries, monitor recovery and get players back on the pitch."
+        headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-white/60 px-4 py-3 sm:px-5 dark:min-w-auto dark:w-auto dark:max-w-none dark:rounded-none dark:bg-transparent dark:p-0"
+        subtitleClassName="text-black dark:text-muted-foreground"
         actions={
           <Button onClick={() => setLogOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />

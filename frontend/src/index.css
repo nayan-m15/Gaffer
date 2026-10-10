@@ -1070,6 +1070,12 @@ select:-webkit-autofill {
   -webkit-backdrop-filter: blur(14px) saturate(135%);
 }
 
+html:not(.dark) .public-dashboard-page > header :is(a, button):not(.bg-primary),
+html:not(.dark) .public-dashboard-page .public-dashboard-section-link {
+  color: #000;
+  text-shadow: none;
+}
+
 .public-dashboard-page > footer {
   z-index: 10;
   opacity: 1;

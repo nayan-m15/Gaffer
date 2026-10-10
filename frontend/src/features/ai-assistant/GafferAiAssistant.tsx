@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import {
   Check,
   Loader2,
@@ -116,11 +116,41 @@ export function GafferAiAssistant({
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const [footerClearance, setFooterClearance] = useState(24);
 
   const sendMessage = useSendAssistantMessage();
   const confirmAction = useConfirmAssistantAction();
   const cancelAction = useCancelAssistantAction();
   const isPending = sendMessage.isPending || confirmAction.isPending || cancelAction.isPending;
+
+  useLayoutEffect(() => {
+    const shell = launcherRef.current?.closest(".app-shell-main");
+    const footer = shell?.querySelector("[data-app-footer]");
+    if (!shell || !footer) return;
+
+    const updatePosition = () => {
+      const footerTop = footer.getBoundingClientRect().top;
+      const clearance = footer.getClientRects().length
+        ? Math.max(24, Math.ceil(window.innerHeight - footerTop + 16))
+        : 24;
+      setFooterClearance((current) => current === clearance ? current : clearance);
+    };
+
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(footer);
+    const content = shell.querySelector(".app-shell-content");
+    if (content) observer.observe(content);
+    shell.addEventListener("scroll", updatePosition, { passive: true });
+    window.addEventListener("resize", updatePosition);
+    updatePosition();
+
+    return () => {
+      observer.disconnect();
+      shell.removeEventListener("scroll", updatePosition);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -222,7 +252,10 @@ export function GafferAiAssistant({
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-x-4 top-[calc(4rem+env(safe-area-inset-top,0px)+64px)] bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] z-50 flex h-auto max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[420px] sm:max-w-[calc(100vw-2rem)] lg:top-auto lg:bottom-24 lg:right-6 lg:h-[640px] lg:max-h-[calc(100vh-8rem)]">
+        <div
+          className="fixed inset-x-4 bottom-4 z-50 flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-[var(--gaffer-panel-bottom)] sm:right-6 sm:h-[640px] sm:max-h-[calc(100vh-var(--gaffer-panel-bottom)-2rem)] sm:w-[420px] sm:max-w-[calc(100vw-2rem)] max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+64px)] max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] max-lg:h-auto max-lg:max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] max-lg:right-4 sm:max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] sm:max-lg:right-4 sm:max-lg:h-auto sm:max-lg:max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))]"
+          style={{ "--gaffer-panel-bottom": `${footerClearance + 72}px` } as CSSProperties}
+        >
           {/* Header */}
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="flex items-start gap-2.5">
@@ -436,11 +469,13 @@ export function GafferAiAssistant({
 
       {/* Floating launcher */}
       <button
+        ref={launcherRef}
         type="button"
         aria-label={isOpen ? "Close Gaffer AI" : "Ask Gaffer AI"}
         title="Ask Gaffer AI"
         onClick={() => setIsOpen((current) => !current)}
-        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
+        className="fixed bottom-[var(--gaffer-launcher-bottom)] right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
+        style={{ "--gaffer-launcher-bottom": `${footerClearance}px` } as CSSProperties}
       >
         <Sparkles className="size-6 max-lg:size-5" />
       </button>

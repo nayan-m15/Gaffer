@@ -72,7 +72,7 @@ function AppShellContent() {
         <div className={cn("app-shell-content flex-1", isEventsPage && "min-h-0")}>
           <Outlet />
         </div>
-        <div className="no-print relative z-20">
+        <div className={cn("no-print relative z-20", expanded ? "lg:-ml-1 lg:w-[calc(100%+4px)]" : "lg:-ml-5 lg:w-[calc(100%+20px)]")}>
           <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:mt-0 sm:py-3" : undefined} />
         </div>
       </main>

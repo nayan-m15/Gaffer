@@ -12,6 +12,10 @@ export interface PageHeaderProps {
   children?: ReactNode;
   /** Additional custom class names for the header container */
   className?: string;
+  /** Additional custom class names for the title and subtitle block */
+  headingClassName?: string;
+  /** Additional custom class names for the subtitle text */
+  subtitleClassName?: string;
   /** Align the title and actions on one row on mobile. */
   mobileInline?: boolean;
 }
@@ -28,6 +32,8 @@ export function PageHeader({
   actions,
   children,
   className,
+  headingClassName,
+  subtitleClassName,
   mobileInline = false,
 }: PageHeaderProps) {
   return (
@@ -44,12 +50,12 @@ export function PageHeader({
           mobileInline && "flex-row items-center justify-between gap-2",
         )}
       >
-        <div className={mobileInline ? "min-w-0" : undefined}>
+        <div className={cn(mobileInline && "min-w-0", headingClassName)}>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
+            <p className={cn("mt-2 text-sm text-muted-foreground", subtitleClassName)}>{subtitle}</p>
           )}
         </div>
 
