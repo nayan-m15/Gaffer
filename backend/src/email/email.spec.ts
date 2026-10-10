@@ -7,6 +7,8 @@ import {
   sendCompetitionRepresentativeCorrectionEmail,
   sendCompetitionTeamReviewEmail,
   sendCompetitionTeamReviewOutcomeEmail,
+  sendEmailChangeConfirmationEmail,
+  sendPasswordResetEmail,
   sendPlayerClaimInviteEmail,
   sendVerificationEmail,
 } from './email';
@@ -106,6 +108,29 @@ const senders: { name: string; send: () => Promise<void> }[] = [
         teamName: 'XI',
         recipientEmail: 'player@example.com',
         url: urlWithToken('competitions/1'),
+      }),
+  },
+  // Regression (SEC-007 residual): these two senders used to bypass
+  // handleUnconfiguredDelivery and logger.warn the bearer URL in every
+  // environment. The matrix entries above now prove they fail closed like
+  // every other sender.
+  {
+    name: 'sendPasswordResetEmail',
+    send: () =>
+      sendPasswordResetEmail({
+        to: 'coach@example.com',
+        name: 'Coach',
+        url: urlWithToken('reset-password'),
+      }),
+  },
+  {
+    name: 'sendEmailChangeConfirmationEmail',
+    send: () =>
+      sendEmailChangeConfirmationEmail({
+        to: 'coach@example.com',
+        name: 'Coach',
+        newEmail: 'new-address@example.com',
+        url: urlWithToken('email-change'),
       }),
   },
 ];
