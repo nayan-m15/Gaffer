@@ -1,69 +1,15 @@
 /* These selectors only affect the explicit desktop sidebar at lg and above. */
 @media (min-width: 64rem) {
   .gaffer-desktop-sidebar {
-    --nav-pill-start: 14%;
-    --nav-pill-end: 4%;
-    --nav-pill-border: 55%;
-    --nav-pill-glow: 20%;
+    --nav-pill-fill: 10%;
+    --nav-pill-border: 50%;
     --nav-hover-colour: var(--primary);
-    --nav-hover-fill: 5%;
-    --nav-avatar-ring: 70%;
-    --nav-background-tint: 3%;
-    --nav-pitch-opacity: 0.12;
-    --nav-frame-green: var(--chart-2);
-    --nav-logo-border: 40%;
-    --nav-logo-glow: 15%;
-    --nav-button-border: 30%;
-    --nav-button-glow: 20%;
-    --nav-separator-line: 35%;
-    --nav-separator-glow: 15%;
-    --nav-avatar-glow: 30%;
-    overflow: visible;
-    border-color: var(--sidebar-border);
-    box-shadow: var(--tw-shadow, 0 0 transparent);
   }
 
   .dark .gaffer-desktop-sidebar {
-    --nav-pill-start: 22%;
-    --nav-pill-end: 6%;
-    --nav-pill-border: 70%;
-    --nav-pill-glow: 35%;
-    --nav-hover-colour: var(--sidebar-foreground);
-    --nav-hover-fill: 5%;
-    --nav-avatar-ring: 90%;
-    --nav-background-tint: 5%;
-    --nav-pitch-opacity: 0.14;
-    --nav-frame-green: var(--brand);
-    --nav-logo-border: 50%;
-    --nav-logo-glow: 25%;
-    --nav-button-border: 40%;
-    --nav-button-glow: 35%;
-    --nav-separator-line: 45%;
-    --nav-separator-glow: 20%;
-    --nav-avatar-glow: 55%;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-clip {
-    position: relative;
-    border-radius: inherit;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-clip > div:not(.desktop-sidebar-background) {
-    position: relative;
-    z-index: 1;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-background {
-    position: absolute;
-    z-index: 0;
-    overflow: hidden;
-    background: linear-gradient(to bottom, var(--sidebar),
-      color-mix(in srgb, var(--primary) var(--nav-background-tint), var(--sidebar)));
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-light-lines {
-    color: color-mix(in srgb, var(--primary) 10%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 25%, black 60%, transparent);
+    --nav-pill-fill: 12%;
+    --nav-pill-border: 40%;
+    --nav-hover-colour: var(--foreground);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-nav {
@@ -102,202 +48,47 @@
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-link:not(.desktop-sidebar-link--active):not(.desktop-sidebar-link--disabled):hover {
-    background: color-mix(in srgb, var(--nav-hover-colour) var(--nav-hover-fill), transparent);
+    background: color-mix(in srgb, var(--nav-hover-colour) 5%, transparent);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
     border: 1px solid color-mix(in srgb, var(--primary) var(--nav-pill-border), transparent);
-    background: linear-gradient(to right,
-      color-mix(in srgb, var(--primary) var(--nav-pill-start), transparent),
-      color-mix(in srgb, var(--primary) var(--nav-pill-end), transparent));
-    box-shadow: 0 0 14px color-mix(in srgb, var(--primary) var(--nav-pill-glow), transparent);
-  }
-
-  .dark .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent),
-      0 0 18px color-mix(in srgb, var(--primary) var(--nav-pill-glow), transparent),
-      inset 0 1px 0 rgb(255 255 255 / 6%);
-  }
-
-  /* A flat daytime treatment keeps the gliding pill crisp on a light panel. */
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-active-pill {
-    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent);
+    background: color-mix(in srgb, var(--primary) var(--nav-pill-fill), transparent);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-link--active {
+    color: var(--foreground);
     font-weight: 600;
   }
 
+  .gaffer-desktop-sidebar .desktop-sidebar-link--active svg {
+    color: var(--primary);
+  }
+
   .gaffer-desktop-sidebar .desktop-sidebar-avatar {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--nav-frame-green) var(--nav-avatar-ring), transparent),
-      0 0 14px color-mix(in srgb, var(--nav-frame-green) var(--nav-avatar-glow), transparent),
-      inset 0 0 8px color-mix(in srgb, var(--nav-frame-green) 12%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-logo-tile {
-    border-color: color-mix(in srgb, var(--primary) var(--nav-logo-border), transparent);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--nav-frame-green) var(--nav-logo-glow), transparent);
+    border-color: var(--sidebar-border);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-collapse {
-    border: 1px solid color-mix(in srgb, var(--primary) var(--nav-button-border), transparent);
+    border: 1px solid var(--sidebar-border);
     padding: 5px;
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-collapse:hover,
   .gaffer-desktop-sidebar .desktop-sidebar-collapse:focus-visible {
-    border-color: color-mix(in srgb, var(--primary) var(--nav-logo-border), transparent);
-    /* Keep the existing focus ring by supplying the shadow through Tailwind. */
-    --tw-shadow: 0 0 12px color-mix(in srgb, var(--nav-frame-green) var(--nav-button-glow), transparent);
-    box-shadow: var(--tw-inset-shadow, 0 0 transparent), var(--tw-inset-ring-shadow, 0 0 transparent),
-      var(--tw-ring-offset-shadow, 0 0 transparent), var(--tw-ring-shadow, 0 0 transparent), var(--tw-shadow);
+    border-color: var(--primary);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-header {
-    border-bottom-color: transparent;
+    border-bottom-color: var(--sidebar-border);
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-profile-footer {
-    border-top-color: transparent;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-header::after,
-  .gaffer-desktop-sidebar .desktop-sidebar-profile-footer::before {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    height: 1px;
-    pointer-events: none;
-    background: linear-gradient(to right, transparent,
-      color-mix(in srgb, var(--primary) var(--nav-separator-line), transparent), transparent);
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--nav-frame-green) var(--nav-separator-glow), transparent));
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-header::after {
-    bottom: -1px;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-profile-footer::before {
-    top: -1px;
-  }
-
-  .dark .gaffer-desktop-sidebar .desktop-sidebar-light-lines {
-    color: color-mix(in srgb, var(--brand) 14%, transparent);
-  }
-
-  /* The nav ends at the profile separator, so artwork cannot enter the footer. */
-  .gaffer-desktop-sidebar .desktop-sidebar-pitch-layer {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    z-index: -1;
-  }
-
-  .gaffer-desktop-sidebar .desktop-sidebar-pitch {
-    left: -44px;
-    bottom: -38px;
-    width: calc(100% + 88px);
-    color: var(--primary);
-    opacity: var(--nav-pitch-opacity);
-    mask-image: linear-gradient(to bottom, transparent 5%, black 65%);
-    z-index: 0;
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-pitch {
-    color: var(--primary);
-    opacity: 0.11;
-    filter: none;
-  }
-
-  .dark .gaffer-desktop-sidebar::before {
-    content: "";
-    position: absolute;
-    inset: -10px;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: -1;
-    background:
-      radial-gradient(ellipse 28px 40px at 10px 10px,
-        color-mix(in srgb, var(--brand) 20%, transparent), transparent),
-      radial-gradient(ellipse 28px 40px at calc(100% - 10px) calc(100% - 10px),
-        color-mix(in srgb, var(--brand) 20%, transparent), transparent);
-    filter: blur(8px);
-  }
-
-  .dark .gaffer-desktop-sidebar::after {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    z-index: 2;
-    background:
-      radial-gradient(ellipse 40% 40% at top left,
-        color-mix(in srgb, var(--brand) 75%, transparent), transparent),
-      radial-gradient(ellipse 40% 40% at bottom right,
-        color-mix(in srgb, var(--brand) 75%, transparent), transparent);
-    mask: linear-gradient(black, black) content-box, linear-gradient(black, black);
-    mask-composite: exclude;
-  }
-
-  .dark .gaffer-desktop-sidebar .desktop-sidebar-background::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(ellipse 40% 40% at top left,
-        color-mix(in srgb, var(--brand) 18%, transparent), transparent),
-      radial-gradient(ellipse 40% 40% at bottom right,
-        color-mix(in srgb, var(--brand) 18%, transparent), transparent);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar {
-    background: var(--sidebar);
-    box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 6%, transparent);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-background {
-    background: var(--sidebar);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-light-lines {
-    display: none;
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-link--active {
-    color: var(--foreground);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-link--active svg {
-    color: var(--primary);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-logo-tile,
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-collapse {
-    border-color: var(--sidebar-border);
-    box-shadow: none;
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-collapse:hover,
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-collapse:focus-visible {
-    border-color: var(--primary);
-    --tw-shadow: 0 0 transparent;
-    box-shadow: var(--tw-inset-shadow, 0 0 transparent), var(--tw-inset-ring-shadow, 0 0 transparent),
-      var(--tw-ring-offset-shadow, 0 0 transparent), var(--tw-ring-shadow, 0 0 transparent);
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-header::after,
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-profile-footer::before {
-    background: var(--sidebar-border);
-    filter: none;
-  }
-
-  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-avatar {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent);
+    border-top-color: var(--sidebar-border);
   }
 }
 
