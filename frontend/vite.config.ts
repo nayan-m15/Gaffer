@@ -33,7 +33,7 @@ export default defineConfig({
         // Better Auth endpoints are reverse-proxied by Vercel. Keep the PWA
         // navigation fallback from serving the SPA shell for OAuth callbacks
         // such as /auth/callback/google.
-        navigateFallbackDenylist: [/^\/auth(?:\/|$)/],
+        navigateFallbackDenylist: [/^\/auth(?:\/|$)/, /^\/(?:terms-of-service|privacy-policy)\.html$/],
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         globIgnores: ['**/node_modules/**'],
         maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
