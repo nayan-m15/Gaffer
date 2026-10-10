@@ -98,6 +98,18 @@ export default function TeamManagementPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Only the wide squad layout places the status cards beside the selectors.
+  const [isWideControls, setIsWideControls] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1280 : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const handler = (e: MediaQueryListEvent) => setIsWideControls(e.matches);
+    mq.addEventListener("change", handler);
+    setIsWideControls(mq.matches);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   /* ── Lookup helpers ──────────────────────────────────────────────────────── */
 
   const athleteMap = useMemo(() => {
@@ -207,6 +219,95 @@ export default function TeamManagementPage() {
     );
   }
 
+  const statusBar = (
+    <div className="hidden w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md md:flex">
+      <StatusBar
+        label="On Pitch"
+        value={lineup.pitchCount}
+        max={lineup.lineupSize}
+        isComplete={lineup.isLineupComplete}
+      />
+      <StatusBar
+        label="Substitutes"
+        value={lineup.substituteIds.length}
+      />
+      <StatusBadge
+        label="Goalkeeper"
+        ok={lineup.hasGoalkeeper}
+        okText="Set"
+        failText="Not set"
+      />
+
+      {unavailableCounts.injured > 0 && (
+        <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+          Injured: {unavailableCounts.injured}
+        </span>
+      )}
+
+      {unavailableCounts.suspended > 0 && (
+        <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-400">
+          Suspended: {unavailableCounts.suspended}
+        </span>
+      )}
+    </div>
+  );
+
+  const warningBlock = (
+    <div className="flex w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md empty:hidden">
+      {lineup.hasInjuredPitchPlayers && (
+        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+          Remove injured players from the starting lineup before saving
+        </span>
+      )}
+
+      {lineup.hasMisplacedPlayers && (
+        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+          {lineup.misplacedAthleteIds.length === 1
+            ? "1 player not in their optimal position"
+            : `${lineup.misplacedAthleteIds.length} players not in their optimal positions`}
+        </span>
+      )}
+
+      {!lineup.hasEnoughPlayers && (
+        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+          Need at least {lineup.lineupSize} players for a full lineup
+        </span>
+      )}
+
+      {lineup.error && (
+        <span
+          className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
+          onClick={lineup.clearError}
+          role="alert"
+        >
+          {lineup.error} (dismiss)
+        </span>
+      )}
+
+      {saveError && (
+        <span
+          className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
+          onClick={clearSaveError}
+          role="alert"
+        >
+          {saveError} (dismiss)
+        </span>
+      )}
+
+      {deleteError && (
+        <span
+          className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
+          onClick={clearDeleteError}
+          role="alert"
+        >
+          Failed to delete game plan. Please try again. (dismiss)
+        </span>
+      )}
+    </div>
+  );
+
+  const showWideSquadControls = activeSection === "squad" && isWideControls;
+
   /* ── Main content ────────────────────────────────────────────────────────── */
 
   return (
@@ -249,11 +350,19 @@ export default function TeamManagementPage() {
               ariaLabel="Team sections"
               variant="primary"
             />
-            <TeamToolbarFields
-              editor={gamePlanEditor}
-              section={activeSection}
-              readOnly={!canManageTeam}
-            />
+            <div className={showWideSquadControls ? "grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-4" : undefined}>
+              <TeamToolbarFields
+                editor={gamePlanEditor}
+                section={activeSection}
+                readOnly={!canManageTeam}
+              />
+              {showWideSquadControls && (
+                <div className="flex min-w-0 flex-col items-start gap-3">
+                  {statusBar}
+                  {warningBlock}
+                </div>
+              )}
+            </div>
           </div>
         </PageHeader>
       </div>
@@ -271,96 +380,12 @@ export default function TeamManagementPage() {
           <TeamTacticsPanel editor={gamePlanEditor} readOnly={!canManageTeam} />
         ) : (
           <>
-        {/* ── Status bar ────────────────────────────────────────────────────── */}
-      {/* Same near-opaque card as the toolbar fields: the pills are tinted at
-          10% opacity, which disappears against the photographic backdrop.
-          Spelled out here; a phone gets the same counts as icons under the
-          pitch, where three wrapped lines of captions would not fit. */}
-      <div className="hidden w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md md:flex">
-        <StatusBar
-          label="On Pitch"
-          value={lineup.pitchCount}
-          max={lineup.lineupSize}
-          isComplete={lineup.isLineupComplete}
-        />
-        <StatusBar
-          label="Substitutes"
-          value={lineup.substituteIds.length}
-        />
-        <StatusBadge
-          label="Goalkeeper"
-          ok={lineup.hasGoalkeeper}
-          okText="Set"
-          failText="Not set"
-        />
-
-        {unavailableCounts.injured > 0 && (
-          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
-            Injured: {unavailableCounts.injured}
-          </span>
+        {!showWideSquadControls && (
+          <>
+            {statusBar}
+            {warningBlock}
+          </>
         )}
-
-        {unavailableCounts.suspended > 0 && (
-          <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-700 dark:text-yellow-400">
-            Suspended: {unavailableCounts.suspended}
-          </span>
-        )}
-      </div>
-
-      {/* Anything the coach has to act on. Unlike the counts these are
-          sentences, not figures, so they read the same at every width —
-          `empty:hidden` keeps the card out of the layout when all is well. */}
-      <div className="flex w-fit max-w-full flex-wrap items-center gap-3 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-sm backdrop-blur-md empty:hidden">
-        {lineup.hasInjuredPitchPlayers && (
-          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
-            Remove injured players from the starting lineup before saving
-          </span>
-        )}
-
-        {lineup.hasMisplacedPlayers && (
-          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-            {lineup.misplacedAthleteIds.length === 1
-              ? "1 player not in their optimal position"
-              : `${lineup.misplacedAthleteIds.length} players not in their optimal positions`}
-          </span>
-        )}
-
-        {!lineup.hasEnoughPlayers && (
-          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-            Need at least {lineup.lineupSize} players for a full lineup
-          </span>
-        )}
-
-        {lineup.error && (
-          <span
-            className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
-            onClick={lineup.clearError}
-            role="alert"
-          >
-            {lineup.error} (dismiss)
-          </span>
-        )}
-
-        {saveError && (
-          <span
-            className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
-            onClick={clearSaveError}
-            role="alert"
-          >
-            {saveError} (dismiss)
-          </span>
-        )}
-
-        {deleteError && (
-          <span
-            className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive cursor-pointer"
-            onClick={clearDeleteError}
-            role="alert"
-          >
-            Failed to delete game plan. Please try again. (dismiss)
-          </span>
-        )}
-      </div>
 
       {/* ── Tactical board ────────────────────────────────────────────────── */}
       <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-6 2xl:grid-cols-[minmax(0,860px)_456px]">
