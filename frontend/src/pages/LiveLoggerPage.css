@@ -23,7 +23,7 @@
 }
 .live-logger-content { max-width: 1480px; margin-inline: auto; }
 .live-logger-page .live-logger-header { padding: 2.5rem 2.5rem 1.5rem; }
-.live-logger-header h1 { font-size: clamp(2rem, 3.5vw, 3rem); font-weight: 750; letter-spacing: -.04em; }
+.live-logger-header h1 { font-weight: 750; letter-spacing: -.04em; }
 .live-logger-header p { max-width: 42rem; color: var(--text-secondary); line-height: 1.7; }
 .live-logger-body { padding-inline: 2.5rem; }
 .live-logger-toolbar { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center; gap: 1rem; margin-bottom: 1.4rem; }

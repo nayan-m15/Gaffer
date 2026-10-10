@@ -9,6 +9,8 @@ jest.mock('./auth', () => ({
       changePassword: jest.fn(),
       setPassword: jest.fn(),
       listUserAccounts: jest.fn(),
+      requestPasswordReset: jest.fn(),
+      resetPassword: jest.fn(),
       signOut: jest.fn(),
     },
   },
@@ -65,6 +67,9 @@ const setPassword = auth.api.setPassword as unknown as jest.Mock;
 const listUserAccounts = auth.api.listUserAccounts as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
+const requestPasswordReset = auth.api
+  .requestPasswordReset as unknown as jest.Mock;
+const resetPassword = auth.api.resetPassword as unknown as jest.Mock;
 const fromNodeHeadersMock = fromNodeHeaders as unknown as jest.Mock;
 
 /**
@@ -686,6 +691,105 @@ describe('AuthController', () => {
           makeReq(),
         ),
       ).rejects.toThrow('Too many requests.');
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('enforces the email rate limit policy against the request identity before anything else', async () => {
+      const result = await controller.forgotPassword(
+        { email: 'ada@example.com' },
+        makeReq({ 'x-forwarded-for': '198.51.100.9' }),
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '198.51.100.9',
+      });
+      expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces the limiter 429 without requesting a reset token', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.forgotPassword({ email: 'ada@example.com' }, makeReq()),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(requestPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('keeps the generic status for a non-disclosing unknown-account error', async () => {
+      requestPasswordReset.mockRejectedValueOnce(
+        new APIError('NOT_FOUND', { message: 'User not found.' }),
+      );
+
+      const result = await controller.forgotPassword(
+        { email: 'ada@example.com' },
+        makeReq(),
+      );
+
+      expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces actionable Better Auth failures like a server error', async () => {
+      requestPasswordReset.mockRejectedValueOnce(
+        new APIError('INTERNAL_SERVER_ERROR', {
+          message: 'Database unavailable',
+        }),
+      );
+
+      await expect(
+        controller.forgotPassword({ email: 'ada@example.com' }, makeReq()),
+      ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  describe('resetPassword', () => {
+    const RESET_TOKEN = 'a'.repeat(24);
+
+    it('enforces the password rate limit policy against the request identity before anything else', async () => {
+      const result = await controller.resetPassword(
+        { token: RESET_TOKEN, newPassword: 'NewPassword1!' },
+        makeReq({ 'x-forwarded-for': '198.51.100.9' }),
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('password', {
+        primaryIp: '198.51.100.9',
+      });
+      expect(resetPassword).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces the limiter 429 without attempting the reset', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.resetPassword(
+          { token: RESET_TOKEN, newPassword: 'NewPassword1!' },
+          makeReq(),
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(resetPassword).not.toHaveBeenCalled();
+    });
+
+    it('passes the token and new password through to Better Auth', async () => {
+      await controller.resetPassword(
+        { token: RESET_TOKEN, newPassword: 'NewPassword1!' },
+        makeReq(),
+      );
+
+      expect(resetPassword).toHaveBeenCalledWith({
+        body: { token: RESET_TOKEN, newPassword: 'NewPassword1!' },
+      });
     });
   });
 

@@ -62,6 +62,8 @@ export default function PlayerDashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
+        headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-background/50 px-4 py-3 sm:px-5"
+        subtitleClassName="text-black dark:text-muted-foreground"
         subtitle={
           stats
             ? `${stats.name}${stats.position ? ` · ${stats.position}` : ""}${stats.squadNumber ? ` · #${stats.squadNumber}` : ""}`

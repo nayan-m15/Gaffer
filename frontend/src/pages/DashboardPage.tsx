@@ -264,6 +264,8 @@ function DashboardHeader({
           {teamName ? ` \u00b7 ${teamName}` : ""}
         </>
       }
+      headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-white/75 px-4 py-3 sm:px-5 dark:min-w-auto dark:w-auto dark:max-w-none dark:rounded-none dark:bg-transparent dark:p-0"
+      subtitleClassName="text-black dark:text-muted-foreground"
       actions={
         <>
           {!firstTime && !hasTeam && !pendingInvite && !hideAddTeam && (
@@ -933,7 +935,11 @@ export default function DashboardPage() {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    if (reduceMotion) return;
+    if (reduceMotion) {
+      setDashPageRevealed(true);
+      dashboardShell.reveal();
+      return;
+    }
     setUnlockCelebrating(true);
     dashboardShell.hold();
   };

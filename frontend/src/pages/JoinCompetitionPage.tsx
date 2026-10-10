@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { getNewPasswordValidationError } from "@/lib/password-policy";
 import {
   acceptCompetitionInvite,
@@ -116,6 +117,7 @@ export default function JoinCompetitionPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   /** Set when an accept failed with the email-mismatch 403 — drives the
    * sign-out-and-retry guidance rather than treating the invite as dead. */
@@ -254,6 +256,7 @@ export default function JoinCompetitionPage() {
   /* ── Handlers ──────────────────────────────────────────────────────── */
   const handleSignUp = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setShowPasswordRequirements(true);
     if (!validateSignUp()) return;
     setIsSubmitting(true);
     setFormError(null);
@@ -533,7 +536,7 @@ export default function JoinCompetitionPage() {
         <div className="flex rounded-lg border border-border bg-background p-1">
           <button
             type="button"
-            onClick={() => { setViewMode("sign-up"); setErrors({}); setFormError(null); }}
+            onClick={() => { setViewMode("sign-up"); setShowPasswordRequirements(false); setErrors({}); setFormError(null); }}
             className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
               viewMode === "sign-up"
                 ? "bg-brand text-brand-foreground"
@@ -600,22 +603,27 @@ export default function JoinCompetitionPage() {
               )}
             </div>
             <div className="relative">
-              <FloatingLabelInput
-                id="jt-password"
-                label="Password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/3 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
+              <div className="relative">
+                <FloatingLabelInput
+                  id="jt-password"
+                  label="Password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/3 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {showPasswordRequirements && (
+                <PasswordRequirements password={password} className="pt-1" />
+              )}
               {errors.password && (
                 <p className="mt-1 text-xs text-destructive">{errors.password}</p>
               )}
