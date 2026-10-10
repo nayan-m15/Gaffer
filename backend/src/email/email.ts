@@ -119,6 +119,10 @@ export interface SendEmailChangeConfirmationInput {
 /**
  * Confirms an email-address change with the account's current address before
  * Better Auth sends its normal verification message to the new address.
+ *
+ * Like every sender, the unconfigured fallback routes through
+ * `handleUnconfiguredDelivery`, so production fails closed instead of
+ * logging the confirmation link.
  */
 export async function sendEmailChangeConfirmationEmail({
   to,
@@ -129,8 +133,9 @@ export async function sendEmailChangeConfirmationEmail({
   const brevo = getClient();
 
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the email-change confirmation link instead of emailing it.\nTo: ${to}\nNew email: ${newEmail}\nLink: ${url}`,
+      url,
     );
     return;
   }
@@ -164,7 +169,8 @@ export interface SendPasswordResetEmailInput {
 /**
  * Sends the password-reset link through the same Brevo transactional channel
  * as account verification. In local development the link is logged instead,
- * which keeps the reset flow testable without Brevo credentials.
+ * which keeps the reset flow testable without Brevo credentials; every other
+ * environment fails closed rather than logging the link.
  */
 export async function sendPasswordResetEmail({
   to,
@@ -174,8 +180,9 @@ export async function sendPasswordResetEmail({
   const brevo = getClient();
 
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the password reset link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+      url,
     );
     return;
   }
