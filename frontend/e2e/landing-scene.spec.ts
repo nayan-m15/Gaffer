@@ -2,7 +2,32 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Loading Three.js and compiling its first WebGL scene can be noticeably
 // slower on shared CI runners using SwiftShader than on a developer machine.
-const SCENE_TIMEOUT = process.env.CI ? 30_000 : 10_000;
+const SCENE_TIMEOUT = process.env.CI ? 90_000 : 30_000;
+
+// SwiftShader keeps compiling and rasterising for several seconds after the
+// scene reports its first frame, and that GPU backlog stalls whatever touches
+// the GPU next: disposal (forceContextLoss waits for it) or the following test
+// in the same browser. Lifecycle tests therefore use the lighter scene;
+// FULL_QUALITY_DEVICE keeps one smoke test on the high-end path.
+const LIGHT_DEVICE = { cores: 4, memory: 4 };
+const FULL_QUALITY_DEVICE = { cores: 8, memory: 8 };
+
+// Exercise the 3D lifecycle on CI's software GPU. Separate tests below verify
+// the actual software-renderer fallback without this test-only capability shim.
+async function enableScene(page: Page, device = LIGHT_DEVICE) {
+  await page.route('**/assets/scene-capability.worker-*.js', route => route.fulfill({ contentType: 'application/javascript', body: 'self.postMessage(true);' }));
+  await page.addInitScript(({ cores, memory }) => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { value: cores });
+    Object.defineProperty(navigator, 'deviceMemory', { value: memory });
+    for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+      const original = prototype.getParameter;
+      prototype.getParameter = function (parameter: number) {
+        if (parameter === 0x9246 || parameter === this.RENDERER) return 'Test hardware GPU';
+        return original.call(this, parameter);
+      };
+    }
+  }, device);
+}
 
 async function openLandingPage(page: Page) {
   await page.route("**/auth/session", (route) => route.fulfill({ status: 401, body: "{}" }));
@@ -12,7 +37,30 @@ async function openLandingPage(page: Page) {
 }
 
 test.describe("landing-page tactical background", () => {
+  test('cold startup reaches the first scene frame', async ({ page }) => {
+    await enableScene(page, FULL_QUALITY_DEVICE);
+    await page.addInitScript(() => {
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('.landing-scene[data-ready="true"]')) return;
+        performance.mark('landing-first-frame');
+        observer.disconnect();
+      });
+      observer.observe(document, { subtree: true, attributes: true, childList: true });
+    });
+    await openLandingPage(page);
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    const timings = await page.evaluate(() => ({
+      firstFrameMs: performance.getEntriesByName('landing-first-frame')[0]?.startTime,
+      sceneResources: performance.getEntriesByType('resource')
+        .filter(entry => /landing-scene-|three.module-|scene-capability.worker-/.test(entry.name))
+        .map(entry => ({ name: entry.name.split('/').at(-1), startMs: entry.startTime, durationMs: entry.duration })),
+    }));
+    expect(timings.firstFrameMs).toBeGreaterThan(0);
+    console.log('Cold scene startup (test hardware shim on software GPU):', JSON.stringify(timings));
+  });
+
   test("enhances the hero without intercepting its controls", async ({ page }) => {
+    await enableScene(page);
     await openLandingPage(page);
 
     const scene = page.locator(".landing-scene");
@@ -39,6 +87,7 @@ test.describe("landing-page tactical background", () => {
   });
 
   test("renders a bounded static canvas on mobile", async ({ page }) => {
+    await enableScene(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await openLandingPage(page);
 
@@ -53,7 +102,19 @@ test.describe("landing-page tactical background", () => {
     expect(bufferSize.width * bufferSize.height).toBeLessThanOrEqual(800_000);
   });
 
+  test('four-core devices with 4 GB memory use the lighter scene', async ({ page }) => {
+    await enableScene(page, LIGHT_DEVICE);
+    await openLandingPage(page);
+    const canvas = page.locator('.landing-scene canvas');
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await expect(canvas).toHaveCount(1);
+    const pixels = await canvas.evaluate((element: HTMLCanvasElement) => element.width * element.height);
+    expect(pixels).toBeLessThanOrEqual(800_000);
+    await page.screenshot({ path: 'test-results/landing-four-core.png' });
+  });
+
   test("updates the existing scene across repeated theme changes", async ({ page }) => {
+    await enableScene(page);
     await page.addInitScript(() => {
       window.localStorage.setItem("sport-coaching-theme", "dark");
     });
@@ -74,5 +135,81 @@ test.describe("landing-page tactical background", () => {
       await expect(canvas).toHaveAttribute("data-scene-instance", "original");
       await expect(canvas).toHaveCount(1);
     }
+  });
+
+  test('software rendering uses a plain background without downloading the stadium image', async ({ page }) => {
+    const stadiumRequests: string[] = [];
+    page.on('request', request => { if (request.url().includes('hero-stadium-bg')) stadiumRequests.push(request.url()); });
+    await openLandingPage(page);
+    await expect(page.locator('[data-scene-status]')).toHaveAttribute('data-scene-status', 'fallback', { timeout: SCENE_TIMEOUT });
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(0);
+    await expect(page.locator('[data-scene-status]')).toHaveCSS('background-color', 'rgb(7, 16, 13)');
+    await expect(page.locator('img[src*="hero-stadium-bg"]')).toHaveCount(0);
+    expect(stadiumRequests).toEqual([]);
+  });
+
+  test('a reduced-motion change disposes the scene and can restart it', async ({ page }) => {
+    // Startup, a disposal that drains the GPU backlog, then a second startup:
+    // each phase gets its own scene budget. The small viewport keeps that
+    // backlog to the minimum the 3D scene can produce.
+    test.setTimeout(3 * SCENE_TIMEOUT + 30_000);
+    await enableScene(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openLandingPage(page);
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(0, { timeout: SCENE_TIMEOUT });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(1);
+  });
+
+  test('navigation cancels initialization and back navigation creates one scene', async ({ page }) => {
+    await enableScene(page);
+    await page.route('**/auth/session', route => route.fulfill({ status: 401, body: '{}' }));
+    await page.goto('/');
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(1, { timeout: SCENE_TIMEOUT });
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'false');
+    await page.getByRole('link', { name: 'Log In', exact: true }).first().click({ force: true });
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(0);
+    await page.goBack();
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(1);
+  });
+
+  test('failed shirt assets preserve procedural shirts and rapid scroll works', async ({ page }) => {
+    await enableScene(page);
+    await page.route('**/models/landing-shirt*', route => route.abort());
+    await openLandingPage(page);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    await expect(page.getByRole('button', { name: 'Pause background' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('WebGL failure leaves content and navigation usable', async ({ page }) => {
+    await page.route('**/assets/scene-capability.worker-*.js', route => route.fulfill({ contentType: 'application/javascript', body: 'self.postMessage(true);' }));
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (...args: Parameters<typeof original>) {
+        if (String(args[0]).includes('webgl')) return null;
+        return original.apply(this, args);
+      } as typeof original;
+    });
+    await openLandingPage(page);
+    await expect(page.locator('[data-scene-status]')).toHaveAttribute('data-scene-status', 'fallback', { timeout: SCENE_TIMEOUT });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(0);
+  });
+
+  test('constrained devices avoid downloading the 3D scene', async ({ page }) => {
+    const sceneRequests: string[] = [];
+    page.on('request', request => { if (/landing-scene-|three\.module-/.test(request.url())) sceneRequests.push(request.url()); });
+    await page.addInitScript(() => Object.defineProperty(navigator, 'deviceMemory', { value: 2 }));
+    await openLandingPage(page);
+    await expect(page.locator('[data-scene-status]')).toHaveAttribute('data-scene-status', 'fallback');
+    await expect(page.locator('.landing-scene canvas')).toHaveCount(0);
+    expect(sceneRequests).toEqual([]);
   });
 });

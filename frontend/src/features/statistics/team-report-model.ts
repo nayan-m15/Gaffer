@@ -71,9 +71,50 @@ export function reportHighlights(
   return highlights;
 }
 
+/**
+ * Characters that make spreadsheet applications (Excel, LibreOffice,
+ * Google Sheets) interpret a cell as a formula when they lead the value.
+ */
+const FORMULA_TRIGGERS = new Set(["=", "+", "-", "@"]);
+
+/**
+ * True when the first character that is neither whitespace nor a control
+ * character is a formula trigger. Importers may skip leading blanks before
+ * the formula check, so `" =1+1"` and `"\t+2+2"` count as triggers too.
+ */
+function needsFormulaGuard(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    // Space, the C0 controls (up to 0x20), DEL and the BOM are characters
+    // some spreadsheet importers strip before the formula check; \s adds
+    // the remaining Unicode whitespace such as non-breaking spaces.
+    if (
+      code <= 0x20 ||
+      code === 0x7f ||
+      code === 0xfeff ||
+      /\s/.test(text[index])
+    ) {
+      continue;
+    }
+    return FORMULA_TRIGGERS.has(text[index]);
+  }
+  return false;
+}
+
 function csvCell(value: string | number): string {
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  // CSV-formula-injection guard: user-controlled strings (team, competition,
+  // season, opponent and player names) that a spreadsheet could execute are
+  // prefixed with a text-marker apostrophe so they open as literal text.
+  // Guarded before CSV quoting so the escaping still round-trips. Numbers are
+  // exempt — a numeric cell (-3) is never a formula and must stay numeric so
+  // spreadsheet calculations keep working.
+  const guarded =
+    typeof value === "string" && needsFormulaGuard(value)
+      ? `'${value}`
+      : String(value);
+  return /[",\r\n]/.test(guarded)
+    ? `"${guarded.replaceAll('"', '""')}"`
+    : guarded;
 }
 
 function csvRow(values: Array<string | number>): string {
@@ -100,6 +141,7 @@ export function buildTeamReportCsv({
     "Assists",
     "Yellow Cards",
     "Red Cards",
+    "Saves",
   ];
   const rows: Array<Array<string | number>> = [headers];
   const summary: Array<[string, number | string]> = [
@@ -116,23 +158,25 @@ export function buildTeamReportCsv({
     ["Win percentage", `${Math.round(overview.winRate * 100)}%`],
     ["Clean sheets", overview.cleanSheets],
     ["Points", overview.points],
+    ["Average goals for", overview.avgGoalsFor],
+    ["Average goals against", overview.avgGoalsAgainst],
   ];
   for (const [metric, value] of summary) {
-    rows.push(["Team summary", metric, value, "", context.competitionName, "", "", "", "", "", "", "", "", "", ""]);
+    rows.push(["Team summary", metric, value, "", context.competitionName, "", "", "", "", "", "", "", "", "", "", ""]);
   }
   for (const match of overview.trends) {
     rows.push([
       "Match result", "", "", match.date, context.competitionName,
       match.opponent, match.isHome ? "Home" : "Away",
       `${match.goalsFor}-${match.goalsAgainst}`, match.result,
-      "", "", "", "", "", "",
+      "", "", "", "", "", "", "",
     ]);
   }
   for (const player of overview.players) {
     rows.push([
       "Player performance", "", "", "", context.competitionName,
       "", "", "", "", player.name, player.appearances, player.goals,
-      player.assists, player.yellowCards, player.redCards,
+      player.assists, player.yellowCards, player.redCards, player.saves ?? 0,
     ]);
   }
   return `\uFEFF${rows.map(csvRow).join("\r\n")}`;

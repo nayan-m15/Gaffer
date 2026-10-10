@@ -19,6 +19,43 @@ function getClient(): BrevoClient | null {
   return client;
 }
 
+/**
+ * What every sender does when Brevo is not configured (SEC-007).
+ *
+ * `development` keeps the intentional fallback of logging the delivery link
+ * to the backend console so verification/invite flows can be completed
+ * without real credentials. `test` runs the same non-fatal fallback but
+ * suppresses the link itself — test helpers verify accounts directly and
+ * bearer-style tokens must not be normalised test output. Every other
+ * environment — `production` included — fails closed, mirroring the
+ * HARD-002 swagger gate: the request errors instead of reporting success,
+ * and the link never reaches the logs.
+ *
+ * @param devMessage The development fallback log line, including the link.
+ * @param url The bearer/reusable URL embedded in `devMessage`, if any —
+ * present only so `test` output can suppress it; never logged outside
+ * `development`.
+ */
+function handleUnconfiguredDelivery(devMessage: string, url?: string): void {
+  const env = process.env.NODE_ENV;
+  if (env === 'development') {
+    logger.warn(devMessage);
+    return;
+  }
+  if (env === 'test') {
+    // Token-less fallbacks (admin notifications) are safe to log as-is.
+    logger.warn(
+      url
+        ? 'BREVO_API_KEY not set — email not sent; the delivery link is suppressed in test output.'
+        : devMessage,
+    );
+    return;
+  }
+  throw new Error(
+    `Email delivery is not configured (BREVO_API_KEY not set) and NODE_ENV=${env ?? 'unset'} does not permit the development fallback.`,
+  );
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -37,8 +74,9 @@ export interface SendVerificationEmailInput {
 /**
  * Sends the "verify your email" message via Brevo's transactional email API.
  *
- * When `BREVO_API_KEY` isn't set (local dev/test), this logs the link
- * instead of sending, so nobody needs real Brevo credentials to run the app.
+ * When `BREVO_API_KEY` isn't set, delivery falls back per environment (see
+ * `handleUnconfiguredDelivery`): the link is logged in development, while
+ * production fails closed instead of logging the bearer verification URL.
  */
 export async function sendVerificationEmail({
   to,
@@ -48,8 +86,9 @@ export async function sendVerificationEmail({
   const brevo = getClient();
 
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the verification link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+      url,
     );
     return;
   }
@@ -63,9 +102,99 @@ export async function sendVerificationEmail({
     subject: 'Verify your email address',
     htmlContent: `
       <p>Hi ${escapeHtml(name || 'Coach')},</p>
-      <p>Confirm your email address to finish setting up your Gaffer account.</p>
+      <p>Confirm this email address for your Gaffer account.</p>
       <p><a href="${url}">Verify email address</a></p>
-      <p>If you didn't create this account, you can safely ignore this email.</p>
+      <p>If you weren't expecting this message, you can safely ignore it.</p>
+    `,
+  });
+}
+
+export interface SendEmailChangeConfirmationInput {
+  to: string;
+  name: string;
+  newEmail: string;
+  url: string;
+}
+
+/**
+ * Confirms an email-address change with the account's current address before
+ * Better Auth sends its normal verification message to the new address.
+ */
+export async function sendEmailChangeConfirmationEmail({
+  to,
+  name,
+  newEmail,
+  url,
+}: SendEmailChangeConfirmationInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the email-change confirmation link instead of emailing it.\nTo: ${to}\nNew email: ${newEmail}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safeName = escapeHtml(name || 'User');
+  const safeNewEmail = escapeHtml(newEmail);
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to, name }],
+    subject: 'Confirm your Gaffer email change',
+    htmlContent: `
+      <p>Hi ${safeName},</p>
+      <p>We received a request to change the email address on your Gaffer account to <strong>${safeNewEmail}</strong>.</p>
+      <p><a href="${safeUrl}">Approve email change</a></p>
+      <p>After you approve this request, we will send a verification link to the new email address.</p>
+      <p>If you did not request this change, you can safely ignore this email and your current email will remain unchanged.</p>
+    `,
+  });
+}
+
+export interface SendPasswordResetEmailInput {
+  to: string;
+  name: string;
+  url: string;
+}
+
+/**
+ * Sends the password-reset link through the same Brevo transactional channel
+ * as account verification. In local development the link is logged instead,
+ * which keeps the reset flow testable without Brevo credentials.
+ */
+export async function sendPasswordResetEmail({
+  to,
+  name,
+  url,
+}: SendPasswordResetEmailInput): Promise<void> {
+  const brevo = getClient();
+
+  if (!brevo) {
+    logger.warn(
+      `BREVO_API_KEY not set — logging the password reset link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+    );
+    return;
+  }
+
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS ?? 'no-reply@example.com';
+  const fromName = process.env.EMAIL_FROM_NAME ?? 'SportCoachingTool';
+  const safeName = escapeHtml(name || 'Coach');
+  const safeUrl = escapeHtml(url);
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender: { name: fromName, email: fromEmail },
+    to: [{ email: to, name }],
+    subject: 'Reset your Gaffer password',
+    htmlContent: `
+      <p>Hi ${safeName},</p>
+      <p>We received a request to reset the password for your Gaffer account.</p>
+      <p><a href="${safeUrl}">Reset password</a></p>
+      <p>This link expires in 1 hour.</p>
+      <p>If you did not request a password reset, you can safely ignore this email.</p>
     `,
   });
 }
@@ -79,8 +208,8 @@ export interface SendPlayerClaimInviteEmailInput {
 /**
  * Sends a player-profile claim invitation via Brevo.
  *
- * When `BREVO_API_KEY` isn't set (local dev/test), the claim link is logged
- * instead, matching the verification-email development behaviour above.
+ * When `BREVO_API_KEY` isn't set, delivery falls back per environment (see
+ * `handleUnconfiguredDelivery`), matching the verification-email behaviour.
  */
 export async function sendPlayerClaimInviteEmail({
   to,
@@ -90,8 +219,9 @@ export async function sendPlayerClaimInviteEmail({
   const brevo = getClient();
 
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the player invite link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+      url,
     );
     return;
   }
@@ -123,8 +253,8 @@ export interface SendAssistantInviteEmailInput {
 /**
  * Sends an assistant team invitation via Brevo.
  *
- * When `BREVO_API_KEY` isn't set (local dev/test), the invite link is logged
- * instead, matching the other transactional-email development behaviour.
+ * When `BREVO_API_KEY` isn't set, delivery falls back per environment (see
+ * `handleUnconfiguredDelivery`), matching the other transactional emails.
  */
 export async function sendAssistantInviteEmail({
   to,
@@ -133,8 +263,9 @@ export async function sendAssistantInviteEmail({
   const brevo = getClient();
 
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the assistant invite link instead of emailing it.\nTo: ${to}\nLink: ${url}`,
+      url,
     );
     return;
   }
@@ -172,8 +303,9 @@ export async function sendCompetitionInviteEmail({
 }: SendCompetitionInviteEmailInput): Promise<void> {
   const brevo = getClient();
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `BREVO_API_KEY not set — logging the competition invite link instead of emailing it.\nTo: ${to}\nCompetition: ${competitionName}\nTeam: ${teamName}\nLink: ${url}`,
+      url,
     );
     return;
   }
@@ -209,8 +341,9 @@ export async function sendCompetitionTeamReviewEmail(input: {
 }): Promise<void> {
   const brevo = getClient();
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `Competition team review requested: ${input.to} / ${input.competitionName} / ${input.invitedName} -> ${input.proposedName} / ${input.url}`,
+      input.url,
     );
     return;
   }
@@ -236,7 +369,10 @@ export async function sendCompetitionTeamReviewOutcomeEmail(input: {
 }): Promise<void> {
   const brevo = getClient();
   if (!brevo) {
-    logger.warn(
+    // Outcome notices carry no bearer token, but production still fails
+    // closed — reporting success for an email that never went out is the
+    // bug SEC-007 fixes, with or without a link in the message.
+    handleUnconfiguredDelivery(
       `Competition team verification ${input.approved ? 'approved' : 'rejected'}: ${input.to} / ${input.competitionName}`,
     );
     return;
@@ -268,7 +404,7 @@ export async function sendCompetitionRepresentativeCorrectionEmail(input: {
 }): Promise<void> {
   const brevo = getClient();
   if (!brevo) {
-    logger.warn(
+    handleUnconfiguredDelivery(
       `Representative re-invitation requested: ${input.to} / ${input.competitionName} / ${input.teamName} / ${input.recipientEmail}`,
     );
     return;

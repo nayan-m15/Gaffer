@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CompetitionFormValues } from "@/features/statistics/types";
@@ -39,9 +39,12 @@ export function CompetitionFormDialog({
   const title = isEditing ? "Edit Competition" : "Add Competition";
 
   const [values, setValues] = useState<CompetitionFormValues>(DEFAULT_VALUES);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) { initialized.current = false; return; }
+    if (initialized.current) return;
+    initialized.current = true;
     setValues(initialValues ?? DEFAULT_VALUES);
   }, [initialValues, isOpen]);
 

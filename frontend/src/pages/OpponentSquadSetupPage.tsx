@@ -34,6 +34,7 @@ import {
   getFormationOptionsForPlayerCount,
 } from "@/features/team-management/formations";
 import { cn } from "@/lib/utils";
+import { OpponentConfirmedLineupCard } from "@/features/events/OpponentConfirmedLineupCard";
 
 const VISIBILITY_OPTIONS: {
   value: OpponentSquadVisibility;
@@ -209,6 +210,30 @@ export default function OpponentSquadSetupPage() {
     },
     [assignments, handleAssignmentsChange],
   );
+
+  if (context.linkedOpponent) {
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 sm:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="button" variant="outline" onClick={goBack}>
+            <ChevronLeft className="size-4" /> Back to Confirm Squad
+          </Button>
+          <Button type="button" variant="outline" onClick={context.onRetryLineup}>
+            Refresh lineup
+          </Button>
+        </div>
+        <h1 className="text-2xl font-bold">Opponent lineup</h1>
+        {context.lineupError ? (
+          <div role="alert" className="space-y-3">
+            <p>Could not load the opponent lineup.</p>
+            <Button type="button" variant="outline" onClick={context.onRetryLineup}>Retry</Button>
+          </div>
+        ) : context.lineupLoading ? <p role="status">Loading opponent lineup…</p> : (
+          <OpponentConfirmedLineupCard lineup={context.lineup} opponentName={context.opponentName} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">

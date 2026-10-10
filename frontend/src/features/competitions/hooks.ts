@@ -11,6 +11,15 @@ export function useMyCompetitions() {
   return useQuery({ queryKey: [...useCompetitionKey(), "mine"], queryFn: api.fetchMyCompetitions });
 }
 
+export function useFixtureScheduleAlerts(enabled = true) {
+  return useQuery({
+    queryKey: [...useCompetitionKey(), "schedule-alerts"],
+    queryFn: api.fetchCompetitionFixtureScheduleAlerts,
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
 export function useCompetitionSearch(term: string) {
   return useQuery({
     queryKey: [...useCompetitionKey(), "search", term],
@@ -66,5 +75,13 @@ export function useCompetitionMutation<T, R>(mutationFn: (input: T) => Promise<R
         client.invalidateQueries({ queryKey: ["player"] }),
       ]);
     },
+  });
+}
+
+export function useCompetitionPlayerStats(id: string) {
+  return useQuery({
+    queryKey: [...useCompetitionKey(), "player-stats", id],
+    queryFn: () => api.fetchCompetitionPlayerStats(id),
+    refetchInterval: 60_000,
   });
 }

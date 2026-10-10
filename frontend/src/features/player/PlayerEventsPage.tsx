@@ -38,7 +38,7 @@ type Panel =
 
 type CalendarView = "month" | "week" | "agenda";
 
-export const playerEventsQueryKey = ["player", "events"] as const;
+const playerEventsQueryKey = ["player", "events"] as const;
 
 /**
  * Player events page — the same Google-Calendar-style surface as the
@@ -168,7 +168,6 @@ export default function PlayerEventsPage() {
       events={visibleEvents}
       eventDays={eventDays}
       teamName={teamName}
-      undatedEvents={events?.filter((event) => !event.scheduledAt) ?? []}
       readOnly
       onNavigateMonth={(direction) => navigate(direction)}
       onSelectDate={(date) => {

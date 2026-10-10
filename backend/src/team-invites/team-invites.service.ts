@@ -174,6 +174,32 @@ export class TeamInvitesService {
   }
 
   /**
+   * Removes an accepted assistant from the coach's team by deleting their
+   * team_members row. The where-clause is scoped to the coach's own team AND
+   * role='assistant', so an unknown id, another team's member, and any coach
+   * are an identical 404 with no existence leak. Deleting the row cuts every
+   * team-scoped guard on the next request, and PowerSync re-evaluates
+   * team_members per sync bucket, so an already-issued sync token stops
+   * returning team data on the assistant's next sync.
+   */
+  async removeAssistant(teamId: string, memberId: string): Promise<void> {
+    const removed = await this.databaseService.database
+      .delete(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.id, memberId),
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.role, 'assistant'),
+        ),
+      )
+      .returning({ id: teamMembers.id });
+
+    if (removed.length === 0) {
+      throw new NotFoundException('Assistant not found.');
+    }
+  }
+
+  /**
    * Preview behind `GET /team-invites/:token`. Every invalid case —
    * nonexistent, expired, used, or revoked — returns the same
    * `{ valid: false }` so the response never reveals which teams exist.

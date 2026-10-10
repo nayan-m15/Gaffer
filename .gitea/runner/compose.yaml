@@ -1,0 +1,27 @@
+# Self-hosted Gitea Actions runner for this repository.
+# See README.md in this directory for the full setup.
+name: sct-runner
+
+services:
+  runner:
+    image: docker.io/gitea/runner:4.1.0
+    container_name: sct-gitea-runner
+    restart: unless-stopped
+    environment:
+      GITEA_INSTANCE_URL: ${GITEA_INSTANCE_URL}
+      # Only read on the very first start, while /data/.runner does not exist yet.
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_REGISTRATION_TOKEN}
+      GITEA_RUNNER_NAME: ${GITEA_RUNNER_NAME:-sct-local}
+      CONFIG_FILE: /config.yaml
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+      # Registration state (.runner) and the actions cache, kept across restarts.
+      # A named volume, not a directory here: this checkout is inside OneDrive,
+      # which would try to sync tens of gigabytes of cache.
+      - runner-data:/data
+      # This flavour has no bundled daemon: job containers are created on the
+      # host's Docker, so the locally built sct-ci image is found without a registry.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  runner-data:

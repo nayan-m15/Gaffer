@@ -1,7 +1,8 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { BentoGrid } from "@/components/ui/bento-grid";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { HoverEffect } from "@/components/ui/card-hover-effect";
@@ -27,6 +28,7 @@ import {
 } from "@/features/onboarding/unlocks";
 import { EventRemindersBanner } from "@/features/reminders/EventRemindersBanner";
 import { MatchSquadReminder } from "@/features/reminders/MatchSquadReminder";
+import { FixtureScheduleAlertsBanner } from "@/features/competitions/FixtureScheduleAlertsBanner";
 import { EventWeatherCard } from "@/features/events/EventWeatherCard";
 import { EventDetailDialog } from "@/features/events/EventDetailDialog";
 import { useEvent, useNow } from "@/features/events/hooks";
@@ -303,7 +305,7 @@ function LiveMatchPanel({
   return (
     <div
       className={cn(
-        "relative rounded-2xl",
+        "relative min-w-0 rounded-2xl",
         match && "shadow-[0_0_50px_-24px_rgba(16,185,129,0.9)]",
       )}
     >
@@ -319,7 +321,7 @@ function LiveMatchPanel({
       )}
       <Card
         className={cn(
-          "relative overflow-hidden transition-colors",
+          "relative h-full overflow-hidden transition-colors",
           match && "border-primary/40 bg-primary/[0.06]",
         )}
         aria-label="Live match status"
@@ -509,7 +511,7 @@ function RecentFormCard({
     recentResults[0];
 
   return (
-    <Card aria-label="Recent form" data-tour="dashboard-season">
+    <Card aria-label="Recent form" className="min-w-0" data-tour="dashboard-season">
       <SectionTitle
         icon={<TrendingUp className="size-4 text-muted-foreground" />}
       >
@@ -575,12 +577,16 @@ function EventItem({
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onOpen();
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
       }}
       className="cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary last:border-b-0 last:pb-0"
     >
       <div className="min-w-0 px-1">
-        <p className="truncate text-sm text-foreground">
+        <p className="text-sm text-foreground">
           <span className="font-semibold">{event.title}</span>
           <span className="text-muted-foreground">
             {" "}
@@ -618,14 +624,19 @@ function UpcomingEventsCard({
   onOpenEvent: (eventId: string) => void;
 }) {
   return (
-    <Card aria-label="Upcoming events" className="min-h-[11rem]" data-tour="dashboard-upcoming">
+    <Card aria-label="Upcoming events" className="min-w-0" data-tour="dashboard-upcoming">
       <SectionTitle
         icon={<Calendar className="size-4 text-muted-foreground" />}
       >
         Upcoming Events
       </SectionTitle>
+      <EventRemindersBanner events={upcomingEvents} compact />
       {upcomingEvents.length > 0 ? (
-        <ul className="-my-1">
+        <ul
+          className="max-h-96 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]"
+          aria-label="Upcoming events list"
+          tabIndex={0}
+        >
           {upcomingEvents.map((event) => (
             <EventItem
               key={event.id}
@@ -1045,6 +1056,9 @@ export default function DashboardPage() {
     totalEventsCount: 0,
     upcomingEvents: [],
   };
+  // Short schedules fit beside both tools; longer schedules get a wider list
+  // and a stacked rail so the logger never hangs below a lone event.
+  const compactSchedule = upcomingEvents.length <= 2;
 
   return (
     <DashboardFrame fillVisible={dashGateLayout}>
@@ -1143,8 +1157,6 @@ export default function DashboardPage() {
 
         {team && <MatchSquadReminder />}
 
-        <EventRemindersBanner events={upcomingEvents} />
-
         {team && (
           <section aria-labelledby="quick-actions-heading" data-tour="dashboard-quick">
             <SectionTitle
@@ -1188,15 +1200,31 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {team?.role === "coach" && <FixtureScheduleAlertsBanner compact />}
+
         {/* ── Sprint 1: Upcoming Events + Sprint 2: Recent Form (deferred) ── */}
-        <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-5">
-          <div className="md:col-span-3">
+        <div
+          className={cn(
+            "grid gap-5",
+            compactSchedule ? "lg:grid-cols-3" : "lg:grid-cols-5",
+          )}
+        >
+          <div
+            className={cn("grid min-w-0", !compactSchedule && "lg:col-span-3")}
+          >
             <UpcomingEventsCard
               events={upcomingEvents}
               onOpenEvent={setSelectedEventId}
             />
           </div>
-          <div className="space-y-5 md:col-span-2">
+          <div
+            className={cn(
+              "grid min-w-0 gap-5 sm:grid-cols-2",
+              compactSchedule
+                ? "lg:col-span-2"
+                : "lg:col-span-2 lg:grid-cols-1",
+            )}
+          >
             <RecentFormCard
               results={recentForm ?? []}
               teamName={team?.name ?? "Our Team"}
@@ -1205,14 +1233,12 @@ export default function DashboardPage() {
               match={liveMatch ?? null}
               onOpenLogger={() =>
                 navigate(
-                  liveMatch
-                    ? `/matches/${liveMatch.id}/live`
-                    : "/live-logger",
+                  liveMatch ? `/matches/${liveMatch.id}/live` : "/live-logger",
                 )
               }
             />
           </div>
-        </BentoGrid>
+        </div>
 
         {/* ── Sprint 2: Season Summary + Recent Stats (deferred) ──────────── */}
         <BentoGrid className="max-w-none gap-5 md:auto-rows-auto md:grid-cols-2">

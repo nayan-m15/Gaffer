@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, X } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { useEvents, useNow } from "@/features/events/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";

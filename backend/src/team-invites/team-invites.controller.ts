@@ -67,6 +67,19 @@ export class TeamInvitesController {
     return { revoked: true };
   }
 
+  /** Removes an accepted assistant from the coach's own team. */
+  @Delete('assistants/:id')
+  @UseGuards(AuthGuard)
+  async removeAssistant(
+    @CurrentUser() user: SessionUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const team = await this.teamsService.requireCoachTeam(user.id);
+    await this.teamInvitesService.removeAssistant(team.id, id);
+
+    return { removed: true };
+  }
+
   @Get(':token')
   async preview(@Param('token') token: string) {
     return this.teamInvitesService.preview(token);

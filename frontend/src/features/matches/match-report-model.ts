@@ -15,6 +15,7 @@ function scorerSurname(
   event: MatchLogEvent,
   squad: MatchSquadAthlete[],
 ) {
+  if (event.player !== undefined) return event.player?.name ?? null;
   if (event.athlete) {
     return (event.athlete.lastName || event.athlete.firstName).trim();
   }

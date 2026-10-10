@@ -18,15 +18,7 @@ import { BadRequestException } from '@nestjs/common';
 import { FORMATIONS, type FormationPosition } from './lineup-engine';
 
 export type PositionGroup =
-  | 'GK'
-  | 'CB'
-  | 'FB'
-  | 'WB'
-  | 'DM'
-  | 'CM'
-  | 'AM'
-  | 'WIDE'
-  | 'ST';
+  'GK' | 'CB' | 'FB' | 'WB' | 'DM' | 'CM' | 'AM' | 'WIDE' | 'ST';
 
 /** Options shared by every group the category applies to. */
 type SharedOptions = string[];

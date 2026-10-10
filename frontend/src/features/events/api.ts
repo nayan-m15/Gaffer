@@ -1,6 +1,6 @@
 import { apiFetch, ApiError } from "@/lib/api";
 import { apiUrl } from "@/lib/api-url";
-import type { FriendlyOpponentLineup } from "@/features/matches/types";
+import type { OpponentLineupView } from "@/features/matches/types";
 import type {
   ConfirmLineupInput,
   CreateEventInput,
@@ -27,7 +27,7 @@ export function fetchEventWeather(id: string) {
 
 /** The opposing Gaffer team's confirmed lineup for a linked fixture. */
 export function fetchFriendlyOpponentLineup(eventId: string) {
-  return apiFetch<FriendlyOpponentLineup>(
+  return apiFetch<OpponentLineupView>(
     `/events/${eventId}/opponent-lineup`,
   );
 }
@@ -108,4 +108,14 @@ export function confirmEventLineup(
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export type CompetitionSuspension = {
+  athleteId: string;
+  remainingMatches: number;
+  reason: "red_card" | "yellow_accumulation";
+};
+
+export function fetchCompetitionSuspensions(eventId: string) {
+  return apiFetch<CompetitionSuspension[]>(`/events/${eventId}/competition-suspensions`);
 }

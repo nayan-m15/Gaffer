@@ -207,4 +207,122 @@ describe('AthletesService', () => {
       expect(result).toBe(athlete);
     });
   });
+
+  describe('archived athletes', () => {
+    it('lists the archived squad', async () => {
+      const chain = selectChain([{ id: 'athlete-1', archivedAt: new Date() }]);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(service.findArchived('team-1')).resolves.toHaveLength(1);
+    });
+
+    it('returns an empty list when nothing is archived', async () => {
+      const chain = selectChain([]);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(service.findArchived('team-1')).resolves.toEqual([]);
+    });
+  });
+
+  describe('resolving a claimed athlete', () => {
+    it('returns the first athlete this user claimed', async () => {
+      const chain: Record<string, unknown> = selectChain([
+        { id: 'athlete-1', teamId: 'team-1' },
+      ]);
+      chain.orderBy = jest.fn(() => chain);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(
+        service.findClaimedAthleteForUser('user-1'),
+      ).resolves.toMatchObject({ id: 'athlete-1' });
+    });
+
+    it('narrows to a specific athlete id when one is given', async () => {
+      const chain: Record<string, unknown> = selectChain([{ id: 'athlete-2' }]);
+      chain.orderBy = jest.fn(() => chain);
+      const where = jest.fn(() => chain);
+      chain.where = where;
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await service.findClaimedAthleteForUser('user-1', 'athlete-2');
+
+      // Both the user and the athlete id scope the lookup.
+      expect(where).toHaveBeenCalledTimes(1);
+      const [condition] = where.mock.calls[0] as [SQL];
+      expect(condition).toBeDefined();
+    });
+
+    it('returns null when the user has claimed nobody', async () => {
+      const chain: Record<string, unknown> = selectChain([]);
+      chain.orderBy = jest.fn(() => chain);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(
+        service.findClaimedAthleteForUser('user-1'),
+      ).resolves.toBeNull();
+    });
+
+    it('resolves the athlete a user claimed on a specific team', async () => {
+      const chain = selectChain([{ id: 'athlete-1' }]);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(
+        service.findClaimedAthleteOnTeam('user-1', 'team-1'),
+      ).resolves.toEqual({ id: 'athlete-1' });
+    });
+
+    it('returns null when the user claimed nobody on that team', async () => {
+      const chain = selectChain([]);
+      mockDatabaseService.database = { select: jest.fn(() => chain) };
+
+      await expect(
+        service.findClaimedAthleteOnTeam('user-1', 'team-1'),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('archive and restore', () => {
+    /** Stubs `update(...).set(...).where(...).returning()`. */
+    const updateReturning = (rows: unknown[]) => {
+      const returning = jest.fn(() => Promise.resolve(rows));
+      mockDatabaseService.database = {
+        update: jest.fn(() => ({
+          set: jest.fn(() => ({ where: jest.fn(() => ({ returning })) })),
+        })),
+      };
+      return returning;
+    };
+
+    it('archives an athlete', async () => {
+      updateReturning([{ id: 'athlete-1' }]);
+
+      await expect(service.archive('team-1', 'athlete-1')).resolves.toEqual({
+        id: 'athlete-1',
+      });
+    });
+
+    it('reports an already-archived or foreign athlete as not found', async () => {
+      updateReturning([]);
+
+      await expect(service.archive('team-1', 'athlete-1')).rejects.toThrow(
+        'Athlete not found.',
+      );
+    });
+
+    it('restores an archived athlete', async () => {
+      updateReturning([{ id: 'athlete-1' }]);
+
+      await expect(service.restore('team-1', 'athlete-1')).resolves.toEqual({
+        id: 'athlete-1',
+      });
+    });
+
+    it('reports an unknown athlete as not found on restore', async () => {
+      updateReturning([]);
+
+      await expect(service.restore('team-1', 'athlete-1')).rejects.toThrow(
+        'Athlete not found.',
+      );
+    });
+  });
 });

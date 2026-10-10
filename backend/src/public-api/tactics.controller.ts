@@ -4,7 +4,10 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiBadRequestResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
+import { listSchema, tacticSchema } from './public-api.openapi';
 import { zodValidate } from '../common/zod-validate';
 import { publicResourceQuerySchema } from './public-api.schemas';
 import { PublicApiService } from './public-api.service';
@@ -45,11 +48,14 @@ export class TacticsController {
     name: 'id',
     required: false,
     description: 'Tactic id to fetch, e.g. "possession".',
+    schema: { type: 'string', minLength: 1 },
   })
   @ApiOkResponse({
     description: 'Matching tactic(s).',
-    schema: { example: TACTICS_EXAMPLE },
+    schema: { ...listSchema(tacticSchema), example: TACTICS_EXAMPLE },
   })
+  @ApiBadRequestResponse({ description: 'id must not be empty.' })
+  @ApiNotFoundResponse({ description: 'Unknown tactic id.' })
   findAll(@Query() query: unknown) {
     const { id } = zodValidate(publicResourceQuerySchema, query);
     const data = id

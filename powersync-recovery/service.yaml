@@ -67,8 +67,9 @@ client_auth:
           #secret: !env POWERSYNC_CLIENT_AUTH_KEY
   # [optional] Additional audiences to accept (instance domain is always accepted). Default: [].
   additional_audiences: []
-  # [optional] Allow development/temporary tokens. Default: false.
-  allow_temporary_tokens: true
+  # SEC-010: Keep temporary tokens disabled in shared/deployable configurations.
+  # Development exceptions require a separate isolated instance; see docs/powersync-security.md.
+  allow_temporary_tokens: false
   ## [optional] Legacy: Supabase project's legacy JWT secret from API settings in the Supabase Dashboard.
   #supabase_jwt_secret:
   #  secret: !env POWERSYNC_SUPABASE_JWT_SECRET

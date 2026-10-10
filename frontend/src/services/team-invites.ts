@@ -65,6 +65,15 @@ export async function revokeTeamInvite(
   });
 }
 
+/** DELETE /team-invites/assistants/:id — coach-only; removes an accepted assistant. */
+export async function removeTeamAssistant(
+  id: string,
+): Promise<{ removed: boolean }> {
+  return apiFetch<{ removed: boolean }>(`/team-invites/assistants/${id}`, {
+    method: "DELETE",
+  });
+}
+
 /** GET /team-invites/:token — public preview, no auth required. */
 export async function previewTeamInvite(
   token: string,

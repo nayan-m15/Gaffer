@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { getPendingCompetitionInviteToken } from "@/services/competition-invites";
 
 /** Restore the invitation explicitly, without accepting or interrupting another flow. */

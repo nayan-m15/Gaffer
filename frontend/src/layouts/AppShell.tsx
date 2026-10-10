@@ -26,7 +26,8 @@ import {
   type UnlockPageKey,
 } from "@/features/onboarding/unlocks";
 import { SportLogo } from "@/components/brand/SportLogo";
-import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { useSidebar } from "@/hooks/useSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -470,7 +471,7 @@ function AppShellContent() {
           )}
         </div>
         <div className="no-print relative z-20">
-          <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:py-3" : undefined} />
+          <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:mt-0 sm:py-3" : undefined} />
         </div>
       </main>
     </div>

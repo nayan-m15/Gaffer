@@ -57,9 +57,11 @@ export interface PublicPlayer {
   team: PublicTeam;
   statistics: {
     appearances: number;
+    starts: number;
     minutesPlayed: number;
     goals: number;
     assists: number;
+    saves: number;
     yellowCards: number;
     redCards: number;
   };
@@ -81,6 +83,25 @@ export interface PublicStanding {
   ownerTeam: PublicTeam;
   competition: Pick<PublicCompetition, "id" | "name" | "type">;
   season: Pick<PublicSeason, "id" | "name"> | null;
+}
+
+export interface PublicCompetitionFixture {
+  id: string;
+  competitionId: string;
+  competitionName: string;
+  competitionType: "league" | "cup" | "friendly";
+  stage: "league" | "knockout";
+  round: number;
+  position: number;
+  scheduledAt: string;
+  status: "scheduled" | "in_progress" | "completed" | "cancelled";
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  homePenaltyScore: number | null;
+  awayPenaltyScore: number | null;
+  winnerTeamName: string | null;
 }
 
 export interface PublicDashboardQuery {
@@ -118,49 +139,53 @@ export async function getPublicDashboardFilters() {
   return response.data;
 }
 
+export interface PublicPage<T> extends DataResponse<T[]> {
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PublicMatchPage extends PublicPage<PublicMatch> {
+  summary: { total: number; cleanSheets: number };
+}
+
+export type PublicPlayerQuery = PublicDashboardQuery & {
+  search?: string;
+  position?: "ALL" | "FWD" | "MID" | "DEF" | "GK";
+};
+
 export async function getPublicMatches(
   filters: PublicDashboardQuery & { status?: PublicMatchStatus },
+  offset = 0,
+  signal?: AbortSignal,
 ) {
-  return getAllPages<PublicMatch>("matches", filters, 100, 1);
+  return apiFetch<PublicMatchPage>(
+    `${BASE}/matches${queryString({ ...filters, limit: 100, offset })}`,
+    { signal },
+  );
 }
 
-export async function getPublicPlayers(filters: PublicDashboardQuery) {
-  return getAllPages<PublicPlayer>("players", filters, 500, 3);
-}
-
-async function getAllPages<T>(
-  resource: "matches" | "players",
-  filters: PublicDashboardQuery & { status?: PublicMatchStatus },
-  limit: number,
-  concurrency: number,
-): Promise<T[]> {
-  const fetchPage = async (offset: number) => {
-    const response = await apiFetch<DataResponse<T[]>>(
-      `${BASE}/${resource}${queryString({ ...filters, limit, offset })}`,
-    );
-    return response.data;
-  };
-
-  const first = await fetchPage(0);
-  const all = [...first];
-  if (first.length < limit) return all;
-
-  for (let offset = limit; ; offset += limit * concurrency) {
-    const pages = await Promise.all(
-      Array.from({ length: concurrency }, (_, index) =>
-        fetchPage(offset + index * limit),
-      ),
-    );
-    for (const page of pages) {
-      all.push(...page);
-      if (page.length < limit) return all;
-    }
-  }
+export async function getPublicPlayers(
+  filters: PublicPlayerQuery,
+  offset = 0,
+  signal?: AbortSignal,
+) {
+  return apiFetch<PublicPage<PublicPlayer>>(
+    `${BASE}/players${queryString({ ...filters, limit: 40, offset })}`,
+    { signal },
+  );
 }
 
 export async function getPublicTeamStatistics(filters: PublicDashboardQuery) {
   const response = await apiFetch<DataResponse<PublicStanding[]>>(
     `${BASE}/team-statistics${queryString(filters)}`,
+  );
+  return response.data;
+}
+
+export async function getPublicCompetitionFixtures(filters: PublicDashboardQuery) {
+  const response = await apiFetch<DataResponse<PublicCompetitionFixture[]>>(
+    `${BASE}/competition-fixtures${queryString(filters)}`,
   );
   return response.data;
 }

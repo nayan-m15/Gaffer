@@ -14,12 +14,12 @@ Reached through the frontend's existing Vercel rewrite as:
 
 ## What's served
 
-Both endpoints return static, shared coaching reference content — never a
+The formations and tactics endpoints return static, shared coaching reference content — never a
 team's saved game plan, squad selection, or any user/account data:
 
-- **Formations** (`backend/src/public-api/formations.data.ts`) — the eight
-  formations selectable on the Team Tactics screen. IDs mirror
-  `FORMATION_IDS` in `backend/src/game-plans/game-plans.schemas.ts`; keep
+- **Formations** (`backend/src/public-api/formations.data.ts`) — the supported
+  5-, 7- and 11-a-side formations, including custom slots. Each carries
+  `playerCount`. IDs mirror `FORMATION_IDS` in `backend/src/common/formations.ts`; keep
   both in sync if a formation is added or renamed.
 - **Tactics** (`backend/src/public-api/tactics.data.ts`) — the defensive and
   offensive tactical styles from
@@ -41,7 +41,7 @@ GET /v1/tactics                -> { success, count, data: PublicTactic[] }
 GET /v1/tactics?id={id}        -> { success, count: 1, data: [PublicTactic] }
 GET /v1/public-dashboard/filters
 GET /v1/public-dashboard/matches?teamId=&competitionId=&seasonId=&status=
-GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=
+GET /v1/public-dashboard/players?teamId=&competitionId=&seasonId=&search=&position=&limit=&offset=
 GET /v1/public-dashboard/team-statistics?teamId=&competitionId=&seasonId=
 ```
 
@@ -49,8 +49,61 @@ GET /v1/public-dashboard/team-statistics?teamId=&competitionId=&seasonId=
 - `id` present but unknown → `404` with Nest's default `{ statusCode, message, error }` body.
 - Dashboard filter IDs must be UUIDs. Invalid filters return `400`; valid but
   unavailable/private IDs return empty data rather than revealing existence.
+- Paging is bounded: `matches` accepts `limit` 1–100 (default 50) and `players`
+  `limit` 1–200 (default 100). A larger `limit` is a `400`, not a clamped
+  response, so a client paging until it sees a short page is never silently
+  truncated.
 - Any other failure uses Nest's default `500` handler, which does not expose
   raw database errors.
+
+## Rate limiting and caching
+
+`/v1/public-dashboard/*` is the only unauthenticated group that queries the
+database, so it is throttled and cached (SEC-008). `/v1/formations` and
+`/v1/tactics` serve static in-process data and are not.
+
+- **Rate limit** — 120 requests per minute per client, plus a shared backstop
+  bucket keyed on the edge-observed IP that stops a caller rotating forged
+  forwarding headers. Exceeding either returns `429` with
+  `{"message": "Too many requests. Please try again later."}` before the query
+  runs. Both budgets are configurable (see `.env.example`).
+- **Caching** — responses are cached for 30 seconds per distinct set of
+  validated query parameters, and concurrent requests for the same uncached
+  parameters share one database query rather than each running their own. The
+  practical effect for a consumer is that polling faster than every 30 seconds
+  returns the same payload; the data is not live to the second.
+
+`backend/scripts/benchmark-public-dashboard.mjs` (`npm run
+benchmark:public-dashboard` in `backend/`) measures the first player page in
+display order against a real database and prints the grouped query plan.
+It reports first/repeat timings without resetting caches; it does not establish
+the worst case. Each query is a separate read-only SELECT.
+
+## Dashboard pagination and summaries
+
+Matches include an additive `summary: { total, cleanSheets }` field alongside
+`{success,count,limit,offset,data}`. `count` remains the number of rows in the
+page. Summary values cover every match matching the team, competition, season
+and status filters, independent of pagination, and share the 30-second cache
+across pages. Clean sheets count completed matches with no logged opponent goal.
+No new public endpoint is introduced.
+
+Players accept `search` (trimmed, at most 100 characters, a literal
+case-insensitive full-name substring) and `position` (`ALL`, `FWD`, `MID`, `DEF`
+or `GK`). Categories use the dashboard's existing position-code matching rules.
+These filters apply before athlete pagination. Invalid types, lengths or
+categories return 400. Player statistics are grouped in SQL for the selected
+athlete IDs; only completed matches contribute, and players without history
+retain zero statistics.
+
+The public dashboard initially requests 40 players and 100 matches. Additional
+pages load only when the visitor selects "Load more". Search is debounced by
+300 ms, and obsolete page requests can be cancelled. Failed additional pages
+retain the already loaded data and offer a manual retry; page requests do not
+automatically retry a 429. Player and match lists disable the shared five-second
+polling and refresh on focus when their 30-second stale period has elapsed.
+Standings refresh every 30 seconds. The frontend requires the updated backend
+match response, so deploy the backend before the frontend. No migration is needed.
 
 ## CORS
 
@@ -64,12 +117,23 @@ asserted from `test/public-api.e2e-spec.ts`).
 
 ## Documentation
 
-The public API controllers carry `@nestjs/swagger` decorators and are grouped
-under the "Public API" tag in the local Swagger UI at
-`http://localhost:3000/api/docs` when `NODE_ENV=development`.
-Production Swagger, including raw JSON/YAML schemas, is disabled under the
-[Swagger policy](swagger-policy.md). Use this document and
-[the PDF reference](Gaffer-Public-API-Reference.pdf) for external API consumers.
+Swagger UI is public at `/api/docs` in every environment, including production.
+After deployment, external developers can open
+`https://gaffer-api-ynaf.onrender.com/api/docs` without an account, API key or token.
+The local URL is `http://localhost:3000/api/docs`.
+
+The JSON and YAML schemas are available at `/api/docs-json` and `/api/docs-yaml`.
+They document exactly six public GET endpoints, grouped under "Public API" and
+"Public Dashboard", with query parameters, response fields and validation errors.
+Swagger's "Try it out" sends requests to the same backend serving the docs.
+Matches use `limit` 1–100 (default 50); players use `limit` 1–200 (default 100).
+Both accept `offset` ≥0 (default 0) and return `{success,count,limit,offset,data}`.
+Filters return `{success,data}`; team statistics return `{success,count,data}`.
+
+Protected application endpoints retain their existing session and authorization
+checks and are excluded from this public schema. See the
+[Swagger policy](swagger-policy.md) for verification and the
+[PDF reference](Gaffer-Public-API-Reference.pdf) for the catalog reference.
 
 ## Out of scope here
 

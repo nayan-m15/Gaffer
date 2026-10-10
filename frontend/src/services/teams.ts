@@ -5,6 +5,7 @@ export interface GafferTeamSearchResult {
   id: string;
   name: string;
   primaryColor: string | null;
+  coachName?: string | null;
 }
 
 /**
@@ -16,7 +17,8 @@ export interface GafferTeamSearchResult {
 export async function searchGafferTeams(
   query: string,
 ): Promise<GafferTeamSearchResult[]> {
-  return apiFetch<GafferTeamSearchResult[]>(
+  const results = await apiFetch<GafferTeamSearchResult[]>(
     `/teams/search?q=${encodeURIComponent(query)}`,
   );
+  return [...new Map(results.map((team) => [team.id, team])).values()];
 }

@@ -4,7 +4,10 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiBadRequestResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
+import { formationSchema, listSchema } from './public-api.openapi';
 import { zodValidate } from '../common/zod-validate';
 import { publicResourceQuerySchema } from './public-api.schemas';
 import { PublicApiService } from './public-api.service';
@@ -53,11 +56,14 @@ export class FormationsController {
     name: 'id',
     required: false,
     description: 'Formation id to fetch, e.g. "4-3-3".',
+    schema: { type: 'string', minLength: 1 },
   })
   @ApiOkResponse({
     description: 'Matching formation(s).',
-    schema: { example: FORMATIONS_EXAMPLE },
+    schema: { ...listSchema(formationSchema), example: FORMATIONS_EXAMPLE },
   })
+  @ApiBadRequestResponse({ description: 'id must not be empty.' })
+  @ApiNotFoundResponse({ description: 'Unknown formation id.' })
   findAll(@Query() query: unknown) {
     const { id } = zodValidate(publicResourceQuerySchema, query);
     const data = id

@@ -30,8 +30,17 @@ export const publicMatchesQuerySchema = publicDashboardQuerySchema.extend({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+/**
+ * Players are paged before their history is aggregated in SQL. The ceiling of
+ * 200 bounds anonymous aggregation work; the dashboard requests 40 at a time.
+ * Reject over-large limits rather than silently returning a short page, which
+ * clients interpret as the end of the list. Name and position filters apply
+ * before pagination, so search covers the complete matching roster.
+ */
 export const publicPlayersQuerySchema = publicDashboardQuerySchema.extend({
-  limit: z.coerce.number().int().min(1).max(500).default(200),
+  search: z.string().trim().max(100).optional(),
+  position: z.enum(['ALL', 'FWD', 'MID', 'DEF', 'GK']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

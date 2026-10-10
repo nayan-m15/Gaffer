@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, ShieldCheck, Trophy } from "lucide-react";
+import { formatLocalDate } from "@/features/events/event-utils";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompetitionMutation } from "./hooks";
 import { createCompetition, updateCompetition } from "./api";
 import type { CompetitionDetail, CompetitionFormat, CompetitionInput, CompetitionPlayersPerSide, CompetitionType } from "./types";
@@ -30,6 +32,8 @@ const weekdayOptions = [
   { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" }, { value: 0, label: "Sun" },
 ];
 const knockoutSizes = [4, 8, 16, 32] as const;
+const TIME_HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const TIME_MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0"));
 
 type Step = 1 | 2 | 3;
 
@@ -211,13 +215,101 @@ function CompetitionScheduleFields({
   allowedPlayingDays: number[]; onAllowedDaysChange: (days: number[]) => void;
   defaultKickoffTime: string; setDefaultKickoffTime: (value: string) => void;
 }) {
+  const today = formatLocalDate(new Date());
+
   return (
     <>
-      <label className="grid gap-2 text-sm">Competition start date<input className={fieldClass} type="date" disabled={locked} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+      <label className="grid gap-2 text-sm">
+        Competition start date
+        <input
+          className={fieldClass}
+          type="date"
+          disabled={locked}
+          min={locked ? undefined : today}
+          value={startDate}
+          onChange={(event) => setStartDate(event.target.value)}
+        />
+      </label>
       <div className="space-y-2"><p className="text-sm font-medium">Allowed playing days</p><div className="flex flex-wrap gap-2">{weekdayOptions.map((day) => { const selected = allowedPlayingDays.includes(day.value); return <button key={day.value} type="button" disabled={locked} aria-pressed={selected} className={`rounded-lg border px-3 py-2 text-sm ${selected ? "border-primary/45 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/40"}`} onClick={() => onAllowedDaysChange(selected ? allowedPlayingDays.filter((value) => value !== day.value) : [...allowedPlayingDays, day.value])}>{day.label}</button>; })}</div>{!allowedPlayingDays.length && <p className="text-sm text-destructive">Choose at least one playing day.</p>}</div>
-      <label className="grid gap-2 text-sm">Default kickoff time (UTC)<input className={fieldClass} type="time" disabled={locked} value={defaultKickoffTime} onChange={(event) => setDefaultKickoffTime(event.target.value)} /></label>
-      <p className="text-xs text-muted-foreground">The fixture generator moves each round to the next allowed playing day and uses this kickoff time.</p>
+      <div className="grid gap-2 text-sm">
+        <span>Default kickoff time</span>
+        <CompetitionTimePicker
+          disabled={locked}
+          value={defaultKickoffTime}
+          onChange={setDefaultKickoffTime}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">The fixture generator uses this kickoff time in your local timezone and moves each round to the next allowed playing day. If today is an allowed playing day but this kickoff has already passed, generation starts on the next allowed day.</p>
     </>
+  );
+}
+
+function CompetitionTimePicker({
+  disabled,
+  value,
+  onChange,
+}: {
+  disabled: boolean;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hour = "00", minute = "00"] = value.split(":");
+
+  const selectHour = (nextHour: string) => {
+    onChange(`${nextHour}:${minute}`);
+  };
+
+  const selectMinute = (nextMinute: string) => {
+    onChange(`${hour}:${nextMinute}`);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger
+        type="button"
+        disabled={disabled}
+        className={`${fieldClass} flex items-center justify-between text-left font-normal`}
+      >
+        <span className="flex items-center gap-2">
+          <Clock3 className="size-4 text-muted-foreground" />
+          <span className="tabular-nums">{value || "Pick a time"}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">Choose time</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-3">
+        <div className="mb-2 flex items-center justify-between gap-6 px-1">
+          <p className="text-xs font-medium">Kickoff time (local)</p>
+          <p className="text-xs tabular-nums text-muted-foreground">{value || "Not selected"}</p>
+        </div>
+        <div className="flex gap-2">
+          <CompetitionTimeColumn label="Hours" options={TIME_HOURS} selected={value ? hour : undefined} onSelect={selectHour} />
+          <CompetitionTimeColumn label="Minutes" options={TIME_MINUTES} selected={value ? minute : undefined} onSelect={selectMinute} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CompetitionTimeColumn({
+  label, options, selected, onSelect,
+}: {
+  label: string;
+  options: string[];
+  selected: string | undefined;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="h-52 w-16 overflow-y-auto rounded-md border border-border bg-background p-1">
+        {options.map((option) => {
+          const selectedOption = option === selected;
+          return <button key={option} type="button" onClick={() => onSelect(option)} className={`flex h-8 w-full items-center justify-center rounded text-sm tabular-nums transition-colors ${selectedOption ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}>{option}</button>;
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -244,7 +336,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
       ? (competition?.qualifierCount ?? 4) as 4 | 8 | 16 | 32
       : 4,
   );
-  const [startDate, setStartDate] = useState(competition?.startDate ?? new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(competition?.startDate ?? formatLocalDate(new Date()));
   const [allowedPlayingDays, setAllowedPlayingDays] = useState<number[]>(competition?.allowedPlayingDays?.length ? competition.allowedPlayingDays : [6]);
   const [defaultKickoffTime, setDefaultKickoffTime] = useState(competition?.defaultKickoffTime ?? "15:00");
 
@@ -288,6 +380,7 @@ export function CompetitionFormDialog({ competition, locked = false, onClose, on
 
   const scheduleValid = Boolean(
     startDate &&
+    startDate >= formatLocalDate(new Date()) &&
     /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(defaultKickoffTime) &&
     allowedPlayingDays.length,
   );

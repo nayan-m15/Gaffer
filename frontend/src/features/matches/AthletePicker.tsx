@@ -200,7 +200,7 @@ export function OpponentPlayerPicker({
   const excluded = new Set(excludeIds);
   const sorted = [...players]
     .filter((player) => !excluded.has(player.id))
-    .sort((left, right) => left.shirtNumber - right.shirtNumber);
+    .sort((left, right) => (left.shirtNumber ?? 999) - (right.shirtNumber ?? 999));
 
   return (
     <div

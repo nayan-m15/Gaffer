@@ -1,0 +1,5 @@
+# Dedicated Phase 2.6 validation instance scaffold. Not a deployable source/auth configuration.
+# Replication and JWKS must be configured after validation hosting and source readiness are proven.
+_type: cloud
+name: Phase 2.6 isolated validation
+region: eu

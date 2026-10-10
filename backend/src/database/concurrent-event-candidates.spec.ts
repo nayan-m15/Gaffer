@@ -296,6 +296,40 @@ describe('concurrent event candidates', () => {
     expect(
       new Set(afterConflict.rows.map((row) => row.canonical_event_id)).size,
     ).toBe(2);
+    const priorDecisions = await pg.query<{ id: string; resolution: string }>(
+      `SELECT id, decision ->> 'resolution' AS resolution
+       FROM match_event_operations WHERE decision ->> 'reviewId' = $1
+       ORDER BY id`,
+      [review.rows[0].id],
+    );
+    expect(priorDecisions.rows.map((row) => row.resolution).sort()).toEqual([
+      'same_event',
+      'separate_events',
+      'separate_events',
+    ]);
+    const disputingUser = 'candidate-test-disputer';
+    await pg.query(
+      `INSERT INTO "user" (id, name, email)
+       VALUES ($1, 'Disputer', 'disputer@example.com')`,
+      [disputingUser],
+    );
+    await pg.query(
+      `UPDATE match_event_reviews SET disputed_by_user_id = $2,
+       disputed_at = now() WHERE id = $1`,
+      [review.rows[0].id, disputingUser],
+    );
+    const dispute = await pg.query<{ disputed_by_user_id: string }>(
+      `SELECT disputed_by_user_id FROM match_event_reviews WHERE id = $1`,
+      [review.rows[0].id],
+    );
+    expect(dispute.rows[0].disputed_by_user_id).toBe(disputingUser);
+    const decisionsAfterDispute = await pg.query<{ id: string }>(
+      `SELECT id FROM match_event_operations WHERE decision ->> 'reviewId' = $1`,
+      [review.rows[0].id],
+    );
+    expect(decisionsAfterDispute.rows.map((row) => row.id).sort()).toEqual(
+      priorDecisions.rows.map((row) => row.id).sort(),
+    );
   }, 120_000);
 
   it('keeps a separate decision when a third nearby observation is merged', async () => {

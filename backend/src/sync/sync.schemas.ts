@@ -37,6 +37,7 @@ const reviewResolutionOperationSchema = z.object({
   operationType: z.literal('resolve_review'),
   reviewId: z.uuid(),
   resolution: z.enum(['same_event', 'separate_events']),
+  explanation: z.string().trim().max(500).optional(),
   causalParentIds: z.array(z.uuid()).max(50).default([]),
 });
 

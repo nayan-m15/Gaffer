@@ -1,24 +1,51 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, FileText, Printer, Share2, Table2 } from "lucide-react";
+import { ChevronDown, Download, FileText, Loader2, Printer, Share2, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { exportTeamReportCsv, exportTeamReportPdf } from "./report-export";
-import { buildTeamReportCsv, safeReportFilename, type TeamReportData } from "./team-report-model";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { createTeamReportPdfFile, exportTeamReportCsv, exportTeamReportPdf, printTeamReportPdf } from "./report-export";
+import { shareTeamReport } from "./report-share";
+
+import { TeamPerformanceReport } from "./TeamPerformanceReport";
+import type { TeamReportData } from "./team-report-model";
+import "./report.css";
 
 type Notice = { tone: "success" | "error"; message: string } | null;
+type Operation = {
+  mode: "print" | "share" | "pdf" | "csv";
+  data: TeamReportData;
+  controller: AbortController;
+  pending: boolean;
+  shareFile?: File;
+};
 
 export function ReportActions({ data }: { data: TeamReportData }) {
   const [exportOpen, setExportOpen] = useState(false);
-  const [pdfPending, setPdfPending] = useState(false);
+  const [operation, setOperation] = useState<Operation | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const current = useRef<Operation | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => () => {
+    current.current?.controller.abort();
+    current.current = null;
+  }, []);
 
   useEffect(() => {
     if (!exportOpen) return;
     const close = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) setExportOpen(false);
     };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setExportOpen(false); menuRef.current?.querySelector("button")?.focus(); }
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
   }, [exportOpen]);
 
   useEffect(() => {
@@ -27,110 +54,148 @@ export function ReportActions({ data }: { data: TeamReportData }) {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
-  const exportPdf = async () => {
-    setPdfPending(true);
+  const begin = (mode: Operation["mode"]) => {
+    // Synchronous guard also covers multiple clicks before React commits.
+    if (current.current) return null;
+    const next: Operation = {
+      mode,
+      data: { overview: data.overview, context: { ...data.context, generatedAt: new Date() } },
+      controller: new AbortController(),
+      pending: mode === "pdf" || mode === "csv" || mode === "share",
+    };
+    current.current = next;
+    returnFocus.current = document.activeElement as HTMLElement;
+    setNotice(null);
     setExportOpen(false);
-    try {
-      await exportTeamReportPdf(data);
-      setNotice({ tone: "success", message: "PDF report exported." });
-    } catch (error) {
-      console.error("PDF export failed", error);
-      setNotice({ tone: "error", message: "The PDF could not be generated. Please try again." });
-    } finally {
-      setPdfPending(false);
-    }
-  };
-
-  const exportCsv = () => {
-    setExportOpen(false);
-    try {
-      exportTeamReportCsv(data);
-      setNotice({ tone: "success", message: "CSV report exported." });
-    } catch (error) {
-      console.error("CSV export failed", error);
-      setNotice({ tone: "error", message: "The CSV could not be generated. Please try again." });
-    }
-  };
-
-  const share = async () => {
-    const { context, overview } = data;
-    const summary = [
-      `Gaffer Team Performance Report — ${context.teamName}`,
-      `${context.seasonName} · ${context.competitionName}`,
-      `${overview.matchesPlayed} played · ${overview.wins}W ${overview.draws}D ${overview.losses}L · ${overview.goalsFor}-${overview.goalsAgainst} goals`,
-    ].join("\n");
-    try {
-      const csv = buildTeamReportCsv(data);
-      const suffix = safeReportFilename(context.teamName, context.generatedAt);
-      const file = new File([csv], `Gaffer_Team_Performance_${suffix}.csv`, {
-        type: "text/csv;charset=utf-8",
+    setOperation(next);
+    if (mode === "share") {
+      // Prepare the PDF before the confirmation click so navigator.share is invoked
+      // directly in a user gesture (awaiting jsPDF would lose user activation).
+      void createTeamReportPdfFile(next.data, next.controller.signal).then((file) => {
+        if (current.current !== next || next.controller.signal.aborted) return;
+        next.shareFile = file;
+        next.pending = false;
+        setOperation({ ...next });
+      }).catch((error) => {
+        if (next.controller.signal.aborted) return;
+        console.error("Report PDF preparation failed", error);
+        finish(next, { tone: "error", message: "The PDF could not be generated for sharing. Please try again." });
       });
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: `Gaffer report — ${context.teamName}`,
-          text: summary,
-          files: [file],
-        });
-        setNotice({ tone: "success", message: "Report shared." });
-        return;
-      }
-      await navigator.clipboard.writeText(summary);
-      setNotice({ tone: "success", message: "Report summary copied to the clipboard." });
+    }
+    return next;
+  };
+
+  const finish = (active: Operation, result?: Notice) => {
+    if (current.current !== active) return;
+    current.current = null;
+    setOperation(null);
+    if (result) setNotice(result);
+  };
+
+  const closePreview = () => {
+    const active = current.current;
+    // Native sharing must settle before another operation can start.
+    if (!active || (active.mode === "share" && active.pending && active.shareFile)) return;
+    active.controller.abort();
+    finish(active);
+  };
+
+  const exportReport = async (format: "pdf" | "csv") => {
+    const active = begin(format);
+    if (!active) return;
+    try {
+      if (format === "pdf") await exportTeamReportPdf(active.data, active.controller.signal);
+      else exportTeamReportCsv(active.data);
+      finish(active, { tone: "success", message: format.toUpperCase() + " report exported." });
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      console.error("Report sharing failed", error);
-      setNotice({ tone: "error", message: "The report could not be shared or copied." });
+      if (active.controller.signal.aborted) return;
+      console.error("Report export failed", error);
+      finish(active, { tone: "error", message: "The " + format.toUpperCase() + " could not be generated. Please try again." });
     }
   };
 
+  const proceed = async () => {
+    const active = current.current;
+    if (!active || active.pending || (active.mode !== "print" && active.mode !== "share")) return;
+    // Open immediately on the click event, before asynchronous PDF generation:
+    // browsers otherwise block a delayed window.open as a popup.
+    const printTab = active.mode === "print" ? window.open("", "_blank") : null;
+    active.pending = true;
+    setOperation({ ...active });
+    try {
+      if (active.mode === "print") {
+        if (!printTab) throw new Error("Allow popups to print the report.");
+        await printTeamReportPdf(active.data, printTab, active.controller.signal);
+        finish(active);
+      } else {
+        if (!active.shareFile) throw new Error("Shared PDF is not ready");
+        const result = await shareTeamReport(active.shareFile);
+        finish(active, result === "cancelled" ? undefined : {
+          tone: "success",
+          message: result === "shared" ? "Report shared." : "PDF downloaded. Attach the file to share it.",
+        });
+      }
+    } catch (error) {
+      if (active.controller.signal.aborted) return;
+      console.error("Report action failed", error);
+      finish(active, { tone: "error", message: active.mode === "print"
+        ? "The report could not be printed. Please allow popups and try again."
+        : "The PDF could not be shared or downloaded. Please try again." });
+    }
+  };
+
+  const preview = operation?.mode === "print" || operation?.mode === "share" ? operation : null;
+  const busy = operation !== null;
   return (
     <>
-      <div className="report-actions no-print flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={() => void share()}>
-          <Share2 /> Share
-        </Button>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer /> Print
-        </Button>
+      <div className="report-actions no-print flex flex-wrap items-center gap-2" aria-busy={busy}>
+        <Button variant="outline" disabled={busy} onClick={() => begin("share")}><Share2 /> Share</Button>
+        <Button variant="outline" disabled={busy} onClick={() => begin("print")}><Printer /> Print</Button>
         <div className="relative" ref={menuRef}>
-          <Button
-            onClick={() => setExportOpen((open) => !open)}
-            aria-expanded={exportOpen}
-            aria-haspopup="menu"
-            disabled={pdfPending}
-          >
-            <Download /> {pdfPending ? "Generating…" : "Export"} <ChevronDown />
+          <Button onClick={() => setExportOpen((open) => !open)} aria-expanded={exportOpen} disabled={busy}>
+            {operation?.mode === "pdf" ? <Loader2 className="animate-spin" /> : <Download />}
+            {operation?.mode === "pdf" ? "Generating…" : "Export"} <ChevronDown />
           </Button>
           {exportOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
-            >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => void exportPdf()}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-              >
-                <FileText className="size-4 text-primary" /> Export PDF
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={exportCsv}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-              >
-                <Table2 className="size-4 text-primary" /> Export CSV
-              </button>
+            <div className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl">
+              <Button variant="ghost" className="w-full justify-start" onClick={() => void exportReport("pdf")}><FileText /> Export PDF</Button>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => void exportReport("csv")}><Table2 /> Export CSV</Button>
             </div>
           )}
         </div>
       </div>
+      {preview && (
+        <Dialog open onOpenChange={(open) => { if (!open) closePreview(); }}>
+          <DialogContent
+            className="flex max-h-[90dvh] min-w-0 flex-col gap-4 overflow-hidden sm:max-w-5xl"
+            initialFocus={cancelRef}
+            finalFocus={returnFocus}
+            showCloseButton={!(preview.mode === "share" && preview.pending && preview.shareFile)}
+          >
+            <DialogHeader className="shrink-0 pr-8">
+              <DialogTitle>{preview.mode === "print" ? "Print" : "Share"} team performance report</DialogTitle>
+              <DialogDescription>Review {preview.data.context.teamName} · {preview.data.context.seasonName} · {preview.data.context.competitionName}.</DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
+              <div><TeamPerformanceReport data={preview.data} /></div>
+            </div>
+            <DialogFooter className="shrink-0">
+              {preview.pending && <p role="status" className="mr-auto self-center text-xs text-muted-foreground">
+                {preview.mode === "print" ? "Preparing or printing… Close preview when finished if your browser does not close it automatically." : preview.shareFile ? "Sharing…" : "Preparing PDF with graphs…"}
+              </p>}
+              <Button ref={cancelRef} variant="outline" onClick={closePreview} disabled={preview.mode === "share" && preview.pending && !!preview.shareFile}>
+                {preview.pending ? "Close preview" : "Cancel"}
+              </Button>
+              <Button disabled={preview.pending} onClick={() => void proceed()}>
+                {preview.pending ? <Loader2 className="animate-spin" /> : preview.mode === "print" ? <Printer /> : <Share2 />}
+                {preview.mode === "print" ? "Print report" : "Share report"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {notice && (
-        <div
-          role="status"
-          className={`no-print fixed bottom-5 right-5 z-50 max-w-sm rounded-xl border bg-card px-4 py-3 text-sm shadow-xl ${notice.tone === "error" ? "border-destructive/50 text-destructive" : "border-primary/40 text-foreground"}`}
-        >
+        <div role={notice.tone === "error" ? "alert" : "status"} className={"no-print fixed bottom-5 right-4 left-4 z-50 rounded-xl border bg-card px-4 py-3 text-sm shadow-xl sm:left-auto sm:max-w-sm " + (notice.tone === "error" ? "border-destructive/50 text-destructive" : "border-primary/40 text-foreground")}>
           {notice.message}
         </div>
       )}

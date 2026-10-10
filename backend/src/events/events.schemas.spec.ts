@@ -133,13 +133,13 @@ describe('event venue coordinates', () => {
 describe('confirmLineupSchema', () => {
   const benchId = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 
-  it('accepts exactly 11 unique starters with an optional bench', () => {
+  it.each([5, 7, 11])('accepts exactly %i unique starters', (count) => {
     const parsed = confirmLineupSchema.parse({
-      startingAthleteIds: starterIds,
-      benchAthleteIds: [benchId],
+      startingAthleteIds: starterIds.slice(0, count),
+      ...(count === 11 ? { benchAthleteIds: [benchId] } : {}),
     });
-    expect(parsed.startingAthleteIds).toHaveLength(11);
-    expect(parsed.benchAthleteIds).toEqual([benchId]);
+    expect(parsed.startingAthleteIds).toHaveLength(count);
+    if (count === 11) expect(parsed.benchAthleteIds).toEqual([benchId]);
   });
 
   it('accepts a confirm without a bench (legacy single-step flow)', () => {
@@ -174,7 +174,7 @@ describe('confirmLineupSchema', () => {
     ).toThrow();
   });
 
-  it('rejects a starting list that is not exactly 11', () => {
+  it('rejects unsupported starting-lineup sizes', () => {
     expect(() =>
       confirmLineupSchema.parse({
         startingAthleteIds: starterIds.slice(0, 10),

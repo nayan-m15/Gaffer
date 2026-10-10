@@ -1,0 +1,10 @@
+landing-shirt.glb is based on:
+
+  "Hangers and Tee-shirt" by dudecon
+  https://sketchfab.com/3d-models/hangers-and-tee-shirt-44e260855c7f4c1ca611af8d2370195a
+  Licensed under Creative Commons Attribution 4.0 (CC BY 4.0): http://creativecommons.org/licenses/by/4.0/
+  (The author also states the model is public domain: https://ip.tryop.com/)
+
+Changes made: kept only the tee-shirt and the wooden hanger with its hook, recoloured the hanger,
+replaced the shirt's texture layout with front/back planar projections, and removed the original texture.
+landing-shirt-kit.jpg is an original kit texture made for GAFFER.

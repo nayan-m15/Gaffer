@@ -81,7 +81,8 @@ describe('CompetitionInvitesService (PostgreSQL)', () => {
       create table athletes (id uuid primary key default gen_random_uuid(), team_id uuid not null references teams(id),
         user_id text references "user"(id));
       create table competitions (id uuid primary key default gen_random_uuid(), name text not null,
-        type competition_type not null default 'league', admin_user_id text references "user"(id));
+        type competition_type not null default 'league', admin_user_id text references "user"(id),
+        archived_at timestamptz);
       create table competition_teams (id uuid primary key default gen_random_uuid(), competition_id uuid not null references competitions(id),
         team_id uuid references teams(id), display_name text not null,
         created_at timestamptz not null default now(), updated_at timestamptz not null default now());
@@ -206,6 +207,15 @@ describe('CompetitionInvitesService (PostgreSQL)', () => {
     expect(await service.listInvites(competitionId, 'admin')).toHaveLength(1);
     await service.revokeInvite(row.id, 'admin');
     expect((await invites())[0].status).toBe('revoked');
+  });
+
+  it('rejects invitations for archived competitions', async () => {
+    await pg.query(
+      'update competitions set archived_at = now() where id = $1',
+      [competitionId],
+    );
+    await expect(invite()).rejects.toBeInstanceOf(ConflictException);
+    expect(await invites()).toHaveLength(0);
   });
 
   it('rejects inviting an already linked slot', async () => {

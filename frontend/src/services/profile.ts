@@ -44,3 +44,69 @@ export async function updateProfile(
     body: JSON.stringify(input),
   });
 }
+
+
+/** Fields required to securely change the signed-in user's password. */
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/**
+ * Changes the signed-in user's credential password after the backend verifies
+ * their current password. Other active sessions are revoked server-side.
+ */
+export async function changePassword(
+  input: ChangePasswordInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface PasswordStatus {
+  hasPassword: boolean;
+}
+
+/** Returns whether the signed-in account already has an email/password credential. */
+export async function getPasswordStatus(): Promise<PasswordStatus> {
+  return apiFetch<PasswordStatus>("/auth/password-status");
+}
+
+export interface SetPasswordInput {
+  newPassword: string;
+}
+
+/** Creates the first credential password for an OAuth-only account. */
+export async function setPassword(
+  input: SetPasswordInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/set-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+
+/** Permanently removes sign-in access and personal profile data for the current account. */
+export async function deleteProfile(): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>(PROFILE_PATH, {
+    method: "DELETE",
+  });
+}
+
+
+export interface ChangeEmailInput {
+  newEmail: string;
+}
+
+/** Starts Better Auth's verified email-change flow for the signed-in user. */
+export async function requestEmailChange(
+  input: ChangeEmailInput,
+): Promise<{ status: true }> {
+  return apiFetch<{ status: true }>("/auth/change-email", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

@@ -7,8 +7,10 @@ import { SportLogo } from "@/components/brand/SportLogo";
 import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { GoogleSignInButton } from "@/components/ui/google-sign-in-button";
+import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { getNewPasswordValidationError } from "@/lib/password-policy";
 
 /**
  * SignUpPage — Dugout registration page.
@@ -70,10 +72,9 @@ export default function SignUpPage() {
       nextErrors.email = "Please enter a valid email address.";
     }
 
-    if (!password) {
-      nextErrors.password = "Password is required.";
-    } else if (password.length < 8) {
-      nextErrors.password = "Password must be at least 8 characters.";
+    const passwordError = getNewPasswordValidationError(password);
+    if (passwordError) {
+      nextErrors.password = passwordError;
     }
 
     if (!confirmPassword) {
@@ -267,6 +268,7 @@ export default function SignUpPage() {
                   </button>
                 }
               />
+              <PasswordRequirements password={password} className="pt-1" />
               {errors.password && (
                 <p id={passwordErrorId} className="text-xs text-destructive">
                   {errors.password}
@@ -400,6 +402,15 @@ export default function SignUpPage() {
               className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               Sign in
+            </Link>
+          </p>
+          <p>
+            Forgot your password?{" "}
+            <Link
+              to="/forgot-password"
+              className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              Reset it
             </Link>
           </p>
         </div>

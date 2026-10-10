@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CalendarIcon, Check, ClockIcon, Lock, Search, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,7 @@ type EventFormValues = {
   notes: string;
   competitionId: string;
   opponentTeamId: string | null;
+  friendlyPlayersPerSide: 5 | 7 | 11;
 };
 
 function commonEventInput(values: EventFormValues) {
@@ -146,6 +147,7 @@ function commonEventInput(values: EventFormValues) {
       values.type === "match" && values.competitionId !== "none"
         ? values.competitionId
         : null,
+    friendlyPlayersPerSide: values.type === 'match' && values.competitionId === 'none' ? values.friendlyPlayersPerSide : undefined,
     friendlyOpponentTeamId:
       values.type === "match" && values.competitionId === "none"
         ? values.opponentTeamId
@@ -177,11 +179,10 @@ function updateEventInput(
 function eventScheduleError(
   scheduledAt: string,
   isEditing: boolean,
-  allowPastDate: boolean,
 ): string | undefined {
   const timestamp = new Date(scheduledAt).getTime();
   if (Number.isNaN(timestamp)) return "Enter a valid date and time.";
-  if (!isEditing && !allowPastDate && timestamp <= Date.now()) {
+  if (!isEditing && timestamp <= Date.now()) {
     return "Choose a date and time in the future.";
   }
   return undefined;
@@ -194,8 +195,6 @@ interface EventFormDialogProps {
   initialDate?: Date;
   /** Event type prefilled when creating from a calendar menu action. */
   initialType?: EventType;
-  /** Allow scheduling in the past (logging history from the calendar). */
-  allowPastDate?: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -209,7 +208,6 @@ export function EventFormDialog({
   event,
   initialDate,
   initialType,
-  allowPastDate = false,
   onOpenChange,
 }: EventFormDialogProps) {
   const isEditing = Boolean(event);
@@ -242,6 +240,7 @@ export function EventFormDialog({
   const [locating, setLocating] = useState(false);
   const [notes, setNotes] = useState("");
   const [competitionId, setCompetitionId] = useState("none");
+  const [friendlyPlayersPerSide, setFriendlyPlayersPerSide] = useState<5 | 7 | 11>(11);
   const [opponentPick, setOpponentPick] = useState("");
   const [gafferOpponentPick, setGafferOpponentPick] =
     useState<GafferTeamSearchResult | null>(null);
@@ -256,6 +255,7 @@ export function EventFormDialog({
   const [error, setError] = useState<string | null>(null);
   const venueSearchIdRef = useRef(0);
   const gafferOpponentSearchIdRef = useRef(0);
+  const initializedFormRef = useRef<string | null>(null);
 
   const competitionOptions = useMemo(
     () =>
@@ -269,8 +269,14 @@ export function EventFormDialog({
 
   useEffect(() => {
     if (!open) {
+      initializedFormRef.current = null;
       return;
     }
+
+    // Polling may replace the event object while the user is typing.
+    const formKey = event?.id ?? "new";
+    if (initializedFormRef.current === formKey) return;
+    initializedFormRef.current = formKey;
 
     if (event) {
       const parts = splitScheduledAt(event.scheduledAt);
@@ -301,6 +307,7 @@ export function EventFormDialog({
       setVenueSearchEnabled(!savedPlaceMatchesLocation && event.location.trim().length >= 3);
       setNotes(event.notes ?? "");
       setCompetitionId(event.competitionId ?? "none");
+      setFriendlyPlayersPerSide(event.friendlyPlayersPerSide ?? 11);
       setGafferOpponentPick(
         event.friendlyOpponentTeamId && event.friendlyOpponentTeamName
           ? {
@@ -324,6 +331,7 @@ export function EventFormDialog({
       setVenueSearchEnabled(false);
       setNotes("");
       setCompetitionId("none");
+      setFriendlyPlayersPerSide(11);
       setGafferOpponentPick(null);
     }
     setOpponentPick("");
@@ -468,7 +476,7 @@ export function EventFormDialog({
     }
 
     const scheduledAt = combineScheduledAt(formatLocalDate(date), time);
-    const scheduleError = eventScheduleError(scheduledAt, Boolean(event), allowPastDate);
+    const scheduleError = eventScheduleError(scheduledAt, Boolean(event));
     if (scheduleError) {
       setError(scheduleError);
       return;
@@ -490,6 +498,7 @@ export function EventFormDialog({
       notes: notes.trim(),
       competitionId,
       opponentTeamId: gafferOpponentPick?.id ?? null,
+      friendlyPlayersPerSide,
     };
 
     try {
@@ -630,6 +639,22 @@ export function EventFormDialog({
             </Field>
           ) : null}
 
+          {type === "match" && competitionId === "none" ? (
+            <Field label="Match Format">
+              <Select value={String(friendlyPlayersPerSide)} onValueChange={(value) => setFriendlyPlayersPerSide(Number(value) as 5 | 7 | 11)} items={[{ value: '5', label: '5-a-side' }, { value: '7', label: '7-a-side' }, { value: '11', label: '11-a-side' }]} modal={false} disabled={friendlyFixtureLocked || Boolean(event?.lineupConfirmedAt)}>
+                <SelectTrigger className={cn(inputClassName, "w-full justify-between pr-2")}>
+                  <SelectValue placeholder="Match format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5-a-side</SelectItem>
+                  <SelectItem value="7">7-a-side</SelectItem>
+                  <SelectItem value="11">11-a-side</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">Each team must confirm {friendlyPlayersPerSide} starting players.</p>
+            </Field>
+          ) : null}
+
           {showOpponentTeamSelect ? (
             <Field label="Opponent Team">
               <Select
@@ -739,6 +764,11 @@ export function EventFormDialog({
                           }}
                         >
                           {team.name}
+                          {team.coachName ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Coach: {team.coachName}
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -776,12 +806,12 @@ export function EventFormDialog({
             <Field label="Date">
               <DatePicker
                 value={date}
-                disablePast={!isEditing && !allowPastDate}
+                disablePast={!isEditing}
+                readOnly={!isEditing && Boolean(initialDate)}
                 onChange={(next) => {
                   setDate(next);
                   if (
                     !isEditing &&
-                    !allowPastDate &&
                     next &&
                     time &&
                     isScheduleInThePast(next, time)
@@ -795,7 +825,7 @@ export function EventFormDialog({
               <TimePicker
                 value={time}
                 date={date}
-                disablePast={!isEditing && !allowPastDate}
+                disablePast={!isEditing}
                 onChange={setTime}
               />
             </Field>
@@ -987,13 +1017,34 @@ function DatePicker({
   value,
   onChange,
   disablePast = false,
+  readOnly = false,
 }: {
   value: Date | undefined;
   onChange: (date: Date | undefined) => void;
   disablePast?: boolean;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const today = startOfLocalDay();
+
+  if (readOnly) {
+    return (
+      <div
+        className={cn(
+          inputClassName,
+          "flex items-center justify-start gap-2 text-left font-normal",
+        )}
+        aria-readonly="true"
+      >
+        <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+        {value ? (
+          formatDateLabel(value)
+        ) : (
+          <span className="text-muted-foreground">No date selected</span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -1042,34 +1093,79 @@ function TimePicker({
   disablePast?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [hour, minute] = value.split(":");
-  const hourRef = useRef<HTMLButtonElement>(null);
-  const minuteRef = useRef<HTMLButtonElement>(null);
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  const [hour = "00", minute = "00"] = value.split(":");
 
-  const isHourDisabled = (option: string) =>
-    Boolean(
-      disablePast && date && isScheduleInThePast(date, `${option}:59`, now),
-    );
-  const isMinuteDisabled = (option: string) =>
+  useEffect(() => {
+    if (!disablePast) {
+      return;
+    }
+
+    const refreshNow = () => setNow(new Date());
+    refreshNow();
+    const interval = window.setInterval(refreshNow, 30_000);
+    return () => window.clearInterval(interval);
+  }, [disablePast]);
+
+  const isTimePast = useCallback(
+    (nextHour: string, nextMinute: string) =>
+      Boolean(
+        disablePast &&
+          date &&
+          isScheduleInThePast(date, `${nextHour}:${nextMinute}`, now),
+      ),
+    [date, disablePast, now],
+  );
+
+  const hourDisabled = (nextHour: string) =>
     Boolean(
       disablePast &&
         date &&
-        hour &&
-        isScheduleInThePast(date, `${hour}:${option}`, now),
+        TIME_MINUTES.every((nextMinute) => isTimePast(nextHour, nextMinute)),
     );
 
+  const minuteDisabled = (nextMinute: string) =>
+    Boolean(disablePast && date && isTimePast(hour, nextMinute));
+
   useEffect(() => {
-    if (!open) {
+    if (!value || !disablePast || !date || !isTimePast(hour, minute)) {
       return;
     }
-    hourRef.current?.scrollIntoView({ block: "nearest" });
-    minuteRef.current?.scrollIntoView({ block: "nearest" });
-  }, [open, hour, minute]);
 
-  const setPart = (nextHour: string, nextMinute: string) => {
+    const nextTime = TIME_HOURS.flatMap((nextHour) =>
+      TIME_MINUTES.map((nextMinute) => `${nextHour}:${nextMinute}`),
+    ).find((candidate) => {
+      const [candidateHour, candidateMinute] = candidate.split(":");
+      return !isTimePast(candidateHour, candidateMinute);
+    });
+
+    onChange(nextTime ?? "");
+  }, [date, disablePast, hour, isTimePast, minute, onChange, value]);
+
+  const selectHour = (nextHour: string) => {
+    if (hourDisabled(nextHour)) {
+      return;
+    }
+
+    const nextMinute = !isTimePast(nextHour, minute)
+      ? minute
+      : (TIME_MINUTES.find(
+          (candidateMinute) => !isTimePast(nextHour, candidateMinute),
+        ) ?? minute);
     onChange(`${nextHour}:${nextMinute}`);
   };
+
+  const selectMinute = (nextMinute: string) => {
+    if (minuteDisabled(nextMinute)) {
+      return;
+    }
+    onChange(`${hour}:${nextMinute}`);
+    setOpen(false);
+  };
+
+  const selectingToday = Boolean(
+    disablePast && date && formatLocalDate(date) === formatLocalDate(now),
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -1077,79 +1173,47 @@ function TimePicker({
         type="button"
         className={cn(
           inputClassName,
-          "flex items-center justify-start gap-2 text-left font-normal",
+          "flex items-center justify-between text-left font-normal",
         )}
       >
-        <ClockIcon className="size-4 shrink-0 text-muted-foreground" />
-        {value ? (
-          formatTimeLabel(value)
-        ) : (
-          <span className="text-muted-foreground">Pick a time</span>
-        )}
+        <span className="flex items-center gap-2">
+          <ClockIcon className="size-4 shrink-0 text-muted-foreground" />
+          {value ? (
+            <span className="tabular-nums">{formatTimeLabel(value)}</span>
+          ) : (
+            <span className="text-muted-foreground">Pick a time</span>
+          )}
+        </span>
+        <span className="text-xs text-muted-foreground">Choose time</span>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-2">
+      <PopoverContent align="start" className="w-auto p-3">
+        <div className="mb-2 flex items-center justify-between gap-6 px-1">
+          <p className="text-xs font-medium">Event time</p>
+          <p className="text-xs tabular-nums text-muted-foreground">
+            {value ? formatTimeLabel(value) : "Not selected"}
+          </p>
+        </div>
         <div className="flex gap-2">
           <TimeColumn
             label="Hours"
             options={TIME_HOURS}
-            selected={hour}
-            selectedRef={hourRef}
-            isDisabled={isHourDisabled}
-            onSelect={(nextHour) => {
-              const minuteStillValid =
-                Boolean(minute) &&
-                !(
-                  disablePast &&
-                  date &&
-                  isScheduleInThePast(date, `${nextHour}:${minute}`, now)
-                );
-              const nextMinute = minuteStillValid
-                ? minute
-                : (TIME_MINUTES.find(
-                    (option) =>
-                      !(
-                        disablePast &&
-                        date &&
-                        isScheduleInThePast(date, `${nextHour}:${option}`, now)
-                      ),
-                  ) ?? "00");
-              setPart(nextHour, nextMinute);
-              if (minuteStillValid) {
-                setOpen(false);
-              }
-            }}
+            selected={value ? hour : undefined}
+            isDisabled={hourDisabled}
+            onSelect={selectHour}
           />
           <TimeColumn
             label="Minutes"
             options={TIME_MINUTES}
-            selected={minute}
-            selectedRef={minuteRef}
-            isDisabled={isMinuteDisabled}
-            onSelect={(nextMinute) => {
-              const hourStillValid =
-                Boolean(hour) &&
-                !(
-                  disablePast &&
-                  date &&
-                  isScheduleInThePast(date, `${hour}:${nextMinute}`, now)
-                );
-              const nextHour = hourStillValid
-                ? hour
-                : (TIME_HOURS.find(
-                    (option) =>
-                      !(
-                        disablePast &&
-                        date &&
-                        isScheduleInThePast(date, `${option}:${nextMinute}`, now)
-                      ),
-                  ) ?? "00");
-              setPart(nextHour, nextMinute);
-              if (hourStillValid) {
-                setOpen(false);
-              }
-            }}
+            selected={value ? minute : undefined}
+            isDisabled={minuteDisabled}
+            onSelect={selectMinute}
           />
         </div>
+        {selectingToday && (
+          <p className="mt-2 max-w-36 text-[11px] leading-4 text-muted-foreground">
+            Past times are unavailable.
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -1159,14 +1223,12 @@ function TimeColumn({
   label,
   options,
   selected,
-  selectedRef,
   isDisabled,
   onSelect,
 }: {
   label: string;
   options: string[];
   selected: string | undefined;
-  selectedRef: RefObject<HTMLButtonElement | null>;
   isDisabled: (option: string) => boolean;
   onSelect: (value: string) => void;
 }) {
@@ -1175,7 +1237,7 @@ function TimeColumn({
       <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <div className="h-48 w-14 overflow-y-auto rounded-md border border-border bg-background">
+      <div className="h-52 w-16 overflow-y-auto rounded-md border border-border bg-background p-1">
         {options.map((option) => {
           const isSelected = option === selected;
           const disabled = isDisabled(option);
@@ -1183,12 +1245,11 @@ function TimeColumn({
             <button
               key={option}
               type="button"
-              ref={isSelected ? selectedRef : undefined}
               disabled={disabled}
               onClick={() => onSelect(option)}
               className={cn(
-                "flex h-8 w-full items-center justify-center text-sm tabular-nums",
-                disabled && "cursor-not-allowed opacity-35",
+                "flex h-8 w-full items-center justify-center rounded text-sm tabular-nums transition-colors",
+                disabled && "cursor-not-allowed opacity-30",
                 !disabled && isSelected && "bg-primary text-primary-foreground",
                 !disabled && !isSelected && "text-foreground hover:bg-muted",
               )}

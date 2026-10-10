@@ -17,6 +17,7 @@ import {
   Shield,
   Sun,
   Trophy,
+  Settings,
   UserRound,
   Users,
   type LucideIcon,
@@ -148,6 +149,7 @@ interface MobileBottomNavProps {
   theme: Theme;
   onToggleTheme: () => void;
   onProfile: () => void;
+  onSettings: () => void;
   onSignOut: () => void;
 }
 
@@ -156,6 +158,7 @@ export function MobileBottomNav({
   theme,
   onToggleTheme,
   onProfile,
+  onSettings,
   onSignOut,
 }: MobileBottomNavProps) {
   const { pathname } = useLocation();
@@ -266,8 +269,9 @@ export function MobileBottomNav({
               })}
             </div>
             <div className="mobile-more__links">
-              <button type="button" className="mobile-more__row" onClick={() => { closeMenu(); onProfile(); }}>
-                <UserRound aria-hidden="true" /><span>Profile</span><ChevronRight className="mobile-more__chevron" aria-hidden="true" />
+              <button type="button" className="mobile-more__row" onClick={() => { closeMenu(); onProfile(); }}><UserRound aria-hidden="true" /><span>View profile</span><ChevronRight className="mobile-more__chevron" aria-hidden="true" /></button>
+              <button type="button" className="mobile-more__row" onClick={() => { closeMenu(); onSettings(); }}>
+                <Settings aria-hidden="true" /><span>Account settings</span><ChevronRight className="mobile-more__chevron" aria-hidden="true" />
               </button>
             </div>
             <div className="mobile-more__links" role="group" aria-label="Legal navigation">

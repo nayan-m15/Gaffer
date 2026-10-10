@@ -21,7 +21,7 @@
   color: var(--lm-white);
   min-height: 100dvh;
   height: 100dvh;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .live-match .font-oswald {
@@ -70,16 +70,34 @@
 .live-match-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(15rem, 18rem);
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
+  overflow-y: auto;
+  align-content: start;
   grid-template-areas:
-    "score opponentAction"
     "pitch activity"
     "callout activity"
     "bench activity";
   min-height: 0;
 }
 
-.live-match-score { grid-area: score; }
+.live-match-layout:has(.live-match-opponent-action) {
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    "opponentAction activity"
+    "pitch activity"
+    "callout activity"
+    "bench activity";
+}
+
+.live-match-header {
+  display: grid;
+  grid-template-columns: auto minmax(16rem, 1fr) auto;
+}
+.live-match-tactical-label { display: none; }
+.live-match-control-short { display: none; }
+.live-match-clock { grid-column: 1 / -1; }
+.live-match-summary:empty { display: none; }
+.live-match-summary { grid-column: 1 / -1; }
 .live-match-opponent-action {
   grid-area: opponentAction;
   display: flex;
@@ -89,7 +107,7 @@
 }
 .live-match-pitch-area {
   grid-area: pitch;
-  overflow: hidden;
+  align-self: start;
 }
 .live-match-activity {
   grid-area: activity;
@@ -103,7 +121,7 @@
   grid-area: bench;
   min-height: 0;
   max-height: 7rem;
-  overflow: hidden;
+  overflow: auto;
 }
 .live-match-callout {
   grid-area: callout;
@@ -111,7 +129,7 @@
 
 .live-match-pause-overlay {
   grid-column: 1 / -1;
-  grid-row: 2 / -1;
+  grid-row: 1 / -1;
   z-index: 20;
 }
 
@@ -122,15 +140,125 @@
 }
 
 .live-pitch-panel-landscape {
+  --live-marker-inset: 2.25rem;
   width: 100%;
   height: auto;
-  max-height: 100%;
-  aspect-ratio: 105 / 58;
+  min-height: 0;
+  aspect-ratio: 105 / 68;
+}
+
+@media (min-width: 1025px) {
+  .live-match-header {
+    row-gap: 0.25rem;
+  }
+
+  .live-match-clock {
+    grid-column: 2;
+    grid-row: 2;
+    margin-top: 0;
+  }
+
+  .live-match-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .live-match-tactical-label {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+  }
+
+  .live-match-pitch-area > h2 {
+    display: none;
+  }
+
+  .live-match {
+    overflow: hidden;
+  }
+
+  .live-match-layout {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "summary summary"
+      "pitch activity"
+      "callout activity"
+      "bench activity";
+    overflow: hidden;
+  }
+
+  .live-match-layout:has(.live-match-opponent-action) {
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "summary summary"
+      "opponentAction activity"
+      "pitch activity"
+      "callout activity"
+      "bench activity";
+  }
+
+  .live-match-summary {
+    grid-area: summary;
+  }
+
+  .live-match-layout:has(.live-match-summary:empty) {
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "pitch activity"
+      "callout activity"
+      "bench activity";
+  }
+
+  .live-match-layout:has(.live-match-summary:empty):has(.live-match-opponent-action) {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "opponentAction activity"
+      "pitch activity"
+      "callout activity"
+      "bench activity";
+  }
+
+  .live-match-pitch-area {
+    align-self: stretch;
+  }
+
+  /* Fill the space left after the header, prompts and bench take their rows. */
+  .live-match-pitch-area > div {
+    display: flex;
+  }
+
+  .live-pitch-panel-landscape {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    flex: none;
+  }
+
+  .live-match-bench-area {
+    max-height: none;
+    overflow: visible;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .live-match-bench-area .live-bench-list {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-top: 0.25rem;
+    padding-bottom: 0.125rem;
+  }
+
+  .live-match-bench-area .live-bench-player {
+    flex-shrink: 0;
+  }
 }
 
 @media (min-width: 1025px) and (max-width: 1600px) {
   .live-match-bench-area {
-    max-height: 6.25rem;
+    max-height: none;
   }
 
   .live-match-scoreline {
@@ -150,17 +278,43 @@
 
   .live-match-bench-area .live-bench-list {
     gap: 0.5rem;
-    padding-top: 1rem;
-    padding-bottom: 0.25rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.125rem;
+  }
+}
+
+@media (max-width: 1279px) {
+  .live-match-header {
+    grid-template-columns: 1fr auto;
+  }
+  .live-match-header .live-match-score {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .live-match-controls {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .live-match-clock {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1279px) {
+  .live-match-tactical-label {
+    grid-row: 3;
+    justify-self: start;
   }
 }
 
 @media (max-width: 1024px) {
-  .live-match-layout {
+  .live-match-layout,
+  .live-match-layout:has(.live-match-opponent-action) {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto minmax(20rem, 28rem);
+    grid-template-rows: auto auto auto auto minmax(20rem, 28rem);
     grid-template-areas:
-      "score"
       "opponentAction"
       "pitch"
       "callout"
@@ -174,6 +328,7 @@
   }
 
   .live-pitch-panel-landscape {
+    --live-marker-inset: 1.75rem;
     min-height: 0;
   }
 
@@ -253,18 +408,81 @@
 
   .live-match > header > div:first-child {
     min-width: 0;
+    grid-row: 1;
+    justify-content: space-between;
   }
 
-  .live-match > header > div:nth-child(2) {
+  .live-match > header > .live-match-score {
+    grid-row: 2;
+  }
+
+  .live-match-scoreline {
+    font-size: 2rem;
+  }
+
+  .live-match-team-code {
+    font-size: 1rem;
+  }
+
+  .live-match > header > .live-match-clock {
+    grid-row: 3;
+    margin-top: 0;
+  }
+
+  .live-match > header > .live-match-controls {
+    grid-column: 1;
+    grid-row: 4;
     min-width: 0;
     flex-wrap: wrap;
     justify-content: center;
     gap: 0.375rem;
   }
 
-  .live-match > header > div:nth-child(2) > button {
+  .live-match > header > .live-match-controls > button {
     flex: 0 0 auto;
     white-space: nowrap;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0.375rem 0.625rem;
+  }
+
+  .live-match-controls > :first-child {
+    flex-basis: 100%;
+    justify-content: center;
+    margin-bottom: 0.125rem;
+    font-size: 0.5rem;
+  }
+
+  .live-match-control-label {
+    display: none;
+  }
+
+  .live-match-control-short {
+    display: inline;
+  }
+
+  .live-pitch-panel-landscape {
+    --live-marker-inset: 0.75rem;
+  }
+
+  .live-pitch-panel-landscape .live-squad-token {
+    width: clamp(1rem, 5.5vw, 1.35rem);
+    height: clamp(1rem, 5.5vw, 1.35rem);
+    font-size: 0.56rem;
+  }
+
+  .live-pitch-panel-landscape .live-player-name {
+    max-width: 1.9rem;
+  }
+
+  .live-match-bench-area .live-bench-list {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .live-match-bench-area {
+    max-height: none;
+    overflow: visible;
   }
 }
 

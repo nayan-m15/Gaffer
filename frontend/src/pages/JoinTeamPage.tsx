@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { getNewPasswordValidationError } from "@/lib/password-policy";
 import {
   acceptTeamInvite,
   classifyInviteAcceptError,
@@ -128,10 +129,9 @@ export default function JoinTeamPage() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       next.email = "Please enter a valid email address.";
     }
-    if (!password) {
-      next.password = "Password is required.";
-    } else if (password.length < 8) {
-      next.password = "Password must be at least 8 characters.";
+    const passwordError = getNewPasswordValidationError(password);
+    if (passwordError) {
+      next.password = passwordError;
     }
     if (!confirmPassword) {
       next.confirmPassword = "Please confirm your password.";

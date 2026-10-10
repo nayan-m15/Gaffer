@@ -14,7 +14,7 @@ export default defineConfig({
       // Keep a new worker waiting until open capture tabs close so an app/schema
       // update cannot reload a match with pending local work.
       registerType: 'prompt',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo-112.webp'],
       manifest: {
         name: 'Gaffer Sport Coaching',
         short_name: 'Gaffer',

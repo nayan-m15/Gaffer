@@ -1,12 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { eq, or } from 'drizzle-orm';
+import { eq, inArray, or } from 'drizzle-orm';
 import {
   createDatabaseClient,
   isDatabaseConnectionError,
 } from '../../src/database/drizzle';
 import {
+  authRateLimits,
+  competitionFixtures,
+  competitions,
+  events,
+  friendlyFixtures,
   injuries,
   injuryTimelineEntries,
+  matchSessionParticipants,
+  matchSessions,
   playerClaimInvites,
   teamInvites,
   teams,
@@ -34,8 +41,12 @@ export function uniqueTestIdentity(prefix = 's1-07'): TestIdentity {
 /**
  * Deletes a test-created user and (if it created one) their team.
  *
- * The team goes first: deleting it cascades `team_members`, `athletes`,
- * `events`, `team_invites` and `injuries` (which in turn cascades
+ * Shared sessions go first so confirmed-report locks do not block cascades,
+ * and their confirmation audit references do not retain deleted test users.
+ * Fixtures and events go next, while their teams/competitions still exist,
+ * so cascading match deletes cannot race FK SET NULL updates from those
+ * parents. Deleting the team then cascades `team_members`, `athletes`,
+ * `team_invites` and `injuries` (which in turn cascades
  * `injury_timeline_entries`). Those last two matter because
  * `team_invites.created_by_user_id`, `injuries.created_by_user_id` and
  * `injury_timeline_entries.created_by_user_id` all reference `user` with no
@@ -52,6 +63,30 @@ export async function cleanupUser({
     .from(user)
     .where(eq(user.email, email))
     .limit(1);
+
+  // Only sessions belonging to this synthetic team/user are removed. Delete
+  // them before their events, which remain locked while the session exists.
+  await testDb
+    .delete(matchSessions)
+    .where(
+      or(
+        inArray(
+          matchSessions.id,
+          testDb
+            .select({ id: matchSessionParticipants.sessionId })
+            .from(matchSessionParticipants)
+            .innerJoin(teams, eq(teams.id, matchSessionParticipants.teamId))
+            .where(eq(teams.name, teamName)),
+        ),
+        ...(existingUser
+          ? [
+              eq(matchSessions.homeConfirmedByUserId, existingUser.id),
+              eq(matchSessions.awayConfirmedByUserId, existingUser.id),
+              eq(matchSessions.finalisedByUserId, existingUser.id),
+            ]
+          : []),
+      ),
+    );
 
   if (existingUser) {
     await testDb
@@ -77,6 +112,38 @@ export async function cleanupUser({
         ),
       );
   }
+
+  const testTeamIds = testDb
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.name, teamName));
+
+  // A team deletion can reach the same match via events (CASCADE) and via
+  // competitions/opponent teams/game plans (SET NULL). PostgreSQL may check
+  // the latter update after its event has gone, raising matches_event_id FK.
+  // Delete owned fixtures first, including the other team's generated event,
+  // then the remaining team events, before any of those parent rows disappear.
+  // Keeping fixture deletion first also releases linked_match_id references.
+  await testDb
+    .delete(competitionFixtures)
+    .where(
+      inArray(
+        competitionFixtures.competitionId,
+        testDb
+          .select({ id: competitions.id })
+          .from(competitions)
+          .where(inArray(competitions.teamId, testTeamIds)),
+      ),
+    );
+  await testDb
+    .delete(friendlyFixtures)
+    .where(
+      or(
+        inArray(friendlyFixtures.requesterTeamId, testTeamIds),
+        inArray(friendlyFixtures.opponentTeamId, testTeamIds),
+      ),
+    );
+  await testDb.delete(events).where(inArray(events.teamId, testTeamIds));
 
   await testDb.delete(teams).where(eq(teams.name, teamName));
   await testDb.delete(user).where(eq(user.email, email));
@@ -119,7 +186,10 @@ async function cleanupUserWithRetry(
       await cleanupUser(identity);
       return;
     } catch (err) {
-      if (attempt === attempts || !isDatabaseConnectionError(err)) {
+      if (
+        attempt === attempts ||
+        !(isDatabaseConnectionError(err) || isDeadlock(err))
+      ) {
         throw err;
       }
       await new Promise((resolve) =>
@@ -127,6 +197,23 @@ async function cleanupUserWithRetry(
       );
     }
   }
+}
+
+/**
+ * Concurrent cleanups can delete teams that cascade into the same shared rows
+ * (two-account fixtures share a competition) in opposite orders. Postgres then
+ * aborts one side with SQLSTATE 40P01, and retrying it succeeds once the other
+ * side has committed.
+ */
+function isDeadlock(err: unknown): boolean {
+  const cause = err instanceof Error ? err.cause : undefined;
+  return [err, cause].some(
+    (e) =>
+      typeof e === 'object' &&
+      e !== null &&
+      ((e as { code?: unknown }).code === '40P01' ||
+        (e instanceof Error && /deadlock detected/i.test(e.message))),
+  );
 }
 
 /**
@@ -141,4 +228,17 @@ export async function verifyUserEmail(email: string): Promise<void> {
     .update(user)
     .set({ emailVerified: true })
     .where(eq(user.email, email));
+}
+
+/**
+ * Clears the auth rate-limit counters.
+ *
+ * Rate-limit rows are keyed by client IP, and the rate-limit e2e spec draws
+ * its IPs from a fixed documentation range, so rows left behind by a previous
+ * jest invocation would pre-exhaust the buckets its tests pin. The counters
+ * are pure ephemeral state — no other suite's assertions depend on them — so
+ * a wholesale clear is safe even while suites run in parallel.
+ */
+export async function clearAuthRateLimits(): Promise<void> {
+  await testDb.delete(authRateLimits);
 }

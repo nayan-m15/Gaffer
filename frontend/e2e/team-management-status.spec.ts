@@ -6,7 +6,6 @@ import {
   registerVerifiedUser,
 } from './utils/auth';
 
-const PASSWORD = 'password123';
 const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
 
 async function expectApiOk(response: APIResponse, operation: string) {
@@ -52,7 +51,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await registerVerifiedUser(request, email, coach, E2E_PASSWORD);
       await page.goto('/login');
       await page.getByLabel('Email address').fill(email);
-      await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+      await page.getByLabel('Password', { exact: true }).fill(E2E_PASSWORD);
       await page.getByRole('button', { name: /sign in to dugout/i }).click();
       await expect(page).toHaveURL(/\/dashboard$/, NETWORK);
 

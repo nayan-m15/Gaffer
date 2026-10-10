@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import { Archive, ArrowLeft, BarChart3, Pencil, RotateCcw, UserPlus } from "lucide-react";
 import { StatusBadge } from "@/components/roster/StatusBadge";
-import type { Athlete, RecentAppearance } from "@/components/roster/data";
+import type { Athlete } from "@/components/roster/data";
 import { AthleteStatsPanel } from "@/features/statistics/AthleteStatsPanel";
 import { useAthleteStatistics } from "@/features/statistics/hooks";
+import { selectRecentMatches } from "@/features/statistics/recent-matches";
+import type { AthleteMatchBreakdown } from "@/features/statistics/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const COMPACT_MATCH_DATE = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+});
 
 interface AthleteDetailPanelProps {
   athlete: Athlete;
@@ -23,10 +30,11 @@ interface AthleteDetailPanelProps {
 /**
  * AthleteDetailPanel — right-hand panel showing the selected athlete.
  *
- * Displays profile summary, quick info cards, season performance and recent
- * appearances using mock data only.  Active athletes can be edited or archived;
- * archived athletes can be restored. "View Statistics" swaps this panel to the
- * shared AthleteStatsPanel (same query as the Statistics page).
+ * Displays profile summary, quick info cards, season performance and the
+ * athlete's five most recent completed matches, fetched live from the shared
+ * statistics endpoint.  Active athletes can be edited or archived; archived
+ * athletes can be restored. "View Statistics" swaps this panel to the shared
+ * AthleteStatsPanel (same query as the Statistics page).
  */
 export function AthleteDetailPanel({
   athlete,
@@ -38,7 +46,9 @@ export function AthleteDetailPanel({
   readOnly = false,
 }: AthleteDetailPanelProps) {
   const [showingStats, setShowingStats] = useState(false);
-  const statsQuery = useAthleteStatistics(showingStats ? athlete.id : null);
+  // Fetched for every selected athlete so the match log renders without
+  // waiting for "View Statistics"; the same query backs AthleteStatsPanel.
+  const statsQuery = useAthleteStatistics(athlete.id);
 
   useEffect(() => {
     setShowingStats(false);
@@ -209,17 +219,8 @@ export function AthleteDetailPanel({
         </div>
       </section>
 
-      {/* Recent appearances */}
-      {athlete.recentAppearances.length > 0 && <section className="flex-1">
-        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-          Recent Logged Appearances
-        </h3>
-        <div className="flex flex-col gap-2.5">
-          {athlete.recentAppearances.map((appearance, index) => (
-            <AppearanceRow key={`${appearance.opponent}-${index}`} appearance={appearance} />
-          ))}
-        </div>
-      </section>}
+      {/* Recent match log — live from the athlete statistics endpoint. */}
+      <RecentMatchesSection query={statsQuery} />
     </div>
   );
 }
@@ -265,22 +266,94 @@ function StatCard({ label, value, valueClassName, className }: StatCardProps) {
   );
 }
 
-interface AppearanceRowProps {
-  appearance: RecentAppearance;
+type StatsQuery = ReturnType<typeof useAthleteStatistics>;
+
+function RecentMatchesSection({ query }: { query: StatsQuery }) {
+  if (query.isLoading) {
+    return (
+      <section className="flex-1" aria-label="Recent matches" aria-busy="true">
+        <SectionHeading />
+        <div className="flex flex-col gap-2.5">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-[72px] animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (query.isError || !query.data) {
+    return (
+      <section className="flex-1">
+        <SectionHeading />
+        <p className="rounded-xl border border-dashed border-danger/30 px-3 py-6 text-center text-sm text-danger">
+          Could not load recent matches. Please try again.
+        </p>
+      </section>
+    );
+  }
+
+  const recentMatches = selectRecentMatches(query.data.matches);
+  return (
+    <section className="flex-1">
+      <SectionHeading />
+      {recentMatches.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+          No recent matches recorded for this player.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {recentMatches.map((match) => (
+            <MatchLogRow key={match.matchId} match={match} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
-function AppearanceRow({ appearance }: AppearanceRowProps) {
+function SectionHeading() {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-border bg-background p-3">
-      <div>
-        <p className="text-sm font-semibold text-foreground">
-          vs. {appearance.opponent}
-        </p>
-        <p className="text-xs text-brand">{appearance.contribution}</p>
+    <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+      Recent Matches
+    </h3>
+  );
+}
+
+function MatchLogRow({ match }: { match: AthleteMatchBreakdown }) {
+  const details = [
+    match.minutesPlayed !== null ? `${match.minutesPlayed} min` : null,
+    match.goals > 0 ? `${match.goals} ${match.goals === 1 ? "goal" : "goals"}` : null,
+    match.assists > 0 ? `${match.assists} ${match.assists === 1 ? "assist" : "assists"}` : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+      <div className="w-11 shrink-0 text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground">
+        {COMPACT_MATCH_DATE.format(new Date(match.date))}
       </div>
-      <span className="text-sm font-bold tabular-nums text-muted-foreground">
-        {appearance.minutes}&apos;
-      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">vs {match.opponent}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {match.started ? "Started" : "Substitute"}
+          {details.length > 0 ? ` · ${details.join(" · ")}` : ""}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <span
+          className={cn(
+            "inline-flex size-7 items-center justify-center rounded-md text-[11px] font-bold",
+            match.result === "W" && "bg-brand/15 text-brand",
+            match.result === "D" && "bg-warning/15 text-warning",
+            match.result === "L" && "bg-danger/15 text-danger",
+          )}
+        >
+          {match.result}
+        </span>
+        <p className="mt-1 text-xs font-bold tabular-nums text-foreground">
+          {match.teamScore}–{match.opponentScore}
+        </p>
+      </div>
     </div>
   );
 }

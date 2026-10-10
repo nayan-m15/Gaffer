@@ -9,6 +9,7 @@ import {
   RotateCcw,
   ZoomIn,
 } from "lucide-react";
+import { hasSoftwareWebGL } from "@/lib/software-webgl";
 import { cn } from "@/lib/utils";
 import {
   BODY_VIEWS,
@@ -274,12 +275,17 @@ export function BodyModelViewer({
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    /* On CPU-rasterised WebGL every frame costs the page hundreds of
+     * milliseconds, so it gets the reduced-motion treatment: a frozen pulse
+     * and a frame drawn only when something visible changes. */
+    const software = hasSoftwareWebGL();
+    const still = reducedMotion || software;
 
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
         canvas,
-        antialias: true,
+        antialias: !software,
         alpha: true,
       });
     } catch {
@@ -288,7 +294,7 @@ export function BodyModelViewer({
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(software ? 1 : Math.min(window.devicePixelRatio || 1, 2));
     /* Every material below is a flat hex literal (no textures in any of
      * these models), which is already display-referred — an sRGB output
      * transform would gamma-encode it a second time and wash them out. */
@@ -723,6 +729,7 @@ export function BodyModelViewer({
     const projected = new THREE.Vector3();
     let frame = 0;
     let previous = performance.now();
+    let lastDrawn = "";
 
     function animate(now: number) {
       frame = requestAnimationFrame(animate);
@@ -757,9 +764,9 @@ export function BodyModelViewer({
       const hoveredNow = hoveredRegionRef.current;
       const activeRegion = hoveredNow ?? selectedRef.current;
       const injuredNow = injuredRef.current;
-      const pulse = reducedMotion ? 0.55 : 0.42 + Math.sin(now / 420) * 0.22;
-      const idlePulse = reducedMotion ? 0.85 : 0.85 + Math.sin(now / 650) * 0.08;
-      const activePulse = reducedMotion ? 1 : 1 + Math.sin(now / 420) * 0.22;
+      const pulse = still ? 0.55 : 0.42 + Math.sin(now / 420) * 0.22;
+      const idlePulse = still ? 0.85 : 0.85 + Math.sin(now / 650) * 0.08;
+      const activePulse = still ? 1 : 1 + Math.sin(now / 420) * 0.22;
 
       for (const entry of meshEntries) {
         const isInjured = entry.regions.some((region) =>
@@ -781,6 +788,16 @@ export function BodyModelViewer({
         : null;
       updateCalloutPosition(calloutRef.current, hotspotPosition, projected, camera, container!);
 
+      if (still) {
+        // Nothing animates on its own here, so skip frames that would be
+        // identical to the last one drawn.
+        const drawn = [
+          x.toFixed(4), y.toFixed(4), z.toFixed(4), activeRegion,
+          injuredNow.join(), canvas!.width, canvas!.height, scene.children.length,
+        ].join("|");
+        if (drawn === lastDrawn) return;
+        lastDrawn = drawn;
+      }
       renderer.render(scene, camera);
     }
 

@@ -6,6 +6,9 @@ jest.mock('./auth', () => ({
       signUpEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
       signInEmail: jest.fn(),
+      changePassword: jest.fn(),
+      setPassword: jest.fn(),
+      listUserAccounts: jest.fn(),
       signOut: jest.fn(),
     },
   },
@@ -27,7 +30,12 @@ jest.mock('better-auth/api', () => {
 
     constructor(status: string, body?: { message?: string }) {
       super(body?.message ?? 'Authentication request failed.');
-      this.statusCode = status === 'TOO_MANY_REQUESTS' ? 429 : 400;
+      this.statusCode =
+        status === 'TOO_MANY_REQUESTS'
+          ? 429
+          : status === 'FORBIDDEN'
+            ? 403
+            : 400;
       this.body = body;
     }
   }
@@ -39,18 +47,52 @@ jest.mock('better-auth/node', () => ({
   toNodeHandler: jest.fn(),
 }));
 
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { APIError } from 'better-auth/api';
-import type { Response } from 'express';
+import { fromNodeHeaders } from 'better-auth/node';
+import type { Request, Response } from 'express';
 import { auth } from './auth';
 import { AuthController } from './auth.controller';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import { AthletesService } from '../athletes/athletes.service';
 import { TeamsService } from '../teams/teams.service';
 
 const signUpEmail = auth.api.signUpEmail as unknown as jest.Mock;
 const signInEmail = auth.api.signInEmail as unknown as jest.Mock;
+const changePassword = auth.api.changePassword as unknown as jest.Mock;
+const setPassword = auth.api.setPassword as unknown as jest.Mock;
+const listUserAccounts = auth.api.listUserAccounts as unknown as jest.Mock;
 const sendVerificationEmail = auth.api
   .sendVerificationEmail as unknown as jest.Mock;
+const fromNodeHeadersMock = fromNodeHeaders as unknown as jest.Mock;
+
+/**
+ * Minimal Express request shape `signIn` reads. It must satisfy both features
+ * the merged controller wires in: the socket address the rate limiter keys on
+ * (SEC-002) alongside the headers, and the protocol/host/originalUrl/method
+ * the rebuilt web `Request` handed to Better Auth needs for login-CSRF
+ * validation (SEC-003).
+ */
+const signInRequest = (headers: Record<string, string> = {}) =>
+  ({
+    headers,
+    protocol: 'http',
+    originalUrl: '/auth/sign-in',
+    method: 'POST',
+    socket: { remoteAddress: '203.0.113.7' },
+  }) as unknown as Request;
+
+// Stand-in for the Express request the limiter keys on. Unit tests only
+// exercise the wiring (which policy, which identity) —
+// `resolveRateLimitIdentity` itself has its own dedicated spec. Sign-up and
+// the resend never build a web Request, so unlike `signInRequest` this shape
+// carries no protocol/URL fields — keep `signInRequest` for `signIn` tests.
+const makeReq = (headers: Record<string, string> = {}): Request =>
+  ({
+    headers,
+    socket: { remoteAddress: '203.0.113.7' },
+  }) as unknown as Request;
 
 // Mirrors the controller's own fallback so expectations track whatever the
 // environment actually resolved FRONTEND_URL to.
@@ -96,9 +138,18 @@ describe('AuthController', () => {
     getHeader: jest.fn((name: string) => responseHeaders.get(name)),
   } as unknown as Response;
 
+  const enforceRateLimit = jest.fn();
+
   beforeEach(async () => {
     jest.clearAllMocks();
     responseHeaders = new Map<string, string | string[]>();
+    enforceRateLimit.mockReset();
+    enforceRateLimit.mockResolvedValue(undefined);
+    // The controller builds the web Request it forwards to Better Auth from
+    // these headers, so the mock mirrors the real adapter's behaviour.
+    fromNodeHeadersMock.mockImplementation(
+      (headers: Record<string, string>) => new Headers(headers),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -106,6 +157,10 @@ describe('AuthController', () => {
         { provide: TeamsService, useValue: {} },
         { provide: AuthService, useValue: {} },
         { provide: AthletesService, useValue: {} },
+        {
+          provide: AuthRateLimitService,
+          useValue: { enforce: enforceRateLimit },
+        },
       ],
     }).compile();
 
@@ -117,6 +172,74 @@ describe('AuthController', () => {
   });
 
   describe('signUp', () => {
+    it('enforces the email rate limit policy against the request identity before anything else', async () => {
+      signUpEmail.mockResolvedValue(signUpResponse(false));
+      const req = makeReq({ 'x-forwarded-for': '198.51.100.9' });
+
+      await controller.signUp(
+        {
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          password: 'Password123!',
+        },
+        req,
+        res,
+      );
+
+      // No x-vercel-forwarded-for: the single unforgeable bucket keyed on the
+      // edge-observed IP (rightmost XFF entry here) is the whole identity.
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '198.51.100.9',
+      });
+    });
+
+    it('passes the two-tier Vercel-path identity through to the limiter', async () => {
+      signUpEmail.mockResolvedValue(signUpResponse(false));
+      const req = makeReq({
+        'x-vercel-forwarded-for': '203.0.113.10',
+        'cf-connecting-ip': '198.51.100.50',
+      });
+
+      await controller.signUp(
+        {
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          password: 'Password123!',
+        },
+        req,
+        res,
+      );
+
+      // Per-user bucket keyed on what Vercel reported, backstop bucket keyed
+      // on the edge-observed IP — the controller must forward both tiers.
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '203.0.113.10',
+        edgeIp: '198.51.100.50',
+      });
+    });
+
+    it('surfaces the limiter 429 without touching Better Auth', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.signUp(
+          {
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+            password: 'password123',
+          },
+          makeReq(),
+          res,
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(signUpEmail).not.toHaveBeenCalled();
+    });
+
     it('sends the standard verified-login callbackURL and reports the verification requirement', async () => {
       signUpEmail.mockResolvedValue(signUpResponse(false));
 
@@ -124,8 +247,9 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
         },
+        makeReq(),
         res,
       );
 
@@ -133,7 +257,7 @@ describe('AuthController', () => {
         body: {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           callbackURL: `${FRONTEND_URL}/login?verified=1`,
         },
         returnHeaders: true,
@@ -151,9 +275,10 @@ describe('AuthController', () => {
         {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           inviteToken: INVITE_TOKEN,
         },
+        makeReq(),
         res,
       );
 
@@ -161,7 +286,7 @@ describe('AuthController', () => {
         body: {
           name: 'Ada Lovelace',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           callbackURL: `${FRONTEND_URL}/join-team/${INVITE_TOKEN}`,
         },
         returnHeaders: true,
@@ -174,10 +299,11 @@ describe('AuthController', () => {
         {
           name: 'Ada',
           email: 'ada@example.com',
-          password: 'password123',
+          password: 'Password123!',
           inviteToken: INVITE_TOKEN,
           inviteKind: 'competition',
         },
+        makeReq(),
         res,
       );
       expect(signUpEmail).toHaveBeenCalledWith(
@@ -195,10 +321,11 @@ describe('AuthController', () => {
           {
             name: 'Ada',
             email: 'ada@example.com',
-            password: 'password123',
+            password: 'Password123!',
             inviteToken: INVITE_TOKEN,
             inviteKind: 'other',
           },
+          makeReq(),
           res,
         ),
       ).rejects.toThrow();
@@ -211,9 +338,10 @@ describe('AuthController', () => {
           {
             name: 'Ada Lovelace',
             email: 'ada@example.com',
-            password: 'password123',
+            password: 'Password123!',
             inviteToken: 'not-a-token',
           },
+          makeReq(),
           res,
         ),
       ).rejects.toThrow('This invite link is no longer valid.');
@@ -242,22 +370,63 @@ describe('AuthController', () => {
     const finalSetCookie = (): string | string[] | undefined =>
       responseHeaders.get('Set-Cookie');
 
+    it('enforces the password rate limit policy against the request IP before anything else', async () => {
+      signInEmail.mockResolvedValue(
+        signInResponse([
+          'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
+        ]),
+      );
+
+      await controller.signIn(
+        { email: 'ada@example.com', password: 'password123' },
+        signInRequest({ 'x-forwarded-for': '198.51.100.9' }),
+        res,
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('password', {
+        primaryIp: '198.51.100.9',
+      });
+      expect(signInEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces the limiter 429 without attempting authentication', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.signIn(
+          { email: 'ada@example.com', password: 'password123' },
+          signInRequest(),
+          res,
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(signInEmail).not.toHaveBeenCalled();
+    });
+
     it('honours rememberMe: true and expires any stale dont_remember flag', async () => {
       signInEmail.mockResolvedValue(signInResponse([sessionCookie]));
 
       const result = await controller.signIn(
         { email: 'ada@example.com', password: 'password123', rememberMe: true },
+        signInRequest({ origin: 'http://localhost:5173' }),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: true,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: true,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       expect(result).toEqual({
         user: { id: 'user-id', email: 'ada@example.com' },
       });
@@ -281,17 +450,21 @@ describe('AuthController', () => {
           password: 'password123',
           rememberMe: false,
         },
+        signInRequest(),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: false,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: false,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       // Browser-session semantics: Better Auth's own cookies are forwarded
       // verbatim and nothing is expired or synthesised.
       expect(finalSetCookie()).toEqual([
@@ -310,29 +483,124 @@ describe('AuthController', () => {
 
       await controller.signIn(
         { email: 'ada@example.com', password: 'password123' },
+        signInRequest(),
         res,
       );
 
-      expect(signInEmail).toHaveBeenCalledWith({
-        body: {
-          email: 'ada@example.com',
-          password: 'password123',
-          rememberMe: false,
-        },
-        returnHeaders: true,
-      });
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: 'ada@example.com',
+            password: 'password123',
+            rememberMe: false,
+          },
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
       expect(finalSetCookie()).toEqual([
         'better-auth.session_token=signed-token; Path=/; HttpOnly; SameSite=Lax',
         dontRememberCookie,
       ]);
     });
+
+    it('forwards the incoming request so Better Auth can validate it for login CSRF', async () => {
+      signInEmail.mockResolvedValue(signInResponse([sessionCookie]));
+
+      await controller.signIn(
+        { email: 'ada@example.com', password: 'password123' },
+        signInRequest({
+          origin: 'http://localhost:5173',
+          'sec-fetch-site': 'same-site',
+          'sec-fetch-mode': 'cors',
+        }),
+        res,
+      );
+
+      expect(signInEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.any(Headers) as Headers,
+          request: expect.any(Request) as Request,
+          asResponse: false,
+          returnHeaders: true,
+        }),
+      );
+      const calls = signInEmail.mock.calls as {
+        request: { method: string; headers: Headers };
+      }[][];
+      const call = calls[0][0];
+      // The rebuilt request must carry the browser's CSRF signals through to
+      // Better Auth's `formCsrfMiddleware`; without them it silently no-ops.
+      expect(call.request.method).toBe('POST');
+      expect(call.request.headers.get('origin')).toBe('http://localhost:5173');
+      expect(call.request.headers.get('sec-fetch-site')).toBe('same-site');
+      expect(call.request.headers.get('sec-fetch-mode')).toBe('cors');
+    });
+
+    it('surfaces Better Auth CSRF rejections as 403 without issuing cookies', async () => {
+      // `formCsrfMiddleware` throws APIError(FORBIDDEN) for cross-site or
+      // untrusted-origin logins; the wrapper must map that faithfully and
+      // forward nothing — no session cookie can leak out of a rejected login.
+      signInEmail.mockRejectedValueOnce(
+        new APIError('FORBIDDEN', { message: 'Invalid origin' }),
+      );
+
+      const rejection = await controller
+        .signIn(
+          { email: 'ada@example.com', password: 'password123' },
+          signInRequest({ origin: 'https://attacker.example' }),
+          res,
+        )
+        .catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(HttpException);
+      expect((rejection as HttpException).getStatus()).toBe(403);
+      expect((rejection as HttpException).message).toBe('Invalid origin');
+      expect(finalSetCookie()).toBeUndefined();
+    });
   });
 
   describe('sendVerificationEmail', () => {
-    it('sends the standard verified-login callbackURL', async () => {
-      const result = await controller.sendVerificationEmail({
-        email: 'ada@example.com',
+    it('enforces the email rate limit policy against the request identity before anything else', async () => {
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq({ 'x-forwarded-for': '198.51.100.9' }),
+      );
+
+      expect(enforceRateLimit).toHaveBeenCalledWith('email', {
+        primaryIp: '198.51.100.9',
       });
+      expect(result).toEqual({ status: true });
+    });
+
+    it('surfaces the limiter 429 without triggering a send', async () => {
+      enforceRateLimit.mockRejectedValueOnce(
+        new HttpException(
+          'Too many requests. Please try again later.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      await expect(
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+          },
+          makeReq(),
+        ),
+      ).rejects.toThrow('Too many requests. Please try again later.');
+      expect(sendVerificationEmail).not.toHaveBeenCalled();
+    });
+
+    it('sends the standard verified-login callbackURL', async () => {
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq(),
+      );
 
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
@@ -344,11 +612,14 @@ describe('AuthController', () => {
     });
 
     it('routes competition verification resends back to the competition invite', async () => {
-      await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-        inviteToken: INVITE_TOKEN,
-        inviteKind: 'competition',
-      });
+      await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+          inviteToken: INVITE_TOKEN,
+          inviteKind: 'competition',
+        },
+        makeReq(),
+      );
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
           email: 'ada@example.com',
@@ -358,10 +629,13 @@ describe('AuthController', () => {
     });
 
     it('routes the resend back to the pending team invite', async () => {
-      await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-        inviteToken: INVITE_TOKEN,
-      });
+      await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+          inviteToken: INVITE_TOKEN,
+        },
+        makeReq(),
+      );
 
       expect(sendVerificationEmail).toHaveBeenCalledWith({
         body: {
@@ -373,10 +647,13 @@ describe('AuthController', () => {
 
     it('rejects a malformed invite token', async () => {
       await expect(
-        controller.sendVerificationEmail({
-          email: 'ada@example.com',
-          inviteToken: 'not-a-token',
-        }),
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+            inviteToken: 'not-a-token',
+          },
+          makeReq(),
+        ),
       ).rejects.toThrow('This invite link is no longer valid.');
       expect(sendVerificationEmail).not.toHaveBeenCalled();
     });
@@ -386,9 +663,12 @@ describe('AuthController', () => {
         new APIError('USER_NOT_FOUND', { message: 'User not found.' }),
       );
 
-      const result = await controller.sendVerificationEmail({
-        email: 'ada@example.com',
-      });
+      const result = await controller.sendVerificationEmail(
+        {
+          email: 'ada@example.com',
+        },
+        makeReq(),
+      );
 
       expect(result).toEqual({ status: true });
     });
@@ -399,10 +679,175 @@ describe('AuthController', () => {
       );
 
       await expect(
-        controller.sendVerificationEmail({
-          email: 'ada@example.com',
-        }),
+        controller.sendVerificationEmail(
+          {
+            email: 'ada@example.com',
+          },
+          makeReq(),
+        ),
       ).rejects.toThrow('Too many requests.');
+    });
+  });
+
+  describe('passwordStatus', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('reports when a credential password exists', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+        { id: 'credential-account', providerId: 'credential' },
+      ]);
+
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: true,
+      });
+    });
+
+    it('reports OAuth-only accounts as having no password', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
+
+      await expect(controller.passwordStatus(req)).resolves.toEqual({
+        hasPassword: false,
+      });
+    });
+  });
+
+  describe('setPassword', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('sets the first password for an OAuth-only account', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'google-account', providerId: 'google' },
+      ]);
+      setPassword.mockResolvedValue({ status: true });
+
+      await expect(
+        controller.setPassword({ newPassword: 'Newpassword456!' }, req),
+      ).resolves.toEqual({ status: true });
+
+      expect(setPassword).toHaveBeenCalledWith({
+        body: { newPassword: 'Newpassword456!' },
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
+      });
+    });
+
+    it('refuses to overwrite an existing credential password without current-password verification', async () => {
+      listUserAccounts.mockResolvedValue([
+        { id: 'credential-account', providerId: 'credential' },
+      ]);
+
+      await expect(
+        controller.setPassword({ newPassword: 'Newpassword456!' }, req),
+      ).rejects.toThrow(
+        'A password is already set for this account. Use Change Password instead.',
+      );
+
+      expect(setPassword).not.toHaveBeenCalled();
+    });
+
+    it('applies the same strong password policy to first-time passwords', async () => {
+      await expect(
+        controller.setPassword({ newPassword: 'short' }, req),
+      ).rejects.toThrow('Password must be at least 8 characters.');
+
+      expect(listUserAccounts).not.toHaveBeenCalled();
+      expect(setPassword).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    const req = {
+      headers: { cookie: 'better-auth.session_token=signed-token' },
+    } as never;
+
+    it('verifies the current password, changes it and revokes other sessions', async () => {
+      changePassword.mockResolvedValue({ status: true });
+
+      const result = await controller.changePassword(
+        {
+          currentPassword: 'password123',
+          newPassword: 'Newpassword456!',
+        },
+        req,
+      );
+
+      expect(changePassword).toHaveBeenCalledWith({
+        body: {
+          currentPassword: 'password123',
+          newPassword: 'Newpassword456!',
+          revokeOtherSessions: true,
+        },
+        headers: new Headers({
+          cookie: 'better-auth.session_token=signed-token',
+        }),
+      });
+      expect(result).toEqual({ status: true });
+    });
+
+    it('rejects a new password shorter than the eight-character minimum', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'password123',
+            newPassword: 'short',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Password must be at least 8 characters.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects a new password that does not meet the complexity requirements', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'password123',
+            newPassword: 'alllowercase123!',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Password must include at least one uppercase letter.');
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects reusing the current password as the new password', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: 'Password123!',
+            newPassword: 'Password123!',
+          },
+          req,
+        ),
+      ).rejects.toThrow(
+        'New password must be different from your current password.',
+      );
+
+      expect(changePassword).not.toHaveBeenCalled();
+    });
+
+    it('requires the current password before calling Better Auth', async () => {
+      await expect(
+        controller.changePassword(
+          {
+            currentPassword: '',
+            newPassword: 'Newpassword456!',
+          },
+          req,
+        ),
+      ).rejects.toThrow('Current password is required.');
+
+      expect(changePassword).not.toHaveBeenCalled();
     });
   });
 });

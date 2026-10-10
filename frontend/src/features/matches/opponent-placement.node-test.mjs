@@ -105,3 +105,16 @@ assert.equal(gkSlot?.x, 50);
 assert.equal(gkSlot?.y, 94);
 
 console.log("opponent placement tests passed");
+
+const { friendlyLineupPlayers, publicOpponentTimeline, opponentPitchState } = await import("./live-match-model.ts");
+const publicPlayers = friendlyLineupPlayers({ available: true, source: "confirmed", formation: "4-3-3", starters: [{ name: "Public Starter", shirtNumber: 9, slotId: "ST" }], bench: [{ name: "Public Sub", shirtNumber: null }] });
+const publicTimeline = publicOpponentTimeline([{ team: "opponent", eventType: "substitution", opponentPlayerId: null, opponentLabel: "#9 Public Starter", detail: "Public Sub", minute: 10, createdAt: "now" }], publicPlayers);
+const publicState = opponentPitchState(publicPlayers, publicTimeline, new Set([publicPlayers[0].id]));
+assert.equal(publicState.onPitch[0].name, "Public Sub");
+assert.equal(publicState.bench[0].name, "Public Starter");
+
+const { opponentEventAttribution, opponentSubstitutionDetail } = await import("./live-match-model.ts");
+assert.deepEqual(opponentEventAttribution(publicPlayers[0]), { opponentPlayerId: undefined, opponentLabel: "#9 Public Starter" });
+assert.equal(opponentSubstitutionDetail(publicPlayers[1]), "Public Sub");
+assert.equal(opponentEventAttribution({ id: "manual-row", name: "Manual", shirtNumber: 4 }).opponentPlayerId, "manual-row");
+assert.equal(publicState.onPitch[0].publicLineup.slotId, "ST");

@@ -26,6 +26,7 @@ describe('TeamInvitesController', () => {
     createInvite: jest.fn(),
     listInvites: jest.fn(),
     revokeInvite: jest.fn(),
+    removeAssistant: jest.fn(),
     preview: jest.fn(),
     accept: jest.fn(),
   };
@@ -156,6 +157,32 @@ describe('TeamInvitesController', () => {
         ForbiddenException,
       );
       expect(mockTeamInvitesService.revokeInvite).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeAssistant', () => {
+    it("removes an assistant from the coach's own team", async () => {
+      mockTeamInvitesService.removeAssistant.mockResolvedValue(undefined);
+
+      const result = await controller.removeAssistant(user, 'member-id');
+
+      expect(mockTeamsService.requireCoachTeam).toHaveBeenCalledWith('user-id');
+      expect(mockTeamInvitesService.removeAssistant).toHaveBeenCalledWith(
+        'team-id',
+        'member-id',
+      );
+      expect(result).toEqual({ removed: true });
+    });
+
+    it('rejects with 403 when the caller is an assistant', async () => {
+      mockTeamsService.requireCoachTeam.mockRejectedValue(
+        new ForbiddenException('Only coaches can perform this action.'),
+      );
+
+      await expect(
+        controller.removeAssistant(user, 'member-id'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockTeamInvitesService.removeAssistant).not.toHaveBeenCalled();
     });
   });
 

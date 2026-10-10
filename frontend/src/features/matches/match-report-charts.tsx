@@ -89,10 +89,10 @@ export function TeamComparisonChart({
               tick={<ComparisonTick />}
             />
             <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={TICK} />
-            <Bar dataKey="own" fill={ownColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
+            <Bar dataKey="own" fill={ownColor} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false}>
               <LabelList dataKey="own" position="top" fill="var(--mr-white)" fontSize={11} />
             </Bar>
-            <Bar dataKey="opp" fill={oppColor} radius={[4, 4, 0, 0]} maxBarSize={26}>
+            <Bar dataKey="opp" fill={oppColor} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false}>
               <LabelList dataKey="opp" position="top" fill="var(--mr-white)" fontSize={11} />
             </Bar>
           </BarChart>

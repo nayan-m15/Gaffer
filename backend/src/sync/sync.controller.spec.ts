@@ -3,6 +3,8 @@ import { ServiceUnavailableException } from '@nestjs/common';
 jest.mock('../auth/auth.guard', () => ({ AuthGuard: class AuthGuard {} }));
 
 import { SyncController } from './sync.controller';
+import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
+import { SyncJwksController } from './sync-jwks.controller';
 
 describe('SyncController', () => {
   const originalEnv = { ...process.env };
@@ -39,8 +41,10 @@ describe('SyncController', () => {
   });
 
   it('issues a short-lived token containing the authorised team', async () => {
+    delete process.env.POWERSYNC_PRIVATE_KEY;
     process.env.POWERSYNC_URL = 'https://example.powersync.journeyapps.com';
     process.env.POWERSYNC_KID = 'test-key';
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'true';
     process.env.POWERSYNC_SHARED_SECRET = Buffer.from(
       'a sufficiently long development secret',
     ).toString('base64url');
@@ -57,7 +61,72 @@ describe('SyncController', () => {
     const result = await controller.token({ id: 'user-1' } as never);
     expect(result.endpoint).toBe(process.env.POWERSYNC_URL);
     expect(result.token.split('.')).toHaveLength(3);
+    expect(
+      JSON.parse(
+        Buffer.from(result.token.split('.')[0], 'base64url').toString(),
+      ),
+    ).toEqual({ alg: 'HS256', kid: 'test-key', typ: 'JWT' });
+    const claims = JSON.parse(
+      Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    expect(claims).toMatchObject({
+      user_id: 'user-1',
+      sub: 'user-1',
+      aud: process.env.POWERSYNC_URL,
+      team_id: 'team-1',
+      team_role: 'assistant',
+      two_sided_live_logging: 'true',
+    });
+    process.env.TWO_SIDED_LIVE_LOGGING_ENABLED = 'false';
+    const disabledResult = await controller.token({ id: 'user-1' } as never);
+    const disabledClaims = JSON.parse(
+      Buffer.from(disabledResult.token.split('.')[1], 'base64url').toString(
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    expect(disabledClaims.two_sided_live_logging).toBe('false');
     expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(Number(claims.exp) - Number(claims.iat)).toBe(300);
+  });
+
+  it('signs RSA tokens with the same kid and public key as the JWKS, preferring RSA over HMAC', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.POWERSYNC_PRIVATE_KEY = privateKey
+      .export({ format: 'pem', type: 'pkcs8' })
+      .toString();
+    process.env.POWERSYNC_SHARED_SECRET = 'unused';
+    process.env.POWERSYNC_KID = 'fresh-rsa-key';
+    process.env.POWERSYNC_URL = 'https://example.powersync.journeyapps.com';
+    const controller = new SyncController(
+      { findTeamForUser: jest.fn().mockResolvedValue(null) } as never,
+      {} as never,
+      {} as never,
+    );
+    const result = await controller.token({ id: 'revoked-user' } as never);
+    const [header, payload, signature] = result.token.split('.');
+    expect(JSON.parse(Buffer.from(header, 'base64url').toString())).toEqual({
+      alg: 'RS256',
+      typ: 'JWT',
+      kid: 'fresh-rsa-key',
+    });
+    expect(
+      JSON.parse(Buffer.from(payload, 'base64url').toString()),
+    ).toMatchObject({
+      sub: 'revoked-user',
+      user_id: 'revoked-user',
+      team_id: null,
+      team_role: null,
+    });
+    const jwk = new SyncJwksController().keys().keys[0];
+    expect(jwk.kid).toBe('fresh-rsa-key');
+    expect(
+      verify(
+        'RSA-SHA256',
+        Buffer.from(`${header}.${payload}`),
+        createPublicKey({ key: jwk, format: 'jwk' }),
+        Buffer.from(signature, 'base64url'),
+      ),
+    ).toBe(true);
   });
 
   it('leaves an upload retriable when the database fails after ingestion', async () => {

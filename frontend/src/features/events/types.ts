@@ -34,11 +34,14 @@ export interface TeamEvent {
   /** Present on the single-event response for generated competition fixtures. */
   fixtureOpponentCompetitionTeamId?: string | null;
   fixtureOpponentName?: string | null;
+  /** Authoritative side for linked fixtures; null on manual events. */
+  fixtureIsHome?: boolean | null;
   /**
    * Friendly-fixture link. `friendlyFixtureId` is the raw column value;
    * the status and opponent team fields are resolved per side, so each
    * calendar sees the *other* team as the opponent.
    */
+  friendlyPlayersPerSide?: 5 | 7 | 11 | null;
   friendlyFixtureId?: string | null;
   friendlyFixtureStatus?: FriendlyFixtureStatus | null;
   friendlyOpponentTeamId?: string | null;
@@ -75,6 +78,7 @@ export interface CreateEventInput {
    * Gaffer team. Omitted or null keeps free-text (non-Gaffer) opponents.
    */
   friendlyOpponentTeamId?: string | null;
+  friendlyPlayersPerSide?: 5 | 7 | 11;
 }
 
 export interface UpdateEventInput {
@@ -92,6 +96,7 @@ export interface UpdateEventInput {
   notes?: string | null;
   competitionId?: string | null;
   friendlyOpponentTeamId?: string | null;
+  friendlyPlayersPerSide?: 5 | 7 | 11;
 }
 
 export interface LocationSearchResult {
@@ -139,6 +144,9 @@ export interface StartMatchInput {
   isHome: boolean;
   startingAthleteIds: string[];
   benchAthleteIds?: string[];
+  formationId?: string;
+  pitchAssignments?: Record<string, string | null>;
+  customPositions?: import("@/features/team-management/types").FormationPosition[] | null;
   gamePlanId?: string;
   opponentSquadVisibility?: OpponentSquadVisibility;
   opponentSquad?: OpponentMatchPlayer[];

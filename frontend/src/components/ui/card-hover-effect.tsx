@@ -25,12 +25,12 @@ export function HoverEffect({
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className={cn("grid grid-cols-1 gap-1 sm:grid-cols-2 xl:grid-cols-4", className)}>
+    <div className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4", className)}>
       {items.map((item, index) => (
         <Link
           to={item.to}
           key={item.to}
-          className="group relative block h-full p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group relative block h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onMouseEnter={() => setHoveredIndex(index)}
           onMouseLeave={() => setHoveredIndex(null)}
           onFocus={() => setHoveredIndex(index)}
@@ -49,7 +49,7 @@ export function HoverEffect({
             )}
           </AnimatePresence>
           <div className="relative z-10 h-full rounded-xl border border-border/60 bg-card/70 p-4 backdrop-blur-xl">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex min-h-10 items-start justify-between gap-4">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 {item.icon}
               </span>

@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { brand } from "@/data/brand";
 import { cn } from "@/lib/utils";
 

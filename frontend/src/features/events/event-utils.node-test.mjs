@@ -21,6 +21,8 @@ import {
 /* ─── formatLocalDate / parseLocalDate ───────────────────────────────── */
 
 assert.equal(formatLocalDate(new Date(2026, 8, 1)), "2026-09-01");
+assert.equal(formatLocalDate(new Date(2026, 9, 8, 0, 30)), "2026-10-08");
+assert.equal(formatLocalDate(new Date(2026, 9, 8, 23, 30)), "2026-10-08");
 assert.equal(
   formatLocalDate(new Date(2026, 0, 5)),
   "2026-01-05",

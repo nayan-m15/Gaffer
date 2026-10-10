@@ -1,8 +1,18 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
-import { teamMembers } from '../database/schema';
+import { teamMembers, teams } from '../database/schema';
 import { TeamsService } from './teams.service';
+
+/** A Postgres unique-violation (SQLSTATE 23505) as the driver raises it. */
+function uniqueViolation(): Error {
+  return Object.assign(
+    new Error('duplicate key value violates unique constraint'),
+    {
+      code: '23505',
+    },
+  );
+}
 
 /**
  * Stubs a drizzle select chain. Each queued `results` entry resolves one
@@ -91,6 +101,121 @@ describe('TeamsService', () => {
     });
   });
 
+  describe('updateTeamForUser', () => {
+    it('lets a coach rename the team through the competition-syncing batch', async () => {
+      const coachChain = selectChain([
+        { id: 'team-id', name: 'Old Name', role: 'coach' },
+      ]);
+      const freshChain = selectChain([
+        { id: 'team-id', name: 'New Name', primaryColor: null },
+      ]);
+      const batch = jest.fn().mockResolvedValue([]);
+      const updateBuilder = {
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockReturnThis(),
+      };
+      const update = jest.fn().mockReturnValue(updateBuilder);
+      mockDatabaseService.database = {
+        select: jest
+          .fn()
+          .mockReturnValueOnce(coachChain)
+          .mockReturnValueOnce(freshChain),
+        update,
+        execute: jest.fn().mockReturnThis(),
+        batch,
+      };
+
+      const team = await service.updateTeamForUser('coach-user-id', {
+        name: 'New Name',
+      });
+
+      expect(team).toEqual({
+        id: 'team-id',
+        name: 'New Name',
+        role: 'coach',
+        primaryColor: null,
+      });
+      expect(update).toHaveBeenCalledWith(teams);
+      expect(batch).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a coach update the team colour', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'coach' },
+      ]);
+      const returning = jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'team-id', name: 'Test Team', primaryColor: '#1A2B3C' },
+        ]);
+      const where = jest.fn().mockReturnValue({ returning });
+      const set = jest.fn().mockReturnValue({ where });
+      const update = jest.fn().mockReturnValue({ set });
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+      };
+
+      await expect(
+        service.updateTeamForUser('coach-user-id', {
+          primaryColor: '#1A2B3C',
+        }),
+      ).resolves.toEqual({
+        id: 'team-id',
+        name: 'Test Team',
+        role: 'coach',
+        primaryColor: '#1A2B3C',
+      });
+      expect(update).toHaveBeenCalledWith(teams);
+    });
+
+    it('rejects an assistant with 403 before touching the database', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'assistant' },
+      ]);
+      const update = jest.fn();
+      const batch = jest.fn();
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+        batch,
+      };
+
+      const rejection = service.updateTeamForUser('assistant-user-id', {
+        name: 'Hijacked FC',
+        primaryColor: '#FF0000',
+      });
+      await expect(rejection).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(rejection).rejects.toThrow(
+        'Only coaches can perform this action.',
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a user with no team membership before any write', async () => {
+      const chain = selectChain([]);
+      const update = jest.fn();
+      const batch = jest.fn();
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update,
+        batch,
+      };
+
+      const rejection = service.updateTeamForUser('teamless-user-id', {
+        name: 'Any FC',
+      });
+      await expect(rejection).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(rejection).rejects.toThrow(
+        'No team associated with this account.',
+      );
+      expect(update).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('addAssistantMember', () => {
     it('inserts a membership with the role hardcoded to assistant', async () => {
       const values = jest.fn().mockResolvedValue(undefined);
@@ -133,6 +258,82 @@ describe('TeamsService', () => {
       await expect(
         service.addAssistantMember('team-id', 'assistant-user-id'),
       ).rejects.toBe(dbError);
+    });
+  });
+
+  describe('createTeamForUser', () => {
+    /** Wires select/insert/delete for one `createTeamForUser` call. */
+    const wire = (options: {
+      existing?: unknown[];
+      memberInsert?: () => Promise<unknown>;
+      teamInsert?: () => Promise<unknown[]>;
+    }) => {
+      const deleteWhere = jest.fn().mockResolvedValue(undefined);
+      let insertCall = 0;
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(selectChain(options.existing ?? [])),
+        insert: jest.fn(() => {
+          insertCall += 1;
+          return insertCall === 1
+            ? {
+                values: jest.fn(() => ({
+                  returning:
+                    options.teamInsert ??
+                    jest.fn(() =>
+                      Promise.resolve([{ id: 'team-1', name: 'Gaffer FC' }]),
+                    ),
+                })),
+              }
+            : {
+                values:
+                  options.memberInsert ?? jest.fn(() => Promise.resolve()),
+              };
+        }),
+        delete: jest.fn(() => ({ where: deleteWhere })),
+      };
+      return { deleteWhere };
+    };
+
+    it('creates the team and makes the caller its coach', async () => {
+      wire({});
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC', '#ff0000'),
+      ).resolves.toMatchObject({
+        id: 'team-1',
+        name: 'Gaffer FC',
+        role: 'coach',
+      });
+    });
+
+    it('refuses a second team for the same account', async () => {
+      wire({ existing: [{ id: 'team-0', name: 'Existing', role: 'coach' }] });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('removes the orphaned team when the membership insert fails', async () => {
+      const { deleteWhere } = wire({
+        memberInsert: jest.fn(() => Promise.reject(new Error('insert failed'))),
+      });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow('insert failed');
+      expect(deleteWhere).toHaveBeenCalled();
+    });
+
+    it('maps a racing second membership to a conflict', async () => {
+      const { deleteWhere } = wire({
+        memberInsert: jest.fn(() => Promise.reject(uniqueViolation())),
+      });
+
+      await expect(
+        service.createTeamForUser('user-1', 'Gaffer FC'),
+      ).rejects.toThrow(ConflictException);
+      expect(deleteWhere).toHaveBeenCalled();
     });
   });
 });
