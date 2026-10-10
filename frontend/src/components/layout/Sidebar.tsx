@@ -293,10 +293,11 @@ export function Sidebar({ className, variant }: SidebarProps) {
       <div
         className={cn(
           "flex items-center gap-3 border-b border-sidebar-border/70 px-5 py-6",
+          desktop && "desktop-sidebar-header",
           !expanded && "lg:justify-center lg:px-2",
         )}
       >
-        <div className="rounded-lg border border-sidebar-border bg-surface-nested p-1.5">
+        <div className={cn("rounded-lg border border-sidebar-border bg-surface-nested p-1.5", desktop && "desktop-sidebar-logo-tile")}>
           <SportLogo size={32} className="rounded-md" />
         </div>
         <div className={cn(!expanded && "lg:hidden")}>
@@ -434,7 +435,7 @@ export function Sidebar({ className, variant }: SidebarProps) {
         <button
           type="button"
           onClick={toggle}
-          className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="desktop-sidebar-collapse absolute right-2 top-2 z-10 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={expanded ? "Collapse navigation" : "Expand navigation"}
           title={expanded ? "Collapse navigation" : "Expand navigation"}
         >

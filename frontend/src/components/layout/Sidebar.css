@@ -7,9 +7,23 @@
     --nav-pill-glow: 20%;
     --nav-hover-colour: var(--primary);
     --nav-hover-fill: 6%;
-    --nav-avatar-ring: 45%;
+    --nav-avatar-ring: 70%;
     --nav-background-tint: 3%;
     --nav-pitch-opacity: 0.12;
+    --nav-frame-green: var(--chart-2);
+    --nav-rim-border: 30%;
+    --nav-rim-glow: 10%;
+    --nav-logo-border: 40%;
+    --nav-logo-glow: 15%;
+    --nav-button-border: 30%;
+    --nav-button-glow: 20%;
+    --nav-separator-line: 35%;
+    --nav-separator-glow: 15%;
+    --nav-avatar-glow: 30%;
+    border-color: color-mix(in srgb, var(--primary) var(--nav-rim-border), transparent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--nav-frame-green) var(--nav-rim-glow), transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--nav-frame-green) 8%, transparent),
+      var(--tw-shadow, 0 0 transparent);
   }
 
   .dark .gaffer-desktop-sidebar {
@@ -19,9 +33,19 @@
     --nav-pill-glow: 35%;
     --nav-hover-colour: var(--sidebar-foreground);
     --nav-hover-fill: 5%;
-    --nav-avatar-ring: 60%;
+    --nav-avatar-ring: 90%;
     --nav-background-tint: 5%;
-    --nav-pitch-opacity: 0.10;
+    --nav-pitch-opacity: 0.14;
+    --nav-frame-green: var(--brand);
+    --nav-rim-border: 35%;
+    --nav-rim-glow: 16%;
+    --nav-logo-border: 50%;
+    --nav-logo-glow: 25%;
+    --nav-button-border: 40%;
+    --nav-button-glow: 35%;
+    --nav-separator-line: 45%;
+    --nav-separator-glow: 20%;
+    --nav-avatar-glow: 55%;
   }
 
   .gaffer-desktop-sidebar > div:not(.desktop-sidebar-background) {
@@ -114,11 +138,60 @@
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-avatar {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) var(--nav-avatar-ring), transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--nav-frame-green) var(--nav-avatar-ring), transparent),
+      0 0 14px color-mix(in srgb, var(--nav-frame-green) var(--nav-avatar-glow), transparent),
+      inset 0 0 8px color-mix(in srgb, var(--nav-frame-green) 12%, transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-logo-tile {
+    border-color: color-mix(in srgb, var(--primary) var(--nav-logo-border), transparent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--nav-frame-green) var(--nav-logo-glow), transparent);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-collapse {
+    border: 1px solid color-mix(in srgb, var(--primary) var(--nav-button-border), transparent);
+    padding: 5px;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-collapse:hover,
+  .gaffer-desktop-sidebar .desktop-sidebar-collapse:focus-visible {
+    border-color: color-mix(in srgb, var(--primary) var(--nav-logo-border), transparent);
+    /* Keep the existing focus ring by supplying the shadow through Tailwind. */
+    --tw-shadow: 0 0 12px color-mix(in srgb, var(--nav-frame-green) var(--nav-button-glow), transparent);
+    box-shadow: var(--tw-inset-shadow, 0 0 transparent), var(--tw-inset-ring-shadow, 0 0 transparent),
+      var(--tw-ring-offset-shadow, 0 0 transparent), var(--tw-ring-shadow, 0 0 transparent), var(--tw-shadow);
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-header {
+    border-bottom-color: transparent;
   }
 
   .gaffer-desktop-sidebar .desktop-sidebar-profile-footer {
-    border-top-color: var(--sidebar-border);
+    border-top-color: transparent;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-header::after,
+  .gaffer-desktop-sidebar .desktop-sidebar-profile-footer::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent,
+      color-mix(in srgb, var(--primary) var(--nav-separator-line), transparent), transparent);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--nav-frame-green) var(--nav-separator-glow), transparent));
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-header::after {
+    bottom: -1px;
+  }
+
+  .gaffer-desktop-sidebar .desktop-sidebar-profile-footer::before {
+    top: -1px;
+  }
+
+  .dark .gaffer-desktop-sidebar .desktop-sidebar-light-lines {
+    color: color-mix(in srgb, var(--brand) 14%, transparent);
   }
 
   /* The nav ends at the profile separator, so artwork cannot enter the footer. */
@@ -137,6 +210,12 @@
     opacity: var(--nav-pitch-opacity);
     mask-image: linear-gradient(to bottom, transparent 5%, black 65%);
     z-index: 0;
+  }
+
+  :root:not(.dark) .gaffer-desktop-sidebar .desktop-sidebar-pitch {
+    color: var(--chart-2);
+    opacity: 0.24;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--chart-2) 25%, transparent));
   }
 }
 
