@@ -223,6 +223,8 @@ function DashboardHeader({
           {teamName ? ` \u00b7 ${teamName}` : ""}
         </>
       }
+      headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-white/75 px-4 py-3 sm:px-5 dark:min-w-auto dark:w-auto dark:max-w-none dark:rounded-none dark:bg-transparent dark:p-0"
+      subtitleClassName="text-black dark:text-muted-foreground"
       actions={
         <>
           {!hasTeam && !pendingInvite && (

@@ -41,6 +41,8 @@ export default function PlayerTeamPage() {
       <PageHeader
         title="Team"
         subtitle="Your squad roster — read-only view."
+        headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-background/50 px-4 py-3 sm:px-5"
+        subtitleClassName="text-black dark:text-muted-foreground"
       />
 
       <div className="space-y-6 p-6 sm:p-8">
