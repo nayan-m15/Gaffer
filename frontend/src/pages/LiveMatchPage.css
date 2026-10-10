@@ -534,25 +534,26 @@
   .live-match[data-phone-pitch-minimum]:not(.live-match-phone-logs) { overflow-y: auto; }
   .live-match[data-phone-pitch-minimum]:not(.live-match-phone-logs) > .live-match-layout { min-height: var(--phone-minimum-layout-height); max-height: none; }
   .live-match > header { grid-template-columns: minmax(0, 1fr) auto; gap: .25rem; padding: .25rem .5rem; }
-  .live-match > header > div:first-child { grid-column: 1 / -1; }
-  .live-match > header > .live-match-score { grid-column: 1; grid-row: 2; }
-  .live-match > header > .live-match-clock { grid-column: 2; grid-row: 2; min-width: 0; }
+  .live-match > header > div:first-child { grid-column: 1; grid-row: 1; }
+  .live-match > header > .live-match-score { grid-column: 1 / -1; grid-row: 2; }
+  .live-match > header > .live-match-clock { grid-column: 2; grid-row: 1; min-width: 0; margin-top: 0; }
   .live-match-score > div:first-child { display: flex; justify-content: center; align-items: center; gap: .35rem; }
   .live-match-score > div:first-child > div > span { display: none; }
-  .live-match-scoreline { font-size: 1.125rem; }
+  .live-match-scoreline { font-size: 1.75rem; font-weight: 700; }
   .live-match-scoreline > .text-2xl { font-size: 1rem; margin-inline: .2rem; }
-  .live-match-team-code { font-size: .75rem; letter-spacing: .05em; }
+  .live-match-team-code { font-size: 1rem; font-weight: 700; letter-spacing: .05em; }
   .live-match-clock > span { gap: .3rem; padding: .2rem .35rem; }
   .live-match-clock .font-oswald { font-size: .75rem; }
   .live-match-clock > span > span:not(.font-oswald) { font-size: .625rem; letter-spacing: .05em; }
   .live-match > header > div:first-child > :not(button) { display: none; }
   .live-match > header > div:first-child > button { padding: .2rem .5rem; }
-  .live-match > header > .live-match-controls { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; gap: .375rem; }
+  .live-match > header > .live-match-controls { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; justify-content: center; gap: .375rem; }
   .live-match-controls > :first-child { flex-basis: auto; margin-bottom: 0; font-size: inherit; }
   .live-match-controls > button, .live-match-controls > div > button { min-height: 2.25rem; }
-  .live-match-phone-sync { grid-column: 1 / -1; grid-row: 4; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .2rem .5rem; font-size: .625rem; line-height: 1.2; }
-  .live-match-phone-sync * { font-size: .625rem; }
-  .live-match-phone-projection { color: #9ca39f; text-align: center; }
+  .live-match-phone-sync { grid-column: 1 / -1; grid-row: 4; display: flex; flex-wrap: nowrap; align-items: center; justify-content: safe center; overflow-x: auto; gap: 0; font-size: .6rem; line-height: 1.2; white-space: nowrap; scrollbar-width: none; }
+  .live-match-phone-sync * { font-size: .6rem; }
+  .live-match-phone-sync > [role="status"] { flex-shrink: 0; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; letter-spacing: 0; }
+  .live-match-phone-projection { flex-shrink: 0; text-align: center; }
   .live-match-layout,
   .live-match-layout:has(.live-match-opponent-action) {
     position: relative;
@@ -589,10 +590,11 @@
     bottom: calc(2.25rem * var(--phone-pitch-scale, 1));
   }
   .live-match .live-match-phone-pitch-centre .live-squad-token {
-    width: calc(clamp(1rem, 5.5vw, 1.35rem) * var(--phone-pitch-scale, 1));
-    height: calc(clamp(1rem, 5.5vw, 1.35rem) * var(--phone-pitch-scale, 1));
-    font-size: calc(.56rem * var(--phone-pitch-scale, 1));
+    width: calc(2.125rem * var(--phone-pitch-scale, 1));
+    height: calc(2.125rem * var(--phone-pitch-scale, 1));
+    font-size: calc(.75rem * var(--phone-pitch-scale, 1));
   }
+  .live-match .live-match-phone-pitch-centre .live-marker-hit::before { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: var(--phone-hit-size, 100%); height: var(--phone-hit-size, 100%); }
   .live-match .live-match-phone-pitch-centre .live-player-name {
     width: calc(4.25rem * var(--phone-pitch-scale, 1));
     max-width: calc(4.25rem * var(--phone-pitch-scale, 1));

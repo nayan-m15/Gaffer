@@ -869,6 +869,37 @@ export default function LiveMatchPage() {
   }, [isPhone, phoneView, phoneLayoutReady]);
 
   useEffect(() => {
+    if (!isPhone || phoneView !== "pitch" || !phoneLayoutReady) return;
+    const centre = phonePitchCentreRef.current;
+    if (!centre) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const buttons = Array.from(centre.querySelectorAll<HTMLElement>(".live-marker-hit"));
+      const positions = buttons.map(button => button.getBoundingClientRect());
+      buttons.forEach((button, index) => {
+        const own = positions[index];
+        let spacing = Infinity;
+        positions.forEach((other, otherIndex) => {
+          if (index === otherIndex) return;
+          spacing = Math.min(spacing, Math.max(Math.abs(own.left + own.width / 2 - other.left - other.width / 2), Math.abs(own.top + own.height / 2 - other.top - other.height / 2)));
+        });
+        const size = `${Math.max(own.width, Math.min(44, spacing - 2))}px`;
+        if (button.style.getPropertyValue("--phone-hit-size") !== size) button.style.setProperty("--phone-hit-size", size);
+      });
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(centre);
+    const mutations = new MutationObserver(records => {
+      if (records.some(record => record.type === "childList" || (record.target instanceof HTMLElement && !record.target.matches(".live-marker-hit")))) schedule();
+    });
+    mutations.observe(centre, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+    schedule();
+    return () => { resize.disconnect(); mutations.disconnect(); cancelAnimationFrame(frame); };
+  }, [isPhone, phoneView, phoneLayoutReady]);
+
+  useEffect(() => {
     if (!isPhone) return;
     if (composer.kind === "sub-in" || composer.kind === "mandatory-sub-in") {
       setPhoneView("pitch");
@@ -1750,6 +1781,7 @@ export default function LiveMatchPage() {
   const pitchCallOwnIds = assistHighlightOwnIds ?? subOutHighlightOwnIds;
   const pitchCallOppIds = assistHighlightOppIds ?? subOutHighlightOppIds;
   const pitchCallTone = assistPick ? "assist" : "warning";
+  const phoneLogCount = isPhone ? timeline.filter(event => !isPairedAssistEvent(event, assistsByGoal)).length : 0;
   const projectionStatus = !projection ? "" : !projectionConsistent
     ? "Syncing result and event log"
     : projection.finalisationState === "finalised"
@@ -2098,9 +2130,9 @@ export default function LiveMatchPage() {
             <span className="live-match-control-label">{match.eventStatus === "completed" ? "View report" : "End Match"}</span>
             <span className="live-match-control-short" aria-hidden="true">FT</span>
           </button>
-          {isPhone && <button type="button" className="live-match-view-logs rounded-md border border-[#3e4448] text-xs font-semibold" onClick={() => { setBenchPanel(null); setPhoneView("logs"); }}>View logs</button>}
+          {isPhone && <button type="button" className="live-match-view-logs rounded-md border border-[#3e4448] text-xs font-semibold" onClick={() => { setBenchPanel(null); setPhoneView("logs"); }}>View logs{phoneLogCount > 0 ? ` · ${phoneLogCount}` : ""}</button>}
         </div>
-        {isPhone && matchId ? <div className="live-match-phone-sync"><OfflineSyncStatus matchId={matchId} />{projection && <span className="live-match-phone-projection">{projectionStatus}</span>}</div> : null}
+        {isPhone && matchId ? <div className="live-match-phone-sync"><OfflineSyncStatus matchId={matchId} />{projection && <span className={cn("live-match-phone-projection", projection.finalisationState === "finalised" ? "text-[#16d99a]" : !projectionConsistent || projection.unresolvedReviewCount > 0 || projection.finalisationState === "amendment_required" ? "text-[#d6a447]" : "text-[#9ca39f]")}> · {projectionStatus}</span>}</div> : null}
       </header>
 
       {reviewOpen && matchId ? (
@@ -2177,7 +2209,7 @@ export default function LiveMatchPage() {
             Tactical view
           </h2>
           <div className={cn("relative min-h-0 flex-1", isPhone && "live-match-phone-stage")}>
-            {isPhone && <button ref={ownBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-own" style={{ backgroundColor: ownColor }} aria-label={`${ownName} bench`} aria-expanded={benchPanel === "own"} onClick={() => setBenchPanel(current => current === "own" ? null : "own")}><span>BENCH</span></button>}
+            {isPhone && <button ref={ownBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-own" style={{ backgroundColor: ownColor }} aria-label={`${ownName} bench · ${ownBench.length}`} aria-expanded={benchPanel === "own"} onClick={() => setBenchPanel(current => current === "own" ? null : "own")}><span>BENCH · {ownBench.length}</span></button>}
             <div ref={phonePitchCentreRef} className={isPhone ? "live-match-phone-pitch-centre" : "contents"}>
             <LivePitch
               className={cn(
@@ -2207,7 +2239,7 @@ export default function LiveMatchPage() {
               />
             </LivePitch>
             </div>
-            {isPhone && visibility !== "none" && oppBench.length > 0 && <button ref={oppBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-opponent" style={{ backgroundColor: oppColor }} aria-label={`${oppName} bench`} aria-expanded={benchPanel === "opponent"} onClick={() => setBenchPanel(current => current === "opponent" ? null : "opponent")}><span>BENCH</span></button>}
+            {isPhone && visibility !== "none" && oppBench.length > 0 && <button ref={oppBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-opponent" style={{ backgroundColor: oppColor }} aria-label={`${oppName} bench · ${oppBench.length}`} aria-expanded={benchPanel === "opponent"} onClick={() => setBenchPanel(current => current === "opponent" ? null : "opponent")}><span>BENCH · {oppBench.length}</span></button>}
           </div>
         </section>
 
