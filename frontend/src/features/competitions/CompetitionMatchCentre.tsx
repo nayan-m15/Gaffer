@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Printer } from "lucide-react";
-import { CompetitionMatchEventGraphic, getCompetitionMatchEventAppearance } from "./CompetitionMatchEventGraphic";
+import { CompetitionMatchEventGraphic } from "./CompetitionMatchEventGraphic";
+import { getCompetitionMatchEventAppearance } from "./competitionMatchEventAppearance";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { competitionMatchCentreQueryOptions } from "./match-centre-query";

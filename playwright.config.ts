@@ -19,14 +19,8 @@ export default defineConfig({
   // Full-stack flows perform several real database round trips. Shared CI
   // runners can take well over 90 seconds even when every assertion passes.
   timeout: process.env.CI ? 180_000 : 90_000,
-  // Bound each shard independently so CI still has time to run PWA checks and
-  // upload diagnostics before the enclosing job deadline (.gitea/workflows/
-  // test.yml). The full suite no longer fits one worker's 25-minute budget,
-  // so CI now splits it across two shards (`--shard`, one per job/runner) —
-  // each shard still runs single-worker (see `workers` below: two Chromium
-  // instances sharing one runner's CPU for software-rendered WebGL tests
-  // starved both and turned fast assertions into timeouts), so this budget
-  // only needs to cover roughly half the suite, not all of it.
+  // Four single-worker CI shards keep this budget available for assertions,
+  // including slow software WebGL startup, with time left for diagnostics.
   globalTimeout: process.env.CI ? 30 * 60_000 : undefined,
   expect: {
     // On a shared CI runner a cold load of the match report or live logger
@@ -34,7 +28,7 @@ export default defineConfig({
     timeout: process.env.CI ? 30_000 : 5_000,
   },
   // Lets `--shard` split individual tests rather than whole files, so the
-  // two CI shards stay roughly the same size: regression-ui.spec.ts alone is
+  // four CI shards stay roughly the same size: regression-ui.spec.ts alone is
   // ~35 tests. With one worker per shard nothing actually runs concurrently.
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
