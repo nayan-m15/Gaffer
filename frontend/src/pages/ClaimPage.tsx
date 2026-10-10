@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FloatingLabelInput } from "@/components/ui/floating-label-input";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { getNewPasswordValidationError } from "@/lib/password-policy";
 import {
   acceptClaim,
@@ -57,6 +58,7 @@ export default function ClaimPage() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const baseId = useId();
@@ -159,6 +161,7 @@ export default function ClaimPage() {
   /* ── Handlers ──────────────────────────────────────────────────────── */
   const handleSignUp = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setShowPasswordRequirements(true);
     if (!validateSignUp()) return;
     setIsSubmitting(true);
     setFormError(null);
@@ -280,6 +283,7 @@ export default function ClaimPage() {
           email={email}
           onEmailChange={setEmail}
           password={password}
+          showPasswordRequirements={showPasswordRequirements}
           onPasswordChange={setPassword}
           confirmPassword={confirmPassword}
           onConfirmPasswordChange={setConfirmPassword}
@@ -320,6 +324,7 @@ export default function ClaimPage() {
         viewMode={viewMode}
         onChange={(mode) => {
           setViewMode(mode);
+          setShowPasswordRequirements(false);
           setErrors({});
           setFormError(null);
         }}
@@ -483,7 +488,7 @@ function ClaimConfirmForm({
 }
 
 function ClaimSignUpForm({
-  baseId, fullName, onFullNameChange, email, onEmailChange, password, onPasswordChange,
+  baseId, fullName, onFullNameChange, email, onEmailChange, password, showPasswordRequirements, onPasswordChange,
   confirmPassword, onConfirmPasswordChange, showPassword, onTogglePassword,
   showConfirmPassword, onToggleConfirmPassword, errors, fullNameErrorId, emailErrorId,
   passwordErrorId, confirmPasswordErrorId, consentAccepted, onConsentChange,
@@ -492,7 +497,7 @@ function ClaimSignUpForm({
   baseId: string;
   fullName: string; onFullNameChange: (value: string) => void;
   email: string; onEmailChange: (value: string) => void;
-  password: string; onPasswordChange: (value: string) => void;
+  password: string; showPasswordRequirements: boolean; onPasswordChange: (value: string) => void;
   confirmPassword: string; onConfirmPasswordChange: (value: string) => void;
   showPassword: boolean; onTogglePassword: () => void;
   showConfirmPassword: boolean; onToggleConfirmPassword: () => void;
@@ -507,6 +512,7 @@ function ClaimSignUpForm({
       <ClaimInput id={`${baseId}-fullName`} label="Full name" type="text" value={fullName} onChange={onFullNameChange} autoComplete="name" error={errors.fullName} errorId={fullNameErrorId} />
       <ClaimInput id={`${baseId}-email`} label="Email address" type="email" value={email} onChange={onEmailChange} autoComplete="email" error={errors.email} errorId={emailErrorId} />
       <ClaimInput id={`${baseId}-password`} label="Password" type="password" value={password} onChange={onPasswordChange} autoComplete="new-password" error={errors.password} errorId={passwordErrorId} visible={showPassword} onToggleVisibility={onTogglePassword} hideLabel="Hide password" showLabel="Show password" />
+      {showPasswordRequirements && <PasswordRequirements password={password} className="pt-1" />}
       <ClaimInput id={`${baseId}-confirmPassword`} label="Confirm password" type="password" value={confirmPassword} onChange={onConfirmPasswordChange} autoComplete="new-password" error={errors.confirmPassword} errorId={confirmPasswordErrorId} visible={showConfirmPassword} onToggleVisibility={onToggleConfirmPassword} hideLabel="Hide confirm password" showLabel="Show confirm password" />
       <ConsentCheckbox baseId={baseId} checked={consentAccepted} onChange={onConsentChange} error={errors.consent} errorId={consentErrorId} />
       {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
