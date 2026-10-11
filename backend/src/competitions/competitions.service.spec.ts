@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
-import { competitions, competitionTeams } from '../database/schema';
+import {
+  competitions,
+  competitionTeams,
+  hiddenCompetitions,
+} from '../database/schema';
 import { TeamsService } from '../teams/teams.service';
 import { CompetitionsService } from './competitions.service';
 
@@ -526,6 +530,291 @@ describe('CompetitionsService', () => {
         }),
       ]);
       expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setHidden', () => {
+    function wire(
+      existing: unknown[] = [competitionRow],
+      membership: unknown[] = [participantRow],
+    ) {
+      const onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+      const values = jest.fn(() => ({ onConflictDoNothing }));
+      const deleteWhere = jest.fn().mockResolvedValue(undefined);
+      const database = {
+        select: jest
+          .fn()
+          .mockReturnValueOnce(selectChain(existing))
+          .mockReturnValueOnce(selectChain(membership)),
+        insert: jest.fn(() => ({ values })),
+        delete: jest.fn(() => ({ where: deleteWhere })),
+      };
+      mockDatabaseService.database = database;
+      return { ...database, values, onConflictDoNothing, deleteWhere };
+    }
+
+    it('hides a competition only for the requesting participant and tolerates repeated requests', async () => {
+      const database = wire();
+      await expect(
+        service.setHidden('coach-user-id', 'comp-1', true),
+      ).resolves.toEqual({ hidden: true });
+      expect(database.insert).toHaveBeenCalledWith(hiddenCompetitions);
+      expect(database.values).toHaveBeenCalledWith({
+        userId: 'coach-user-id',
+        competitionId: 'comp-1',
+      });
+      expect(database.onConflictDoNothing).toHaveBeenCalledTimes(1);
+      expect(database.delete).not.toHaveBeenCalled();
+    });
+
+    it('restores visibility by removing the caller hide record', async () => {
+      const database = wire();
+      await expect(
+        service.setHidden('coach-user-id', 'comp-1', false),
+      ).resolves.toEqual({ hidden: false });
+      expect(database.delete).toHaveBeenCalledWith(hiddenCompetitions);
+      expect(database.deleteWhere).toHaveBeenCalledTimes(1);
+      expect(database.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing competition before any visibility write', async () => {
+      const database = wire([]);
+      await expect(
+        service.setHidden('coach-user-id', 'missing', true),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(database.insert).not.toHaveBeenCalled();
+      expect(mockTeamsService.findTeamForUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects a team that is not a participant', async () => {
+      const database = wire([competitionRow], []);
+      await expect(
+        service.setHidden('coach-user-id', 'comp-1', true),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(database.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects an account with neither membership nor a claimed athlete', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValueOnce(null);
+      const database = wire([competitionRow], []);
+      await expect(
+        service.setHidden('outsider', 'comp-1', true),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(database.insert).not.toHaveBeenCalled();
+      expect(database.delete).not.toHaveBeenCalled();
+    });
+
+    it('allows a claimed player to hide their team competition without coach privileges', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValueOnce(null);
+      const database = wire();
+      database.select
+        .mockReset()
+        .mockReturnValueOnce(selectChain([competitionRow]))
+        .mockReturnValueOnce(selectChain([{ teamId: team.id }]))
+        .mockReturnValueOnce(selectChain([participantRow]));
+      await expect(
+        service.setHidden('player-user-id', 'comp-1', true),
+      ).resolves.toEqual({ hidden: true });
+      expect(mockTeamsService.requireCoachTeam).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setArchived', () => {
+    function wire(
+      archivedAt: Date | null = null,
+      activeFixtures: unknown[] = [],
+    ) {
+      const set = jest.fn(() => ({
+        where: jest.fn().mockResolvedValue(undefined),
+      }));
+      const database = {
+        select: jest
+          .fn()
+          .mockReturnValueOnce(selectChain([{ ...competitionRow, archivedAt }]))
+          .mockReturnValueOnce(selectChain(activeFixtures)),
+        update: jest.fn(() => ({ set })),
+      };
+      mockDatabaseService.database = database;
+      return { ...database, set };
+    }
+
+    it('archives an idle competition for its administrator', async () => {
+      const database = wire();
+      await expect(
+        service.setArchived('coach-user-id', 'comp-1', true),
+      ).resolves.toEqual({ archived: true });
+      expect(database.update).toHaveBeenCalledWith(competitions);
+      expect(database.set).toHaveBeenCalledWith({
+        archivedAt: expect.any(Date) as Date,
+        updatedAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('rejects archiving while a fixture is live, without updating the competition', async () => {
+      const database = wire(null, [{ id: 'live-fixture' }]);
+      await expect(
+        service.setArchived('coach-user-id', 'comp-1', true),
+      ).rejects.toThrow(
+        'Finish or cancel live fixtures before archiving this competition.',
+      );
+      expect(database.update).not.toHaveBeenCalled();
+    });
+
+    it('restores an archived competition without checking live fixtures', async () => {
+      const database = wire(new Date('2026-10-01'));
+      await expect(
+        service.setArchived('coach-user-id', 'comp-1', false),
+      ).resolves.toEqual({ archived: false });
+      expect(database.select).toHaveBeenCalledTimes(1);
+      expect(database.set).toHaveBeenCalledWith({
+        archivedAt: null,
+        updatedAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('allows a repeated archive request without checking live fixtures again', async () => {
+      const database = wire(new Date('2026-10-01'));
+      await expect(
+        service.setArchived('coach-user-id', 'comp-1', true),
+      ).resolves.toEqual({ archived: true });
+      expect(database.select).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a non-administrator before writing archive state', async () => {
+      const database = wire();
+      await expect(
+        service.setArchived('outsider', 'comp-1', true),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(database.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listFixtureScheduleAlerts', () => {
+    const now = new Date('2026-10-11T10:00:00Z');
+    const fixture = {
+      fixtureId: 'fixture-1',
+      competitionId: 'comp-1',
+      competitionName: 'League',
+      ownCompetitionTeamId: 'home-slot',
+      homeCompetitionTeamId: 'home-slot',
+      awayCompetitionTeamId: 'away-slot',
+      scheduledAt: now,
+      scheduleRevision: 3,
+      homeScheduleResponse: 'pending',
+      awayScheduleResponse: 'accepted',
+      scheduleProposedByCompetitionTeamId: 'away-slot',
+      scheduleProposalNote: 'New kickoff time',
+      scheduleConfirmedAt: null,
+      updatedAt: now,
+    };
+
+    function wire(rows: unknown[]) {
+      const select = jest
+        .fn()
+        .mockReturnValueOnce(selectChain(rows))
+        .mockReturnValueOnce(
+          selectChain([
+            { id: 'home-slot', displayName: 'Home FC' },
+            { id: 'away-slot', displayName: 'Away FC' },
+          ]),
+        );
+      mockDatabaseService.database = { select };
+      return select;
+    }
+
+    it('returns no alerts for an account without any team', async () => {
+      mockTeamsService.findTeamForUser.mockResolvedValueOnce(null);
+      const select = wire([]);
+      await expect(
+        service.listFixtureScheduleAlerts('outsider'),
+      ).resolves.toEqual([]);
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips participant lookup when there are no schedule proposals', async () => {
+      const select = wire([]);
+      await expect(
+        service.listFixtureScheduleAlerts('coach-user-id'),
+      ).resolves.toEqual([]);
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a pending home-side response as action required with the opponent name', async () => {
+      wire([fixture]);
+      await expect(
+        service.listFixtureScheduleAlerts('coach-user-id'),
+      ).resolves.toEqual([
+        {
+          id: 'fixture-1:3:action_required',
+          fixtureId: fixture.fixtureId,
+          competitionId: 'comp-1',
+          competitionName: 'League',
+          opponentName: 'Away FC',
+          scheduledAt: now,
+          scheduleRevision: 3,
+          proposalNote: 'New kickoff time',
+          proposedByOwnTeam: false,
+          state: 'action_required',
+          confirmedAt: null,
+          updatedAt: now,
+        },
+      ]);
+    });
+
+    it('uses the away-side response and home opponent for an away viewer', async () => {
+      wire([{ ...fixture, ownCompetitionTeamId: 'away-slot' }]);
+      await expect(
+        service.listFixtureScheduleAlerts('coach-user-id'),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          opponentName: 'Home FC',
+          state: 'awaiting_response',
+          proposedByOwnTeam: true,
+        }),
+      ]);
+    });
+
+    it('uses a safe opponent fallback for a missing participant identity', async () => {
+      const select = wire([
+        {
+          ...fixture,
+          homeCompetitionTeamId: null,
+          awayCompetitionTeamId: null,
+        },
+      ]);
+      await expect(
+        service.listFixtureScheduleAlerts('coach-user-id'),
+      ).resolves.toEqual([
+        expect.objectContaining({ opponentName: 'Opponent' }),
+      ]);
+      expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains confirmations at the seven-day boundary and drops older confirmations', async () => {
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(now.getTime());
+      try {
+        const cutoff = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+        wire([
+          {
+            ...fixture,
+            fixtureId: 'recent',
+            scheduleConfirmedAt: new Date(cutoff),
+          },
+          {
+            ...fixture,
+            fixtureId: 'old',
+            scheduleConfirmedAt: new Date(cutoff - 1),
+          },
+          fixture,
+        ]);
+        const alerts = await service.listFixtureScheduleAlerts('coach-user-id');
+        expect(alerts.map((alert) => alert.id)).toEqual([
+          'recent:3:confirmed',
+          'fixture-1:3:action_required',
+        ]);
+      } finally {
+        clock.mockRestore();
+      }
     });
   });
 

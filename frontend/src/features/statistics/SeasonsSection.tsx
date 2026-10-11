@@ -38,7 +38,7 @@ export function SeasonsSection({
             overlap.
           </p>
         </div>
-        <Button className="no-print" size="sm" onClick={onAdd}>
+        <Button className="no-print" size="sm" onClick={onAdd} data-tour="stats-seasons">
           <Plus className="size-4" />
           Add Season
         </Button>

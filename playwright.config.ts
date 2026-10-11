@@ -21,7 +21,10 @@ export default defineConfig({
   timeout: process.env.CI ? 180_000 : 90_000,
   // Four single-worker CI shards keep this budget available for assertions,
   // including slow software WebGL startup, with time left for diagnostics.
-  globalTimeout: process.env.CI ? 30 * 60_000 : undefined,
+  // A shard normally needs 3-5 minutes, but on a loaded shared runner every
+  // test can run ten times slower; 30 minutes cut off a shard whose tests
+  // were all passing.
+  globalTimeout: process.env.CI ? 40 * 60_000 : undefined,
   expect: {
     // On a shared CI runner a cold load of the match report or live logger
     // routinely takes ~20s before its first element renders.

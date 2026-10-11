@@ -1,4 +1,10 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type Route,
+} from "@playwright/test";
 
 const MATCH_ID = "71111111-1111-4111-8111-111111111111";
 const EVENT_ID = "72222222-2222-4222-8222-222222222222";
@@ -114,20 +120,33 @@ async function openEventPicker(page: Page, number: number) {
   ).toBeVisible(UI_WAIT);
 }
 
-async function expectCalloutAboveBench(page: Page, selector: string) {
+// At phone width the bench lives in slide-out panels, so a callout gets its
+// own row between the summary and the pitch. The phone layout does not
+// scroll, so the callout must sit on screen and clear of the players it asks
+// the coach to tap.
+async function expectCalloutAbovePitch(page: Page, selector: string) {
+  await expect(page.locator(selector)).toBeInViewport();
   await expect
     .poll(() =>
       page.evaluate((calloutSelector) => {
         const callout = document.querySelector(calloutSelector);
-        const bench = document.querySelector(".live-match-bench-area");
-        if (!callout || !bench) return false;
+        const pitch = document.querySelector(".live-match-pitch-area");
+        if (!callout || !pitch) return false;
         return (
           callout.getBoundingClientRect().bottom <=
-          bench.getBoundingClientRect().top + 1
+          pitch.getBoundingClientRect().top + 1
         );
       }, selector),
     )
     .toBe(true);
+}
+
+// At phone width the timeline sits behind "View logs" rather than beside the
+// pitch: open it, check the entry, and return to the pitch for the next event.
+async function expectLogged(page: Page, entry: Locator) {
+  await page.getByRole("button", { name: /^View logs/ }).click();
+  await expect(entry).toBeVisible();
+  await page.getByRole("button", { name: "Back to pitch" }).click();
 }
 
 test("all live event workflows remain usable and visible offline", async ({
@@ -155,7 +174,7 @@ test("all live event workflows remain usable and visible offline", async ({
   await page.getByRole("button", { name: "Goal" }).click();
   await expect(page.getByText(/Goal saved on this device/i)).toBeVisible();
   await expect(page.locator('[data-callout="assist-pick"]')).toBeVisible();
-  await expectCalloutAboveBench(page, '[data-callout="assist-pick"]');
+  await expectCalloutAbovePitch(page, '[data-callout="assist-pick"]');
   await player(page, 10).click();
   await expect(page.getByText(/Assist saved on this device/i)).toBeVisible();
   await expect(page.locator(".live-match-scoreline")).toContainText("1-0");
@@ -166,20 +185,20 @@ test("all live event workflows remain usable and visible offline", async ({
   await expect(
     page.getByText(/Yellow card saved on this device/i),
   ).toBeVisible();
-  await expect(page.getByText(/12' Yellow Card/i)).toBeVisible();
+  await expectLogged(page, page.getByText(/12' Yellow Card/i));
 
   await advanceWallClock();
   await openEventPicker(page, 5);
   await page.getByRole("button", { name: "Red" }).click();
-  await expect(page.getByText(/12' Red Card/i)).toBeVisible();
+  await expectLogged(page, page.getByText(/12' Red Card/i));
 
   await advanceWallClock();
   await openEventPicker(page, 1);
   await page.getByRole("button", { name: "Substitution" }).click();
   await expect(page.locator('[data-callout="voluntary-sub-in"]')).toBeVisible();
-  await expectCalloutAboveBench(page, '[data-callout="voluntary-sub-in"]');
+  await expectCalloutAbovePitch(page, '[data-callout="voluntary-sub-in"]');
   await page.getByRole("button", { name: /12.*Player12/i }).click();
-  await expect(page.getByText(/12' Substitution/i)).toBeVisible();
+  await expectLogged(page, page.getByText(/12' Substitution/i));
 
   await advanceWallClock();
   await openEventPicker(page, 9);
@@ -188,15 +207,16 @@ test("all live event workflows remain usable and visible offline", async ({
   // Goalkeeper-saves added a miss-reason follow-up (target vs keeper save)
   // between picking "MISSED" and the event actually being logged.
   await page.getByRole("button", { name: "MISSED TARGET" }).click();
-  await expect(page.getByText(/12' Penalty Missed/i)).toBeVisible();
+  await expectLogged(page, page.getByText(/12' Penalty Missed/i));
 
   await advanceWallClock();
   await openEventPicker(page, 9);
   await page.getByRole("button", { name: "Penalty" }).click();
   await page.getByRole("button", { name: "SCORED" }).click();
-  await expect(
+  await expectLogged(
+    page,
     page.getByText("12' Penalty 2-0", { exact: true }),
-  ).toBeVisible();
+  );
 
   await advanceWallClock();
   await openEventPicker(page, 6);
@@ -207,9 +227,9 @@ test("all live event workflows remain usable and visible offline", async ({
   await expect(page.getByRole("dialog", { name: /injury/i })).toBeVisible();
   await page.getByRole("button", { name: /skip details/i }).click();
   await expect(page.locator('[data-callout="mandatory-sub"]')).toBeVisible();
-  await expectCalloutAboveBench(page, '[data-callout="mandatory-sub"]');
+  await expectCalloutAbovePitch(page, '[data-callout="mandatory-sub"]');
   await page.getByRole("button", { name: /13.*Player13/i }).click();
-  await expect(page.getByText(/12' Injury/i)).toBeVisible();
+  await expectLogged(page, page.getByText(/12' Injury/i));
 
   await expect(page.getByRole("status", { name: /^9 waiting/ })).toBeVisible();
 });

@@ -1176,6 +1176,7 @@ function PasswordManagementDialog({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
 
   const passwordStatusQuery = useQuery({
     queryKey: ["password-status"],
@@ -1202,6 +1203,7 @@ function PasswordManagementDialog({
     setShowNewPassword(false);
     setShowConfirmPassword(false);
     setValidationError(null);
+    setShowPasswordRequirements(false);
     passwordMutation.reset();
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1212,6 +1214,7 @@ function PasswordManagementDialog({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setShowPasswordRequirements(true);
 
     if (passwordStatusQuery.isPending) {
       setValidationError("Checking your sign-in methods. Please try again in a moment.");
@@ -1369,7 +1372,9 @@ function PasswordManagementDialog({
                   disabled={passwordMutation.isPending}
                 />
 
-                <PasswordRequirements password={newPassword} />
+                {showPasswordRequirements && (
+                  <PasswordRequirements password={newPassword} />
+                )}
 
                 <PasswordField
                   id="confirm-new-password"

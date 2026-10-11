@@ -219,7 +219,7 @@ export function AssistantChatPanel({
   return (
     <>
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[640px] max-h-[calc(100vh-8rem)] w-[420px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+        <div className="fixed bottom-24 right-6 z-50 flex h-[640px] max-h-[calc(100vh-8rem)] w-[420px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+64px)] max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom,0px)+8px)] max-lg:h-auto max-lg:max-h-none max-lg:left-4 max-lg:right-4 max-lg:w-auto max-lg:max-w-none sm:max-lg:left-auto sm:max-lg:w-[420px] sm:max-lg:max-w-[calc(100vw-2rem)]">
           {/* Header */}
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="flex items-start gap-2.5">
@@ -268,7 +268,7 @@ export function AssistantChatPanel({
           </div>
 
           {/* Body */}
-          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 max-lg:min-h-0">
             <div>
               <p className="text-sm font-semibold text-foreground">Hi! I&apos;m Gaffer AI</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -409,9 +409,9 @@ export function AssistantChatPanel({
         type="button"
         aria-label={isOpen ? "Close Gaffer AI" : "Open Gaffer AI"}
         onClick={() => setIsOpen((current) => !current)}
-        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 max-lg:top-[calc(4rem+env(safe-area-inset-top,0px)+12px)] max-lg:bottom-auto max-lg:right-4 max-lg:size-11"
       >
-        <Sparkles className="size-6" />
+        <Sparkles className="size-6 max-lg:size-5" />
       </button>
     </>
   );

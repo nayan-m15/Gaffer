@@ -199,7 +199,7 @@ function InjuryRecoverySections(props: InjuryRecoverySectionsProps) {
 }
 
 function InjurySummaryTiles({ summary }: { summary: ReturnType<typeof injurySummary> }) {
-  return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="injuries-summary">
     <SummaryTile label="Currently injured" value={summary.openCount} tone={summary.openCount > 0 ? "warning" : "good"} />
     <SummaryTile label="Due back within a week" value={summary.dueBackWithinAWeek} />
     <SummaryTile label="Recurrences" value={summary.recurrenceCount} tone={summary.recurrenceCount > 0 ? "warning" : "default"} />
@@ -248,7 +248,7 @@ function InjuryRecoveryOverview({
       value={focused?.athleteId ?? null}
       onChange={switchPlayer}
     />}
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]" data-tour="injuries-body">
       <AthleteInjuryModelPanel
         focused={focused}
         athleteInjuries={athleteInjuries}
@@ -641,19 +641,23 @@ export default function InjuryRecoveryPage() {
       <PageHeader
         title="Injury & Recovery"
         subtitle="Track injuries, monitor recovery and get players back on the pitch."
+        headingClassName="min-w-0 w-fit max-w-full rounded-xl bg-white/60 px-4 py-3 sm:px-5 dark:min-w-auto dark:w-auto dark:max-w-none dark:rounded-none dark:bg-transparent dark:p-0"
+        subtitleClassName="text-black dark:text-muted-foreground"
         actions={
-          <Button onClick={() => setLogOpen(true)}>
+          <Button onClick={() => setLogOpen(true)} data-tour="injuries-log">
             <Plus className="size-4" aria-hidden="true" />
             Log injury
           </Button>
         }
       >
-        <AnimatedTabs
-          items={TABS}
-          value={tab}
-          onValueChange={setTab}
-          ariaLabel="Injury and recovery sections"
-        />
+        <div data-tour="injuries-tabs">
+          <AnimatedTabs
+            items={TABS}
+            value={tab}
+            onValueChange={setTab}
+            ariaLabel="Injury and recovery sections"
+          />
+        </div>
       </PageHeader>
 
       <InjuryRecoveryRecords

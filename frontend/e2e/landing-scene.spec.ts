@@ -115,10 +115,22 @@ test.describe("landing-page tactical background", () => {
 
   test("updates the existing scene across repeated theme changes", async ({ page }) => {
     await enableScene(page);
+    await page.route('**/models/landing-shirt*', route => route.abort());
     await page.addInitScript(() => {
       window.localStorage.setItem("sport-coaching-theme", "dark");
+      let programs = 0;
+      for (const prototype of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+        const original = prototype.createProgram;
+        prototype.createProgram = function () {
+          document.documentElement.dataset.landingProgramCount = String(++programs);
+          return original.call(this);
+        };
+      }
     });
     await openLandingPage(page);
+    await expect(page.locator('.landing-scene')).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });
+    const programs = await page.locator('html').getAttribute('data-landing-program-count');
+    expect(Number(programs)).toBeGreaterThan(0);
 
     const canvas = page.locator(".landing-scene canvas");
     await expect(canvas).toHaveCount(1, { timeout: SCENE_TIMEOUT });
@@ -134,6 +146,8 @@ test.describe("landing-page tactical background", () => {
       );
       await expect(canvas).toHaveAttribute("data-scene-instance", "original");
       await expect(canvas).toHaveCount(1);
+      // Theme changes must reuse the same light-count shader variants.
+      await expect(page.locator('html')).toHaveAttribute('data-landing-program-count', programs!);
     }
   });
 

@@ -1,10 +1,34 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
+import { CoachOnboarding } from "@/features/onboarding/CoachOnboarding";
+import { UnlockGateCard } from "@/features/onboarding/UnlockGateCard";
+import { DashboardGateTint, GatePageBackdrop } from "@/features/onboarding/GatePageBackdrop";
+import { PageTourProvider } from "@/features/onboarding/pageTourContext";
+import { DashboardShellProvider } from "@/features/onboarding/dashboardShell";
+import { START_TOUR_STORAGE_KEY } from "@/features/onboarding/constants";
+import { useOnboardingRoadActive } from "@/features/onboarding/onboardingFlag";
+import { getPendingTeamInviteToken } from "@/services/team-invites";
+import {
+  cancelGoalUnlockCelebration,
+  clearUnlockPageReveal,
+} from "@/features/onboarding/goalUnlockCelebration";
+import {
+  BACKDROP_OUT_MS,
+  REVEAL_STAGGER_MS,
+} from "@/features/onboarding/celebrations/timings";
+import {
+  usePageCelebrated,
+  useUnlockRequirements,
+  pageRequirementsMet,
+  type UnlockPageKey,
+} from "@/features/onboarding/unlocks";
 import { SportLogo } from "@/components/brand/SportLogo";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const StadiumScene = lazy(() =>
@@ -13,6 +37,120 @@ const StadiumScene = lazy(() =>
   })),
 );
 
+function normalizePath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
+function pageKeyFromPath(pathname: string): UnlockPageKey | null {
+  const path = normalizePath(pathname);
+
+  if (/^\/events\/[^/]+\/confirm-squad(\/|$)/.test(path)) {
+    return "live-logger";
+  }
+  if (path === "/live-logger" || path.startsWith("/live-logger/")) {
+    return "live-logger";
+  }
+  if (path === "/matches" || path.startsWith("/matches/")) {
+    return "live-logger";
+  }
+  if (path === "/events" || path.startsWith("/events/")) {
+    return "events";
+  }
+  if (path === "/injuries" || path.startsWith("/injuries/")) {
+    return "injuries";
+  }
+  if (path === "/statistics" || path.startsWith("/statistics/")) {
+    return "statistics";
+  }
+  if (path === "/team" || path.startsWith("/team/")) {
+    return "team";
+  }
+  return null;
+}
+
+function GatedPageBody({
+  pageKey,
+  userId,
+  showingGate,
+  celebrating,
+  pageRevealed,
+  onUnlocked,
+  onRevealed,
+  onCelebrationComplete,
+}: {
+  pageKey: UnlockPageKey;
+  userId: string;
+  showingGate: boolean;
+  celebrating: boolean;
+  pageRevealed: boolean;
+  onUnlocked: () => void;
+  onRevealed: () => void;
+  onCelebrationComplete: () => void;
+}) {
+  const { hasPlayers, hasGamePlan, isLoading } = useUnlockRequirements();
+  const unlocked = pageRequirementsMet(pageKey, hasPlayers, hasGamePlan);
+  const showSpinner = showingGate && isLoading;
+  const showCard = showingGate && !isLoading;
+  const showOutlet = !showingGate || unlocked;
+  const pageHidden = showingGate && unlocked && !pageRevealed;
+
+  return (
+    <div
+      data-gate-body=""
+      className={
+        showingGate && !pageRevealed
+          ? "relative min-h-0 flex-1"
+          : undefined
+      }
+    >
+      {showOutlet && (
+        <div
+          key={pageKey}
+          data-unlock-page=""
+          className={cn(
+            pageHidden &&
+              "pointer-events-none opacity-0 isolate [transform:translate(0)]",
+          )}
+          aria-hidden={pageHidden || undefined}
+          inert={pageHidden || undefined}
+        >
+          <Outlet />
+        </div>
+      )}
+      {showSpinner && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center">
+          <Loader2
+            className="size-6 animate-spin text-primary motion-reduce:animate-none"
+            role="status"
+            aria-label="Loading"
+          />
+        </div>
+      )}
+      {showCard && (
+        <div
+          className={cn(
+            "unlock-gate-center absolute inset-0 z-20 flex items-center justify-center px-6 py-8",
+            celebrating && "pointer-events-none",
+          )}
+        >
+          <UnlockGateCard
+            pageKey={pageKey}
+            userId={userId}
+            hasPlayers={hasPlayers}
+            hasGamePlan={hasGamePlan}
+            exiting={celebrating}
+            onUnlocked={onUnlocked}
+            onRevealed={onRevealed}
+            onCelebrationComplete={onCelebrationComplete}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Authenticated app chrome: responsive sidebar + main outlet.
@@ -31,12 +169,218 @@ export function AppShell() {
 function AppShellContent() {
   const { expanded } = useSidebar();
   const { pathname } = useLocation();
+  const { user, team } = useAuth();
+  const roadActive = useOnboardingRoadActive(user?.id);
+  // Team creation writes this flag before the onboarding key. Read it here so
+  // the gate does not wait for the effect that copies it into localStorage.
+  const tourArming =
+    Boolean(user?.id && team) &&
+    sessionStorage.getItem(START_TOUR_STORAGE_KEY) === "1";
+  const onboardingActive = roadActive || tourArming;
+  const [dashboardHeld, setDashboardHeld] = useState(false);
+  const [dashboardRevealed, setDashboardRevealed] = useState(false);
+  const [dashboardBlurPhase, setDashboardBlurPhase] = useState<"shown" | "fading" | "gone">("shown");
+  const [shellPath, setShellPath] = useState(pathname);
+  const dashboardBlurTimers = useRef<{ stagger: number | null; fade: number | null }>({
+    stagger: null,
+    fade: null,
+  });
+  const pageKey = pageKeyFromPath(pathname);
+  const celebrated = usePageCelebrated(user?.id, pageKey ?? "events");
+  const dashboardCelebrated = usePageCelebrated(user?.id, "dashboard");
+  const [celebrating, setCelebrating] = useState(false);
+  const [celebrationActive, setCelebrationActive] = useState(false);
+  const [pageRevealed, setPageRevealed] = useState(false);
+  const [gateBgFading, setGateBgFading] = useState(false);
+  const [gateBgRemoved, setGateBgRemoved] = useState(false);
+  const mountedRef = useRef(true);
+  const gateBgStaggerTimeoutRef = useRef<number | null>(null);
+  const gateBgFadeTimeoutRef = useRef<number | null>(null);
+
+  const clearDashboardBlurTimers = () => {
+    if (dashboardBlurTimers.current.stagger != null) {
+      window.clearTimeout(dashboardBlurTimers.current.stagger);
+      dashboardBlurTimers.current.stagger = null;
+    }
+    if (dashboardBlurTimers.current.fade != null) {
+      window.clearTimeout(dashboardBlurTimers.current.fade);
+      dashboardBlurTimers.current.fade = null;
+    }
+  };
+
+  if (shellPath !== pathname) {
+    setShellPath(pathname);
+    setDashboardHeld(false);
+    setDashboardRevealed(false);
+    setDashboardBlurPhase("shown");
+    clearDashboardBlurTimers();
+    setCelebrating(false);
+    setCelebrationActive(false);
+    setPageRevealed(false);
+    setGateBgFading(false);
+    setGateBgRemoved(false);
+  }
+
+  const holdDashboardShell = useCallback(() => {
+    setDashboardHeld(true);
+  }, []);
+
+  const revealDashboardShell = useCallback(() => {
+    setDashboardRevealed(true);
+    clearDashboardBlurTimers();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      setDashboardBlurPhase("gone");
+      return;
+    }
+    dashboardBlurTimers.current.stagger = window.setTimeout(() => {
+      dashboardBlurTimers.current.stagger = null;
+      setDashboardBlurPhase("fading");
+      dashboardBlurTimers.current.fade = window.setTimeout(() => {
+        dashboardBlurTimers.current.fade = null;
+        setDashboardBlurPhase("gone");
+      }, BACKDROP_OUT_MS);
+    }, REVEAL_STAGGER_MS);
+  }, []);
+
+  const dashboardShellApi = useMemo(
+    () => ({ hold: holdDashboardShell, reveal: revealDashboardShell }),
+    [holdDashboardShell, revealDashboardShell],
+  );
+
+  const clearGateBgTimers = () => {
+    if (gateBgStaggerTimeoutRef.current != null) {
+      window.clearTimeout(gateBgStaggerTimeoutRef.current);
+      gateBgStaggerTimeoutRef.current = null;
+    }
+    if (gateBgFadeTimeoutRef.current != null) {
+      window.clearTimeout(gateBgFadeTimeoutRef.current);
+      gateBgFadeTimeoutRef.current = null;
+    }
+  };
+
+  const resetGateBackground = () => {
+    clearGateBgTimers();
+    setGateBgFading(false);
+    setGateBgRemoved(false);
+  };
+
+  useLayoutEffect(() => {
+    setCelebrating(false);
+    setCelebrationActive(false);
+    setPageRevealed(false);
+    resetGateBackground();
+    cancelGoalUnlockCelebration();
+    clearUnlockPageReveal();
+  }, [pathname]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearGateBgTimers();
+      clearDashboardBlurTimers();
+      cancelGoalUnlockCelebration();
+    };
+  }, []);
+
+  const gateEligible = Boolean(
+    pageKey &&
+      user?.id &&
+      team &&
+      team.role === "coach" &&
+      onboardingActive,
+  );
+  const showingGate = Boolean(gateEligible && pageKey && user?.id && (!celebrated || celebrating));
+  const isDashboardPage =
+    pathname === "/dashboard" || pathname === "/dashboard/";
+  const dashboardTourBlocked = Boolean(
+    isDashboardPage &&
+      user?.id &&
+      team &&
+      team.role === "coach" &&
+      onboardingActive &&
+      !dashboardCelebrated,
+  );
+  const pendingTeamInvite = Boolean(!team && getPendingTeamInviteToken());
+  const dashboardFirstTime = Boolean(
+    isDashboardPage && user?.id && !team && !pendingTeamInvite,
+  );
+  const dashboardUnlockGate = Boolean(
+    isDashboardPage &&
+      user?.id &&
+      team &&
+      team.role === "coach" &&
+      onboardingActive &&
+      !dashboardCelebrated,
+  );
+  if (dashboardUnlockGate && !dashboardHeld) {
+    setDashboardHeld(true);
+  }
+  const dashboardLocked =
+    dashboardFirstTime ||
+    ((dashboardUnlockGate || dashboardHeld) && !dashboardRevealed);
+  const showDashboardBlur =
+    isDashboardPage &&
+    (dashboardLocked || (dashboardRevealed && dashboardBlurPhase !== "gone"));
+
+  const handleUnlocked = () => {
+    if (!mountedRef.current) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) return;
+    setCelebrating(true);
+    setCelebrationActive(true);
+  };
+
+  const handleRevealed = () => {
+    if (!mountedRef.current) return;
+    setPageRevealed(true);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduceMotion) {
+      clearGateBgTimers();
+      setGateBgRemoved(true);
+      return;
+    }
+    clearGateBgTimers();
+    gateBgStaggerTimeoutRef.current = window.setTimeout(() => {
+      gateBgStaggerTimeoutRef.current = null;
+      if (!mountedRef.current) return;
+      setGateBgFading(true);
+      gateBgFadeTimeoutRef.current = window.setTimeout(() => {
+        gateBgFadeTimeoutRef.current = null;
+        if (!mountedRef.current) return;
+        setGateBgRemoved(true);
+      }, BACKDROP_OUT_MS);
+    }, REVEAL_STAGGER_MS);
+  };
+
+  const handleCelebrationComplete = () => {
+    if (!mountedRef.current) return;
+    setCelebrating(false);
+    setCelebrationActive(false);
+    setPageRevealed(false);
+    resetGateBackground();
+  };
+
   const showDashboardScene =
     pathname === "/dashboard" || pathname === "/dashboard/";
   const isEventsPage = pathname === "/events" || pathname === "/events/";
 
   return (
-    <div className="app-shell app-shell--coach relative isolate flex h-dvh overflow-hidden bg-background text-foreground">
+    <DashboardShellProvider value={dashboardShellApi}>
+    <PageTourProvider
+      userId={user?.id}
+      showingGate={showingGate || dashboardTourBlocked}
+      celebrationActive={celebrationActive}
+    >
+    <div className={cn(
+      "app-shell app-shell--coach relative isolate flex h-dvh overflow-hidden bg-background text-foreground",
+      ((showingGate && !pageRevealed) || dashboardLocked) && "app-shell--page-concealed",
+    )}>
       <div
         className="no-print pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_32%),radial-gradient(circle_at_90%_12%,color-mix(in_oklab,var(--chart-2)_10%,transparent),transparent_26%)]"
         aria-hidden="true"
@@ -47,20 +391,53 @@ function AppShellContent() {
       />
       {showDashboardScene && (
         <Suspense fallback={null}>
-          <StadiumScene />
+          <div
+            className={
+              showDashboardBlur
+                ? cn(
+                    "dashboard-gate-blur",
+                    dashboardBlurPhase === "fading" && "dashboard-gate-blur--out",
+                  )
+                : "contents"
+            }
+            style={
+              showDashboardBlur && dashboardBlurPhase === "fading"
+                ? { transitionDuration: `${BACKDROP_OUT_MS}ms` }
+                : undefined
+            }
+          >
+            <StadiumScene />
+          </div>
         </Suspense>
+      )}
+      {showDashboardBlur && (
+        <DashboardGateTint
+          fading={dashboardBlurPhase === "fading"}
+          fadeMs={BACKDROP_OUT_MS}
+          sidebarExpanded={expanded}
+        />
+      )}
+      {showingGate && pageKey && !gateBgRemoved && (
+        <GatePageBackdrop
+          pageKey={pageKey}
+          fading={gateBgFading}
+          fadeMs={BACKDROP_OUT_MS}
+          sidebarExpanded={expanded}
+        />
       )}
 
       <Sidebar />
+      <CoachOnboarding />
 
       <main
         className={cn(
           "app-shell-main relative z-10 flex min-h-0 min-w-0 flex-1 flex-col transition-[padding] duration-300 motion-reduce:transition-none",
-          isEventsPage ? "overflow-hidden" : "overflow-y-auto",
+          isEventsPage || (showingGate && !pageRevealed) || dashboardLocked
+            ? "overflow-hidden"
+            : "overflow-y-auto",
           expanded ? "lg:pl-72" : "lg:pl-24",
         )}
       >
-      
         <div className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center justify-center border-b border-border/60 bg-background/75 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-2">
             <SportLogo size={26} className="rounded-md" />
@@ -69,13 +446,36 @@ function AppShellContent() {
             </span>
           </div>
         </div>
-        <div className={cn("app-shell-content flex-1", isEventsPage && "min-h-0")}>
-          <Outlet />
+        <div
+          className={cn(
+            "app-shell-content flex-1",
+            isEventsPage && "min-h-0",
+            (showingGate && !pageRevealed) || dashboardLocked
+              ? "relative flex min-h-0 flex-col"
+              : undefined,
+          )}
+        >
+          {gateEligible && pageKey && user?.id && showingGate ? (
+            <GatedPageBody
+              pageKey={pageKey}
+              userId={user.id}
+              showingGate={showingGate}
+              celebrating={celebrating}
+              pageRevealed={pageRevealed}
+              onUnlocked={handleUnlocked}
+              onRevealed={handleRevealed}
+              onCelebrationComplete={handleCelebrationComplete}
+            />
+          ) : (
+            <Outlet />
+          )}
         </div>
-        <div className="no-print relative z-20">
+        <div className={cn("no-print relative z-20", expanded ? "lg:-ml-1 lg:w-[calc(100%+4px)]" : "lg:-ml-5 lg:w-[calc(100%+20px)]")}>
           <Footer className={isEventsPage ? "mt-0 shrink-0 py-2 sm:mt-0 sm:py-3" : undefined} />
         </div>
       </main>
     </div>
+    </PageTourProvider>
+    </DashboardShellProvider>
   );
 }

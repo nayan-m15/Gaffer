@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database/database.service';
 import { teamMembers, teams } from '../database/schema';
@@ -102,6 +106,95 @@ describe('TeamsService', () => {
   });
 
   describe('updateTeamForUser', () => {
+    function wireRenameFailure(error: unknown) {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Old Name', role: 'coach' },
+      ]);
+      const updateBuilder = {
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockReturnThis(),
+      };
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update: jest.fn().mockReturnValue(updateBuilder),
+        execute: jest.fn().mockReturnThis(),
+        batch: jest.fn().mockRejectedValueOnce(error),
+      };
+    }
+
+    it.each([
+      uniqueViolation(),
+      new Error('query failed', { cause: uniqueViolation() }),
+    ])(
+      'maps direct and wrapped participant-name collisions to a conflict: %p',
+      async (error) => {
+        wireRenameFailure(error);
+        await expect(
+          service.updateTeamForUser('coach-user-id', { name: 'Taken Name' }),
+        ).rejects.toThrow(
+          'The team name conflicts with another competition participant.',
+        );
+      },
+    );
+
+    it.each([
+      new Error('connection reset'),
+      null,
+      'query failed',
+      { cause: null },
+    ])('preserves unrelated update errors: %p', async (error) => {
+      wireRenameFailure(error);
+      await expect(
+        service.updateTeamForUser('coach-user-id', { name: 'New Name' }),
+      ).rejects.toBe(error);
+    });
+
+    it('rejects a colour update if the team disappears after authorization', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'coach' },
+      ]);
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update: jest.fn(() => ({
+          set: jest.fn(() => ({
+            where: jest.fn(() => ({
+              returning: jest.fn().mockResolvedValueOnce([]),
+            })),
+          })),
+        })),
+      };
+      await expect(
+        service.updateTeamForUser('coach-user-id', { primaryColor: null }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('clears the team colour when explicitly set to null', async () => {
+      const chain = selectChain([
+        { id: 'team-id', name: 'Test Team', role: 'coach' },
+      ]);
+      const set = jest.fn(() => ({
+        where: jest.fn(() => ({
+          returning: jest
+            .fn()
+            .mockResolvedValueOnce([
+              { id: 'team-id', name: 'Test Team', primaryColor: null },
+            ]),
+        })),
+      }));
+      mockDatabaseService.database = {
+        select: jest.fn().mockReturnValue(chain),
+        update: jest.fn(() => ({ set })),
+      };
+      await expect(
+        service.updateTeamForUser('coach-user-id', { primaryColor: null }),
+      ).resolves.toMatchObject({ primaryColor: null });
+      expect(set).toHaveBeenCalledWith({
+        primaryColor: null,
+        updatedAt: expect.any(Date) as Date,
+      });
+    });
+
     it('lets a coach rename the team through the competition-syncing batch', async () => {
       const coachChain = selectChain([
         { id: 'team-id', name: 'Old Name', role: 'coach' },

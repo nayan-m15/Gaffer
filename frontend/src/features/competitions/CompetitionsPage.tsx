@@ -249,13 +249,13 @@ function CompetitionWorkspace() {
 
     <PageHeader title="Leagues & Competitions" subtitle={canCreate ? "Find competitions, view standings or brackets, and manage the ones you administer." : "Find competitions and view their standings or knockout brackets."}
 
-      actions={canCreate ? <Button onClick={() => setCreating(true)}><Plus className="size-4" />Create competition</Button> : undefined} />
+      actions={canCreate ? <Button onClick={() => setCreating(true)} data-tour="competitions-create"><Plus className="size-4" />Create competition</Button> : undefined} />
 
     <div className={contentClass}>
 
       {canCreate && <FixtureScheduleAlertsBanner showConfirmed={false} />}
 
-      <AppCard className="space-y-5">
+      <AppCard className="space-y-5" data-tour="competitions-mine">
 
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Trophy className="size-5 text-primary" />My Leagues & Competitions</h2>
 
@@ -289,7 +289,7 @@ function CompetitionWorkspace() {
 
         <div><h2 className="text-lg font-semibold">Find a League or Competition</h2><p className="mt-1 text-sm text-muted-foreground">Search by name to open the same shared competition view.</p></div>
 
-        <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); const nextTerm = input.trim(); if (nextTerm.length < 2) return; if (nextTerm === term) void search.refetch(); else setTerm(nextTerm); }}>
+        <form className="flex flex-col gap-3 sm:flex-row" data-tour="competitions-find" onSubmit={(event) => { event.preventDefault(); const nextTerm = input.trim(); if (nextTerm.length < 2) return; if (nextTerm === term) void search.refetch(); else setTerm(nextTerm); }}>
 
           <input className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Competition name to search" placeholder="Search by competition name" maxLength={100} value={input} onChange={(event) => setInput(event.target.value)} />
 

@@ -1,4 +1,6 @@
 import { type ReactNode } from "react";
+import { CircleHelp } from "lucide-react";
+import { usePageTour } from "@/features/onboarding/usePageTour";
 import { cn } from "@/lib/utils";
 
 export interface PageHeaderProps {
@@ -12,6 +14,10 @@ export interface PageHeaderProps {
   children?: ReactNode;
   /** Additional custom class names for the header container */
   className?: string;
+  /** Additional custom class names for the title and subtitle block */
+  headingClassName?: string;
+  /** Additional custom class names for the subtitle text */
+  subtitleClassName?: string;
   /** Align the title and actions on one row on mobile. */
   mobileInline?: boolean;
 }
@@ -28,8 +34,13 @@ export function PageHeader({
   actions,
   children,
   className,
+  headingClassName,
+  subtitleClassName,
   mobileInline = false,
 }: PageHeaderProps) {
+  const { pageTourKey, startPageTour } = usePageTour();
+  const showPageTourHelp = pageTourKey !== null;
+
   return (
     <header
       className={cn(
@@ -44,17 +55,29 @@ export function PageHeader({
           mobileInline && "flex-row items-center justify-between gap-2",
         )}
       >
-        <div className={mobileInline ? "min-w-0" : undefined}>
+        <div className={cn(mobileInline && "min-w-0", headingClassName)}>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
+            <p className={cn("mt-2 text-sm text-muted-foreground", subtitleClassName)}>{subtitle}</p>
           )}
         </div>
 
-        {actions && (
+        {(showPageTourHelp || actions) && (
           <div className={cn("flex flex-wrap items-center gap-3 sm:gap-4", mobileInline && "shrink-0")}>
+            {showPageTourHelp && (
+              <button
+                type="button"
+                onClick={startPageTour}
+                data-tour="page-help"
+                aria-label="Show tips for this page"
+                title="Show tips for this page"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <CircleHelp className="size-[18px]" />
+              </button>
+            )}
             {actions}
           </div>
         )}

@@ -145,7 +145,7 @@ export default function LiveLoggerPage() {
             <p>{error instanceof Error ? error.message : "Could not load events."}</p>
             <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
           </div>}
-          {!isLoading && !isError && matches.length === 0 && <div className="live-logger-state">
+          {!isLoading && !isError && matches.length === 0 && <div className="live-logger-state" data-tour="livelogger-matches">
             <Radio className="size-8 text-primary" aria-hidden="true" />
             <h2>{allMatches.length === 0 ? "No matches yet" : "No matches found"}</h2>
             <p>{allMatches.length === 0 ? "Create a match event from the Events page to start logging." : "Try another search or status filter."}</p>
@@ -154,7 +154,7 @@ export default function LiveLoggerPage() {
             </Button>
           </div>}
           {!isLoading && !isError && matches.length > 0 && <>
-            <ul className="live-logger-matches" aria-label="Matches">
+            <ul className="live-logger-matches" aria-label="Matches" data-tour="livelogger-matches">
               {visibleMatches.map((event) => <li key={event.id}>
                 <MatchRow event={event} teamName={team?.name}
                   competition={event.competitionId ? competitionById.get(event.competitionId) : undefined}
@@ -221,7 +221,7 @@ function MatchRow({ event, competition, teamName, onSelect }: {
           {!completed && !cancelled && <span><Users aria-hidden="true" />{event.lineupConfirmedAt ? "Squad confirmed" : "Squad to be confirmed"}</span>}
         </div>
       </div>
-      <div className="live-logger-match-action">
+      <div className="live-logger-match-action" data-tour={locked ? "livelogger-locked" : undefined}>
         {locked ? <><Lock aria-hidden="true" />Unlocks {unlockLabel}</>
           : reportable ? <><FileText aria-hidden="true" />View Match Report</>
           : completed ? <><Check aria-hidden="true" />Match completed</>

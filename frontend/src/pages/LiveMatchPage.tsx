@@ -28,6 +28,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { OfflineSyncStatus } from "@/offline/OfflineSyncStatus";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { EventReviewPanel } from "@/offline/EventReviewPanel";
 import { ResumeMatchDialog } from "@/features/matches/ResumeMatchDialog";
 import { OfflineReadinessPanel } from "@/offline/OfflineReadinessPanel";
@@ -403,6 +404,29 @@ function loggingForLabel(
 export default function LiveMatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const [isPhone, setIsPhone] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 640px)").matches
+      : false,
+  );
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const handleChange = (event: MediaQueryListEvent) => setIsPhone(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    setIsPhone(mediaQuery.matches);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+  const orientation = isPhone ? "vertical" : "horizontal";
+  const [phoneView, setPhoneView] = useState<"pitch" | "logs">("pitch");
+  const [benchPanel, setBenchPanel] = useState<"own" | "opponent" | null>(null);
+  const phonePitchCentreRef = useRef<HTMLDivElement>(null);
+  const [phonePitchGeometry, setPhonePitchGeometry] = useState({ width: 0, height: 0, scale: 1, rem: 16 });
+  const ownBenchTabRef = useRef<HTMLButtonElement>(null);
+  const oppBenchTabRef = useRef<HTMLButtonElement>(null);
+  const lastBenchSideRef = useRef<"own" | "opponent">("own");
+  const phoneLogRef = useRef<HTMLUListElement>(null);
+  const phoneLogScrollRef = useRef(0);
+  useEffect(() => { if (benchPanel) lastBenchSideRef.current = benchPanel; }, [benchPanel]);
   const { team } = useAuth();
 
   const { matchQuery, eventsQuery, sessionReport, privateEventsQuery } = useMatchView(matchId);
@@ -758,6 +782,68 @@ export default function LiveMatchPage() {
       ),
     [matchPlayerCount, oppState.onPitch, oppHalf, timeline],
   );
+  const phonePlaced = useMemo(() => {
+    if (!isPhone || phonePitchGeometry.width <= 0) return { own: ownPlaced, opponent: oppPlaced };
+    const { width, height, scale, rem } = phonePitchGeometry;
+    const chip = 2.125 * rem * scale;
+    // Reserve two name lines, their margin and a small gap. The wider name
+    // footprint also protects adjacent labels, not just the visible chips.
+    const label = (2 * .5 * 1.15 * rem + 2 + 2) * scale;
+    const layerHeight = Math.max(1, height - 3.25 * rem * scale);
+    const boxWidth = (4.25 * rem * scale + 2 * scale) / width * 100;
+    const boxHeight = (chip + label + 2 * scale) / layerHeight * 100;
+    const minU = boxWidth / 2, maxU = 100 - minU;
+    const minV = Math.max(0, chip / 2 + scale - rem * scale) / layerHeight * 100;
+    const maxV = 100 - Math.max(0, chip / 2 + label + scale - 2.25 * rem * scale) / layerHeight * 100;
+    const own = ownPlaced.map(placed => ({ ...placed }));
+    const opponent = oppPlaced.map(placed => ({ ...placed }));
+    const nodes = [
+      ...own.map(placed => ({ placed, team: "own", keeper: isGoalkeeperPosition(placed.athlete.position), half: ownHalf })),
+      ...(visibility === "none" ? [] : opponent.map(placed => ({ placed, team: "opponent", keeper: isGoalkeeperPosition(placed.player.position), half: oppHalf }))),
+    ].map(node => ({ ...node, u: Math.max(minU, Math.min(maxU, node.placed.y)), v: Math.max(minV, Math.min(maxV, 100 - node.placed.x)), lowU: minU, highU: maxU }));
+    const originalU = nodes.map(node => node.u);
+    nodes.forEach((node, index) => {
+      nodes.forEach((other, otherIndex) => {
+        if (node.team !== other.team) return;
+        const midpoint = (originalU[index] + originalU[otherIndex]) / 2;
+        if (originalU[otherIndex] < originalU[index]) node.lowU = Math.max(node.lowU, midpoint);
+        if (originalU[otherIndex] > originalU[index]) node.highU = Math.min(node.highU, midpoint);
+      });
+    });
+    nodes.forEach(node => {
+      if (node.keeper) node.v = node.half === "left" ? Math.min(maxV, 98) : Math.max(minV, 2);
+    });
+    // Stable pair order, at most eight passes. Keep keepers anchored and prefer
+    // depth separation within a team; horizontal moves retain left/right order.
+    for (let iteration = 0; iteration < 8; iteration++) {
+      let moved = false;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const overlapU = boxWidth - Math.abs(a.u - b.u);
+          const overlapV = boxHeight - Math.abs(a.v - b.v);
+          if (overlapU <= .001 || overlapV <= .001) continue;
+          const separate = (axis: "u" | "v", amount: number) => {
+            const sign = a[axis] < b[axis] ? -1 : a[axis] > b[axis] ? 1 : a.keeper ? (a.half === "left" ? 1 : -1) : -1;
+            const roomA = a.keeper ? 0 : sign < 0 ? a[axis] - (axis === "u" ? a.lowU : minV) : (axis === "u" ? a.highU : maxV) - a[axis];
+            const roomB = b.keeper ? 0 : sign < 0 ? (axis === "u" ? b.highU : maxV) - b[axis] : b[axis] - (axis === "u" ? b.lowU : minV);
+            if (roomA + roomB < amount) return false;
+            const moveA = Math.min(roomA, Math.max(amount / 2, amount - roomB));
+            a[axis] += sign * moveA;
+            b[axis] -= sign * (amount - moveA);
+            return true;
+          };
+          const verticalFirst = a.team === b.team || overlapV <= overlapU;
+          moved = (verticalFirst
+            ? separate("v", overlapV) || separate("u", overlapU)
+            : separate("u", overlapU) || separate("v", overlapV)) || moved;
+        }
+      }
+      if (!moved) break;
+    }
+    nodes.forEach(node => { node.placed.x = 100 - node.v; node.placed.y = node.u; });
+    return { own, opponent };
+  }, [isPhone, ownPlaced, oppPlaced, ownHalf, oppHalf, visibility, phonePitchGeometry]);
   const ownPitchIds = useMemo(
     () => new Set(ownPlaced.map((placed) => placed.athlete.id)),
     [ownPlaced],
@@ -784,6 +870,144 @@ export default function LiveMatchPage() {
       ...overflow,
     ];
   }, [oppState.bench, oppState.onPitch, oppPitchIds, oppPlaced]);
+
+  const phoneLayoutReady = Boolean(matchQuery.data) && !squadQuery.isLoading && !eventsQuery.isLoading;
+  useEffect(() => {
+    if (!isPhone || !phoneLayoutReady) return;
+    const status = document.querySelector<HTMLElement>(".live-match .live-match-phone-sync");
+    if (!status) return;
+    let frame = 0, lastWidth = 0;
+    const fitStatus = () => {
+      frame = 0;
+      const base = .6 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+      status.style.setProperty("--phone-status-font", `${base}px`);
+      const natural = Array.from(status.children).reduce((total, child) => total + child.getBoundingClientRect().width, 0);
+      if (natural > status.clientWidth && status.clientWidth > 0) {
+        status.style.setProperty("--phone-status-font", `${base * Math.max(0, status.clientWidth - 12) / natural}px`);
+      }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(fitStatus); };
+    const resize = new ResizeObserver(() => {
+      if (lastWidth !== status.clientWidth) { lastWidth = status.clientWidth; schedule(); }
+    });
+    resize.observe(status);
+    const text = new MutationObserver(schedule);
+    text.observe(status, { childList: true, subtree: true, characterData: true });
+    schedule();
+    return () => { resize.disconnect(); text.disconnect(); cancelAnimationFrame(frame); };
+  }, [isPhone, phoneLayoutReady]);
+  useEffect(() => {
+    if (!isPhone || phoneView !== "pitch" || !phoneLayoutReady) return;
+    const centre = phonePitchCentreRef.current;
+    if (!centre) return;
+    const shell = centre.closest<HTMLElement>(".live-match");
+    const layout = centre.closest<HTMLElement>(".live-match-layout");
+    const header = shell?.querySelector<HTMLElement>(".live-match-header");
+    if (!shell || !layout || !header) return;
+    const prompts = Array.from(layout.querySelectorAll<HTMLElement>(":scope > .live-match-summary, :scope > .live-match-opponent-action, :scope > .live-match-callout"));
+    const MIN_RATIO = .48, MAX_RATIO = .75;
+    let lastFit = "";
+    const fit = () => {
+      // Measure the fixed viewport shell and non-pitch rows, never the expanded pitch.
+      const shellStyle = getComputedStyle(shell);
+      const promptHeight = prompts.reduce((total, prompt) => total + prompt.getBoundingClientRect().height, 0);
+      const gaps = (parseFloat(getComputedStyle(layout).rowGap) || 0) * 3;
+      const W = Math.max(0, shell.clientWidth - parseFloat(shellStyle.paddingLeft) - parseFloat(shellStyle.paddingRight) - 48);
+      const H = Math.max(0, shell.clientHeight - parseFloat(shellStyle.paddingTop) - parseFloat(shellStyle.paddingBottom) - header.getBoundingClientRect().height - promptHeight - gaps);
+      const ratio = H > 0 ? W / H : 0;
+      let width = Math.max(0, ratio > MAX_RATIO ? H * MAX_RATIO : W);
+      let height = Math.max(0, ratio < MIN_RATIO ? Math.min(H, W / MIN_RATIO) : H);
+      const minimum = width < 260 || height < 420;
+      if (minimum) {
+        const fittedRatio = height > 0 ? Math.max(MIN_RATIO, Math.min(width / height, MAX_RATIO)) : MAX_RATIO;
+        width = Math.max(width, 260, 420 * fittedRatio);
+        height = width / fittedRatio;
+      }
+      const key = `${W}:${H}:${width}:${height}:${promptHeight}:${gaps}`;
+      if (key === lastFit) return;
+      lastFit = key;
+      shell.toggleAttribute("data-phone-pitch-minimum", minimum);
+      shell.style.setProperty("--phone-minimum-layout-height", `${height + promptHeight + gaps}px`);
+      centre.style.setProperty("--phone-pitch-width", `${width}px`);
+      centre.style.setProperty("--phone-pitch-height", `${height}px`);
+      centre.style.setProperty("--phone-pitch-scale", `${Math.max(.7, Math.min(width / 352, 1.15))}`);
+      const scale = Math.max(.7, Math.min(width / 352, 1.15));
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      setPhonePitchGeometry(previous => previous.width === width && previous.height === height && previous.scale === scale && previous.rem === rem ? previous : { width, height, scale, rem });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(shell);
+    observer.observe(header);
+    prompts.forEach(prompt => observer.observe(prompt));
+    observer.observe(centre);
+    // Callouts can mount without changing the viewport itself.
+    const promptObserver = new MutationObserver(() => {
+      const next = Array.from(layout.querySelectorAll<HTMLElement>(":scope > .live-match-summary, :scope > .live-match-opponent-action, :scope > .live-match-callout"));
+      prompts.forEach(prompt => observer.unobserve(prompt));
+      prompts.splice(0, prompts.length, ...next);
+      prompts.forEach(prompt => observer.observe(prompt));
+      fit();
+    });
+    promptObserver.observe(layout, { childList: true });
+    return () => {
+      observer.disconnect();
+      promptObserver.disconnect();
+      shell.removeAttribute("data-phone-pitch-minimum");
+      shell.style.removeProperty("--phone-minimum-layout-height");
+    };
+  }, [isPhone, phoneView, phoneLayoutReady]);
+
+  useEffect(() => {
+    if (!isPhone || phoneView !== "pitch" || !phoneLayoutReady) return;
+    const centre = phonePitchCentreRef.current;
+    if (!centre) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const buttons = Array.from(centre.querySelectorAll<HTMLElement>(".live-marker-hit"));
+      const positions = buttons.map(button => button.getBoundingClientRect());
+      buttons.forEach((button, index) => {
+        const own = positions[index];
+        let spacing = Infinity;
+        positions.forEach((other, otherIndex) => {
+          if (index === otherIndex) return;
+          spacing = Math.min(spacing, Math.max(Math.abs(own.left + own.width / 2 - other.left - other.width / 2), Math.abs(own.top + own.height / 2 - other.top - other.height / 2)));
+        });
+        const size = `${Math.max(own.width, Math.min(44, spacing - 2))}px`;
+        if (button.style.getPropertyValue("--phone-hit-size") !== size) button.style.setProperty("--phone-hit-size", size);
+      });
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(centre);
+    const mutations = new MutationObserver(records => {
+      if (records.some(record => record.type === "childList" || (record.target instanceof HTMLElement && !record.target.matches(".live-marker-hit")))) schedule();
+    });
+    mutations.observe(centre, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+    schedule();
+    return () => { resize.disconnect(); mutations.disconnect(); cancelAnimationFrame(frame); };
+  }, [isPhone, phoneView, phoneLayoutReady]);
+
+  useEffect(() => {
+    if (!isPhone) return;
+    if (composer.kind === "sub-in" || composer.kind === "mandatory-sub-in") {
+      setPhoneView("pitch");
+      setBenchPanel(composer.team === "own" ? "own" : visibility !== "none" && oppBench.length > 0 ? "opponent" : null);
+    } else if (composer.kind === "sub-out" || composer.kind === "assist-pick" || composer.kind === "closed") {
+      setBenchPanel(null);
+    }
+  }, [isPhone, composer, visibility, oppBench.length]);
+
+  useEffect(() => {
+    if (!isPhone || phoneView !== "logs") return;
+    if (phoneLogRef.current) phoneLogRef.current.scrollTop = phoneLogScrollRef.current;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) setPhoneView("pitch");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isPhone, phoneView]);
 
   const runningScores = useMemo(
     () => runningScoreByEvent(timeline, isHome),
@@ -1647,6 +1871,26 @@ export default function LiveMatchPage() {
   const pitchCallOwnIds = assistHighlightOwnIds ?? subOutHighlightOwnIds;
   const pitchCallOppIds = assistHighlightOppIds ?? subOutHighlightOppIds;
   const pitchCallTone = assistPick ? "assist" : "warning";
+  const phoneLogCount = isPhone ? timeline.filter(event => !isPairedAssistEvent(event, assistsByGoal)).length : 0;
+  const projectionStatus = !projection ? "" : !projectionConsistent
+    ? "Syncing result and event log"
+    : projection.finalisationState === "finalised"
+      ? `Final result · revision ${projection.revision}`
+      : projection.finalisationState === "amendment_required"
+        ? "Result changed · amendment review required"
+        : projection.unresolvedReviewCount > 0
+          ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
+          : `Live provisional · revision ${projection.revision}`;
+  const renderBench = (side: "own" | "opponent", vertical = false) => side === "own" ? (
+    <LiveBenchRow label={`${ownAbbrev} bench`} color={ownColor} athletes={ownBench}
+      timeline={timeline} selectedKey={selectedKey} onSelectOwn={selectOwn}
+      callToAction={ownBenchCallToAction} align="left" orientation={vertical ? "vertical" : "horizontal"} />
+  ) : (
+    <LiveBenchRow label={`${oppAbbrev} ${oppBench.some((player) => oppPitchIds.has(player.id)) ? "bench / unplaced starters" : "bench"}`}
+      color={oppColor} opponents={oppBench} visibility={visibility} timeline={timeline}
+      selectedKey={selectedKey} onSelectOpp={selectOpp} callToAction={oppBenchCallToAction}
+      align="right" orientation={vertical ? "vertical" : "horizontal"} />
+  );
 
   if (matchQuery.isLoading || squadQuery.isLoading || eventsQuery.isLoading) {
     return (
@@ -1694,7 +1938,7 @@ export default function LiveMatchPage() {
   }
 
   return (
-    <div className="live-match relative flex min-h-dvh flex-col">
+    <div className={cn("live-match relative flex min-h-dvh flex-col", isPhone && phoneView === "logs" && "live-match-phone-logs")}>
       <header className="live-match-header shrink-0 items-center gap-3 px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <SportLogo size={36} className="rounded-lg" />
@@ -1736,7 +1980,7 @@ export default function LiveMatchPage() {
               />
             </div>
           </div>
-          {projection ? (
+          {!isPhone && projection ? (
             <div className="mt-1 flex justify-center">
               <span
                 className={cn(
@@ -1749,15 +1993,7 @@ export default function LiveMatchPage() {
                       : "bg-[#707773]/15 text-[#9ca39f]",
                 )}
               >
-                {!projectionConsistent
-                  ? "Syncing result and event log"
-                  : projection.finalisationState === "finalised"
-                    ? `Final result · revision ${projection.revision}`
-                    : projection.finalisationState === "amendment_required"
-                      ? "Result changed · amendment review required"
-                      : projection.unresolvedReviewCount > 0
-                        ? `Provisional · confirmed ${confirmedHomeScore}-${confirmedAwayScore} · ${projection.unresolvedReviewCount} review${projection.unresolvedReviewCount === 1 ? "" : "s"}${possibleGoalEffect ? ` · possible ${possibleGoalEffect} goal effect` : ""}`
-                        : `Live provisional · revision ${projection.revision}`}
+                {projectionStatus}
               </span>
             </div>
           ) : null}
@@ -1787,7 +2023,7 @@ export default function LiveMatchPage() {
           Tactical view
         </h2>
         <div className="live-match-controls flex items-center gap-2">
-          {matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
+          {!isPhone && matchId ? <OfflineSyncStatus matchId={matchId} /> : null}
           <div className="relative">
             <button
               type="button"
@@ -1984,7 +2220,9 @@ export default function LiveMatchPage() {
             <span className="live-match-control-label">{match.eventStatus === "completed" ? "View report" : "End Match"}</span>
             <span className="live-match-control-short" aria-hidden="true">FT</span>
           </button>
+          {isPhone && <button type="button" className="live-match-view-logs rounded-md border border-[#3e4448] text-xs font-semibold" onClick={() => { setBenchPanel(null); setPhoneView("logs"); }}>View logs{phoneLogCount > 0 ? ` · ${phoneLogCount}` : ""}</button>}
         </div>
+        {isPhone && matchId ? <div className="live-match-phone-sync"><OfflineSyncStatus matchId={matchId} />{projection && <span className={cn("live-match-phone-projection", projection.finalisationState === "finalised" ? "text-[#16d99a]" : !projectionConsistent || projection.unresolvedReviewCount > 0 || projection.finalisationState === "amendment_required" ? "text-[#d6a447]" : "text-[#9ca39f]")}> · {projectionConsistent && projection.finalisationState === "open" && projection.unresolvedReviewCount === 0 ? `rev ${projection.revision}` : projectionStatus}</span>}</div> : null}
       </header>
 
       {reviewOpen && matchId ? (
@@ -2060,17 +2298,24 @@ export default function LiveMatchPage() {
           <h2 className="mb-1 shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
             Tactical view
           </h2>
-          <div className="relative min-h-0 flex-1">
+          <div className={cn("relative min-h-0 flex-1", isPhone && "live-match-phone-stage")}>
+            {isPhone && <button ref={ownBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-own" style={{ backgroundColor: ownColor }} aria-label={`${ownName} bench · ${ownBench.length}`} aria-expanded={benchPanel === "own"} onClick={() => setBenchPanel(current => current === "own" ? null : "own")}><span>BENCH · {ownBench.length}</span></button>}
+            <div ref={phonePitchCentreRef} className={isPhone ? "live-match-phone-pitch-centre" : "contents"}>
             <LivePitch
-              className="live-pitch-panel-landscape"
+              className={cn(
+                "live-pitch-panel-landscape",
+                isPhone && "live-pitch-panel-portrait",
+              )}
+              orientation={orientation}
               layout="full"
               ownHalf={ownHalf}
               ownColor={ownColor}
               oppColor={oppColor}
             >
               <LivePitchPlayers
-                ownPlaced={ownPlaced}
-                oppPlaced={oppPlaced}
+                orientation={orientation}
+                ownPlaced={isPhone ? phonePlaced.own : ownPlaced}
+                oppPlaced={isPhone ? phonePlaced.opponent : oppPlaced}
                 ownColor={ownColor}
                 oppColor={oppColor}
                 visibility={visibility}
@@ -2083,6 +2328,8 @@ export default function LiveMatchPage() {
                 callToActionTone={pitchCallTone}
               />
             </LivePitch>
+            </div>
+            {isPhone && visibility !== "none" && oppBench.length > 0 && <button ref={oppBenchTabRef} type="button" className="live-match-bench-tab live-match-bench-tab-opponent" style={{ backgroundColor: oppColor }} aria-label={`${oppName} bench · ${oppBench.length}`} aria-expanded={benchPanel === "opponent"} onClick={() => setBenchPanel(current => current === "opponent" ? null : "opponent")}><span>BENCH · {oppBench.length}</span></button>}
           </div>
         </section>
 
@@ -2096,27 +2343,7 @@ export default function LiveMatchPage() {
                 : "border-[#2a2e31]",
           )}
         >
-          <LiveBenchRow
-            label={`${ownAbbrev} bench`}
-            color={ownColor}
-            athletes={ownBench}
-            timeline={timeline}
-            selectedKey={selectedKey}
-            onSelectOwn={selectOwn}
-            callToAction={ownBenchCallToAction}
-            align="left"
-          />
-          <LiveBenchRow
-            label={`${oppAbbrev} ${oppBench.some((player) => oppPitchIds.has(player.id)) ? "bench / unplaced starters" : "bench"}`}
-            color={oppColor}
-            opponents={oppBench}
-            visibility={visibility}
-            timeline={timeline}
-            selectedKey={selectedKey}
-            onSelectOpp={selectOpp}
-            callToAction={oppBenchCallToAction}
-            align="right"
-          />
+          {!isPhone && <>{renderBench("own")}{renderBench("opponent")}</>}
         </section>
 
         {composer.kind === "mandatory-sub-in" || composer.kind === "sub-in" ? (
@@ -2203,6 +2430,7 @@ export default function LiveMatchPage() {
         )}
 
         <div className="live-match-activity min-h-0">
+          {isPhone && <button type="button" className="live-match-log-back rounded-lg border border-[#3e4448] px-3 py-2 text-sm font-semibold" onClick={() => setPhoneView("pitch")}>Back to pitch</button>}
           <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[#2a2e31] bg-[#0d0f10] p-2.5">
             <h2 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.22em] text-[#9ca39f]">
               Match log
@@ -2212,7 +2440,7 @@ export default function LiveMatchPage() {
                 No events yet.
               </p>
             ) : (
-              <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+              <ul ref={phoneLogRef} onScroll={(event) => { if (isPhone && phoneView === "logs") phoneLogScrollRef.current = event.currentTarget.scrollTop; }} className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
                 {timeline
                   .filter((event) => !isPairedAssistEvent(event, assistsByGoal))
                   .map((event) => {
@@ -2408,6 +2636,14 @@ export default function LiveMatchPage() {
         </div>
       )}
 
+      {isPhone && <Dialog open={benchPanel !== null} onOpenChange={(open) => { if (!open) setBenchPanel(null); }}>
+        <DialogContent className={cn("live-match-phone-bench-panel", (benchPanel ?? lastBenchSideRef.current) === "own" ? "live-match-phone-bench-left" : "live-match-phone-bench-right")}
+          finalFocus={() => lastBenchSideRef.current === "own" ? ownBenchTabRef.current : oppBenchTabRef.current}>
+          <DialogTitle>{(benchPanel ?? lastBenchSideRef.current) === "own" ? ownName : oppName} bench</DialogTitle>
+          <div className="live-match-phone-bench-body">{renderBench(benchPanel ?? lastBenchSideRef.current, true)}</div>
+        </DialogContent>
+      </Dialog>}
+
       {eventPickerOpen && target && (
         <Overlay onClose={() => setEventPickerOpen(false)} wide>
           <div className="flex items-start justify-between gap-4">
@@ -2504,7 +2740,7 @@ export default function LiveMatchPage() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-4 left-1/2 z-40 w-[min(92%,28rem)] -translate-x-1/2 rounded-xl bg-[#111315] px-4 py-3 shadow-lg",
+            "live-match-undo-toast fixed bottom-4 left-1/2 z-40 w-[min(92%,28rem)] -translate-x-1/2 rounded-xl bg-[#111315] px-4 py-3 shadow-lg",
             toast.id
               ? "border border-[#16d99a]/40"
               : "border border-[#e36a6d]/40",
@@ -2917,7 +3153,7 @@ function Overlay({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 w-full rounded-2xl border border-[#2a2e31] bg-[#090a0b] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+          "live-match-event-overlay relative z-10 w-full rounded-2xl border border-[#2a2e31] bg-[#090a0b] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
           wide ? "max-w-2xl" : "max-w-md",
         )}
       >
