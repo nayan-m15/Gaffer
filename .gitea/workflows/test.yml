@@ -163,10 +163,11 @@ jobs:
     name: UI tests (shard 1/4)
     runs-on: ubuntu-latest
     # Keep one browser per job: software WebGL is CPU intensive. Four explicit
-    # shards keep the full suite within each job's 30-minute browser budget.
+    # shards keep the full suite within each job's 40-minute browser budget.
     # Gitea on this instance does not queue workflows using strategy.matrix.
-    # Leave time for builds, PWA checks and failure artifact uploads.
-    timeout-minutes: 50
+    # Leave time for builds (up to 10 minutes on a loaded runner), PWA checks
+    # and failure artifact uploads.
+    timeout-minutes: 60
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
@@ -243,7 +244,7 @@ jobs:
   ui-tests-shard-2:
     name: UI tests (shard 2/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
@@ -314,7 +315,7 @@ jobs:
   ui-tests-shard-3:
     name: UI tests (shard 3/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
@@ -385,7 +386,7 @@ jobs:
   ui-tests-shard-4:
     name: UI tests (shard 4/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       CI: "true"
       TWO_SIDED_LIVE_LOGGING_ENABLED: "true"
