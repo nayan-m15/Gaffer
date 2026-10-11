@@ -127,7 +127,7 @@ function pitchTexture() {
     const image = ctx.getImageData(0, 0, 2048, 1408);
     let seed = 571;
     for (let i = 0; i < image.data.length; i += 4) {
-      seed = (Math.imul(seed, 1664525) + 1013904223) | 0;
+      seed = Math.trunc(Math.imul(seed, 1664525) + 1013904223);
       const v = ((seed >>> 24) / 255 - 0.5) * 9;
       image.data[i] += v;
       image.data[i + 1] += v;
