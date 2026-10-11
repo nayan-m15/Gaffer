@@ -20,6 +20,9 @@ async function dashboard(page: Page) {
 }
 
 test('leaving the dashboard releases geometry and instance GPU buffers', async ({ page }) => {
+  // Boots the software-WebGL scene twice and lazy-loads the events page in
+  // between; on a loaded shared runner those waits alone can pass 180s.
+  test.slow();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
     const live = new Set<WebGLBuffer>();
@@ -37,7 +40,10 @@ test('leaving the dashboard releases geometry and instance GPU buffers', async (
   const initialCount = await page.evaluate(() => (window as unknown as { __stadiumLiveBuffers: number }).__stadiumLiveBuffers);
   await page.getByRole('link', { name: 'Events', exact: true }).first().click();
   await expect(page).toHaveURL(/\/events$/, { timeout: 30_000 });
-  await expect(canvas).toHaveCount(0, { timeout: 30_000 });
+  // The URL changes before the lazy events chunk arrives. Until it does, the
+  // route Suspense fallback only hides the shell, so the canvas stays mounted.
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible({ timeout: SCENE_TIMEOUT });
+  await expect(canvas).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __stadiumLiveBuffers: number }).__stadiumLiveBuffers)).toBe(0);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).first().click();
   await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: SCENE_TIMEOUT });

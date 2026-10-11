@@ -87,7 +87,7 @@ export class PublicDashboardCacheService {
   static key(route: string, query: Record<string, unknown>): string {
     const normalised = Object.keys(query)
       .filter((name) => query[name] !== undefined)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
       .map((name) => `${name}=${String(query[name])}`)
       .join('&');
     return normalised ? `${route}?${normalised}` : route;
