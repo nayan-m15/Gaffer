@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { ProfileService } from './profile.service';
 
@@ -33,6 +36,7 @@ describe('ProfileService', () => {
   const mockDatabase = {
     select: jest.fn().mockReturnValue(mockQueryChain),
     update: jest.fn().mockReturnValue(mockUpdateChain),
+    execute: jest.fn<Promise<{ rows: { id: string }[] }>, [SQL]>(),
   };
 
   const mockDatabaseService = {
@@ -41,6 +45,7 @@ describe('ProfileService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDatabase.execute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +62,62 @@ describe('ProfileService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('deleteProfile', () => {
+    it('anonymizes the user and removes access in one statement scoped to that user', async () => {
+      mockDatabase.execute.mockResolvedValueOnce({
+        rows: [{ id: mockUser.id }],
+      });
+
+      await expect(service.deleteProfile(mockUser.id)).resolves.toEqual({
+        status: true,
+      });
+
+      expect(mockDatabase.execute).toHaveBeenCalledTimes(1);
+      const query = new PgDialect().sqlToQuery(
+        mockDatabase.execute.mock.calls[0][0],
+      );
+      expect(query.params).toEqual([
+        mockUser.id,
+        mockUser.id,
+        mockUser.id,
+        mockUser.id,
+        `deleted+${mockUser.id}@deleted.invalid`,
+        mockUser.id,
+      ]);
+      expect(query.sql).toMatch(/update athletes\s+set user_id = null/);
+      for (const table of ['team_members', 'session', 'account']) {
+        expect(query.sql).toContain(`delete from ${table}`);
+      }
+      expect(query.sql).toContain("name = 'Deleted User'");
+      expect(query.sql).toContain('email_verified = false');
+      for (const column of ['image', 'phone_number', 'sex', 'date_of_birth']) {
+        expect(query.sql).toContain(`${column} = null`);
+      }
+      expect(mockDatabase.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown user before deleting anything', async () => {
+      mockQueryChain.limit.mockResolvedValueOnce([]);
+      await expect(service.deleteProfile('missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(mockDatabase.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects if the user disappears between lookup and anonymization', async () => {
+      mockDatabase.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(service.deleteProfile(mockUser.id)).rejects.toThrow(
+        'User not found.',
+      );
+    });
+
+    it('propagates a failed deletion instead of reporting success', async () => {
+      const error = new Error('database unavailable');
+      mockDatabase.execute.mockRejectedValueOnce(error);
+      await expect(service.deleteProfile(mockUser.id)).rejects.toBe(error);
+    });
   });
 
   describe('getProfile', () => {
