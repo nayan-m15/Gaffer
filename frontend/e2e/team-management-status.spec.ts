@@ -7,6 +7,10 @@ import {
 } from './utils/auth';
 
 const NETWORK = { timeout: process.env.CI ? 60_000 : 30_000 };
+// A full reload cold-boots the app: bundle, auth session, fonts, then the
+// lazy shell and page chunks. A loaded shared runner has spent over a minute
+// on that before the page heading existed.
+const COLD_BOOT = { timeout: process.env.CI ? 150_000 : 30_000 };
 
 async function expectApiOk(response: APIResponse, operation: string) {
   if (!response.ok()) {
@@ -34,7 +38,7 @@ test('team management reflects athlete status badges and roster edits', async ({
   page,
   request,
 }) => {
-  test.setTimeout(process.env.CI ? 240_000 : 180_000);
+  test.setTimeout(process.env.CI ? 420_000 : 180_000);
   const { email, teamName } = uniqueTestIdentity('tm-status-e2e');
   const coach = 'TM Status Coach';
 
@@ -206,7 +210,7 @@ test('team management reflects athlete status badges and roster edits', async ({
       await page.reload();
       await expect(
         page.getByRole('heading', { name: 'Team Management' }),
-      ).toBeVisible(NETWORK);
+      ).toBeVisible(COLD_BOOT);
       const bench = page.getByRole('region', { name: 'Substitute players' });
       const inesCard = bench.getByRole('button', { name: /Ines Injured —/ });
       await expect(inesCard).toBeVisible(NETWORK);
