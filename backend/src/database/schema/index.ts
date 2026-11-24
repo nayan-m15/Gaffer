@@ -1966,3 +1966,24 @@ export const matchAmendments = pgTable('match_amendments', {
   respondedByUserId: text('responded_by_user_id').references(() => user.id),
   ...timestamps,
 });
+
+/** Shared Postgres cache for daily hourly weather forecasts across Render restarts. */
+export const weatherForecastCache = pgTable('weather_forecast_cache', {
+  cacheKey: text('cache_key').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+  provider: text('provider').notNull(),
+  hourly: jsonb('hourly')
+    .$type<{
+      time: string[];
+      temperature: (number | null)[];
+      precipitationProbability: (number | null)[];
+      windSpeed: (number | null)[];
+      weatherCode: (number | null)[];
+      humidity?: (number | null)[];
+    }>()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

@@ -200,6 +200,7 @@ describe('WeatherService', () => {
             },
           }),
       })
+      .mockResolvedValueOnce({ ok: false, status: 503 })
       .mockResolvedValueOnce({ ok: false, status: 503 });
     const service = new WeatherService();
     const event = {
@@ -213,7 +214,7 @@ describe('WeatherService', () => {
     const cached = await service.getEventWeather(event);
 
     expect(cached).toMatchObject({ status: 'available', stale: true });
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
   it('rejects incomplete provider payloads as unavailable', async () => {
@@ -247,5 +248,145 @@ describe('WeatherService', () => {
         weatherLongitude: 28.04,
       }),
     ).resolves.toEqual({ status: 'unavailable' });
+  });
+
+  it('accepts partial null hours in Open-Meteo response when kickoff hour is valid', async () => {
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    scheduledAt.setUTCHours(14, 0, 0, 0);
+    const otherHour = new Date(scheduledAt);
+    otherHour.setUTCHours(13, 0, 0, 0);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          hourly: {
+            time: [
+              otherHour.toISOString().slice(0, 16),
+              scheduledAt.toISOString().slice(0, 16),
+            ],
+            temperature_2m: [null, 22],
+            precipitation_probability: [null, 10],
+            wind_speed_10m: [null, 15],
+            weather_code: [null, 1],
+            relative_humidity_2m: [null, 52],
+          },
+        }),
+    });
+
+    const result = await new WeatherService().getEventWeather({
+      scheduledAt,
+      status: 'scheduled',
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
+    });
+
+    expect(result).toMatchObject({
+      status: 'available',
+      temperatureC: 22,
+      temperatureMinC: 22,
+      temperatureMaxC: 22,
+      humidity: 52,
+      precipitationProbability: 10,
+      windSpeedKmh: 15,
+    });
+  });
+
+  it('falls back to MET Norway when Open-Meteo returns 429', async () => {
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    scheduledAt.setUTCHours(16, 0, 0, 0);
+    const isoHour = scheduledAt.toISOString().slice(0, 13) + ':00:00Z';
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 429 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            properties: {
+              timeseries: [
+                {
+                  time: isoHour,
+                  data: {
+                    instant: {
+                      details: {
+                        air_temperature: 19.5,
+                        wind_speed: 5,
+                        relative_humidity: 61,
+                      },
+                    },
+                    next_1_hours: {
+                      summary: { symbol_code: 'partlycloudy_day' },
+                      details: { probability_of_precipitation: 25 },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+      });
+
+    const result = await new WeatherService().getEventWeather({
+      scheduledAt,
+      status: 'scheduled',
+      weatherLatitude: -26.2,
+      weatherLongitude: 28.04,
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      status: 'available',
+      temperatureC: 19.5,
+      humidity: 61,
+      precipitationProbability: 25,
+      windSpeedKmh: 18,
+      condition: 'Partly cloudy',
+      attribution: 'Weather data by MET Norway',
+    });
+  });
+
+  it('falls back to geocoding event.location when coordinates are missing', async () => {
+    const scheduledAt = new Date();
+    scheduledAt.setUTCDate(scheduledAt.getUTCDate() + 1);
+    scheduledAt.setUTCHours(12, 0, 0, 0);
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            results: [{ latitude: -26.23, longitude: 27.98 }],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            hourly: {
+              time: [scheduledAt.toISOString().slice(0, 16)],
+              temperature_2m: [24],
+              precipitation_probability: [0],
+              wind_speed_10m: [10],
+              weather_code: [0],
+            },
+          }),
+      });
+
+    const result = await new WeatherService().getEventWeather({
+      scheduledAt,
+      status: 'scheduled',
+      weatherLatitude: null,
+      weatherLongitude: null,
+      location: 'FNB Stadium, Johannesburg',
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      status: 'available',
+      temperatureC: 24,
+    });
   });
 });

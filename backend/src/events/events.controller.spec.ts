@@ -220,6 +220,21 @@ describe('EventsController', () => {
       expect(mockWeatherService.getEventWeather).not.toHaveBeenCalled();
     });
 
+    it('sets Cache-Control: no-store when weather is unavailable', async () => {
+      mockEventsService.findOne.mockResolvedValue({ id: 'event-id' });
+      mockWeatherService.getEventWeather.mockResolvedValue({
+        status: 'unavailable',
+      });
+      const setHeader = jest.fn();
+
+      const result = await controller.weather(user, 'event-id', {
+        setHeader,
+      } as never);
+
+      expect(result).toEqual({ status: 'unavailable' });
+      expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+
     it('lets an assistant start a match (live-logging entry)', async () => {
       mockEventsService.startMatch.mockResolvedValue({ id: 'match-id' });
       const body = {

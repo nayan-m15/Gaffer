@@ -540,6 +540,13 @@
       "when": 1791417600004,
       "tag": "0067_single_coach_competition_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1791417600005,
+      "tag": "0068_weather_forecast_cache",
+      "breakpoints": true
     }
   ]
 }

@@ -137,11 +137,27 @@ export function EventWeatherCard({
     temp - (windKmh > 5 ? Math.sqrt(windKmh) * 0.7 : 0),
   );
 
-  // Time of day logic
+  // Time of day logic (in venue timezone when available)
   const scheduledDate = new Date(event.scheduledAt);
-  const hour = !Number.isNaN(scheduledDate.getTime())
-    ? scheduledDate.getHours()
-    : 14;
+  let hour = 14;
+  if (!Number.isNaN(scheduledDate.getTime())) {
+    if (event.weatherTimezone) {
+      try {
+        const parts = new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          hour12: false,
+          timeZone: event.weatherTimezone,
+        }).formatToParts(scheduledDate);
+        const hourPart = parts.find((p) => p.type === "hour")?.value;
+        const parsed = hourPart ? Number(hourPart) : NaN;
+        hour = Number.isFinite(parsed) ? parsed % 24 : scheduledDate.getHours();
+      } catch {
+        hour = scheduledDate.getHours();
+      }
+    } else {
+      hour = scheduledDate.getHours();
+    }
+  }
   const isNight = hour < 6 || hour >= 18;
 
   // Pitch status
@@ -168,8 +184,25 @@ export function EventWeatherCard({
           ? "Moderate"
           : "Strong Gusts";
 
-  // Relative humidity estimate based on rain / temp
-  const humidity = rainChance > 50 ? 76 : rainChance > 20 ? 64 : 58;
+  // Relative humidity (use provider data when available, fallback to estimate)
+  const humidity =
+    weather.humidity != null
+      ? Math.round(weather.humidity)
+      : rainChance > 50
+        ? 76
+        : rainChance > 20
+          ? 64
+          : 58;
+
+  const tempMin =
+    weather.temperatureMinC != null ? Math.round(weather.temperatureMinC) : temp - 3;
+  const tempMax =
+    weather.temperatureMaxC != null ? Math.round(weather.temperatureMaxC) : temp + 3;
+  const tempRange = tempMax - tempMin;
+  const tempPercent =
+    tempRange > 0
+      ? Math.min(100, Math.max(8, Math.round(((temp - tempMin) / tempRange) * 100)))
+      : 50;
 
   // Icon component
   const WeatherIcon = () => {
@@ -288,12 +321,15 @@ export function EventWeatherCard({
       {/* Temperature Range Bar */}
       <div>
         <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-          <span>Low {temp - 3}°</span>
+          <span>Low {tempMin}°</span>
           <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{temp}° Kickoff Point</span>
-          <span>High {temp + 3}°</span>
+          <span>High {tempMax}°</span>
         </div>
         <div className="h-1.5 w-full bg-muted-foreground/15 dark:bg-neutral-800 rounded-full overflow-hidden relative">
-          <div className="h-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400 w-1/2" />
+          <div
+            className="h-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400"
+            style={{ width: `${tempPercent}%` }}
+          />
         </div>
       </div>
 
@@ -370,7 +406,9 @@ export function EventWeatherCard({
           <span>
             Synced {weather.fetchedAt ? formatVenueTime(weather.fetchedAt) : "recently"}
           </span>
-          <span>(Open-Meteo)</span>
+          <span>
+            ({weather.attribution?.replace(/^Weather data by\s+/i, "") ?? "Open-Meteo"})
+          </span>
         </div>
         <button
           type="button"

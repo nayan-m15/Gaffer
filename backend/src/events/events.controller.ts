@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Put,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBody } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -163,9 +165,14 @@ export class EventsController {
   async weather(
     @CurrentUser() user: AuthenticatedRequest['user'],
     @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
     const event = await this.eventsService.findOne(user.id, id);
-    return this.weatherService.getEventWeather(event);
+    const weather = await this.weatherService.getEventWeather(event);
+    if (weather.status === 'unavailable') {
+      res?.setHeader('Cache-Control', 'no-store');
+    }
+    return weather;
   }
 
   @Patch(':id')

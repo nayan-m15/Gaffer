@@ -121,6 +121,9 @@ export interface EventWeather {
   forecastAt?: string;
   fetchedAt?: string;
   temperatureC?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  humidity?: number;
   precipitationProbability?: number;
   windSpeedKmh?: number;
   weatherCode?: number;
