@@ -10,6 +10,25 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    {
+      name: 'landing-scene-preload',
+      transformIndexHtml: {
+        order: 'post',
+        handler(html, ctx) {
+          if (!ctx.bundle) return html;
+          const hrefs = Object.values(ctx.bundle)
+            .filter(
+              (item) =>
+                item.type === 'chunk' &&
+                /^(?:assets\/)?(?:three\.module|landing-scene|stadium-architecture)-/.test(item.fileName),
+            )
+            .map((item) => `/${item.fileName}`);
+          if (hrefs.length === 0) return html;
+          const script = `<script>try{var n=navigator;if(location.pathname==="/"&&!matchMedia("(prefers-reduced-motion:reduce)").matches&&!(n.connection&&n.connection.saveData)&&!(n.deviceMemory!==undefined&&n.deviceMemory<=2)){${JSON.stringify(hrefs)}.forEach(function(h){var l=document.createElement("link");l.rel="modulepreload";l.href=h;document.head.appendChild(l);});}}catch(e){}</script>`;
+          return html.replace('</head>', `    ${script}\n  </head>`);
+        },
+      },
+    },
     VitePWA({
       // Keep a new worker waiting until open capture tabs close so an app/schema
       // update cannot reload a match with pending local work.

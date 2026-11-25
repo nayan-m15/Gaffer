@@ -59,8 +59,11 @@ export function LandingScene({ onStatusChange }: LandingSceneProps) {
 
     const initialise = async () => {
       try {
-        await yieldSceneTask(abortController.signal);
-        if (!await supportsLandingScene(abortController.signal)) {
+        const [, supported] = await Promise.all([
+          yieldSceneTask(abortController.signal),
+          supportsLandingScene(abortController.signal),
+        ]);
+        if (!supported) {
           if (!cancelled) statusCallbackRef.current("fallback");
           return;
         }

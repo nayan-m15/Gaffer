@@ -25,6 +25,9 @@ const JoinCompetitionPage = lazy(() => import('@/pages/JoinCompetitionPage'))
 const JoinTeamPage = lazy(() => import('@/pages/JoinTeamPage'))
 const VerifyEmailPendingPage = lazy(() => import('@/pages/VerifyEmailPendingPage'))
 const LandingPage = lazy(() => import('@/pages/LandingPage'))
+if (typeof window !== 'undefined' && window.location.pathname === '/') {
+  void import('@/pages/LandingPage')
+}
 const AppShell = lazy(() => import('@/layouts/AppShell').then(module => ({ default: module.AppShell })))
 const PlayerShell = lazy(() => import('@/layouts/PlayerShell').then(module => ({ default: module.PlayerShell })))
 const PublicDashboard = lazy(() => import('@/pages/PublicDashboard'))
@@ -74,6 +77,17 @@ function App() {
   const { status } = useAuth();
   const [loadingDone, setLoadingDone] = useState(false);
   const [appReady, setAppReady] = useState(false);
+  const [pwaReady, setPwaReady] = useState(
+    () => typeof window !== 'undefined' && window.location.pathname !== '/',
+  );
+
+  useEffect(() => {
+    if (pwaReady || !appReady) return;
+    // Defer Workbox precaching (~5.3 MiB) on the landing page so it does not
+    // compete with the hero poster and 3D scene on slow connections.
+    const timer = window.setTimeout(() => setPwaReady(true), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [appReady, pwaReady]);
 
   /* Signal that the application is ready once auth has resolved (no longer
    * in the "loading" state) AND the browser's fonts have finished loading.
@@ -123,155 +137,155 @@ function App() {
 
   return (
     <>
-      <PwaUpdatePrompt />
+      {pwaReady && <PwaUpdatePrompt />}
       {!loadingDone && (
         <LoadingScreen appReady={appReady} onDone={handleLoadingDone} />
       )}
       <BrowserRouter useTransitions={false}>
-      <PwaInstallExperience />
-      <ClaimResumer />
-      <TeamInviteResumer />
-      <CompetitionInviteResumer />
-      <Suspense fallback={<RouteFallback />}>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <RedirectIfAuthenticated>
-              <LandingPage />
-            </RedirectIfAuthenticated>
-          }
-        />
-        <Route path="/public-dashboard" element={<PublicDashboard />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/oauth/callback" element={<AuthCallbackPage />} />
-        <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/email-change/approved" element={<EmailChangeApprovedPage />} />
-        <Route path="/email-change/complete" element={<EmailChangeCompletePage />} />
-        <Route path="/claim/:token" element={<ClaimPage />} />
-        <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
-        <Route path="/join-team/:token" element={<JoinTeamPage />} />
-        <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
-        <Route
-          path="/matches/:matchId/live"
-          element={
-            <ProtectedRoute>
-              <RequireTeam>
-                <LiveMatchPage />
-              </RequireTeam>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          element={
-            <ProtectedRoute>
-              <AppShell />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/competitions" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
-          <Route path="/competitions/:id" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
-          <Route
-            path="/athletes"
-            element={
-              <RequireTeam>
-                <AthletesPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/events"
-            element={
-              <RequireTeam>
-                <EventsPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/events/:eventId/confirm-squad"
-            element={
-              <RequireTeam>
-                <ConfirmSquadPage />
-              </RequireTeam>
-            }
-          >
+        <PwaInstallExperience />
+        <ClaimResumer />
+        <TeamInviteResumer />
+        <CompetitionInviteResumer />
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
             <Route
-              path="opponent"
-              element={<OpponentSquadSetupPage />}
+              path="/"
+              element={
+                <RedirectIfAuthenticated>
+                  <LandingPage />
+                </RedirectIfAuthenticated>
+              }
             />
-          </Route>
-          <Route
-            path="/live-logger"
-            element={
-              <RequireTeam>
-                <LiveLoggerPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/matches/:matchId/report"
-            element={
-              <RequireTeam>
-                <MatchReportPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/statistics"
-            element={
-              <RequireTeam>
-                <StatisticsPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/injuries"
-            element={
-              <RequireTeam>
-                <InjuryRecoveryPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/team"
-            element={
-              <RequireTeam>
-                <TeamManagementPage />
-              </RequireTeam>
-            }
-          />
-          <Route
-            path="/tactics"
-            element={
-              <RequireTeam>
-                <Navigate to="/team?section=tactics" replace />
-              </RequireTeam>
-            }
-          />
-        </Route>
+            <Route path="/public-dashboard" element={<PublicDashboard />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/oauth/callback" element={<AuthCallbackPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/email-change/approved" element={<EmailChangeApprovedPage />} />
+            <Route path="/email-change/complete" element={<EmailChangeCompletePage />} />
+            <Route path="/claim/:token" element={<ClaimPage />} />
+            <Route path="/join-competition/:token" element={<JoinCompetitionPage />} />
+            <Route path="/join-team/:token" element={<JoinTeamPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPendingPage />} />
+            <Route
+              path="/matches/:matchId/live"
+              element={
+                <ProtectedRoute>
+                  <RequireTeam>
+                    <LiveMatchPage />
+                  </RequireTeam>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/competitions" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
+              <Route path="/competitions/:id" element={<RequireTeam><CompetitionsPage /></RequireTeam>} />
+              <Route
+                path="/athletes"
+                element={
+                  <RequireTeam>
+                    <AthletesPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/events"
+                element={
+                  <RequireTeam>
+                    <EventsPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/events/:eventId/confirm-squad"
+                element={
+                  <RequireTeam>
+                    <ConfirmSquadPage />
+                  </RequireTeam>
+                }
+              >
+                <Route
+                  path="opponent"
+                  element={<OpponentSquadSetupPage />}
+                />
+              </Route>
+              <Route
+                path="/live-logger"
+                element={
+                  <RequireTeam>
+                    <LiveLoggerPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/matches/:matchId/report"
+                element={
+                  <RequireTeam>
+                    <MatchReportPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/statistics"
+                element={
+                  <RequireTeam>
+                    <StatisticsPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/injuries"
+                element={
+                  <RequireTeam>
+                    <InjuryRecoveryPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/team"
+                element={
+                  <RequireTeam>
+                    <TeamManagementPage />
+                  </RequireTeam>
+                }
+              />
+              <Route
+                path="/tactics"
+                element={
+                  <RequireTeam>
+                    <Navigate to="/team?section=tactics" replace />
+                  </RequireTeam>
+                }
+              />
+            </Route>
 
-        {/* ── Player routes ──────────────────────────────────────────── */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <RequirePlayer>
-                <PlayerShell />
-              </RequirePlayer>
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
-          <Route path="/player/team" element={<PlayerTeamPage />} />
-          <Route path="/player/events" element={<PlayerEventsPage />} />
-          <Route path="/player/competitions" element={<CompetitionsPage />} />
-          <Route path="/player/competitions/:id" element={<CompetitionsPage />} />
-          <Route path="/player/standings" element={<Navigate to="/player/competitions" replace />} />
-        </Route>
-      </Routes>
-      </Suspense>
+            {/* ── Player routes ──────────────────────────────────────────── */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <RequirePlayer>
+                    <PlayerShell />
+                  </RequirePlayer>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/player/dashboard" element={<PlayerDashboardPage />} />
+              <Route path="/player/team" element={<PlayerTeamPage />} />
+              <Route path="/player/events" element={<PlayerEventsPage />} />
+              <Route path="/player/competitions" element={<CompetitionsPage />} />
+              <Route path="/player/competitions/:id" element={<CompetitionsPage />} />
+              <Route path="/player/standings" element={<Navigate to="/player/competitions" replace />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </>
   )
